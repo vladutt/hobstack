@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { toast } from "./ui.js";
 import { projectsView, projectFormView } from "./projects.js";
 import { agentView } from "./agent.js";
+import { workspaceView } from "./workspace.js";
 
 // Rute in hash: #/, #/new, #/p/3/edit, #/p/3/agent/new, #/p/3/agent/7.
 // Fiecare view primeste elementul in care deseneaza si poate intoarce o
@@ -10,6 +11,7 @@ const routes = [
   [/^#\/?$/, (root) => projectsView(root)],
   [/^#\/new$/, (root) => projectFormView(root, null)],
   [/^#\/p\/(\d+)\/edit$/, (root, m) => projectFormView(root, Number(m[1]))],
+  [/^#\/p\/(\d+)$/, (root, m) => workspaceView(root, Number(m[1]))],
   [/^#\/p\/(\d+)\/agent\/new$/, (root, m) => agentView(root, Number(m[1]), null)],
   [/^#\/p\/(\d+)\/agent\/(\d+)$/, (root, m) => agentView(root, Number(m[1]), Number(m[2]))],
 ];
