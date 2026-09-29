@@ -132,7 +132,8 @@ func TestCreateProjectValidation(t *testing.T) {
 		{"name": "", "workdir": t.TempDir()},
 		{"name": "X", "workdir": "relativ/folder"},
 		{"name": "X", "workdir": filepath.Join(t.TempDir(), "nu-exista")},
-		{"name": "X", "workdir": t.TempDir(), "maxParallel": 20},
+		{"name": "X", "workdir": t.TempDir(), "maxParallel": -1},
+		{"name": "X", "workdir": t.TempDir(), "budgetUsd": 0.01},
 		{"name": "X", "workdir": t.TempDir(), "budgetUsd": -1},
 	}
 	for _, body := range cases {
@@ -335,5 +336,18 @@ func TestBlocksCrossSite(t *testing.T) {
 
 	if code, _ := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/stop", nil); code != http.StatusNoContent {
 		t.Errorf("stop fara body: %d", code)
+	}
+}
+
+func TestProjectLimitsOptional(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir()) // fara maxParallel si budgetUsd
+	if p.MaxParallel != 0 || p.BudgetUSD != 0 {
+		t.Fatalf("limitele trebuiau sa ramana 0 (fara limita): %+v", p)
+	}
+	body := map[string]any{"name": "Y", "workdir": t.TempDir(), "maxParallel": 20, "budgetUsd": 2.5}
+	code, raw := e.do(t, "POST", "/api/projects", body)
+	if code != http.StatusCreated || !strings.Contains(string(raw), `"maxParallel":20`) || !strings.Contains(string(raw), `"budgetUsd":2.5`) {
+		t.Fatalf("limite setate explicit: %d %s", code, raw)
 	}
 }

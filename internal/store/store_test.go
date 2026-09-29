@@ -56,7 +56,7 @@ func TestOpenAppliesMigrationsOnce(t *testing.T) {
 func TestCreateProjectAddsLeadAndDefaults(t *testing.T) {
 	s := newStore(t)
 	p, lead := newProject(t, s)
-	if p.ID == 0 || p.MaxParallel != 2 || p.BudgetUSD != 1 {
+	if p.ID == 0 || p.MaxParallel != 0 || p.BudgetUSD != 0 {
 		t.Fatalf("proiect = %+v", p)
 	}
 	if lead.Position != PositionLead || lead.Name != "Lead" || lead.Model != "sonnet" || len(lead.Tools) != 0 {

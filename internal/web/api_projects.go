@@ -51,17 +51,12 @@ func (in projectInput) toProject() (store.Project, error) {
 		return p, badRequest("folderul de lucru nu exista: " + dir)
 	}
 	p.Workdir = filepath.Clean(dir)
-	if p.MaxParallel == 0 {
-		p.MaxParallel = 2
+	// 0 (sau camp gol in UI) inseamna fara limita, la ambele.
+	if p.MaxParallel < 0 || p.MaxParallel > 100 {
+		return p, badRequest("workeri in paralel: gol pentru fara limita, sau intre 1 si 100")
 	}
-	if p.MaxParallel < 1 || p.MaxParallel > 8 {
-		return p, badRequest("workeri in paralel: intre 1 si 8")
-	}
-	if p.BudgetUSD == 0 {
-		p.BudgetUSD = 1
-	}
-	if p.BudgetUSD < 0.05 || p.BudgetUSD > 100 {
-		return p, badRequest("bugetul per run: intre 0.05 si 100 USD")
+	if p.BudgetUSD < 0 || (p.BudgetUSD > 0 && p.BudgetUSD < 0.05) || p.BudgetUSD > 100 {
+		return p, badRequest("bugetul per run: gol pentru fara limita, sau intre 0.05 si 100 USD")
 	}
 	return p, nil
 }

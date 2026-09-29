@@ -74,7 +74,10 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, 
 		"--settings", prompt.Settings(a.Tools),
 		"--mcp-config", prompt.MCPConfig(t.baseURL + "/mcp/" + token),
 		"--strict-mcp-config",
-		"--max-budget-usd", strconv.FormatFloat(p.BudgetUSD, 'f', 2, 64),
+	}
+	// bugetul e optional: cu abonament Claude nu platesti per run
+	if p.BudgetUSD > 0 {
+		args = append(args, "--max-budget-usd", strconv.FormatFloat(p.BudgetUSD, 'f', 2, 64))
 	}
 	if resume {
 		args = append(args, "--resume", a.SessionID)

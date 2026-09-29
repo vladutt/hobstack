@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// Project: MaxParallel = 0 inseamna workeri in paralel fara limita,
+// BudgetUSD = 0 inseamna fara buget per run.
 type Project struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
@@ -37,12 +39,6 @@ func scanProject(sc scanner) (Project, error) {
 // CreateProject salveaza proiectul si ii creeaza lead-ul implicit in aceeasi
 // tranzactie, ca un proiect sa nu existe niciodata fara lead.
 func (s *Store) CreateProject(p *Project) (Agent, error) {
-	if p.MaxParallel <= 0 {
-		p.MaxParallel = 2
-	}
-	if p.BudgetUSD <= 0 {
-		p.BudgetUSD = 1
-	}
 	created := now()
 
 	tx, err := s.db.Begin()

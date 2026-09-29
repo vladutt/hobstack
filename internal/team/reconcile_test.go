@@ -54,13 +54,15 @@ func TestRunArguments(t *testing.T) {
 	checks := map[string]string{
 		"--output-format":   "stream-json",
 		"--setting-sources": "user",
-		"--max-budget-usd":  "1.00",
 		"--model":           "sonnet",
 	}
 	for flag, want := range checks {
 		if got := argValue(args, flag); got != want {
 			t.Errorf("%s = %q, vreau %q", flag, got, want)
 		}
+	}
+	if hasFlag(args, "--max-budget-usd") {
+		t.Error("fara buget setat nu trebuie trimis --max-budget-usd")
 	}
 	if !strings.Contains(argValue(args, "--settings"), `"Edit"`) {
 		t.Error("Rook are tool-ul write: --settings trebuia sa permita Edit")
@@ -322,5 +324,33 @@ func TestBlockedTaskActions(t *testing.T) {
 	}
 	if !f.hasMessage(f.lead.ID, "Utilizatorul a deblocat T-1") {
 		t.Fatal("lead-ul trebuie anuntat")
+	}
+}
+
+func TestBudgetFlagWhenSet(t *testing.T) {
+	f := setup(t)
+	f.p.BudgetUSD = 1.5
+	f.st.UpdateProject(f.p)
+	f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	if got := argValue(f.fs.last(t, f.rook).Args, "--max-budget-usd"); got != "1.50" {
+		t.Fatalf("--max-budget-usd = %q, vreau 1.50", got)
+	}
+}
+
+func TestUnlimitedParallel(t *testing.T) {
+	f := setup(t)
+	f.p.MaxParallel = 0 // fara limita
+	f.st.UpdateProject(f.p)
+	quill := store.Agent{ProjectID: f.p.ID, Name: "Quill", Position: store.PositionWorker, Model: "haiku"}
+	if err := f.st.CreateAgent(&quill); err != nil {
+		t.Fatal(err)
+	}
+	f.task(t, "A", f.rook, store.StatusQueued)
+	f.task(t, "B", f.vera, store.StatusQueued)
+	f.task(t, "C", quill, store.StatusQueued)
+	mustReconcile(t, f)
+	if f.fs.count() != 3 {
+		t.Fatalf("run-uri pornite: %d, vreau 3 (fara limita)", f.fs.count())
 	}
 }

@@ -34,14 +34,15 @@ function projectCard(p) {
 export async function projectFormView(root, id) {
   const p = id
     ? await api(`/api/projects/${id}`)
-    : { name: "", goal: "", context: "", workdir: "", maxParallel: 2, budgetUsd: 1 };
+    : { name: "", goal: "", context: "", workdir: "", maxParallel: 0, budgetUsd: 0 };
 
   const name = el("input", { type: "text", value: p.name, placeholder: "ex. HoReCa QR", required: true, maxlength: 80 });
   const goal = el("textarea", { value: p.goal, placeholder: "Un MVP si un prototip clickable pentru inscrieri prin QR." });
   const context = el("textarea", { value: p.context, rows: 7, placeholder: "Stack, conventii, ce e deja decis, ce e interzis." });
   const workdir = el("input", { type: "text", value: p.workdir, placeholder: "~/projects/horeca-qr", required: true });
-  const parallel = el("input", { type: "number", min: 1, max: 8, value: p.maxParallel });
-  const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd });
+  // 0 = fara limita; in formular apare ca un camp gol
+  const parallel = el("input", { type: "number", min: 1, max: 100, value: p.maxParallel || "", placeholder: "fara limita" });
+  const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd || "", placeholder: "fara limita" });
 
   root.append(el("form", { class: "form", onsubmit: save },
     el("header", { class: "page-head" },
@@ -66,7 +67,7 @@ export async function projectFormView(root, id) {
         el("div", { class: "row" },
           field("Workeri in paralel", parallel),
           field("Buget per run (USD)", budget)),
-        el("p", { class: "hint" }, "Fiecare run al unui agent se opreste cand atinge bugetul. Lead-ul nu intra in limita de workeri."),
+        el("p", { class: "hint" }, "Ambele sunt optionale: lasa-le goale pentru fara limita. Bugetul conteaza doar daca folosesti API key (cu abonament nu platesti per run); cand e setat, un run se opreste la atingerea lui. Lead-ul nu intra in limita de workeri."),
         !id && el("p", { class: "hint" }, "Primesti un lead implicit. Workerii ii adaugi din pagina proiectului.")))));
   name.focus();
 
@@ -74,7 +75,7 @@ export async function projectFormView(root, id) {
     e.preventDefault();
     const body = {
       name: name.value, goal: goal.value, context: context.value, workdir: workdir.value,
-      maxParallel: Number(parallel.value), budgetUsd: Number(budget.value),
+      maxParallel: Number(parallel.value) || 0, budgetUsd: Number(budget.value) || 0,
     };
     try {
       const saved = id

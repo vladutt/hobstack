@@ -76,6 +76,8 @@ func (t *Team) Reconcile(projectID int64) error {
 			running++
 		}
 	}
+	// full: s-a atins limita de workeri in paralel (0 = fara limita)
+	full := func() bool { return p.MaxParallel > 0 && running >= p.MaxParallel }
 
 	// 1. task-urile din Queued, in ordinea numarului
 	hasQueued := map[int64]bool{}
@@ -85,7 +87,7 @@ func (t *Team) Reconcile(projectID int64) error {
 			continue
 		}
 		hasQueued[task.AssigneeID] = true
-		if running >= p.MaxParallel || t.isActive(task.AssigneeID) {
+		if full() || t.isActive(task.AssigneeID) {
 			continue
 		}
 		w := byID[task.AssigneeID]
@@ -114,7 +116,7 @@ func (t *Team) Reconcile(projectID int64) error {
 
 	// 2. workeri fara task, carora utilizatorul le-a scris direct
 	for _, w := range workers {
-		if running >= p.MaxParallel {
+		if full() {
 			break
 		}
 		if t.isActive(w.ID) || hasQueued[w.ID] {
