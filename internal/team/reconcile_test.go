@@ -205,6 +205,42 @@ func TestStopAndResume(t *testing.T) {
 	}
 }
 
+func TestResumeWakesLeadForReview(t *testing.T) {
+	f := setup(t)
+	f.task(t, "A", f.rook, store.StatusReview)
+	if err := f.tm.Stop(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.Resume(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	if f.fs.count() != 1 {
+		t.Fatalf("run-uri pornite: %d", f.fs.count())
+	}
+	got := turn(f.fs.last(t, f.lead))
+	if !strings.Contains(got, "Echipa a fost repornita") || !strings.Contains(got, "T-1") {
+		t.Fatalf("tura lead-ului: %q", got)
+	}
+}
+
+func TestWorkdirChangeStartsNewSession(t *testing.T) {
+	f := setup(t)
+	f.tm.UserMessage(f.rook.ID, "salut")
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: "done", SessionID: "s-rook", Result: "ok"})
+
+	f.p.Workdir = t.TempDir()
+	if err := f.st.UpdateProject(f.p); err != nil {
+		t.Fatal(err)
+	}
+	f.tm.UserMessage(f.rook.ID, "din nou")
+	mustReconcile(t, f)
+	if hasFlag(f.fs.last(t, f.rook).Args, "--resume") {
+		t.Fatal("folder schimbat: nu trebuia --resume")
+	}
+}
+
 func TestRecover(t *testing.T) {
 	f := setup(t)
 	task := f.task(t, "A", f.rook, store.StatusInProgress)

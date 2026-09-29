@@ -21,12 +21,13 @@ func (t *Team) startRun(p store.Project, a, lead store.Agent, taskID int64, turn
 	}
 
 	system := prompt.System(p, a, lead.Name)
-	hash := prompt.Hash(system)
+	// Claude tine sesiunile pe cwd, deci un alt folder de lucru inseamna alta sesiune.
+	hash := prompt.Hash(p.Workdir + "\n" + system)
 	// Claude retine system prompt-ul de la inceputul sesiunii. Daca s-a schimbat
 	// (agent sau proiect editat), --resume l-ar ignora, deci pornim sesiune noua.
 	resume := a.SessionID != "" && a.PromptHash == hash
 	if a.SessionID != "" && !resume {
-		t.note(p.ID, a.ID, "Instructiunile s-au schimbat, pornesc o sesiune noua.", true)
+		t.note(p.ID, a.ID, "Instructiunile sau folderul de lucru s-au schimbat, pornesc o sesiune noua.", true)
 	}
 
 	runID := runner.NewID()

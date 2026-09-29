@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"foreman/internal/prompt"
 	"foreman/internal/store"
@@ -230,12 +231,47 @@ func (t *Team) Stop(projectID int64) error {
 func (t *Team) Resume(projectID int64) error {
 	t.work.Lock()
 	err := t.st.SetPaused(projectID, false)
+	if err == nil {
+		err = t.wakeLeadForDecisions(projectID)
+	}
 	t.work.Unlock()
 	if err != nil {
 		return err
 	}
 	t.emit(projectID, "project", map[string]int64{"id": projectID})
 	t.Kick(projectID)
+	return nil
+}
+
+// wakeLeadForDecisions: notificarile se marcheaza livrate cand porneste run-ul
+// lead-ului. Daca run-ul a fost oprit (Stop/restart), dupa Resume nu mai e nimic
+// nelivrat, iar task-urile din review/blocked ar ramane uitate. Aici adaugam o
+// nota noua. Se apeleaza cu t.work blocat.
+func (t *Team) wakeLeadForDecisions(projectID int64) error {
+	lead, err := t.st.Lead(projectID)
+	if err != nil {
+		return err
+	}
+	if t.isActive(lead.ID) {
+		return nil
+	}
+	pending, err := t.st.Undelivered(lead.ID)
+	if err != nil || len(pending) > 0 {
+		return err
+	}
+	tasks, err := t.st.ListTasks(projectID)
+	if err != nil {
+		return err
+	}
+	var refs []string
+	for _, task := range tasks {
+		if task.Status == store.StatusReview || task.Status == store.StatusBlocked {
+			refs = append(refs, task.Ref())
+		}
+	}
+	if len(refs) > 0 {
+		t.note(projectID, lead.ID, "Echipa a fost repornita. Asteapta decizia ta: "+strings.Join(refs, ", ")+".", false)
+	}
 	return nil
 }
 
