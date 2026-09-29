@@ -29,8 +29,8 @@ Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
   - un agent radacina fara echipa nu are tool-uri.
 - Cand un agent termina, reviewerul (daca exista) si apoi liderul care a creat task-ul sunt
   trezisi (`--resume`) cu rezultatul.
-- Un sub-lider sparge task-ul primit in sub-task-uri pentru echipa lui si il raporteaza in sus
-  dupa ce toate sub-task-urile sunt gata.
+- Un sub-lider sparge task-ul primit in sub-task-uri pentru echipa lui. Cand toate sub-task-urile
+  sunt gata, task-ul revine in coada lui, iar sub-liderul il verifica si il raporteaza in sus.
 - Pe canvas nodurile se muta cu mouse-ul, legaturile se trag din ●, iar dublu-click deschide editorul.
 - `max_parallel` se aplica doar agentilor care au sef.
 - Permisiunile vin doar din aplicatie (`--settings` inline, `--setting-sources user`). `CLAUDE.md`

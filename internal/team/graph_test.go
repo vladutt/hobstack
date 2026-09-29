@@ -86,7 +86,7 @@ func TestGraphFullFlow(t *testing.T) {
 	}
 	f.fs.finish(rev1.ID, ok("s-rev"))
 
-	// 5. Sub accepta T-2 si primeste "toate gata"
+	// 5. Sub accepta T-2; T-1 revine in coada si Sub primeste un run pe el
 	mustReconcile(t, f)
 	sub2 := f.fs.last(t, sub)
 	if sub2.ID == sub1.ID || !strings.Contains(turn(sub2), "Rev a aprobat T-2 lucrat de Wes") {
@@ -95,18 +95,15 @@ func TestGraphFullFlow(t *testing.T) {
 	if _, err := f.tm.AcceptTask(f.caller(t, sub2), "T-2", ""); err != nil {
 		t.Fatal(err)
 	}
+	f.wantStatus(t, 1, store.StatusQueued)
 	f.fs.finish(sub2.ID, ok("s-sub"))
 	mustReconcile(t, f)
 	sub3 := f.fs.last(t, sub)
 	got := turn(sub3)
-	if !strings.Contains(got, "Toate sub-task-urile pentru T-1 sunt gata.") ||
-		!strings.Contains(got, "Task-urile tale deschise:\n- T-1: Import (sub-task-uri gata: 1 din 1)") {
+	if !strings.Contains(got, "Task T-1: Import") || !strings.Contains(got, "- T-2 [done] Parser -> Wes") {
 		t.Fatalf("sub3:\n%s", got)
 	}
-	if _, err := f.tm.ReportDone(f.caller(t, sub3), "", "x"); err == nil {
-		t.Fatal("in run de notificari, task-ul e obligatoriu")
-	}
-	if _, err := f.tm.ReportDone(f.caller(t, sub3), "T-1", "Import gata"); err != nil {
+	if _, err := f.tm.ReportDone(f.caller(t, sub3), "", "Import gata"); err != nil {
 		t.Fatal(err)
 	}
 	f.fs.finish(sub3.ID, ok("s-sub"))
@@ -211,9 +208,10 @@ func TestAcceptBlockedSubtaskNotifiesParent(t *testing.T) {
 	if err := f.tm.AcceptBlocked(child.ID); err != nil {
 		t.Fatal(err)
 	}
-	if !f.hasMessage(sub.ID, "Utilizatorul a acceptat T-2.") || !f.hasMessage(sub.ID, "Toate sub-task-urile pentru T-1 sunt gata.") {
+	if !f.hasMessage(sub.ID, "Utilizatorul a acceptat T-2.") || !f.hasMessage(sub.ID, "Toate sub-task-urile pentru T-1 sunt gata") {
 		t.Fatal("sub-liderul (creator si asignatul parintelui) trebuie anuntat")
 	}
+	f.wantStatus(t, 1, store.StatusQueued)
 }
 
 func TestResumeWakesReviewer(t *testing.T) {

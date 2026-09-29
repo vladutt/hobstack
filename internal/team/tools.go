@@ -230,8 +230,10 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 	return who, nil
 }
 
-// afterDone: cand ultimul sub-task al unui task ajunge in Done, asignatul
-// task-ului parinte (sub-liderul) e trezit sa raporteze in sus.
+// afterDone: cand ultimul sub-task al unui task ajunge in Done, task-ul
+// parinte revine in Queued la acelasi asignat (sub-liderul). Asa primeste un
+// run pe task, cu lista sub-task-urilor, si il raporteaza in sus; finalul
+// run-ului (recordOutcome) trateaza orice iesire. Se apeleaza cu t.work blocat.
 func (t *Team) afterDone(task store.Task) error {
 	if task.ParentTaskID == nil {
 		return nil
@@ -250,15 +252,20 @@ func (t *Team) afterDone(task store.Task) error {
 		}
 	}
 	// daca sub-liderul lucreaza chiar acum pe parinte, finalul run-ului lui
-	// muta task-ul in Review; o notificare in plus l-ar incurca
+	// muta task-ul in Review; nu il punem inapoi in coada
 	t.mu.Lock()
 	ar, busy := t.active[parent.AssigneeID]
 	t.mu.Unlock()
 	if busy && ar.taskID == parent.ID {
 		return nil
 	}
-	text := fmt.Sprintf("Toate sub-task-urile pentru %s sunt gata. Verifica rezultatul si raporteaza cu report_done(task: %q, summary).", parent.Ref(), parent.Ref())
-	return t.note(parent.ProjectID, parent.AssigneeID, text, false)
+	parent.Status = store.StatusQueued
+	if err := t.st.SaveTask(&parent); err != nil {
+		return err
+	}
+	t.emit(parent.ProjectID, "task", parent)
+	text := fmt.Sprintf("Toate sub-task-urile pentru %s sunt gata; %s revine in coada ca sa-l verifici si sa-l raportezi.", parent.Ref(), parent.Ref())
+	return t.note(parent.ProjectID, parent.AssigneeID, text, true)
 }
 
 // rejectTask e partea comuna a send_back si review_reject: numara respingerea

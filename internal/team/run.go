@@ -182,7 +182,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	}
 	// Un sub-lider care a spart task-ul se opreste fara report_done. Task-ul
 	// ramane in lucru (oricum s-ar fi terminat run-ul) pana cand toate
-	// sub-task-urile ajung in Done; atunci afterDone il trezeste.
+	// sub-task-urile ajung in Done; atunci afterDone il pune inapoi in coada.
 	if len(open) > 0 {
 		if o.Status == store.RunStopped {
 			return nil

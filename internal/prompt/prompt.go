@@ -57,8 +57,8 @@ const howLead = `Esti lider: ai o echipa directa, listata in mesajul turei. Spar
 	`Nu folosi alte liste de task-uri in afara de tool-urile mcp__team__.`
 
 const howSubLead = `Cand primesti un task de la seful tau, sparge-l in sub-task-uri pentru echipa ta si opreste-te fara report_done. ` +
-	`Cand primesti notificarea ca toate sub-task-urile sunt gata, verifica rezultatul si apeleaza mcp__team__report_done ` +
-	`cu task-ul (ex. task: "T-3") si rezumatul.`
+	`Cand task-ul revine la tine cu toate sub-task-urile gata, verifica rezultatul si apeleaza mcp__team__report_done ` +
+	`cu rezumatul.`
 
 const howWorker = `Lucreaza doar pe task-ul primit si nu modifica lucruri din afara lui. ` +
 	`Cand termini, apeleaza mcp__team__report_done cu rezumatul cerut. ` +

@@ -398,7 +398,7 @@ func TestAcceptWithoutCreatorByAncestor(t *testing.T) {
 	}
 }
 
-func TestSubtaskAcceptNotifiesParentAssignee(t *testing.T) {
+func TestSubtaskAcceptRequeuesParent(t *testing.T) {
 	f := setup(t)
 	sub := f.agent(t, "Sub", &f.lead, nil)
 	wes := f.agent(t, "Wes", &sub, nil)
@@ -411,12 +411,21 @@ func TestSubtaskAcceptNotifiesParentAssignee(t *testing.T) {
 	}
 	sc := mcp.Caller{ProjectID: f.p.ID, AgentID: sub.ID, IsLead: true, HasParent: true}
 	f.tm.AcceptTask(sc, "T-2", "")
-	if f.hasMessage(sub.ID, "Toate sub-task-urile") {
-		t.Fatal("T-3 e inca deschis: prea devreme")
-	}
+	f.wantStatus(t, 1, store.StatusInProgress) // T-3 e inca deschis
 	f.tm.AcceptTask(sc, "T-3", "")
-	pending, _ := f.st.Undelivered(sub.ID)
-	if len(pending) != 1 || !strings.HasPrefix(pending[0].Text, "Toate sub-task-urile pentru T-1 sunt gata.") {
-		t.Fatalf("notificare sub-lider: %+v", pending)
+	f.wantStatus(t, 1, store.StatusQueued)
+	if !f.hasMessage(sub.ID, "Toate sub-task-urile pentru T-1 sunt gata") {
+		t.Fatal("lipseste nota din thread")
+	}
+	if pending, _ := f.st.Undelivered(sub.ID); len(pending) != 0 {
+		t.Fatalf("nu mai trebuie notificare separata: %+v", pending)
+	}
+	// sub-liderul primeste un run pe task-ul parinte, cu lista sub-task-urilor
+	mustReconcile(t, f)
+	spec := f.fs.last(t, sub)
+	got := turn(spec)
+	if f.caller(t, spec).TaskID != parent.ID || !strings.Contains(got, "Task T-1: Import") ||
+		!strings.Contains(got, "- T-2 [done] A -> Wes\n- T-3 [done] B -> Wes") {
+		t.Fatalf("tura sub-liderului:\n%s", got)
 	}
 }
