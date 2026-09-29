@@ -195,7 +195,7 @@ export async function workspaceView(root, projectId) {
         el("div", { class: "hint" }, isLead
           ? "Thread-ul lead-ului. Ii dai obiective aici, el delegheaza echipei."
           : "Thread direct. Lead-ul primeste in copie ce ii scrii.")));
-    input.placeholder = isLead ? `Da-i lui ${a.name} un obiectiv sau cere un status` : `Mesaj pentru ${a.name}`;
+    input.placeholder = isLead ? `Scrie-i lui ${a.name}...` : `Mesaj pentru ${a.name}`;
     note.textContent = state.project.paused ? "Echipa e pe pauza: mesajul asteapta pana o pornesti." : "";
   }
 
