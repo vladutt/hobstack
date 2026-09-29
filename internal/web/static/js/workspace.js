@@ -30,7 +30,7 @@ export async function workspaceView(root, projectId) {
   let disposed = false; // view-ul a fost inchis: nu mai deschidem stream-uri si nu mai desenam
   // view-ul e inchis daca s-a apelat curatarea sau daca #view a fost golit intre timp
   const gone = () => disposed || !header.isConnected;
-  state.selected = state.project.agents[0]?.id ?? null;
+  state.selected = firstRootId();
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const dropResets = []; // resetari de contor + outline, apelate la orice drop/dragend
@@ -162,12 +162,21 @@ export async function workspaceView(root, projectId) {
       const items = state.project.tasks.filter((t) => c.statuses.includes(t.status));
       return el("div", { class: "col" },
         el("div", { class: "col-head" }, el("span", {}, c.title), el("span", {}, items.length)),
-        items.map((t) => taskCard(t, byId.get(t.assigneeId))));
+        items.map((t) => taskCard(t, byId.get(t.assigneeId), byId)));
     }));
   }
 
-  function taskCard(t, who) {
+  // stageName: la cine asteapta un task din review (reviewer-ul asignatului, altfel creatorul, altfel seful)
+  function stageName(t, who, byId) {
+    const target = t.reviewStage === "reviewer"
+      ? byId.get(who?.reviewerId)
+      : byId.get(t.creatorId) || byId.get(who?.parentId);
+    return target ? target.name : null;
+  }
+
+  function taskCard(t, who, byId) {
     const blocked = t.status === "blocked";
+    const stage = t.status === "review" ? stageName(t, who, byId) : null;
     return el("details", {
       class: "task",
       open: state.open.has(t.id),
@@ -177,7 +186,8 @@ export async function workspaceView(root, projectId) {
         el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)), t.title),
         el("span", { class: "task-who" },
           who && avatar(who.name, kindOf(who), 20), who ? who.name : "?",
-          blocked && el("span", { class: "badge-blocked" }, "Blocat"))),
+          blocked && el("span", { class: "badge-blocked" }, "Blocat"),
+          stage && el("span", { class: "task-stage" }, `la ${stage}`))),
       el("div", { class: "task-detail" },
         t.description && el("div", {}, t.description),
         t.feedback && el("div", {}, el("strong", {}, "Feedback: "), t.feedback),
@@ -188,6 +198,10 @@ export async function workspaceView(root, projectId) {
           el("button", { type: "button", class: "btn small", onclick: () => taskAction(t, "unblock") }, "Deblocheaza"))));
   }
 
+  function firstRootId() {
+    return state.project.agents.find((a) => a.isRoot)?.id ?? state.project.agents[0]?.id ?? null;
+  }
+
   function selectedAgent() {
     return state.project.agents.find((a) => a.id === state.selected);
   }
@@ -196,13 +210,14 @@ export async function workspaceView(root, projectId) {
     const a = selectedAgent();
     if (!a) return;
     const isLead = kindOf(a) === "lead";
+    const boss = state.project.agents.find((x) => x.id === a.parentId);
     consoleHead.replaceChildren(
       avatar(a.name, kindOf(a), 36),
       el("div", {},
         el("div", { class: "member-name" }, a.name, a.role && el("span", { class: "hint" }, "· " + a.role)),
-        el("div", { class: "hint" }, isLead
-          ? "Thread-ul lead-ului. Ii dai obiective aici, el delegheaza echipei."
-          : "Thread direct. Lead-ul primeste in copie ce ii scrii.")));
+        el("div", { class: "hint" }, !boss
+          ? "Thread direct. Ii dai obiective aici, iar el delegheaza echipei lui."
+          : `Thread direct. ${boss.name} primeste in copie ce ii scrii.`)));
     input.placeholder = isLead ? `Scrie-i lui ${a.name}...` : `Mesaj pentru ${a.name}`;
     note.textContent = state.project.paused ? "Echipa e pe pauza: mesajul asteapta pana o pornesti." : "";
   }
@@ -477,7 +492,7 @@ export async function workspaceView(root, projectId) {
       return;
     }
     if (gone()) return;
-    if (!selectedAgent()) state.selected = state.project.agents[0]?.id ?? null; // agent sters
+    if (!selectedAgent()) state.selected = firstRootId(); // agent sters
     renderAll();
     syncLive();
   }

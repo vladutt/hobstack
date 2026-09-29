@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { el, avatar, pill, field, toast } from "./ui.js";
+import { el, avatar, pill, field, toast, kindOf } from "./ui.js";
 
 export async function projectsView(root) {
   const projects = await api("/api/projects");
@@ -23,7 +23,7 @@ function projectCard(p) {
     el("div", { class: "card-top" }, el("span", { class: "card-title" }, p.name), pill(p.status)),
     el("p", { class: "muted clamp" }, p.goal || "Fara obiectiv inca."),
     el("div", { class: "avatars" },
-      el("span", { class: "stack" }, p.team.map((m) => avatar(m.name, m.position, 28))),
+      el("span", { class: "stack" }, p.team.map((m) => avatar(m.name, kindOf(m), 28))),
       el("span", { class: "hint" }, p.team.length === 1 ? "1 agent" : `${p.team.length} agenti`)),
     el("div", { class: "progress-row" },
       el("span", { class: "hint" }, p.total ? `${p.done} din ${p.total} task-uri gata` : "Niciun task"),
@@ -76,7 +76,7 @@ export async function projectFormView(root, id) {
         el("div", { class: "row" },
           field("Workeri in paralel", parallel),
           field("Buget per run (USD)", budget)),
-        el("p", { class: "hint" }, "Ambele sunt optionale: lasa-le goale pentru fara limita. Bugetul conteaza doar daca folosesti API key (cu abonament nu platesti per run); cand e setat, un run se opreste la atingerea lui. Lead-ul nu intra in limita de workeri."),
+        el("p", { class: "hint" }, "Ambele sunt optionale: lasa-le goale pentru fara limita. Bugetul conteaza doar daca folosesti API key (cu abonament nu platesti per run); cand e setat, un run se opreste la atingerea lui. Agentii care iti raporteaza direct nu intra in limita."),
         !id && el("p", { class: "hint" }, "Primesti un lead implicit. Workerii ii adaugi din pagina proiectului.")))));
   name.focus();
 

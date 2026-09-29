@@ -52,9 +52,10 @@ export function agentBody(a, patch = {}) {
   };
 }
 
-export function avatar(name, position, size = 32) {
+// kind: "lead" sau "worker" (vezi kindOf)
+export function avatar(name, kind, size = 32) {
   return el("span", {
-    class: `avatar ${position === "lead" ? "lead" : "worker"}`,
+    class: `avatar ${kind === "lead" ? "lead" : "worker"}`,
     style: `--size:${size}px`,
     "aria-hidden": "true",
   }, (name || "?").charAt(0).toUpperCase());
