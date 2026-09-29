@@ -27,6 +27,9 @@ Gata (felia 1, spec in docs/superpowers/specs/2026-09-29-foreman-slice1-design.m
 orchestrare prin MCP, board live, chat per agent, SQLite, pauza la pornire.
 Gata (echipe ca graf, spec in docs/superpowers/specs/2026-09-29-foreman-team-graph-design.md): ierarhie cu mai multe
 radacini si sub-lideri, reviewer per agent, editor canvas.
+Gata (wizard, spec in docs/superpowers/specs/2026-09-30-foreman-setup-wizard-design.md): "Proiect nou cu AI":
+un analist Claude (doar citire) citeste folderul si propune proiectul si echipa prin tool-ul MCP propose_setup;
+utilizatorul editeaza propunerea si creeaza totul intr-o tranzactie. Pachet: internal/setup.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"
