@@ -254,11 +254,12 @@ export async function workspaceView(root, projectId) {
     e.preventDefault();
     const text = input.value.trim();
     if ((!text && !state.pending.length) || !state.selected || sending) return;
+    const agentId = state.selected; // agentul pentru care trimitem, tinut minte cat dureaza cererea
     sending = true;
     sendBtn.disabled = true;
     try {
       let m;
-      const path = `/api/agents/${state.selected}/messages`;
+      const path = `/api/agents/${agentId}/messages`;
       if (state.pending.length) {
         const fd = new FormData();
         fd.append("text", text);
@@ -267,11 +268,14 @@ export async function workspaceView(root, projectId) {
       } else {
         m = await api(path, { method: "POST", body: { text } });
       }
-      input.value = "";
-      state.pending = [];
-      renderChips();
-      addMessage(m);
-      scrollDown(true);
+      // daca userul a schimbat agentul intre timp, nu atingem chatul si lista celuilalt agent
+      if (state.selected === agentId) {
+        input.value = "";
+        state.pending = [];
+        renderChips();
+        addMessage(m);
+        scrollDown(true);
+      }
     } catch (err) {
       toast(err.message);
     } finally {

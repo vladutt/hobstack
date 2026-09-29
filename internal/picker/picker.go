@@ -15,6 +15,9 @@ var (
 	ErrUnsupported = errors.New("dialogul de ales folder nu e disponibil pe acest sistem")
 )
 
+// errAutomationDenied: userul a refuzat permisiunea de Automatizare pe macOS.
+var errAutomationDenied = errors.New("macOS a refuzat accesul la dialog; permite Terminal/foreman in Setari > Confidentialitate > Automatizare")
+
 // parseResult transforma iesirea unei comenzi de dialog intr-o cale sau o eroare.
 // Pur (nu ruleaza nimic), deci se poate testa pe orice OS.
 func parseResult(stdout, stderr string, err error) (string, error) {
@@ -22,6 +25,10 @@ func parseResult(stdout, stderr string, err error) (string, error) {
 		// osascript raporteaza anularea ca eroare cu "User canceled" / (-128).
 		if strings.Contains(stderr, "User canceled") || strings.Contains(stderr, "(-128)") {
 			return "", ErrCanceled
+		}
+		// -1743: macOS nu a dat voie accesul la System Events (Automatizare)
+		if strings.Contains(stderr, "-1743") {
+			return "", errAutomationDenied
 		}
 		return "", fmt.Errorf("dialog folder: %w: %s", err, strings.TrimSpace(stderr))
 	}

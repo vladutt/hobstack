@@ -21,4 +21,7 @@ func TestParseResult(t *testing.T) {
 	if _, err := parseResult("", "altceva", errors.New("exit 2")); err == nil || errors.Is(err, ErrCanceled) {
 		t.Fatalf("eroare reala: %v", err)
 	}
+	if _, err := parseResult("", "execution error: Not authorized to send Apple events to System Events. (-1743)", errors.New("exit 1")); !errors.Is(err, errAutomationDenied) {
+		t.Fatalf("-1743: %v", err)
+	}
 }
