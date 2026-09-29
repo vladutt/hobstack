@@ -96,19 +96,19 @@ func (s *Server) saveOne(dir string, projectID int64, kind string, fh *multipart
 // discardUploads sterge fisierele si randurile create de un request esuat.
 func (s *Server) discardUploads(list []store.Attachment) {
 	for _, a := range list {
-		s.removeFile(a)
+		if err := s.removeFile(a); err != nil {
+			log.Printf("curatare atasament %d: %v", a.ID, err)
+		}
 	}
 }
 
 // removeFile sterge fisierul de pe disc (un fisier deja lipsa se ignora), apoi randul.
-func (s *Server) removeFile(a store.Attachment) {
+func (s *Server) removeFile(a store.Attachment) error {
 	path := filepath.Join(config.ProjectFilesDir(s.dirs.Projects, a.ProjectID), a.Stored)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		log.Printf("nu pot sterge %s: %v", path, err)
 	}
-	if err := s.st.DeleteAttachment(a.ID); err != nil {
-		log.Printf("nu pot sterge atasamentul %d: %v", a.ID, err)
-	}
+	return s.st.DeleteAttachment(a.ID)
 }
 
 func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +191,10 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", a.Mime)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "sandbox")
+	// viewerul de PDF din Chrome nu merge sub sandbox; restul tipurilor raman in sandbox
+	if strings.TrimSpace(base) != "application/pdf" {
+		w.Header().Set("Content-Security-Policy", "sandbox")
+	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": a.Name}))
 	http.ServeContent(w, r, a.Name, a.CreatedAt, f)
 }
@@ -207,7 +210,10 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	s.removeFile(a)
+	if err := s.removeFile(a); err != nil && !errors.Is(err, store.ErrNotFound) {
+		fail(w, err)
+		return
+	}
 	s.hub.Publish(a.ProjectID, "files", map[string]int64{"id": a.ProjectID})
 	w.WriteHeader(http.StatusNoContent)
 }

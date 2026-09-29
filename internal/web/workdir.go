@@ -1,7 +1,9 @@
 package web
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,18 +39,25 @@ func slugify(name string) string {
 func resolveWorkdir(input, projectName, workspaces string) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
+		if err := os.MkdirAll(workspaces, 0o755); err != nil {
+			return "", fmt.Errorf("nu pot crea %s: %w", workspaces, err)
+		}
 		base := filepath.Join(workspaces, slugify(projectName))
-		dir := base
-		for n := 2; ; n++ {
-			if _, err := os.Stat(dir); os.IsNotExist(err) {
-				break
+		// Mkdir esueaza atomic daca exista deja, deci nu avem cursa check-then-create.
+		for n := 1; n <= 1000; n++ {
+			dir := base
+			if n > 1 {
+				dir = fmt.Sprintf("%s-%d", base, n)
 			}
-			dir = fmt.Sprintf("%s-%d", base, n)
+			err := os.Mkdir(dir, 0o755)
+			if err == nil {
+				return dir, nil
+			}
+			if !errors.Is(err, fs.ErrExist) {
+				return "", fmt.Errorf("nu pot crea folderul de lucru: %w", err)
+			}
 		}
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return "", fmt.Errorf("nu pot crea folderul de lucru: %w", err)
-		}
-		return dir, nil
+		return "", fmt.Errorf("nu gasesc un nume liber pentru folderul de lucru in %s", workspaces)
 	}
 	dir, err := expandHome(input)
 	if err != nil {

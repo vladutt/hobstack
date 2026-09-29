@@ -42,11 +42,6 @@ func (in projectInput) toProject(workspaces string) (store.Project, error) {
 			return p, err
 		}
 	}
-	dir, err := resolveWorkdir(in.Workdir, p.Name, workspaces)
-	if err != nil {
-		return p, err
-	}
-	p.Workdir = dir
 	// 0 (sau camp gol in UI) inseamna fara limita, la ambele.
 	if p.MaxParallel < 0 || p.MaxParallel > 100 {
 		return p, badRequest("workeri in paralel: gol pentru fara limita, sau intre 1 si 100")
@@ -54,6 +49,12 @@ func (in projectInput) toProject(workspaces string) (store.Project, error) {
 	if p.BudgetUSD < 0 || (p.BudgetUSD > 0 && p.BudgetUSD < 0.05) || p.BudgetUSD > 100 {
 		return p, badRequest("bugetul per run: gol pentru fara limita, sau intre 0.05 si 100 USD")
 	}
+	// ultimul pas: creeaza folderul doar dupa ce restul e valid
+	dir, err := resolveWorkdir(in.Workdir, p.Name, workspaces)
+	if err != nil {
+		return p, err
+	}
+	p.Workdir = dir
 	return p, nil
 }
 

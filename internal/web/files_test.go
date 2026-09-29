@@ -6,12 +6,14 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"foreman/internal/config"
+	"foreman/internal/events"
 	"foreman/internal/picker"
 	"foreman/internal/store"
 )
@@ -102,8 +104,11 @@ func TestUploadListServeDelete(t *testing.T) {
 	if !strings.HasPrefix(res.Header.Get("Content-Disposition"), "inline") {
 		t.Errorf("disposition = %q", res.Header.Get("Content-Disposition"))
 	}
-	if res.Header.Get("Content-Security-Policy") != "sandbox" {
-		t.Errorf("csp = %q", res.Header.Get("Content-Security-Policy"))
+	if csp := res.Header.Get("Content-Security-Policy"); csp != "" {
+		t.Errorf("pdf-ul nu trebuie sa aiba CSP, are %q", csp)
+	}
+	if res.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("nosniff lipseste pe pdf")
 	}
 	if code, _ := e.do(t, "DELETE", "/api/files/"+itoa(pdf.ID), nil); code != http.StatusNoContent {
 		t.Fatalf("delete: %d", code)
@@ -131,6 +136,9 @@ func TestServeFileHeaders(t *testing.T) {
 	}
 	if res.Header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Errorf("nosniff lipseste")
+	}
+	if res.Header.Get("Content-Security-Policy") != "sandbox" {
+		t.Errorf("csp = %q", res.Header.Get("Content-Security-Policy"))
 	}
 }
 
@@ -245,5 +253,34 @@ func TestDeleteProjectRemovesFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(work); err != nil {
 		t.Errorf("folderul de lucru a disparut: %v", err)
+	}
+}
+
+func TestWorkspacesIsFile(t *testing.T) {
+	e := setup(t)
+	f := filepath.Join(t.TempDir(), "fisier")
+	os.WriteFile(f, []byte("x"), 0o644)
+	e.dirs.Workspaces = f
+	srv := New(e.st, e.tm, nil, events.NewHub(), http.NotFoundHandler(), e.dirs, nil, false)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	res, err := http.Post(ts.URL+"/api/projects", "application/json", strings.NewReader(`{"name":"X"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode == http.StatusCreated {
+		t.Fatalf("a creat proiect: %d", res.StatusCode)
+	}
+}
+
+func TestInvalidInputCreatesNoFolder(t *testing.T) {
+	e := setup(t)
+	code, _ := e.do(t, "POST", "/api/projects", map[string]any{"name": "X", "budgetUsd": 0.01})
+	if code != http.StatusBadRequest {
+		t.Fatalf("cod %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(e.dirs.Workspaces, "x")); !os.IsNotExist(err) {
+		t.Errorf("folderul orfan exista: %v", err)
 	}
 }
