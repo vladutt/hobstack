@@ -53,8 +53,18 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
     wrap.classList.toggle("full", on);
     fullBtn.textContent = on ? "Inchide" : "Ecran mare";
     closeMenu();
+    // cat timp e ecran mare, Escape iese si fara focus pe canvas (focusul se pierde
+    // cand un buton se dezactiveaza sau meniul se inchide)
+    document.removeEventListener("keydown", fullEscape);
+    if (on) document.addEventListener("keydown", fullEscape);
     wrap.focus();
     // redesenarea vine din ResizeObserver
+  }
+  function fullEscape(e) {
+    if (e.key !== "Escape") return;
+    const t = document.activeElement;
+    if (t && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type !== "button"))) return;
+    if (menu) closeMenu(); else setFull(false);
   }
 
   // ---------- coordonate ----------
@@ -207,7 +217,12 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
         g.classList.add("dragging");
       }
       const p = toSvg(ev);
-      const np = { x: start.pos.x + p.x - start.p.x, y: start.pos.y + p.y - start.p.y };
+      // ramane in viewBox-ul curent, ca nodul sa nu dispara pana la drop
+      const vb = svgEl.viewBox.baseVal;
+      const np = {
+        x: Math.min(Math.max(start.pos.x + p.x - start.p.x, vb.x), vb.x + vb.width - NODE_W),
+        y: Math.min(Math.max(start.pos.y + p.y - start.p.y, vb.y), vb.y + vb.height - NODE_H),
+      };
       pos.set(id, np);
       g.setAttribute("transform", `translate(${np.x} ${np.y})`);
       redrawEdges();
@@ -282,6 +297,11 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
       sourceId !== "you" && el("button", { type: "button", "data-kind": "review", onclick: () => choose({ reviewerId: sourceId }) }, "Verifica munca lui " + target.name),
       el("button", { type: "button", "data-kind": "cancel", onclick: closeMenu }, "Renunta"));
     wrap.append(menu);
+    // in limitele canvas-ului (dupa ce are dimensiuni)
+    const left = Math.max(0, Math.min(e.clientX - w.left, w.width - menu.offsetWidth - 4));
+    const top = Math.max(0, Math.min(e.clientY - w.top, w.height - menu.offsetHeight - 4));
+    menu.style.left = Math.round(left) + "px";
+    menu.style.top = Math.round(top) + "px";
     // click in afara meniului il inchide (dupa ce evenimentul curent s-a terminat)
     setTimeout(() => document.addEventListener("pointerdown", outside, true), 0);
     async function choose(patch) {
@@ -295,6 +315,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
     if (!menu) return;
     menu.remove();
     menu = null;
+    wrap.focus();
     flush();
   }
 
@@ -314,6 +335,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
     const agent = agentById(Number(idText));
     selectedLink = null;
     syncLinkSelection();
+    wrap.focus(); // butonul se dezactiveaza: pastram focusul pe canvas
     if (!agent) return;
     saveLinks(agent, kind === "p" ? { parentId: null } : { reviewerId: null });
   }
@@ -354,6 +376,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
     },
     destroy() {
       observer.disconnect();
+      document.removeEventListener("keydown", fullEscape);
       document.removeEventListener("pointerdown", outside, true);
       menu?.remove();
     },
