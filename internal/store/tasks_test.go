@@ -1,0 +1,170 @@
+package store
+
+import (
+	"errors"
+	"testing"
+)
+
+func TestTaskNumbersPerProject(t *testing.T) {
+	s := newStore(t)
+	p1, _ := newProject(t, s)
+	p2, _ := newProject(t, s)
+	w1 := newWorker(t, s, p1.ID, "Rook")
+	w2 := newWorker(t, s, p2.ID, "Rook")
+
+	var got []int
+	for _, x := range []struct {
+		pid, aid int64
+	}{{p1.ID, w1.ID}, {p1.ID, w1.ID}, {p2.ID, w2.ID}} {
+		task := Task{ProjectID: x.pid, Title: "t", AssigneeID: x.aid}
+		if err := s.CreateTask(&task); err != nil {
+			t.Fatal(err)
+		}
+		if task.Status != StatusQueued {
+			t.Fatalf("status initial = %q", task.Status)
+		}
+		got = append(got, task.Number)
+	}
+	if got[0] != 1 || got[1] != 2 || got[2] != 1 {
+		t.Fatalf("numere = %v, vreau [1 2 1]", got)
+	}
+	task, err := s.GetTaskByNumber(p1.ID, 2)
+	if err != nil || task.Ref() != "T-2" {
+		t.Fatalf("GetTaskByNumber = %+v, %v", task, err)
+	}
+	if _, err := s.GetTaskByNumber(p1.ID, 9); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("task inexistent: %v", err)
+	}
+}
+
+func TestSaveTaskAndRequeue(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	a := Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID}
+	b := Task{ProjectID: p.ID, Title: "B", AssigneeID: w.ID}
+	s.CreateTask(&a)
+	s.CreateTask(&b)
+
+	a.Status, a.Result, a.Feedback, a.SendBacks = StatusInProgress, "r", "f", 2
+	if err := s.SaveTask(&a); err != nil {
+		t.Fatal(err)
+	}
+	b.Status = StatusReview
+	s.SaveTask(&b)
+
+	if err := s.RequeueInProgress(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	gotA, _ := s.GetTask(a.ID)
+	gotB, _ := s.GetTask(b.ID)
+	if gotA.Status != StatusQueued || gotA.Result != "r" || gotA.Feedback != "f" || gotA.SendBacks != 2 {
+		t.Fatalf("A dupa requeue: %+v", gotA)
+	}
+	if gotB.Status != StatusReview {
+		t.Fatalf("B nu trebuia atins: %+v", gotB)
+	}
+	tasks, _ := s.ListTasks(p.ID)
+	if len(tasks) != 2 || tasks[0].Title != "A" {
+		t.Fatalf("ListTasks = %+v", tasks)
+	}
+}
+
+func TestDeleteAgentWithTasksRejected(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	s.CreateTask(&Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID})
+	if err := s.DeleteAgent(w.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stergere worker cu task-uri: %v", err)
+	}
+	free := newWorker(t, s, p.ID, "Vera")
+	if err := s.DeleteAgent(free.ID); err != nil {
+		t.Fatalf("stergere worker liber: %v", err)
+	}
+}
+
+func TestRunsLifecycle(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	task := Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID}
+	s.CreateTask(&task)
+
+	r1 := Run{ID: "r1", AgentID: w.ID, TaskID: task.ID}
+	r2 := Run{ID: "r2", AgentID: lead.ID}
+	if err := s.CreateRun(&r1); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateRun(&r2); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishRun("r1", RunFailed, 0.75, "buget depasit"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InterruptRunning(); err != nil {
+		t.Fatal(err)
+	}
+	got1, _ := s.GetRun("r1")
+	got2, _ := s.GetRun("r2")
+	if got1.Status != RunFailed || got1.CostUSD != 0.75 || got1.Error != "buget depasit" || got1.EndedAt == nil || got1.TaskID != task.ID {
+		t.Fatalf("r1 = %+v", got1)
+	}
+	if got2.Status != RunInterrupted || got2.TaskID != 0 {
+		t.Fatalf("r2 = %+v", got2)
+	}
+	if err := s.FinishRun("nu-exista", RunDone, 0, ""); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("run inexistent: %v", err)
+	}
+}
+
+func TestMessagesDelivery(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	m1 := Message{ProjectID: p.ID, AgentID: lead.ID, Kind: KindMsg, Author: AuthorUser, Text: "salut", Delivered: false}
+	m2 := Message{ProjectID: p.ID, AgentID: lead.ID, Kind: KindEvent, Text: "info", Delivered: true}
+	m3 := Message{ProjectID: p.ID, AgentID: lead.ID, Kind: KindEvent, Text: "Rook a terminat", Delivered: false, RunID: "r1"}
+	for _, m := range []*Message{&m1, &m2, &m3} {
+		if err := s.AddMessage(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending, err := s.Undelivered(lead.ID)
+	if err != nil || len(pending) != 2 || pending[0].ID != m1.ID || pending[1].RunID != "r1" {
+		t.Fatalf("Undelivered = %+v, %v", pending, err)
+	}
+	if has, _ := s.HasUndelivered(lead.ID); !has {
+		t.Fatal("HasUndelivered = false")
+	}
+	if err := s.MarkDelivered([]int64{m1.ID, m3.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if has, _ := s.HasUndelivered(lead.ID); has {
+		t.Fatal("HasUndelivered = true dupa MarkDelivered")
+	}
+	all, _ := s.ListMessages(lead.ID)
+	if len(all) != 3 || all[0].Text != "salut" || !all[0].Delivered {
+		t.Fatalf("ListMessages = %+v", all)
+	}
+}
+
+func TestDeleteProjectCascades(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	task := Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID}
+	s.CreateTask(&task)
+	s.CreateRun(&Run{ID: "r1", AgentID: w.ID, TaskID: task.ID})
+	s.AddMessage(&Message{ProjectID: p.ID, AgentID: lead.ID, Kind: KindMsg, Author: AuthorUser, Text: "x"})
+
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatalf("stergere cu cascada: %v", err)
+	}
+	for _, table := range []string{"agents", "tasks", "runs", "messages"} {
+		var n int
+		s.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&n)
+		if n != 0 {
+			t.Errorf("%s mai are %d randuri", table, n)
+		}
+	}
+}
