@@ -140,7 +140,8 @@ Stergeri:
   - `notifications/initialized`: raspunde cu 202, fara body;
   - `tools/list`;
   - `tools/call`;
-  - orice alta metoda intoarce eroarea `-32601`.
+  - orice alta metoda intoarce eroarea `-32601`. Claude trimite intai `server/discover`, iar `-32601` e raspunsul corect;
+  - `GET` pe endpoint intoarce 405, pentru ca nu oferim stream server -> client. Verificat pe 2026-09-29 cu Claude Code 2.1.284: conexiunea merge.
 - **Token:** 32 de bytes aleatori, in hex. Se genereaza la pornirea fiecarui run si e tinut in memorie ca `token -> {projectID, agentID, runID, taskID}`. Se sterge cand run-ul se termina. Un token necunoscut primeste 404.
 - **Lista de tool-uri** depinde de pozitia agentului, astfel incat un worker sa nu vada tool-urile lead-ului.
 - **Numele serverului** in config e `team`, deci in Claude tool-urile apar ca `mcp__team__<nume>`.
@@ -276,7 +277,11 @@ Sectiunile cu continut gol se omit. `internal/prompt` expune si un `Preview(agen
 | `git` (fara shell complet) | `Bash(git status:*)`, `Bash(git diff:*)`, `Bash(git log:*)`, `Bash(git add:*)`, `Bash(git commit:*)`, `Bash(git checkout -b:*)` |
 | `web` | `WebSearch`, `WebFetch` |
 
-`permissions.deny` este fix pentru toti agentii: `Bash(git push:*)`, `Bash(rm -rf:*)`, `Bash(sudo:*)`, `Bash(npm install:*)`, `Bash(composer require:*)`, `Bash(go get:*)`, `Bash(pip install:*)`, `Bash(brew install:*)`.
+`permissions.deny` este fix pentru toti agentii:
+- actiuni riscante: `Bash(git push:*)`, `Bash(rm -rf:*)`, `Bash(sudo:*)`, `Bash(npm install:*)`, `Bash(composer require:*)`, `Bash(go get:*)`, `Bash(pip install:*)`, `Bash(brew install:*)`;
+- tool-uri interne Claude Code care se suprapun cu echipa: `TaskCreate`, `TaskUpdate`, `TaskList`, `TaskGet`, `TodoWrite`, `Agent`.
+
+Proba din 2026-09-29 a aratat ca, fara acest deny, lead-ul foloseste `TaskCreate` (lista interna de task-uri) in loc de `mcp__team__create_task`. Cu deny, apeleaza tool-ul nostru. Aceste tool-uri interne nu cer permisiune in `-p`, deci trebuie blocate explicit.
 
 In `-p` tot ce lipseste din `allow` sau apare in `deny` e refuzat automat. Acest lucru a fost verificat pe 2026-09-29 pentru `allow`. `--setting-sources user` pastreaza setarile globale ale utilizatorului si ignora `.claude/settings.json` din repo. `CLAUDE.md` din folderul proiectului se incarca in continuare.
 
@@ -367,8 +372,8 @@ internal/web/         API, SSE proiect, UI embedded
 - **Manual cap-coada cu Claude real:** proiect temporar (un folder cu un README), lead plus 2 workeri, obiectiv mic de tipul „adauga 2 fisiere text cu X si Y”. Se verifica board-ul live, costurile si chat-ul direct cu un worker.
 - **Conventii:** `go vet ./...`, `go build -race ./...`, cross-compile darwin/arm64 si windows.
 
-## 13. Riscuri de verificat primele (task 1 din plan)
+## 13. Riscuri verificate (proba din 2026-09-29, Claude Code 2.1.284)
 
-1. `claude -p` cu `--mcp-config` inline de tip `http` si `--strict-mcp-config` se conecteaza la serverul nostru, iar tool-urile `mcp__team__*` pot fi apelate cand sunt in `permissions.allow`.
-2. `--append-system-prompt` impreuna cu `--resume` se comporta cum spune help-ul (prompt inregistrat la prima cerere). Daca nu, ajustam regula din sectiunea 6.
-3. `--max-budget-usd` opreste run-ul curat si se vede in evenimentul `result`.
+1. **MCP HTTP inline:** merge. Serverul raspunde JSON simplu, iar tool-urile apar ca `mcp__team__*`, sunt descoperite prin ToolSearch si se apeleaza fara refuz cand sunt in `allow`. E nevoie de deny pe tool-urile interne de task-uri (sectiunea 6).
+2. **`--append-system-prompt` cu `--resume`:** help-ul confirma ca prompt-ul se inregistreaza la prima cerere. Regula cu `prompt_hash` din sectiunea 6 acopera cazul.
+3. **`--max-budget-usd`:** run-ul se opreste, iar evenimentul `result` vine cu `subtype: "error_max_budget_usd"`, `is_error: true`, `errors: ["Reached maximum budget ($X)"]` si `result` null. Limita se verifica intre ture, deci costul real poate depasi putin bugetul.
