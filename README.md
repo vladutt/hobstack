@@ -32,6 +32,8 @@ Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
 - Un sub-lider sparge task-ul primit in sub-task-uri pentru echipa lui. Cand toate sub-task-urile
   sunt gata, task-ul revine in coada lui, iar sub-liderul il verifica si il raporteaza in sus.
 - Pe canvas nodurile se muta cu mouse-ul, legaturile se trag din ●, iar dublu-click deschide editorul.
+- In API (`POST /api/projects/{id}/agents`, `PUT /api/agents/{id}`), un `parentId` lipsa sau null inseamna
+  agent radacina.
 - `max_parallel` se aplica doar agentilor care au sef.
 - Permisiunile vin doar din aplicatie (`--settings` inline, `--setting-sources user`). `CLAUDE.md`
   din repo-ul proiectului se citeste in continuare. `git push`, `rm -rf`, `sudo` si instalarile
