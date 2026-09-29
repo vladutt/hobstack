@@ -242,3 +242,50 @@ func TestNewReviewerGetsPendingReview(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Un agent nelegat nu e radacina, nu primeste mesaje si devine legat cand
+// primeste un sef sau cand e legat de utilizator. Copiii unui agent fara sef
+// raman nelegati cand acesta e sters.
+func TestDetachedAgent(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
+	code, raw := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/agents", map[string]any{"name": "Banca", "model": "haiku", "detached": true})
+	var banca store.Agent
+	json.Unmarshal(raw, &banca)
+	if code != http.StatusCreated || !banca.Detached {
+		t.Fatalf("creare nelegat: %d %s", code, raw)
+	}
+	for _, a := range e.detail(t, p.ID).Agents {
+		if a.Name == "Banca" && a.IsRoot {
+			t.Fatal("un agent nelegat nu e radacina")
+		}
+	}
+	if code, raw := e.do(t, "POST", "/api/agents/"+itoa(banca.ID)+"/messages", map[string]any{"text": "salut"}); code != 400 || !strings.Contains(string(raw), "nu e legat") {
+		t.Fatalf("mesaj catre nelegat: %d %s", code, raw)
+	}
+
+	// cu sef, "detached" din corp se ignora
+	e.do(t, "PUT", "/api/agents/"+itoa(banca.ID), map[string]any{"name": "Banca", "model": "haiku", "parentId": root.ID, "detached": true})
+	if a, _ := e.st.GetAgent(banca.ID); a.Detached || a.ParentID == nil {
+		t.Fatalf("cu sef trebuie sa fie legat: %+v", a)
+	}
+
+	// fara sef si fara detached: radacina
+	e.do(t, "PUT", "/api/agents/"+itoa(banca.ID), map[string]any{"name": "Banca", "model": "haiku"})
+	if a, _ := e.st.GetAgent(banca.ID); a.Detached || a.ParentID != nil {
+		t.Fatalf("trebuia sa fie radacina: %+v", a)
+	}
+
+	// stergerea unei radacini lasa copiii nelegati
+	copil := store.Agent{ProjectID: p.ID, Name: "Copil", Model: "haiku", ParentID: &banca.ID}
+	if err := e.st.CreateAgent(&copil); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := e.do(t, "DELETE", "/api/agents/"+itoa(banca.ID), nil); code != http.StatusNoContent {
+		t.Fatalf("stergere: %d", code)
+	}
+	if a, _ := e.st.GetAgent(copil.ID); !a.Detached || a.ParentID != nil {
+		t.Fatalf("Copil trebuia sa ramana nelegat: %+v", a)
+	}
+}

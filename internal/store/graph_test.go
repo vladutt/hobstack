@@ -37,3 +37,10 @@ func TestGraphHelpers(t *testing.T) {
 		t.Fatal("FindAgent(9) a gasit ceva")
 	}
 }
+
+func TestDetachedIsNotRoot(t *testing.T) {
+	a := Agent{ID: 1, Detached: true}
+	if r := RolesOf(a, []Agent{a}); r.IsRoot {
+		t.Fatalf("nelegat marcat radacina: %+v", r)
+	}
+}

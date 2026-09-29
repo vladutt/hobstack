@@ -13,9 +13,11 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
   const responsibilities = el("textarea", {
     value: a.responsibilities || "", rows: 2, maxlength: 2000, placeholder: "ex. Endpoint-uri API si migrari",
   });
-  const parentSelect = el("select", { value: a.parentId ? String(a.parentId) : "" }, agentOptions("Tu"));
+  // "" = Tu (radacina), "none" = nelegat, altfel id-ul sefului
+  const parentSelect = el("select", { value: a.parentId ? String(a.parentId) : a.detached ? "none" : "" },
+    el("option", { value: "none" }, "nimeni (nelegat)"), agentOptions("Tu"));
   const reviewerSelect = el("select", { value: a.reviewerId ? String(a.reviewerId) : "" }, agentOptions("nimeni"));
-  const idOf = (sel) => (sel.value ? Number(sel.value) : null);
+  const idOf = (sel) => (sel.value && sel.value !== "none" ? Number(sel.value) : null);
 
   const name = el("input", { type: "text", value: a.name, placeholder: "ex. Rook", required: true, maxlength: 40 });
   const role = el("input", { type: "text", value: a.role, placeholder: "ex. Backend Developer", maxlength: 80 });
@@ -92,6 +94,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
       tools: tools.filter((t) => t.box.checked).map((t) => t.id),
       responsibilities: responsibilities.value,
       parentId: idOf(parentSelect), reviewerId: idOf(reviewerSelect),
+      detached: parentSelect.value === "none",
     });
     saveBtn.disabled = true;
     try {

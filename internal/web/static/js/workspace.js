@@ -66,7 +66,8 @@ export async function workspaceView(root, projectId, route) {
     onSelect: (id) => select(id),
     onEdit: (id) => select(id, "details"),
     onChanged: () => reload(),
-    onCreate: (pos, parentId) => createAgent(pos, parentId),
+    onCreate: (pos, link) => createAgent(pos, link),
+    onDelete: (id) => deleteAgent(id),
   });
   // pe Task-uri si Fisiere alegi cu cine vorbesti din banda cu echipa
   const strip = el("div", { class: "team-strip", "aria-label": "Echipa" });
@@ -207,16 +208,16 @@ export async function workspaceView(root, projectId, route) {
     return true;
   }
 
-  // createAgent: agent nou pus pe canvas la pos. Fara parentId nu are sef
-  // (raporteaza utilizatorului); cu parentId apare direct in echipa acelui agent.
-  async function createAgent(pos, parentId = null) {
+  // createAgent: agent nou pus pe canvas la pos. link = {parentId, detached}:
+  // in echipa unui agent, legat de utilizator sau nelegat.
+  async function createAgent(pos, { parentId, detached }) {
     if (!leaveEditor()) return;
     const names = new Set(state.project.agents.map((a) => a.name.toLowerCase()));
     let name = "Agent nou";
     for (let i = 2; names.has(name.toLowerCase()); i++) name = `Agent nou ${i}`;
     const body = agentBody({
       name, role: "", model: "sonnet", background: "", instructions: "", doneDef: "",
-      tools: ["write"], responsibilities: "", parentId, reviewerId: null,
+      tools: ["write"], responsibilities: "", parentId, reviewerId: null, detached,
     });
     try {
       const a = await api(`/api/projects/${projectId}/agents`, { method: "POST", body });
@@ -231,6 +232,25 @@ export async function workspaceView(root, projectId, route) {
     } catch (err) {
       toast(err.message);
     }
+  }
+
+  // deleteAgent: butonul x de pe nod
+  async function deleteAgent(id) {
+    const a = state.project.agents.find((x) => x.id === id);
+    if (!a || !confirm(`Stergi agentul ${a.name}?`)) return;
+    try {
+      await api(`/api/agents/${id}`, { method: "DELETE" });
+    } catch (err) {
+      toast(err.message);
+      return;
+    }
+    if (state.selected === id) {
+      editor?.destroy();
+      editor = null;
+      state.selected = null;
+    }
+    await reload();
+    await loadThread();
   }
 
   // syncHash: pe Echipa, adresa contine agentul selectat (refresh-ul il pastreaza).
@@ -363,10 +383,13 @@ export async function workspaceView(root, projectId, route) {
       avatar(a.name, kindOf(a), 36),
       el("div", {},
         el("div", { class: "member-name" }, a.name, a.role && el("span", { class: "hint" }, "· " + a.role)),
-        el("div", { class: "hint thread-hint" }, !boss
-          ? "Thread direct. Ii dai obiective aici, iar el delegheaza echipei lui."
-          : `Thread direct. ${boss.name} primeste in copie ce ii scrii.`)));
-    input.placeholder = isLead ? `Scrie-i lui ${a.name}...` : `Mesaj pentru ${a.name}`;
+        el("div", { class: "hint thread-hint" }, a.detached
+          ? "Nelegat: nu lucreaza. Leaga-l pe canvas de Tu sau de un lider."
+          : !boss
+            ? "Thread direct. Ii dai obiective aici, iar el delegheaza echipei lui."
+            : `Thread direct. ${boss.name} primeste in copie ce ii scrii.`)));
+    input.placeholder = a.detached ? "Leaga agentul ca sa-i poti scrie" : isLead ? `Scrie-i lui ${a.name}...` : `Mesaj pentru ${a.name}`;
+    input.disabled = sendBtn.disabled = clip.disabled = !!a.detached;
     note.textContent = state.project.paused ? "Echipa e pe pauza: mesajul asteapta pana o pornesti." : "";
   }
 

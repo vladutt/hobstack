@@ -3,12 +3,12 @@ package store
 // Rolurile unui agent nu se stocheaza: reies din legaturi.
 type Roles struct {
 	IsLead     bool `json:"isLead"`     // are cel putin un agent direct sub el
-	IsRoot     bool `json:"isRoot"`     // raporteaza utilizatorului
+	IsRoot     bool `json:"isRoot"`     // raporteaza utilizatorului (fara sef si legat de el)
 	IsReviewer bool `json:"isReviewer"` // verifica munca cel putin unui agent
 }
 
 func RolesOf(a Agent, team []Agent) Roles {
-	r := Roles{IsRoot: a.ParentID == nil}
+	r := Roles{IsRoot: a.ParentID == nil && !a.Detached}
 	for _, o := range team {
 		if o.ParentID != nil && *o.ParentID == a.ID {
 			r.IsLead = true

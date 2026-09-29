@@ -256,3 +256,16 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   .ws[data-tab="echipa"] .team-body .canvas-wrap:not(.full) svg.team-canvas { flex: 1; min-height: 0; height: auto; }
 }
 .console.on-details .thread-hint { display: none; }
+
+/* x pentru stergere: pe linii la hover sau selectie, pe noduri la hover sau selectie */
+.edge-x, .node-x { display: none; cursor: pointer; }
+.edge-x circle, .node-x circle { fill: var(--card); stroke: var(--line-2); }
+.edge-x path, .node-x path { stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.edge-x:hover circle, .node-x:hover circle { stroke: var(--red); }
+.edge-x:hover path, .node-x:hover path { stroke: var(--red); }
+.edge-group:hover .edge-x, .edge-group.selected .edge-x { display: inline; }
+.node:hover .node-x, .node.selected .node-x { display: inline; }
+.node.dragging .node-x { display: none; }
+/* agent nelegat: chenar punctat, eticheta "nelegat" */
+.node.detached .card { stroke-dasharray: 5 4; }
+.node text.sub.unlinked { fill: var(--amber); }

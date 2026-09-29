@@ -60,7 +60,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	roles := store.RolesOf(a, agents)
 	t.mu.Lock()
 	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
-		IsLead: roles.IsLead, HasParent: !roles.IsRoot, IsReviewer: roles.IsReviewer}
+		IsLead: roles.IsLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer}
 	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
 	t.mu.Unlock()
 

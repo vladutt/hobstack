@@ -9,6 +9,7 @@ Autorul e senior PHP/Laravel, incepator in Go: cod simplu, idiomatic, comentat u
 - Claude Code CLI headless (`claude -p --output-format stream-json --verbose --resume <sid>`), nu Agent SDK.
 - Agentii traiesc in SQLite (~/.foreman/foreman.db), per proiect. Toti ruleaza cu folderul proiectului ca cwd.
 - Echipa e o ierarhie (graf pe canvas): fiecare agent are un sef (`parent_id`) sau e radacina (vorbeste cu utilizatorul).
+  Un agent fara sef poate fi si nelegat (`detached`): nu lucreaza si nu primeste mesaje pana il legi pe canvas.
   Un agent cu echipa directa e lider; un sub-lider sparge task-ul primit in sub-task-uri si il raporteaza in sus.
   Optional, un agent are un reviewer (`reviewer_id`): munca trece intai pe la reviewer, apoi la liderul care a creat task-ul.
 - Orchestrare prin MCP: aplicatia e server MCP (/mcp/<token>); liderii creeaza si decid task-uri, agentii cu sef raporteaza,

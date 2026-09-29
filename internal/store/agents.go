@@ -26,21 +26,22 @@ type Agent struct {
 	PromptHash   string    `json:"-"`
 	CreatedAt    time.Time `json:"createdAt"`
 
-	ParentID         *int64   `json:"parentId"`         // nil = raporteaza utilizatorului (radacina)
+	ParentID         *int64   `json:"parentId"`         // nil = raporteaza utilizatorului (radacina), daca nu e Detached
+	Detached         bool     `json:"detached"`         // fara sef si nelegat de utilizator: nu lucreaza pana il legi
 	ReviewerID       *int64   `json:"reviewerId"`       // nil = nu il verifica nimeni
 	Responsibilities string   `json:"responsibilities"` // "Ce ia"
 	PosX             *float64 `json:"posX"`             // nil = asezare automata pe canvas
 	PosY             *float64 `json:"posY"`
 }
 
-const agentCols = `id, project_id, name, role, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y`
+const agentCols = `id, project_id, name, role, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y, detached`
 
 func scanAgent(sc scanner) (Agent, error) {
 	var a Agent
 	var tools, created string
 	err := sc.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Role, &a.Model, &a.Background,
 		&a.Instructions, &a.DoneDef, &tools, &a.SessionID, &a.PromptHash, &created,
-		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY)
+		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY, &a.Detached)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, ErrNotFound
 	}
@@ -67,10 +68,11 @@ func toolsJSON(tools []string) string {
 
 func insertAgent(ex execer, a *Agent) error {
 	created := now()
-	res, err := ex.Exec(`INSERT INTO agents (project_id, name, role, position, model, background, instructions, done_def, tools, parent_id, reviewer_id, responsibilities, created_at)
-		VALUES (?, ?, ?, 'worker', ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 'worker': coloana veche, pastrata doar pentru ca e NOT NULL
+	a.Detached = a.Detached && a.ParentID == nil // un agent cu sef e mereu legat
+	res, err := ex.Exec(`INSERT INTO agents (project_id, name, role, position, model, background, instructions, done_def, tools, parent_id, reviewer_id, responsibilities, detached, created_at)
+		VALUES (?, ?, ?, 'worker', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 'worker': coloana veche, pastrata doar pentru ca e NOT NULL
 		a.ProjectID, a.Name, a.Role, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools),
-		nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.Responsibilities, created)
+		nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.Responsibilities, a.Detached, created)
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -162,11 +164,11 @@ func (s *Store) GetAgent(id int64) (Agent, error) {
 	return scanAgent(s.db.QueryRow(`SELECT `+agentCols+` FROM agents WHERE id = ?`, id))
 }
 
-// ListAgents intoarce echipa proiectului: radacinile primele, apoi restul, in
-// ordinea adaugarii.
+// ListAgents intoarce echipa proiectului: radacinile primele, apoi nelegatii,
+// apoi restul, in ordinea adaugarii.
 func (s *Store) ListAgents(projectID int64) ([]Agent, error) {
 	rows, err := s.db.Query(`SELECT `+agentCols+` FROM agents WHERE project_id = ?
-		ORDER BY parent_id IS NOT NULL, id`, projectID)
+		ORDER BY parent_id IS NOT NULL, detached, id`, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,10 +201,11 @@ func (s *Store) UpdateAgent(a Agent) error {
 	if err := checkLinks(tx, a); err != nil {
 		return err
 	}
+	a.Detached = a.Detached && a.ParentID == nil // un agent cu sef e mereu legat
 	res, err := tx.Exec(`UPDATE agents SET name = ?, role = ?, model = ?, background = ?, instructions = ?, done_def = ?, tools = ?,
-		responsibilities = ?, parent_id = ?, reviewer_id = ?
+		responsibilities = ?, parent_id = ?, reviewer_id = ?, detached = ?
 		WHERE id = ?`, a.Name, a.Role, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools),
-		a.Responsibilities, nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.ID)
+		a.Responsibilities, nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.Detached, a.ID)
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -217,8 +220,8 @@ func (s *Store) SetAgentPosition(id int64, x, y float64) error {
 	return mustAffect(s.db.Exec(`UPDATE agents SET pos_x = ?, pos_y = ? WHERE id = ?`, x, y, id))
 }
 
-// DeleteAgent sterge un agent. Copiii lui trec la seful lui (sau devin
-// radacini), iar cei pe care ii verifica raman fara reviewer. Agentii cu
+// DeleteAgent sterge un agent. Copiii lui trec la seful lui; daca nu avea sef,
+// raman nelegati. Cei pe care ii verifica raman fara reviewer. Agentii cu
 // task-uri si ultimul agent din proiect nu se pot sterge (ErrConflict).
 func (s *Store) DeleteAgent(id int64) error {
 	tx, err := s.db.Begin()
@@ -240,7 +243,7 @@ func (s *Store) DeleteAgent(id int64) error {
 	if tasks > 0 || others == 0 {
 		return ErrConflict
 	}
-	if _, err := tx.Exec(`UPDATE agents SET parent_id = ? WHERE parent_id = ?`, nullPtr(a.ParentID), id); err != nil {
+	if _, err := tx.Exec(`UPDATE agents SET parent_id = ?, detached = ? WHERE parent_id = ?`, nullPtr(a.ParentID), a.ParentID == nil, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE agents SET reviewer_id = NULL WHERE reviewer_id = ?`, id); err != nil {

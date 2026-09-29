@@ -25,6 +25,7 @@ type agentInput struct {
 	Responsibilities string   `json:"responsibilities"`
 	ParentID         *int64   `json:"parentId"`   // null sau lipsa = radacina
 	ReviewerID       *int64   `json:"reviewerId"` // null sau lipsa = fara reviewer
+	Detached         bool     `json:"detached"`   // cu parentId null: nelegat, nici de utilizator
 }
 
 // apply valideaza input-ul si il copiaza in agent (fara proiect si pozitie; legaturile se valideaza in store).
@@ -51,6 +52,7 @@ func (in agentInput) apply(a *store.Agent) error {
 	a.DoneDef = strings.TrimSpace(in.DoneDef)
 	a.Responsibilities = strings.TrimSpace(in.Responsibilities)
 	a.ParentID, a.ReviewerID = in.ParentID, in.ReviewerID
+	a.Detached = in.Detached && in.ParentID == nil
 	for _, err := range []error{
 		maxLen("numele agentului", a.Name, 40),
 		maxLen("rolul", a.Role, 80),
@@ -188,6 +190,14 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		fail(w, err)
+		return
+	}
+	// un agent nelegat nu lucreaza: nu primeste mesaje pana il legi pe canvas
+	if a, err := s.st.GetAgent(id); err != nil {
+		fail(w, err)
+		return
+	} else if a.Detached {
+		fail(w, badRequest("agentul nu e legat. Leaga-l de Tu sau de un lider ca sa lucreze"))
 		return
 	}
 	var text string

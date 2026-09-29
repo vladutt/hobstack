@@ -48,6 +48,7 @@ export function agentBody(a, patch = {}) {
     name: a.name, role: a.role, model: a.model, background: a.background,
     instructions: a.instructions, doneDef: a.doneDef, tools: a.tools,
     responsibilities: a.responsibilities, parentId: a.parentId, reviewerId: a.reviewerId,
+    detached: !!a.detached,
     ...patch,
   };
 }
