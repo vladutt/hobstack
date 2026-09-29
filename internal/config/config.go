@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // AppName e numele aplicatiei. Din el se deriva folderul de date, fisierul
@@ -16,6 +17,9 @@ type Paths struct {
 	Root string // ~/.foreman
 	DB   string // ~/.foreman/foreman.db
 	Logs string // ~/.foreman/logs/runs
+
+	Projects   string // ~/.foreman/projects (fisierele proiectelor)
+	Workspaces string // ~/Foreman (foldere implicite de lucru; nu se creeaza aici)
 }
 
 func Default() (Paths, error) {
@@ -28,15 +32,23 @@ func Default() (Paths, error) {
 		Root: root,
 		DB:   filepath.Join(root, AppName+".db"),
 		Logs: filepath.Join(root, "logs", "runs"),
+
+		Projects:   filepath.Join(root, "projects"),
+		Workspaces: filepath.Join(home, "Foreman"),
 	}, nil
 }
 
 // Ensure creeaza folderele daca nu exista.
 func (p Paths) Ensure() error {
-	for _, d := range []string{p.Root, p.Logs} {
+	for _, d := range []string{p.Root, p.Logs, p.Projects} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// ProjectFilesDir intoarce folderul cu fisierele unui proiect.
+func ProjectFilesDir(projectsRoot string, id int64) string {
+	return filepath.Join(projectsRoot, strconv.FormatInt(id, 10), "files")
 }

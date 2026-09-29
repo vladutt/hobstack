@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -23,6 +24,15 @@ func TestDefaultPaths(t *testing.T) {
 	}
 	if p.Logs != filepath.Join(root, "logs", "runs") {
 		t.Errorf("Logs = %q", p.Logs)
+	}
+	if p.Projects != filepath.Join(root, "projects") {
+		t.Errorf("Projects = %q", p.Projects)
+	}
+	if p.Workspaces != filepath.Join(home, "Foreman") {
+		t.Errorf("Workspaces = %q", p.Workspaces)
+	}
+	if d := ProjectFilesDir(p.Projects, 7); !strings.HasSuffix(filepath.ToSlash(d), "projects/7/files") {
+		t.Errorf("ProjectFilesDir = %q", d)
 	}
 	if err := p.Ensure(); err != nil {
 		t.Fatal(err)

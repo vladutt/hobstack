@@ -23,6 +23,8 @@ type Message struct {
 	RunID     string    `json:"runId"`
 	Delivered bool      `json:"delivered"`
 	CreatedAt time.Time `json:"createdAt"`
+
+	Attachments []Attachment `json:"attachments"` // mereu non-nil
 }
 
 const messageCols = `id, project_id, agent_id, kind, author, text, run_id, delivered, created_at`
@@ -36,6 +38,7 @@ func scanMessage(sc scanner) (Message, error) {
 	}
 	m.RunID = run.String
 	m.CreatedAt = parseTime(created)
+	m.Attachments = []Attachment{}
 	return m, nil
 }
 
@@ -54,6 +57,7 @@ func (s *Store) AddMessage(m *Message) error {
 		return err
 	}
 	m.CreatedAt = parseTime(ts)
+	m.Attachments = []Attachment{}
 	return nil
 }
 
@@ -71,7 +75,26 @@ func (s *Store) queryMessages(where string, args ...any) ([]Message, error) {
 		}
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close() // o singura conexiune: eliberam cursorul inainte de urmatoarea interogare
+
+	// Atasamentele tuturor mesajelor, printr-o singura interogare.
+	ids := make([]int64, len(out))
+	for i, m := range out {
+		ids[i] = m.ID
+	}
+	byMsg, err := s.attachmentsFor(ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if att, ok := byMsg[out[i].ID]; ok {
+			out[i].Attachments = att
+		}
+	}
+	return out, nil
 }
 
 // ListMessages intoarce thread-ul agentului, cronologic.
