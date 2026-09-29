@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -30,7 +31,9 @@ type Attachment struct {
 const attachmentCols = `id, project_id, message_id, kind, name, stored, mime, size, created_at`
 
 // CleanFileName pastreaza doar numele fisierului (fara foldere) si inlocuieste
-// caracterele periculoase cu "_". Merge si pe cai de Windows.
+// caracterele periculoase cu "_". Merge si pe cai de Windows. Numele e taiat la
+// cel mult 200 de bytes (limita pe disc e 255, iar prefixul aleator adauga 17),
+// dar extensia scurta se pastreaza intotdeauna.
 func CleanFileName(name string) string {
 	name = filepath.Base(strings.ReplaceAll(name, `\`, "/"))
 	name = strings.Map(func(r rune) rune {
@@ -39,13 +42,25 @@ func CleanFileName(name string) string {
 		}
 		return r
 	}, name)
-	if r := []rune(name); len(r) > 120 {
-		name = string(r[:120])
-	}
 	if name == "" || name == "." || name == ".." {
 		return "fisier"
 	}
-	return name
+	const maxBytes = 200
+	stem, ext := name, filepath.Ext(name)
+	if len(ext) <= 16 {
+		stem = strings.TrimSuffix(name, ext)
+	} else {
+		ext = "" // extensie prea lunga: face parte din stem
+	}
+	// taiem stem-ul in bytes, dar pe granita de runa, ca UTF-8 sa ramana valid
+	for len(stem)+len(ext) > maxBytes {
+		_, size := utf8.DecodeLastRuneInString(stem)
+		stem = stem[:len(stem)-size]
+	}
+	if stem == "" {
+		stem = "fisier"
+	}
+	return stem + ext
 }
 
 // StoredName intoarce numele de pe disc: 16 caractere hex aleatoare + "-" + nume.

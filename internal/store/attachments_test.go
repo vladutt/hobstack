@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestCleanFileName(t *testing.T) {
@@ -22,8 +23,16 @@ func TestCleanFileName(t *testing.T) {
 			t.Errorf("CleanFileName(%q) = %q, vreau %q", in, got, want)
 		}
 	}
-	if n := len([]rune(CleanFileName(strings.Repeat("x", 300) + ".png"))); n > 120 {
-		t.Errorf("nume prea lung: %d", n)
+	long := CleanFileName(strings.Repeat("x", 300) + ".png")
+	if !strings.HasSuffix(long, ".png") || len(long) > 200 {
+		t.Errorf("nume lung: %d bytes, %q", len(long), long[len(long)-8:])
+	}
+	ro := CleanFileName(strings.Repeat("ș", 150) + ".pdf")
+	if !utf8.ValidString(ro) || !strings.HasSuffix(ro, ".pdf") || len(ro) > 200 {
+		t.Errorf("nume utf-8: valid=%v bytes=%d", utf8.ValidString(ro), len(ro))
+	}
+	if got := CleanFileName(".png"); got != "fisier.png" {
+		t.Errorf(".png -> %q", got)
 	}
 	a, b := StoredName("x.png"), StoredName("x.png")
 	if a == b || !strings.HasSuffix(a, "-x.png") || len(a) != 16+1+len("x.png") {
