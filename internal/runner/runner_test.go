@@ -77,6 +77,14 @@ func TestRunBudgetExceeded(t *testing.T) {
 	}
 }
 
+func TestRunErrorWithoutErrorsList(t *testing.T) {
+	t.Setenv("FAKE_MODE", "notlogged")
+	o := wait(t, second(start(t, fakeManager(t), Spec{Key: "a", Dir: t.TempDir()})))
+	if o.Status != "failed" || !strings.Contains(o.Error, "Not logged in") {
+		t.Fatalf("outcome = %+v", o)
+	}
+}
+
 func TestRunCrash(t *testing.T) {
 	t.Setenv("FAKE_MODE", "crash")
 	o := wait(t, second(start(t, fakeManager(t), Spec{Key: "a", Dir: t.TempDir()})))

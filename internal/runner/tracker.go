@@ -46,7 +46,11 @@ func (t *tracker) observe(line []byte) {
 	}
 	t.errText = strings.Join(errs, "; ")
 	if t.errText == "" && ev.IsError {
-		t.errText = ev.Subtype
+		// ex. "Not logged in": claude pune textul in result, iar subtype ramane "success"
+		t.errText = strings.TrimSpace(ev.Result)
+		if t.errText == "" {
+			t.errText = ev.Subtype
+		}
 	}
 }
 

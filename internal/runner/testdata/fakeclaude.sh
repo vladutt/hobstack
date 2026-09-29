@@ -9,6 +9,9 @@ budget)
   echo '{"type":"system","subtype":"init","session_id":"sess-b"}'
   echo '{"type":"result","subtype":"error_max_budget_usd","is_error":true,"total_cost_usd":1.2,"errors":["Reached maximum budget ($1)"],"result":null,"session_id":"sess-b"}'
   ;;
+notlogged)
+  echo '{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login","total_cost_usd":0,"session_id":"s"}'
+  ;;
 crash)
   echo "boom" >&2
   exit 3

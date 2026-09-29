@@ -35,7 +35,7 @@ export function liveRenderer(box) {
         break;
       case "result":
         if (ev.is_error) {
-          box.append(el("div", { class: "err" }, "Eroare: " + ((ev.errors || []).join("; ") || ev.subtype)));
+          box.append(el("div", { class: "err" }, "Eroare: " + ((ev.errors || []).join("; ") || ev.result || ev.subtype)));
         } else if (ev.total_cost_usd != null) {
           box.append(el("div", { class: "hint" }, `Gata, $${ev.total_cost_usd.toFixed(4)}`));
         }
