@@ -15,7 +15,7 @@ Autorul e senior PHP/Laravel, incepator in Go: cod simplu, idiomatic, comentat u
 - Fara Docker la runtime; Docker doar pentru dev daca e nevoie.
 - Un singur run activ per agent. Stop omoara tot process group-ul.
 - Asculta doar pe localhost, fara autentificare.
-- Preferinta: dependente minime. SQLite planificat prin modernc.org/sqlite (pure Go, fara CGO).
+- Preferinta: dependente minime. SQLite prin modernc.org/sqlite (pure Go, fara CGO).
 
 ## Stare
 Gata (felia 1, spec in docs/superpowers/specs/2026-09-29-foreman-slice1-design.md): proiecte, echipe lead + workeri,

@@ -26,8 +26,15 @@ Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
 - Cand un worker termina, lead-ul e trezit (`--resume`) cu rezultatul.
 - Permisiunile vin doar din aplicatie (`--settings` inline, `--setting-sources user`). `CLAUDE.md`
   din repo-ul proiectului se citeste in continuare. `git push`, `rm -rf`, `sudo` si instalarile
-  de pachete sunt mereu blocate.
-- La pornire toate proiectele sunt pe pauza: nimic nu ruleaza (si nu costa) fara sa apesi „Porneste echipa”.
+  de pachete sunt blocate ca prefix de comanda; cu "Comenzi shell" activ, un agent le poate
+  ocoli (`rm -fr`, `bash -c ...`). Da shell doar agentilor in care ai incredere (aprobarile
+  vin intr-o versiune viitoare).
+- Setarile tale globale Claude (`~/.claude/settings.json`) se aplica si agentilor, deci o regula
+  globala `permissions.allow` le largeste permisiunile.
+- API-ul accepta doar Host 127.0.0.1/localhost si cere `Content-Type: application/json` pe
+  request-urile care modifica ceva (protectie impotriva paginilor web care ar trimite cereri
+  catre aplicatie).
+- La pornire toate proiectele sunt pe pauza: nimic nu ruleaza (si nu costa) fara sa apesi "Porneste echipa".
 
 ## Date
 

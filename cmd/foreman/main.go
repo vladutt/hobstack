@@ -83,7 +83,7 @@ func start(args []string) error {
 	if err != nil {
 		return fmt.Errorf("portul %d e ocupat, incearca --port: %w", *port, err)
 	}
-	url := "http://" + addr
+	url := "http://" + ln.Addr().String() // portul real, nu cel din flag
 
 	hub := events.NewHub()
 	mgr := runner.NewManager(claudeBin, paths.Logs)
