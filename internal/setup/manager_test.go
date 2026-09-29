@@ -140,3 +140,19 @@ func TestManagerStopAndValidation(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// un folder gol fara descriere nu are ce analiza
+func TestManagerEmptyFolderNeedsDescription(t *testing.T) {
+	m, f := newTest(t)
+	if _, err := m.Start(t.TempDir(), "", "sonnet"); err == nil || !strings.Contains(err.Error(), "folderul e gol") {
+		t.Fatalf("am %v", err)
+	}
+	if len(f.specs) != 0 {
+		t.Fatal("nu trebuia pornit niciun run")
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
+	if _, err := m.Start(dir, "", "sonnet"); err != nil {
+		t.Fatalf("folder cu fisiere fara descriere e ok: %v", err)
+	}
+}

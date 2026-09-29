@@ -130,6 +130,10 @@ export async function setupView(root) {
 
     // selectele de sef/reviewer contin doar agentii inclusi; un agent scos
     // trimite copiii la seful lui (ca la stergere), iar reviewer-ul devine nimeni
+    // parentName/reviewerName: legaturile dorite (din propunere, selecte, redenumiri).
+    // effParent/effReviewer: legaturile efective, calculate aici din cele dorite si din
+    // bife. Un agent debifat isi trimite copiii la seful lui, iar cei verificati de el
+    // raman fara reviewer; la re-bifare revine totul, fiindca cele dorite nu se schimba.
     function sync() {
       const included = rows.filter((r) => r.include.checked);
       const byName = new Map(rows.map((r) => [r.name.value.trim().toLowerCase(), r]));
@@ -138,24 +142,27 @@ export async function setupView(root) {
         let boss = byName.get(r.parentName.toLowerCase());
         for (let i = 0; boss && !boss.include.checked && i < rows.length; i++) boss = byName.get(boss.parentName.toLowerCase());
         const rev = byName.get(r.reviewerName.toLowerCase());
-        r.parentName = boss && boss !== r ? boss.name.value.trim() : "";
-        r.reviewerName = rev && rev.include.checked && rev !== r ? rev.name.value.trim() : "";
+        r.effParent = boss && boss !== r && boss.include.checked ? boss.name.value.trim() : "";
+        r.effReviewer = rev && rev !== r && rev.include.checked ? rev.name.value.trim() : "";
         const opts = (first) => [el("option", { value: "" }, first),
-          included.filter((o) => o !== r).map((o) => el("option", { value: o.name.value.trim() }, o.name.value.trim()))];
+          ...included.filter((o) => o !== r).map((o) => el("option", { value: o.name.value.trim() }, o.name.value.trim()))];
         r.parent.replaceChildren(...opts("Tu"));
-        r.parent.value = r.parentName;
+        r.parent.value = r.effParent;
         r.reviewer.replaceChildren(...opts("nimeni"));
-        r.reviewer.value = r.reviewerName;
+        r.reviewer.value = r.effReviewer;
       }
       drawTree(included);
     }
     function drawTree(included) {
       const lines = ["Tu"];
-      // copiii lui parent: agentii inclusi cu acel sef ("" = radacinile, sub Tu)
+      const seen = new Set(); // protectie: doi agenti cu acelasi nume ar face bucla
+      // copiii lui parent: agentii inclusi cu acel sef efectiv ("" = radacinile, sub Tu)
       const walk = (parent, depth) => {
-        for (const r of included.filter((x) => x.parentName.toLowerCase() === parent.toLowerCase())) {
-          lines.push("  ".repeat(depth) + "└ " + r.name.value.trim() + (r.role.value ? " · " + r.role.value : "") +
-            (r.reviewerName ? "  (verificat de " + r.reviewerName + ")" : ""));
+        for (const r of included.filter((x) => x.effParent.toLowerCase() === parent.toLowerCase())) {
+          if (seen.has(r)) continue;
+          seen.add(r);
+          lines.push("  ".repeat(depth) + "\u2514 " + r.name.value.trim() + (r.role.value ? " \u00b7 " + r.role.value : "") +
+            (r.effReviewer ? "  (verificat de " + r.effReviewer + ")" : ""));
           walk(r.name.value.trim(), depth + 1);
         }
       };
@@ -167,13 +174,17 @@ export async function setupView(root) {
       r.parent.addEventListener("change", () => { r.parentName = r.parent.value; sync(); });
       r.reviewer.addEventListener("change", () => { r.reviewerName = r.reviewer.value; sync(); });
       r.name.addEventListener("change", () => {
-        // redenumirea pastreaza legaturile celorlalti spre acest agent
-        const old = r.oldName;
-        for (const o of rows) {
-          if (o.parentName === old) o.parentName = r.name.value.trim();
-          if (o.reviewerName === old) o.reviewerName = r.name.value.trim();
+        // redenumirea pastreaza legaturile celorlalti spre acest agent. Un nume gol
+        // nu e o redenumire: altfel "" ar potrivi toate radacinile si toti fara reviewer.
+        const old = r.oldName, now = r.name.value.trim();
+        if (!now) { sync(); return; }
+        if (old && old !== now) {
+          for (const o of rows) {
+            if (o.parentName.toLowerCase() === old.toLowerCase()) o.parentName = now;
+            if (o.reviewerName.toLowerCase() === old.toLowerCase()) o.reviewerName = now;
+          }
         }
-        r.oldName = r.name.value.trim();
+        r.oldName = now;
         sync();
       });
       r.role.addEventListener("input", () => drawTree(rows.filter((x) => x.include.checked)));
@@ -196,7 +207,7 @@ export async function setupView(root) {
     async function create() {
       const agents = rows.filter((r) => r.include.checked).map((r) => ({
         name: r.name.value.trim(), role: r.role.value.trim(), model: r.model.value,
-        responsibilities: r.resp.value, reportsTo: r.parentName, reviewedBy: r.reviewerName,
+        responsibilities: r.resp.value, reportsTo: r.effParent, reviewedBy: r.effReviewer,
         background: r.background.value, instructions: r.instructions.value, doneDef: r.doneDef.value,
         tools: r.tools.filter((t) => t.box.checked).map((t) => t.id),
       }));

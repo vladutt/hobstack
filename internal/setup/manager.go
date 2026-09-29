@@ -91,6 +91,10 @@ func (m *Manager) Start(workdir, description, model string) (Session, error) {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			return Session{}, ValidationError("folderul nu exista: " + dir)
 		}
+		// un folder gol nu spune nimic despre proiect: fara descriere n-avem ce analiza
+		if entries, _ := os.ReadDir(dir); len(entries) == 0 && description == "" {
+			return Session{}, ValidationError("folderul e gol: descrie ce vrei sa faci")
+		}
 		workdir = filepath.Clean(dir)
 	}
 
