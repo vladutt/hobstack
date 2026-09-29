@@ -20,6 +20,7 @@ import (
 	"foreman/internal/events"
 	"foreman/internal/models"
 	"foreman/internal/runner"
+	wizard "foreman/internal/setup" // alias: in pachetul web, "setup" e helper-ul din teste
 	"foreman/internal/store"
 	"foreman/internal/team"
 )
@@ -42,13 +43,17 @@ type Server struct {
 	dirs    Dirs
 	pick    func(context.Context) (string, error) // dialogul nativ de ales folder
 	canPick bool
-	opener  Opener // nil = butoanele "Deschide" nu sunt disponibile
+	opener  Opener          // nil = butoanele "Deschide" nu sunt disponibile
+	wizard  *wizard.Manager // nil = wizard-ul "Proiect nou cu AI" nu e disponibil
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
 	dirs Dirs, pick func(context.Context) (string, error), canPick bool) *Server {
 	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick}
 }
+
+// SetSetup activeaza wizard-ul "Proiect nou cu AI".
+func (s *Server) SetSetup(m *wizard.Manager) { s.wizard = m }
 
 func (s *Server) Handler() http.Handler {
 	static, _ := fs.Sub(staticFS, "static")
@@ -65,6 +70,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/projects/{id}/resume", s.resumeProject)
 	mux.HandleFunc("GET /api/projects/{id}/events", s.projectEvents)
 	mux.HandleFunc("POST /api/projects/{id}/open", s.openProject)
+
+	mux.HandleFunc("POST /api/setup", s.startSetup)
+	mux.HandleFunc("GET /api/setup/{id}", s.getSetup)
+	mux.HandleFunc("POST /api/setup/{id}/stop", s.stopSetup)
+	mux.HandleFunc("POST /api/projects/setup", s.createProjectFromSetup)
 
 	mux.HandleFunc("POST /api/projects/{id}/agents", s.createAgent)
 	mux.HandleFunc("PUT /api/agents/{id}", s.updateAgent)

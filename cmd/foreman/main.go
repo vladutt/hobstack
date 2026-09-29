@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"foreman/internal/opener"
 	"foreman/internal/picker"
 	"foreman/internal/runner"
+	"foreman/internal/setup"
 	"foreman/internal/store"
 	"foreman/internal/team"
 	"foreman/internal/web"
@@ -97,8 +99,11 @@ func start(args []string) error {
 	}
 	go tm.Run(ctx)
 
-	webSrv := web.New(st, tm, mgr, hub, mcp.NewServer(tm),
+	// wizard-ul "Proiect nou cu AI": token-urile lui MCP se rezolva inaintea celor ale echipei
+	sm := setup.New(mgr, url, filepath.Join(paths.Root, "setup"))
+	webSrv := web.New(st, tm, mgr, hub, mcp.NewServer(sm.Wrap(tm)),
 		web.Dirs{Projects: paths.Projects, Workspaces: paths.Workspaces}, picker.Pick, picker.Available())
+	webSrv.SetSetup(sm)
 	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
 	webSrv.SetOpener(opener.New())
 

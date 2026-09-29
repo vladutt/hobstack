@@ -67,3 +67,13 @@ func TestValidateProposalSingleRoot(t *testing.T) {
 		t.Fatalf("un singur agent radacina e valid: %v", err)
 	}
 }
+
+// limitele sunt aceleasi ca in formularul de proiect, ca proiectul creat din
+// wizard sa poata fi salvat si din formular
+func TestValidateProposalGoalLimit(t *testing.T) {
+	p := valid()
+	p.Goal = strings.Repeat("x", 2001)
+	if err := ValidateProposal(p, true); err == nil || !strings.Contains(err.Error(), "obiectivul") {
+		t.Fatalf("am %v", err)
+	}
+}

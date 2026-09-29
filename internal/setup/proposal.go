@@ -65,7 +65,7 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 	}
 	for _, err := range []error{
 		tooLong("numele proiectului", p.Name, 80),
-		tooLong("obiectivul", p.Goal, 4000),
+		tooLong("obiectivul", p.Goal, 2000), // aceleasi limite ca formularul de proiect
 		tooLong("contextul", p.Context, 20000),
 		tooLong("explicatia", p.Rationale, 4000),
 	} {
