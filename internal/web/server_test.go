@@ -306,3 +306,34 @@ func TestMCPMounted(t *testing.T) {
 		t.Fatalf("mcp: %d", code)
 	}
 }
+
+func TestBlocksCrossSite(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+
+	req, _ := http.NewRequest("POST", e.ts.URL+"/api/projects", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "text/plain")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("text/plain: %d", res.StatusCode)
+	}
+
+	req, _ = http.NewRequest("GET", e.ts.URL+"/api/info", nil)
+	req.Host = "evil.example"
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Errorf("host strain: %d", res.StatusCode)
+	}
+
+	if code, _ := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/stop", nil); code != http.StatusNoContent {
+		t.Errorf("stop fara body: %d", code)
+	}
+}

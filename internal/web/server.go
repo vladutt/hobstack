@@ -9,8 +9,10 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"foreman/internal/config"
@@ -66,7 +68,32 @@ func (s *Server) Handler() http.Handler {
 	// Rutele sunt separate pe metoda ca sa nu intre in conflict cu "GET /".
 	mux.Handle("POST /mcp/{token}", s.mcp)
 	mux.Handle("GET /mcp/{token}", s.mcp)
-	return mux
+	return guard(mux)
+}
+
+// guard apara API-ul de cereri cross-site: un site din browser poate trimite
+// POST "simplu" (text/plain) catre 127.0.0.1, iar DNS rebinding ocoleste si
+// politica de origine. De aceea verificam Host si Content-Type.
+func guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Host: doar 127.0.0.1 sau localhost, pe toate rutele (inclusiv /mcp si static)
+		host := r.Host
+		if h, _, err := net.SplitHostPort(r.Host); err == nil {
+			host = h
+		}
+		if host != "127.0.0.1" && host != "localhost" {
+			writeErr(w, http.StatusForbidden, "host nepermis")
+			return
+		}
+		// Content-Type: cererile care schimba starea trebuie sa fie JSON, chiar
+		// si fara body (stop/resume/accept). /mcp e exceptat.
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet &&
+			!strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+			writeErr(w, http.StatusUnsupportedMediaType, "Content-Type trebuie sa fie application/json")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
