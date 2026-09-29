@@ -1,5 +1,6 @@
 import { api, upload } from "./api.js";
-import { el, avatar, pill, toast, clock } from "./ui.js";
+import { el, avatar, pill, toast, clock, kindOf } from "./ui.js";
+import { teamCanvas } from "./canvas.js";
 import { liveRenderer } from "./live.js";
 
 const COLUMNS = [
@@ -36,7 +37,11 @@ export async function workspaceView(root, projectId) {
   // titlul proiectului sta in coloana din stanga, ca chat-ul sa inceapa din
   // varful paginii si sa incapa intreg pe ecran (inclusiv campul de scris)
   const header = el("div", { class: "ws-head" });
-  const team = el("div", { class: "team" });
+  const canvas = teamCanvas({
+    onSelect: (id) => select(id),
+    onEdit: (id) => { location.hash = `#/p/${projectId}/agent/${id}`; },
+    onChanged: () => reload(),
+  });
   const board = el("div", { class: "board" });
   const count = el("span", { class: "hint" });
   const filesList = el("div", { class: "files-list" });
@@ -87,9 +92,9 @@ export async function workspaceView(root, projectId) {
         header,
         el("section", { class: "section" },
           el("div", { class: "section-head" },
-            el("div", {}, el("h2", {}, "Echipa"), el("span", { class: "hint" }, "Selecteaza un agent ca sa vorbesti direct cu el")),
+            el("div", {}, el("h2", {}, "Echipa"), el("span", { class: "hint" }, "Trage de \u25CF ca sa legi agentii. Dublu-click deschide editorul.")),
             el("a", { class: "btn small", href: `#/p/${projectId}/agent/new` }, "+ Adauga agent")),
-          team),
+          canvas.el),
         el("section", { class: "section" },
           el("div", { class: "section-head" }, el("h2", {}, "Task-uri"), count),
           board),
@@ -147,35 +152,7 @@ export async function workspaceView(root, projectId) {
   }
 
   function renderTeam() {
-    const [lead, ...workers] = state.project.agents;
-    if (!lead) {
-      team.replaceChildren(el("p", { class: "hint" }, "Proiectul nu are niciun agent."));
-      return;
-    }
-    team.replaceChildren(
-      memberCard(lead, true),
-      workers.length
-        ? el("div", { class: "team-workers" }, workers.map((a) => memberCard(a, false)))
-        : el("p", { class: "hint" }, "Niciun worker inca. Adauga agenti ca lead-ul sa aiba cui delega."));
-  }
-
-  function memberCard(a, isLead) {
-    const task = a.currentTask ? `${ref(a.currentTask)} ${a.currentTask.title}` : "";
-    const statusText = a.status === "Working" ? (task || "Lucreaza")
-      : a.status === "Queued" ? (task ? "Urmeaza: " + task : "Are mesaje in asteptare")
-      : "Liber";
-    return el("div", { class: "member-cell" + (isLead ? " lead" : "") },
-      el("button", {
-        type: "button", class: "member",
-        "aria-pressed": String(a.id === state.selected),
-        onclick: () => select(a.id),
-      },
-        avatar(a.name, a.position, isLead ? 40 : 32),
-        el("span", { class: "member-body" },
-          el("span", { class: "member-name" }, a.name, isLead && el("span", { class: "tag" }, "Lead")),
-          el("span", { class: "hint" }, [a.role, a.model].filter(Boolean).join(" · ")),
-          el("span", { class: "status" }, el("span", { class: "dot " + a.status.toLowerCase() }), el("span", {}, statusText)))),
-      el("a", { class: "edit-link", href: `#/p/${projectId}/agent/${a.id}` }, "Editeaza"));
+    canvas.render(state.project, state.selected);
   }
 
   function renderBoard() {
@@ -199,7 +176,7 @@ export async function workspaceView(root, projectId) {
       el("summary", {},
         el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)), t.title),
         el("span", { class: "task-who" },
-          who && avatar(who.name, who.position, 20), who ? who.name : "?",
+          who && avatar(who.name, kindOf(who), 20), who ? who.name : "?",
           blocked && el("span", { class: "badge-blocked" }, "Blocat"))),
       el("div", { class: "task-detail" },
         t.description && el("div", {}, t.description),
@@ -218,9 +195,9 @@ export async function workspaceView(root, projectId) {
   function renderConsoleHead() {
     const a = selectedAgent();
     if (!a) return;
-    const isLead = a.position === "lead";
+    const isLead = kindOf(a) === "lead";
     consoleHead.replaceChildren(
-      avatar(a.name, a.position, 36),
+      avatar(a.name, kindOf(a), 36),
       el("div", {},
         el("div", { class: "member-name" }, a.name, a.role && el("span", { class: "hint" }, "· " + a.role)),
         el("div", { class: "hint" }, isLead
@@ -549,6 +526,7 @@ export async function workspaceView(root, projectId) {
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
     events.close();
+    canvas.destroy();
     stopLive();
     clearTimeout(reloadTimer);
   };

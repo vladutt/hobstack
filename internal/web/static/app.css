@@ -92,13 +92,6 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 /* workspace (Task 12) */
 .ws { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 32vw, 440px); gap: 18px; align-items: start; }
 .ws-main { display: grid; gap: 18px; min-width: 0; }
-.team { display: grid; gap: 12px; }
-.team-workers { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
-.member-cell { display: grid; gap: 4px; min-width: 0; }
-.member-cell.lead { max-width: 380px; }
-.member { display: flex; gap: 10px; align-items: flex-start; text-align: left; background: var(--card-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; color: var(--text); font: inherit; cursor: pointer; width: 100%; }
-.member[aria-pressed="true"] { border-color: var(--amber); background: var(--amber-bg); }
-.member-body { display: grid; gap: 3px; min-width: 0; flex: 1; }
 .member-name { font-weight: 600; display: flex; gap: 6px; align-items: center; }
 .tag { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: rgba(229, 165, 75, .16); color: var(--amber); font-weight: 600; }
 .status { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--soft); min-width: 0; }
@@ -106,7 +99,6 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex-shrink: 0; }
 .dot.working { background: var(--teal); box-shadow: 0 0 0 3px rgba(108, 195, 180, .18); }
 .dot.queued { background: var(--muted); }
-.edit-link { font-size: 12px; color: var(--muted); justify-self: end; }
 .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .col { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 120px; min-width: 0; }
 .col-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--soft); text-transform: uppercase; letter-spacing: .04em; padding: 2px 4px; }
@@ -188,3 +180,43 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .msg.me .attachments { justify-content: flex-end; }
 .attachments img { display: block; max-width: 180px; max-height: 180px; border-radius: 8px; border: 1px solid var(--line); }
 .attachments .file-link { font-size: 12px; color: var(--amber); overflow-wrap: anywhere; }
+
+/* ---------- canvas echipa ---------- */
+.canvas-wrap { position: relative; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); overflow: hidden; min-width: 0; }
+.canvas-wrap:focus-visible { outline: 1px solid var(--amber); }
+.canvas-wrap svg.team-canvas { display: block; width: 100%; height: 420px; touch-action: none; user-select: none; }
+.canvas-wrap.full { position: fixed; inset: 16px; z-index: 20; background: var(--bg); display: flex; flex-direction: column; }
+.canvas-wrap.full svg.team-canvas { flex: 1; min-height: 0; height: auto; }
+.canvas-bar { display: flex; gap: 14px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.canvas-bar .grow { flex: 1; }
+.canvas-bar .btn:disabled { opacity: .4; cursor: default; }
+.legend-item { display: inline-flex; gap: 6px; align-items: center; }
+.node .card, .node-you .card { fill: var(--card-2); stroke: var(--line-2); }
+.node { cursor: grab; }
+.node.dragging { cursor: grabbing; }
+.node.selected .card { stroke: var(--amber); fill: var(--amber-bg); }
+.node text { fill: var(--text); font: 600 13px var(--sans); pointer-events: none; }
+.node text.sub { fill: var(--muted); font: 400 11px var(--sans); }
+.avatar-c.lead { fill: var(--amber); }
+.avatar-c.worker { fill: var(--teal); }
+.node text.avatar-t { font: 600 13px var(--sans); }
+.node text.avatar-t.lead { fill: var(--amber-ink); }
+.node text.avatar-t.worker { fill: var(--teal-ink); }
+.node-you text { fill: var(--soft); font: 600 12px var(--sans); pointer-events: none; }
+.handle { fill: var(--muted); stroke: var(--panel); stroke-width: 2; cursor: crosshair; }
+.handle:hover { fill: var(--amber); }
+.edge { fill: none; stroke-width: 1.6; }
+.edge.delegate { stroke: var(--muted); }
+.edge.review { stroke: var(--amber); stroke-dasharray: 5 4; }
+.edge.temp { stroke: var(--amber); stroke-dasharray: 3 3; pointer-events: none; }
+.edge.selected { stroke-width: 3; }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.arrow { fill: var(--muted); }
+.arrow.review { fill: var(--amber); }
+.status-dot { fill: var(--dim); }
+.status-dot.working { fill: var(--teal); }
+.status-dot.queued { fill: var(--muted); }
+.status-dot.idle { fill: var(--dim); }
+.link-menu { position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); min-width: 200px; }
+.link-menu button { text-align: left; background: none; border: 0; border-radius: 6px; padding: 7px 10px; color: var(--text); font: 13px var(--sans); cursor: pointer; }
+.link-menu button:hover { background: var(--card-2); }

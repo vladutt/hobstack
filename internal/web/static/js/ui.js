@@ -21,6 +21,37 @@ export function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+const NS = "http://www.w3.org/2000/svg";
+
+// svg("g", { class: "node" }, copii...) creeaza un element SVG, ca el().
+// Textul se pune ca text, niciodata ca HTML.
+export function svg(tag, attrs = {}, ...children) {
+  const node = document.createElementNS(NS, tag);
+  for (const [key, val] of Object.entries(attrs || {})) {
+    if (val == null || val === false) continue;
+    if (key.startsWith("on")) node.addEventListener(key.slice(2), val);
+    else node.setAttribute(key, val === true ? "" : val);
+  }
+  for (const child of children.flat(Infinity)) {
+    if (child == null || child === false) continue;
+    node.append(child instanceof Node ? child : String(child));
+  }
+  return node;
+}
+
+// kindOf: culoarea avatarului; amber pentru lideri si radacini, teal in rest.
+export const kindOf = (a) => (a && (a.isLead || a.isRoot) ? "lead" : "worker");
+
+// agentBody: corpul complet pentru PUT /api/agents/{id}; patch suprascrie campuri.
+export function agentBody(a, patch = {}) {
+  return {
+    name: a.name, role: a.role, model: a.model, background: a.background,
+    instructions: a.instructions, doneDef: a.doneDef, tools: a.tools,
+    responsibilities: a.responsibilities, parentId: a.parentId, reviewerId: a.reviewerId,
+    ...patch,
+  };
+}
+
 export function avatar(name, position, size = 32) {
   return el("span", {
     class: `avatar ${position === "lead" ? "lead" : "worker"}`,
