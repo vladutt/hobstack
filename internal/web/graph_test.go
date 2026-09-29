@@ -117,6 +117,16 @@ func TestAgentPositionEndpoint(t *testing.T) {
 	if code, _ := e.do(t, "PUT", "/api/agents/9999/position", map[string]any{"x": 1, "y": 1}); code != 404 {
 		t.Fatalf("agent inexistent: %d", code)
 	}
+	req, _ := http.NewRequest("PUT", e.ts.URL+path, strings.NewReader(`{"x":1,"y":1}`))
+	req.Header.Set("Content-Type", "text/plain")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("text/plain: %d, vreau 415", res.StatusCode)
+	}
 }
 
 func TestPromptPreviewUsesLinks(t *testing.T) {
