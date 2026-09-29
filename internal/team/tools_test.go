@@ -429,3 +429,19 @@ func TestSubtaskAcceptRequeuesParent(t *testing.T) {
 		t.Fatalf("tura sub-liderului:\n%s", got)
 	}
 }
+
+func TestCreateTaskAmbiguousParent(t *testing.T) {
+	f := setup(t)
+	sub := f.agent(t, "Sub", &f.lead, nil)
+	f.agent(t, "Wes", &sub, nil)
+	f.task(t, "Unu", sub, store.StatusInProgress)
+	f.task(t, "Doi", sub, store.StatusInProgress)
+	sc := mcp.Caller{ProjectID: f.p.ID, AgentID: sub.ID, IsLead: true, HasParent: true} // run de notificari
+	text, err := f.tm.CreateTask(sc, "Parser", "", "Wes")
+	if err != nil || text != "Creat T-3 pentru Wes. Il va primi automat. Creat fara task parinte: ai mai multe task-uri in lucru." {
+		t.Fatalf("%q %v", text, err)
+	}
+	if got := f.wantStatus(t, 3, store.StatusQueued); got.ParentTaskID != nil {
+		t.Fatalf("parinte: %v", *got.ParentTaskID)
+	}
+}

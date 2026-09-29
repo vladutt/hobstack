@@ -49,7 +49,7 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 		return "", errors.New("agentul tau nu mai exista")
 	}
 
-	parentID, err := t.parentTaskFor(c)
+	parentID, ambiguous, err := t.parentTaskFor(c)
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +62,11 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 	t.note(c.ProjectID, w.ID, fmt.Sprintf("%s asignat de %s: %s", task.Ref(), lead.Name, title), true)
 	t.emit(c.ProjectID, "task", task)
 	t.Kick(c.ProjectID)
-	return fmt.Sprintf("Creat %s pentru %s. Il va primi automat.", task.Ref(), w.Name), nil
+	reply := fmt.Sprintf("Creat %s pentru %s. Il va primi automat.", task.Ref(), w.Name)
+	if ambiguous {
+		reply += " Creat fara task parinte: ai mai multe task-uri in lucru."
+	}
+	return reply, nil
 }
 
 func isChild(children []store.Agent, id int64) bool {
@@ -76,25 +80,26 @@ func isChild(children []store.Agent, id int64) bool {
 
 // parentTaskFor alege task-ul din care se sparge un sub-task nou: task-ul
 // run-ului curent, sau singurul task in lucru al apelantului (run de notificari).
-func (t *Team) parentTaskFor(c mcp.Caller) (*int64, error) {
+// ambiguous e true cand apelantul are mai multe task-uri in lucru: atunci
+// sub-task-ul se creeaza fara parinte, ca sa nu il legam de unul gresit.
+func (t *Team) parentTaskFor(c mcp.Caller) (parent *int64, ambiguous bool, err error) {
 	if c.TaskID != 0 {
-		return &c.TaskID, nil
+		return &c.TaskID, false, nil
 	}
 	tasks, err := t.st.ListTasks(c.ProjectID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	var found *int64
 	for _, task := range tasks {
 		if task.AssigneeID == c.AgentID && task.Status == store.StatusInProgress {
-			if found != nil {
-				return nil, nil // ambiguu: mai bine fara parinte decat unul gresit
+			if parent != nil {
+				return nil, true, nil
 			}
 			id := task.ID
-			found = &id
+			parent = &id
 		}
 	}
-	return found, nil
+	return parent, false, nil
 }
 
 func (t *Team) ListTasks(c mcp.Caller, status string) (string, error) {
