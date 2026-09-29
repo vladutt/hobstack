@@ -269,3 +269,16 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 /* agent nelegat: chenar punctat, eticheta "nelegat" */
 .node.detached .card { stroke-dasharray: 5 4; }
 .node text.sub.unlinked { fill: var(--amber); }
+
+/* ---------- wizard "Proiect nou cu AI" ---------- */
+.wizard { display: grid; gap: 18px; max-width: 1100px; }
+.wizard-step { max-width: 760px; }
+.wizard-live { max-height: 60vh; overflow-y: auto; }
+.wizard-review { display: grid; gap: 18px; }
+.wizard-tree { font-family: var(--mono); font-size: 12px; color: var(--soft); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px; margin: 0; white-space: pre-wrap; }
+.wizard-agent { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; background: var(--card-2); }
+.wizard-agent.excluded { opacity: .45; }
+.wizard-agent.excluded .row, .wizard-agent.excluded details, .wizard-agent.excluded .field { display: none; }
+.wizard-tools { display: flex; flex-wrap: wrap; gap: 14px; }
+.wizard-actions { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0; border-top: 1px solid var(--line); }
+.wizard-actions .grow { flex: 1; }

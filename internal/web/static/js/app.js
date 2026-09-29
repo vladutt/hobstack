@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { toast } from "./ui.js";
 import { projectsView, projectFormView } from "./projects.js";
 import { workspaceView, parseWorkspaceRoute } from "./workspace.js";
+import { setupView } from "./setup.js";
 
 // Rute in hash: #/, #/new, #/p/3/edit si pagina proiectului cu tab-uri:
 // #/p/3/task-uri, #/p/3/echipa, #/p/3/echipa/7, #/p/3/fisiere.
@@ -11,6 +12,7 @@ import { workspaceView, parseWorkspaceRoute } from "./workspace.js";
 // apelam update in loc sa redesenam tot: chat-ul si stream-urile raman deschise.
 const routes = [
   { pattern: /^#\/?$/, view: (root) => projectsView(root) },
+  { pattern: /^#\/setup$/, view: (root) => setupView(root) },
   { pattern: /^#\/new$/, view: (root) => projectFormView(root, null) },
   { pattern: /^#\/p\/(\d+)\/edit$/, view: (root, m) => projectFormView(root, Number(m[1])) },
   {
