@@ -18,6 +18,7 @@ import (
 
 	"foreman/internal/config"
 	"foreman/internal/events"
+	"foreman/internal/models"
 	"foreman/internal/runner"
 	"foreman/internal/store"
 	"foreman/internal/team"
@@ -119,7 +120,7 @@ func guard(next http.Handler) http.Handler {
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick})
+	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick, "models": models.All})
 }
 
 // badRequest e o eroare de validare; mesajul ajunge ca atare in UI (400).

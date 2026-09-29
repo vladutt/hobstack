@@ -7,11 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"foreman/internal/models"
 	"foreman/internal/prompt"
 	"foreman/internal/store"
 )
-
-var models = []string{"opus", "sonnet", "haiku"}
 
 type agentInput struct {
 	Name         string   `json:"name"`
@@ -29,8 +28,8 @@ func (in agentInput) apply(a *store.Agent) error {
 	if name == "" {
 		return badRequest("numele agentului e obligatoriu")
 	}
-	if !slices.Contains(models, in.Model) {
-		return badRequest("model necunoscut; alege opus, sonnet sau haiku")
+	if !models.Valid(in.Model) {
+		return badRequest("model necunoscut: " + in.Model)
 	}
 	tools := []string{}
 	for _, tool := range in.Tools {

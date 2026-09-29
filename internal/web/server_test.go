@@ -369,3 +369,19 @@ func existingFile(t *testing.T) string {
 	}
 	return p
 }
+
+func TestModelsInInfoAndPinnedVersion(t *testing.T) {
+	e := setup(t)
+	_, raw := e.do(t, "GET", "/api/info", nil)
+	if !strings.Contains(string(raw), `"claude-opus-4-8"`) || !strings.Contains(string(raw), `"fable"`) {
+		t.Fatalf("info fara lista de modele: %s", raw)
+	}
+	p := e.createProject(t, t.TempDir())
+	path := "/api/projects/" + itoa(p.ID) + "/agents"
+	if code, raw := e.do(t, "POST", path, map[string]any{"name": "Fix", "model": "claude-opus-4-8"}); code != http.StatusCreated {
+		t.Fatalf("versiune fixa: %d %s", code, raw)
+	}
+	if code, _ := e.do(t, "POST", path, map[string]any{"name": "Fab", "model": "fable"}); code != http.StatusCreated {
+		t.Fatalf("alias fable: %d", code)
+	}
+}

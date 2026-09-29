@@ -60,7 +60,6 @@ export function clock(iso) {
   return new Date(iso).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
 }
 
-export const MODELS = ["opus", "sonnet", "haiku"];
 
 export const TOOLS = [
   { id: "write", label: "Scrie fisiere" },

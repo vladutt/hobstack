@@ -1,8 +1,8 @@
 import { api } from "./api.js";
-import { el, field, toast, MODELS, TOOLS } from "./ui.js";
+import { el, field, toast, TOOLS } from "./ui.js";
 
 export async function agentView(root, projectId, agentId) {
-  const project = await api(`/api/projects/${projectId}`);
+  const [project, info] = await Promise.all([api(`/api/projects/${projectId}`), api("/api/info")]);
   const existing = agentId ? project.agents.find((a) => a.id === agentId) : null;
   if (agentId && !existing) throw new Error("Agentul nu exista.");
   const a = existing || {
@@ -13,7 +13,7 @@ export async function agentView(root, projectId, agentId) {
 
   const name = el("input", { type: "text", value: a.name, placeholder: "ex. Rook", required: true, maxlength: 40 });
   const role = el("input", { type: "text", value: a.role, placeholder: "ex. Backend Developer", maxlength: 80 });
-  const model = el("select", { value: a.model }, MODELS.map((m) => el("option", { value: m }, m)));
+  const model = el("select", { value: a.model }, modelOptions(info.models || [], a.model));
   const background = el("textarea", { value: a.background, rows: 5, placeholder: "Cine e agentul si ce stie." });
   const instructions = el("textarea", { value: a.instructions, rows: 5, placeholder: "Cum lucreaza si ce nu are voie sa faca." });
   const doneDef = el("textarea", {
@@ -55,7 +55,7 @@ export async function agentView(root, projectId, agentId) {
               : "Worker: primeste task-uri de la lead si raporteaza inapoi."))),
         el("section", { class: "section" },
           el("h2", {}, "Model"),
-          field("Model Claude", model, "opus: cel mai capabil. sonnet: echilibrat. haiku: rapid si ieftin.")),
+          field("Model Claude", model, "\"Cel mai nou\" trece automat pe versiunile noi. O versiune fixa ramane neschimbata. Fable: cel mai capabil; Opus: foarte capabil; Sonnet: echilibrat; Haiku: rapid si ieftin.")),
         el("section", { class: "section" },
           el("h2", {}, "Tool-uri"),
           el("p", { class: "hint" }, "Citirea fisierelor e mereu permisa. git push, rm -rf, sudo si instalarile de pachete sunt blocate ca prefix de comanda; cu Comenzi shell activ, un agent le poate ocoli. Da shell doar agentilor in care ai incredere (aprobarile vin intr-o versiune viitoare)."),
@@ -114,4 +114,17 @@ export async function agentView(root, projectId, agentId) {
   }
 
   return () => clearTimeout(timer);
+}
+
+// modelOptions construieste optiunile grupate: alias-uri (mereu cel mai nou)
+// si versiuni fixe. Un model salvat care nu mai e in lista ramane selectabil.
+function modelOptions(list, current) {
+  const group = (label, id) => el("optgroup", { label },
+    list.filter((m) => m.group === id).map((m) => el("option", { value: m.id }, m.label)));
+  const known = list.some((m) => m.id === current);
+  return [
+    !known && current && el("option", { value: current }, current + " (nu mai e in lista)"),
+    group("Mereu cel mai nou", "latest"),
+    group("Versiune fixa", "pinned"),
+  ];
 }
