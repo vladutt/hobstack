@@ -2,9 +2,9 @@
 
 Echipe de agenti Claude Code, local. Un singur binar Go, UI in browser pe 127.0.0.1.
 
-Fiecare proiect are o echipa: un **lead** care primeste obiectivul, il sparge in task-uri
-si le da **workerilor**, apoi verifica ce vine inapoi. Tu vorbesti cu lead-ul sau direct
-cu orice agent. Totul se vede live pe un board si ramane salvat in SQLite.
+Echipa unui proiect e o ierarhie: tu dai obiective agentilor radacina, liderii impart munca
+doar echipei lor directe, iar munca trece pe la reviewer (daca exista), apoi la liderul care a
+creat task-ul. Tu vorbesti cu orice agent. Totul se vede live pe un board si ramane salvat in SQLite.
 
 ## Rulare
 
@@ -22,9 +22,17 @@ Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
 ## Cum functioneaza
 
 - Agentii ruleaza ca `claude -p` headless, cu folderul proiectului ca working directory.
-- Aplicatia expune un server MCP pe `/mcp/<token>`. Lead-ul are tool-urile `create_task`,
-  `list_tasks`, `accept_task` si `send_back`, iar workerii au `report_done`.
-- Cand un worker termina, lead-ul e trezit (`--resume`) cu rezultatul.
+- Aplicatia expune un server MCP pe `/mcp/<token>`. Tool-urile depind de rol:
+  - liderii au `create_task`, `list_tasks`, `accept_task` si `send_back`;
+  - agentii cu sef au `report_done`;
+  - reviewerii au `review_approve` si `review_reject`;
+  - un agent radacina fara echipa nu are tool-uri.
+- Cand un agent termina, reviewerul (daca exista) si apoi liderul care a creat task-ul sunt
+  trezisi (`--resume`) cu rezultatul.
+- Un sub-lider sparge task-ul primit in sub-task-uri pentru echipa lui si il raporteaza in sus
+  dupa ce toate sub-task-urile sunt gata.
+- Pe canvas nodurile se muta cu mouse-ul, legaturile se trag din ●, iar dublu-click deschide editorul.
+- `max_parallel` se aplica doar agentilor care au sef.
 - Permisiunile vin doar din aplicatie (`--settings` inline, `--setting-sources user`). `CLAUDE.md`
   din repo-ul proiectului se citeste in continuare. `git push`, `rm -rf`, `sudo` si instalarile
   de pachete sunt blocate ca prefix de comanda; cu "Comenzi shell" activ, un agent le poate
