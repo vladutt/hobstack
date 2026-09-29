@@ -1,0 +1,6 @@
+/agentdash
+/foreman
+/agentdash-*
+/foreman-*
+.DS_Store
+.idea/
