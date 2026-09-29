@@ -1,3 +1,6 @@
+// Package runner porneste procese `claude -p`, le citeste output-ul stream-json,
+// il scrie in log si il transmite live abonatilor (SSE). Nu stie nimic despre
+// proiecte sau agenti: primeste argumentele gata construite.
 package runner
 
 import (
@@ -14,8 +17,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	"foreman/internal/agent"
 )
 
 var (
@@ -23,12 +24,30 @@ var (
 	ErrNotFound = errors.New("run inexistent")
 )
 
-// Run este o singura executie `claude -p`.
-// Tine istoricul evenimentelor in memorie, ca un client SSE care
-// se conecteaza tarziu (sau face refresh) sa primeasca tot de la inceput.
+// Spec descrie un run: ce argumente primeste claude si unde ruleaza.
+type Spec struct {
+	ID     string   // id-ul run-ului (NewID()); daca e gol se genereaza
+	Key    string   // un singur run activ per cheie (ex. "agent-12")
+	Dir    string   // working directory
+	Args   []string // argumentele pentru claude, fara binar
+	Prompt string   // mesajul turei, doar pentru evenimentul de start
+}
+
+// Outcome e rezultatul unui run terminat, extras din stream-json.
+type Outcome struct {
+	RunID     string
+	Status    string // "done", "failed" sau "stopped"
+	SessionID string // pentru --resume
+	Result    string // textul final al agentului
+	CostUSD   float64
+	Error     string
+}
+
+// Run este o singura executie `claude -p`. Tine istoricul evenimentelor in
+// memorie, ca un client SSE care se conecteaza tarziu sa primeasca tot.
 type Run struct {
 	ID        string    `json:"id"`
-	Agent     string    `json:"agent"`
+	Key       string    `json:"key"`
 	Prompt    string    `json:"prompt"`
 	StartedAt time.Time `json:"startedAt"`
 
@@ -42,9 +61,8 @@ type Run struct {
 	cancel  context.CancelFunc
 }
 
-// publish adauga un eveniment in istoric, in fisierul de log si il trimite
-// tuturor abonatilor. Se apeleaza din doua goroutine (stdout si stderr),
-// de aceea totul e sub mutex.
+// publish adauga un eveniment in istoric si in log si il trimite abonatilor.
+// Se apeleaza din doua goroutine (stdout si stderr), de aceea e sub mutex.
 func (r *Run) publish(line []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -58,8 +76,7 @@ func (r *Run) publish(line []byte) {
 		select {
 		case ch <- line:
 		default:
-			// clientul nu tine pasul (buffer plin). Pentru MVP sarim evenimentul;
-			// un refresh in browser reincarca tot istoricul.
+			// clientul nu tine pasul; un refresh reincarca tot istoricul
 		}
 	}
 }
@@ -112,16 +129,14 @@ func (r *Run) Status() string {
 	return r.status
 }
 
-// Manager tine evidenta tuturor run-urilor si a sesiunilor per agent.
-// Pentru MVP totul e in memorie; in pasul urmator se muta in SQLite.
+// Manager tine evidenta run-urilor din procesul curent.
 type Manager struct {
 	claudeBin string
 	logDir    string
 
-	mu       sync.Mutex
-	runs     map[string]*Run
-	sessions map[string]string // agent -> session_id pentru --resume
-	active   map[string]string // agent -> run id activ
+	mu     sync.Mutex
+	runs   map[string]*Run
+	active map[string]string // Key -> id-ul run-ului activ
 }
 
 func NewManager(claudeBin, logDir string) *Manager {
@@ -129,7 +144,6 @@ func NewManager(claudeBin, logDir string) *Manager {
 		claudeBin: claudeBin,
 		logDir:    logDir,
 		runs:      map[string]*Run{},
-		sessions:  map[string]string{},
 		active:    map[string]string{},
 	}
 }
@@ -144,48 +158,29 @@ func (m *Manager) Get(id string) (*Run, error) {
 	return r, nil
 }
 
-// AgentState intoarce sesiunea curenta si run-ul activ (daca exista).
-func (m *Manager) AgentState(name string) (sessionID, activeRunID string) {
+// Start porneste claude cu argumentele din spec. onDone (poate fi nil) e
+// apelat o singura data, dintr-o goroutine, dupa ce procesul s-a terminat.
+func (m *Manager) Start(spec Spec, onDone func(Outcome)) (*Run, error) {
+	if spec.ID == "" {
+		spec.ID = NewID()
+	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.sessions[name], m.active[name]
-}
-
-func (m *Manager) ResetSession(name string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.sessions, name)
-}
-
-// Start porneste `claude -p` in folderul agentului.
-// Un singur run activ per agent, altfel doua procese ar continua
-// aceeasi sesiune in paralel.
-func (m *Manager) Start(a agent.Agent, prompt string) (*Run, error) {
-	m.mu.Lock()
-	if _, busy := m.active[a.Name]; busy {
+	if _, busy := m.active[spec.Key]; busy {
 		m.mu.Unlock()
 		return nil, ErrBusy
 	}
-	sessionID := m.sessions[a.Name]
-	id := newID()
-	m.active[a.Name] = id // rezervam locul inainte sa deblocam
+	m.active[spec.Key] = spec.ID // rezervam locul inainte sa deblocam
 	m.mu.Unlock()
 
 	release := func() {
 		m.mu.Lock()
-		delete(m.active, a.Name)
+		delete(m.active, spec.Key)
 		m.mu.Unlock()
 	}
 
-	args := []string{"-p", prompt, "--output-format", "stream-json", "--verbose"}
-	args = append(args, agentConfigArgs(a.Dir)...)
-	if sessionID != "" {
-		args = append(args, "--resume", sessionID)
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, m.claudeBin, args...)
-	cmd.Dir = a.Dir
+	cmd := exec.CommandContext(ctx, m.claudeBin, spec.Args...)
+	cmd.Dir = spec.Dir
 	setProcessGroup(cmd)
 
 	stdout, err := cmd.StdoutPipe()
@@ -200,8 +195,7 @@ func (m *Manager) Start(a agent.Agent, prompt string) (*Run, error) {
 		release()
 		return nil, err
 	}
-
-	logFile, err := os.Create(filepath.Join(m.logDir, id+".jsonl"))
+	logFile, err := os.Create(filepath.Join(m.logDir, spec.ID+".jsonl"))
 	if err != nil {
 		cancel()
 		release()
@@ -209,9 +203,9 @@ func (m *Manager) Start(a agent.Agent, prompt string) (*Run, error) {
 	}
 
 	run := &Run{
-		ID:        id,
-		Agent:     a.Name,
-		Prompt:    prompt,
+		ID:        spec.ID,
+		Key:       spec.Key,
+		Prompt:    spec.Prompt,
 		StartedAt: time.Now(),
 		subs:      map[chan []byte]struct{}{},
 		log:       logFile,
@@ -226,20 +220,16 @@ func (m *Manager) Start(a agent.Agent, prompt string) (*Run, error) {
 	}
 
 	m.mu.Lock()
-	m.runs[id] = run
+	m.runs[run.ID] = run
 	m.mu.Unlock()
 
-	run.publish(mustJSON(map[string]any{
-		"type":    "agentdash_start",
-		"prompt":  prompt,
-		"resumed": sessionID != "",
-	}))
-
-	go m.pump(run, cmd, stdout, stderr)
+	run.publish(mustJSON(map[string]any{"type": "app_start", "prompt": spec.Prompt}))
+	go m.pump(run, cmd, stdout, stderr, onDone)
 	return run, nil
 }
 
-func (m *Manager) pump(run *Run, cmd *exec.Cmd, stdout, stderr io.Reader) {
+func (m *Manager) pump(run *Run, cmd *exec.Cmd, stdout, stderr io.Reader, onDone func(Outcome)) {
+	var tr tracker // folosit doar de goroutine-ul de stdout, citit dupa wg.Wait
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -250,7 +240,7 @@ func (m *Manager) pump(run *Run, cmd *exec.Cmd, stdout, stderr io.Reader) {
 		sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 		for sc.Scan() {
 			line := append([]byte(nil), sc.Bytes()...)
-			m.captureSession(run.Agent, line)
+			tr.observe(line)
 			run.publish(line)
 		}
 	}()
@@ -259,53 +249,37 @@ func (m *Manager) pump(run *Run, cmd *exec.Cmd, stdout, stderr io.Reader) {
 		defer wg.Done()
 		sc := bufio.NewScanner(stderr)
 		for sc.Scan() {
-			run.publish(mustJSON(map[string]any{"type": "agentdash_stderr", "text": sc.Text()}))
+			run.publish(mustJSON(map[string]any{"type": "app_stderr", "text": sc.Text()}))
 		}
 	}()
 
 	wg.Wait()
-	err := cmd.Wait()
+	waitErr := cmd.Wait()
 
 	run.mu.Lock()
 	stopped := run.stopped
 	run.mu.Unlock()
 
-	status := "success"
-	switch {
-	case stopped:
-		status = "stopped"
-	case err != nil:
-		status = "error"
-	}
-
-	done := map[string]any{"type": "agentdash_done", "status": status}
-	if err != nil && !stopped {
-		done["error"] = err.Error()
+	out := tr.outcome(run.ID, waitErr, stopped)
+	done := map[string]any{"type": "app_done", "status": out.Status}
+	if out.Error != "" {
+		done["error"] = out.Error
 	}
 	run.publish(mustJSON(done))
-	run.finish(status)
+	run.finish(out.Status)
 
 	m.mu.Lock()
-	if m.active[run.Agent] == run.ID {
-		delete(m.active, run.Agent)
+	if m.active[run.Key] == run.ID {
+		delete(m.active, run.Key)
 	}
 	m.mu.Unlock()
+
+	if onDone != nil {
+		onDone(out)
+	}
 }
 
-// captureSession extrage session_id din evenimentele claude
-// (apare in "system/init" si in "result"), pentru --resume la urmatorul prompt.
-func (m *Manager) captureSession(agentName string, line []byte) {
-	var head struct {
-		SessionID string `json:"session_id"`
-	}
-	if json.Unmarshal(line, &head) != nil || head.SessionID == "" {
-		return
-	}
-	m.mu.Lock()
-	m.sessions[agentName] = head.SessionID
-	m.mu.Unlock()
-}
-
+// Stop opreste run-ul (tot process group-ul). Rezultatul vine prin onDone.
 func (m *Manager) Stop(id string) error {
 	run, err := m.Get(id)
 	if err != nil {
@@ -331,7 +305,8 @@ func (m *Manager) Shutdown() {
 	}
 }
 
-func newID() string {
+// NewID genereaza un id de run sortabil dupa timp: 20260929-130056-af8b6e.
+func NewID() string {
 	b := make([]byte, 3)
 	rand.Read(b)
 	return time.Now().Format("20060102-150405") + "-" + hex.EncodeToString(b)
@@ -340,25 +315,4 @@ func newID() string {
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
-}
-
-// agentConfigArgs da explicit fisierele de config ale agentului.
-// Claude Code ignora .claude/settings.json si .mcp.json dintr-un folder
-// in care nu s-a acceptat "trust" interactiv. Fisierele date prin
-// --settings / --mcp-config se aplica oricum. Cu --setting-sources user
-// nu mai citeste settings-ul de proiect, deci dispare si avertismentul.
-func agentConfigArgs(dir string) []string {
-	args := []string{"--setting-sources", "user"}
-	if p := filepath.Join(dir, ".claude", "settings.json"); fileExists(p) {
-		args = append(args, "--settings", p)
-	}
-	if p := filepath.Join(dir, ".mcp.json"); fileExists(p) {
-		args = append(args, "--mcp-config", p)
-	}
-	return args
-}
-
-func fileExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
 }

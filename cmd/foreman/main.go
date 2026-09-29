@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"foreman/internal/agent"
 	"foreman/internal/config"
 	"foreman/internal/runner"
 	"foreman/internal/web"
@@ -60,9 +59,6 @@ func start(args []string) error {
 	if err := paths.Ensure(); err != nil {
 		return fmt.Errorf("nu pot crea %s: %w", paths.Root, err)
 	}
-	if err := agent.EnsureDemo(paths.Agents); err != nil {
-		return err
-	}
 
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {
@@ -78,7 +74,7 @@ func start(args []string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           web.New(paths, mgr).Handler(),
+		Handler:           web.New(mgr).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
@@ -91,7 +87,6 @@ func start(args []string) error {
 
 	url := "http://" + addr
 	log.Printf("%s ruleaza pe %s", config.AppName, url)
-	log.Printf("agenti: %s", paths.Agents)
 	log.Printf("claude: %s", claudeBin)
 	if !*noOpen {
 		openBrowser(url)
