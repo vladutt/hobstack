@@ -1,6 +1,7 @@
 import { api, upload } from "./api.js";
-import { el, avatar, pill, toast, clock, kindOf } from "./ui.js";
+import { el, avatar, pill, toast, clock, kindOf, agentBody } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
+import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
 
 const COLUMNS = [
@@ -12,10 +13,31 @@ const COLUMNS = [
 
 const ref = (t) => `T-${t.number}`;
 
-export async function workspaceView(root, projectId) {
+// Tab-urile paginii de proiect; primul e cel implicit.
+const TABS = [
+  { id: "task-uri", label: "Task-uri" },
+  { id: "echipa", label: "Echipa" },
+  { id: "fisiere", label: "Fisiere" },
+];
+
+// parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId }.
+// Link-urile vechi #/p/3/agent/7 duc in tab-ul Echipa, cu agentul 7 selectat.
+export function parseWorkspaceRoute(rest) {
+  const parts = (rest || "").split("/").filter(Boolean);
+  if (parts[0] === "agent") {
+    return { tab: "echipa", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null };
+  }
+  const tab = TABS.some((t) => t.id === parts[0]) ? parts[0] : TABS[0].id;
+  const agentId = tab === "echipa" && /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null;
+  return { tab, agentId };
+}
+
+export async function workspaceView(root, projectId, route) {
   const state = {
     project: await api(`/api/projects/${projectId}`),
-    selected: null,   // agentul din consola
+    tab: route.tab,
+    panel: route.tab === "echipa" ? "details" : "chat", // panoul din dreapta: "details" sau "chat"
+    selected: null,   // agentul selectat (chat si detalii)
     seen: new Set(),  // id-urile mesajelor afisate in thread
     open: new Set(),  // task-urile deschise pe board (raman deschise la redesenare)
     liveRunId: null,
@@ -30,18 +52,24 @@ export async function workspaceView(root, projectId) {
   let disposed = false; // view-ul a fost inchis: nu mai deschidem stream-uri si nu mai desenam
   // view-ul e inchis daca s-a apelat curatarea sau daca #view a fost golit intre timp
   const gone = () => disposed || !header.isConnected;
-  state.selected = firstRootId();
+  state.selected = state.project.agents.some((a) => a.id === route.agentId) ? route.agentId : firstRootId();
+  let editor = null;     // formularul din Detalii
+  let editorKey = "";    // editableKey pentru datele din formular
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const dropResets = []; // resetari de contor + outline, apelate la orice drop/dragend
   // titlul proiectului sta in coloana din stanga, ca chat-ul sa inceapa din
   // varful paginii si sa incapa intreg pe ecran (inclusiv campul de scris)
   const header = el("div", { class: "ws-head" });
+  const tabsNav = el("nav", { class: "tabs", "aria-label": "Sectiuni proiect" });
   const canvas = teamCanvas({
     onSelect: (id) => select(id),
-    onEdit: (id) => { location.hash = `#/p/${projectId}/agent/${id}`; },
+    onEdit: (id) => select(id, "details"),
     onChanged: () => reload(),
+    onCreate: (pos) => createAgent(pos),
   });
+  // pe Task-uri si Fisiere alegi cu cine vorbesti din banda cu echipa
+  const strip = el("div", { class: "team-strip", "aria-label": "Echipa" });
   const board = el("div", { class: "board" });
   const count = el("span", { class: "hint" });
   const filesList = el("div", { class: "files-list" });
@@ -82,31 +110,149 @@ export async function workspaceView(root, projectId) {
     }
   });
 
-  const consoleBox = el("aside", { class: "console" },
-    consoleHead, thread, el("div", { class: "composer" }, chips, composer, note));
-  setupDrop(consoleBox, addPending);
+  // panoul din dreapta: pe Echipa are doua tab-uri (Detalii | Chat), altfel doar chat
+  const panelTabs = el("div", { class: "panel-tabs", role: "tablist" });
+  const detailsBox = el("div", { class: "details" });
+  const chatBox = el("div", { class: "chat" }, thread, el("div", { class: "composer" }, chips, composer, note));
+  const consoleBox = el("aside", { class: "console" }, consoleHead, panelTabs, detailsBox, chatBox);
+  setupDrop(chatBox, addPending);
 
-  root.append(
-    el("div", { class: "ws" },
-      el("div", { class: "ws-main" },
-        header,
-        el("section", { class: "section" },
-          el("div", { class: "section-head" },
-            el("div", {}, el("h2", {}, "Echipa"), el("span", { class: "hint" }, "Trage de \u25CF ca sa legi agentii. Dublu-click deschide editorul.")),
-            el("a", { class: "btn small", href: `#/p/${projectId}/agent/new` }, "+ Adauga agent")),
-          canvas.el),
-        el("section", { class: "section" },
-          el("div", { class: "section-head" }, el("h2", {}, "Task-uri"), count),
-          board),
-        filesSection),
-      consoleBox));
+  const bodies = {
+    "echipa": el("div", { class: "tab-body team-body" }, canvas.el),
+    "task-uri": el("section", { class: "section tab-body" },
+      el("div", { class: "section-head" }, el("h2", {}, "Task-uri"), count),
+      board),
+    "fisiere": el("div", { class: "tab-body" }, filesSection),
+  };
+  const ws = el("div", { class: "ws" },
+    el("div", { class: "ws-main" }, header, strip, Object.values(bodies)),
+    consoleBox);
+  root.append(ws);
 
   // ---------- desenare ----------
   function renderAll() {
     renderHeader();
+    renderTabs();
     renderTeam();
+    renderStrip();
     renderBoard();
     renderConsoleHead();
+    renderDetails();
+  }
+
+  // renderTabs: tab-ul activ al paginii si al panoului din dreapta
+  function renderTabs() {
+    ws.dataset.tab = state.tab;
+    tabsNav.replaceChildren(...TABS.map((t) => el("a", {
+      class: "tab", href: `#/p/${projectId}/${t.id}`,
+      "aria-current": t.id === state.tab ? "page" : null,
+    }, t.label)));
+    for (const [id, body] of Object.entries(bodies)) body.hidden = id !== state.tab;
+    strip.hidden = state.tab === "echipa";
+    const team = state.tab === "echipa";
+    const panel = team ? state.panel : "chat";
+    panelTabs.hidden = !team;
+    panelTabs.replaceChildren(...[["details", "Detalii"], ["chat", "Chat"]].map(([id, label]) =>
+      el("button", {
+        type: "button", role: "tab", class: "panel-tab", "aria-selected": String(panel === id),
+        onclick: () => { state.panel = id; renderTabs(); if (id === "chat") scrollDown(true); },
+      }, label)));
+    consoleBox.classList.toggle("on-details", panel === "details"); // hint-ul de thread e doar pentru chat
+    detailsBox.hidden = panel !== "details";
+    chatBox.hidden = panel !== "chat";
+  }
+
+  function renderStrip() {
+    strip.replaceChildren(...state.project.agents.map((a) => el("button", {
+      type: "button", class: "strip-agent" + (a.id === state.selected ? " selected" : ""),
+      "aria-pressed": String(a.id === state.selected), title: a.role || a.name,
+      onclick: () => select(a.id),
+    },
+      avatar(a.name, kindOf(a), 22),
+      el("span", {}, a.name),
+      el("span", { class: "dot " + (a.status || "idle").toLowerCase() }))));
+  }
+
+  // renderDetails: formularul agentului selectat. Nu reconstruim un formular
+  // modificat de utilizator; unul nemodificat se reface daca datele s-au schimbat.
+  function renderDetails(force) {
+    const a = selectedAgent();
+    if (!a) {
+      editor?.destroy();
+      editor = null;
+      editorKey = "";
+      detailsBox.replaceChildren(el("p", { class: "empty" }, "Alege un agent pe canvas sau fa unul nou cu dublu-click pe gol."));
+      return null;
+    }
+    const key = a.id + ":" + editableKey(a, state.project.agents);
+    if (!force && editor && editorKey.startsWith(a.id + ":") && (editor.isDirty() || key === editorKey)) return editor;
+    editor?.destroy();
+    editorKey = key;
+    editor = agentEditor({
+      projectId, project: state.project, info, agent: a,
+      onSaved: () => reload(),
+      onDeleted: async () => { state.selected = null; editor = null; await reload(); },
+    });
+    detailsBox.replaceChildren(editor.el);
+    return editor;
+  }
+
+  // leaveEditor: true daca putem schimba agentul din formular (fara modificari
+  // nesalvate sau utilizatorul a confirmat ca renunta la ele)
+  function leaveEditor() {
+    if (!editor || !editor.isDirty()) return true;
+    if (!confirm("Ai modificari nesalvate la " + (selectedAgent()?.name || "agent") + ". Renunti la ele?")) return false;
+    editor.destroy();
+    editor = null;
+    return true;
+  }
+
+  // createAgent: agent nou sub prima radacina, pus pe canvas unde ai dat dublu-click
+  async function createAgent(pos) {
+    if (!leaveEditor()) return;
+    const names = new Set(state.project.agents.map((a) => a.name.toLowerCase()));
+    let name = "Agent nou";
+    for (let i = 2; names.has(name.toLowerCase()); i++) name = `Agent nou ${i}`;
+    const body = agentBody({
+      name, role: "", model: "sonnet", background: "", instructions: "", doneDef: "",
+      tools: ["write"], responsibilities: "", parentId: firstRootId(), reviewerId: null,
+    });
+    try {
+      const a = await api(`/api/projects/${projectId}/agents`, { method: "POST", body });
+      if (pos) await api(`/api/agents/${a.id}/position`, { method: "PUT", body: pos });
+      state.selected = a.id;
+      state.panel = "details";
+      await reload();
+      if (gone()) return;
+      renderDetails(true)?.focusName();
+      syncHash();
+      await loadThread();
+    } catch (err) {
+      toast(err.message);
+    }
+  }
+
+  // syncHash: pe Echipa, adresa contine agentul selectat (refresh-ul il pastreaza).
+  // replaceState nu declanseaza hashchange, deci nu trece prin router.
+  function syncHash() {
+    if (state.tab !== "echipa" || !state.selected) return;
+    const want = `#/p/${projectId}/echipa/${state.selected}`;
+    if (location.hash !== want) history.replaceState(null, "", want);
+  }
+
+  // update: ruta s-a schimbat in acelasi proiect (alt tab sau alt agent)
+  async function update(r) {
+    if (r.tab === "echipa" && state.tab !== "echipa") state.panel = "details"; // intrarea pe Echipa arata Detaliile
+    state.tab = r.tab;
+    if (r.tab === "echipa" && r.agentId && r.agentId !== state.selected) {
+      if (!state.project.agents.some((a) => a.id === r.agentId)) { renderTabs(); return; }
+      state.panel = "details";
+      await select(r.agentId);
+      return;
+    }
+    renderTabs();
+    syncHash();
+    if (!chatBox.hidden) scrollDown(true);
   }
 
   function renderHeader() {
@@ -115,7 +261,7 @@ export async function workspaceView(root, projectId) {
       el("div", {},
         el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Proiecte"), " / ", p.name),
         el("div", { class: "actions" }, el("h1", {}, p.name), pill(p.status)),
-        p.goal && el("p", { class: "muted" }, "Obiectiv: " + p.goal),
+        p.goal && el("p", { class: "muted clamp" }, "Obiectiv: " + p.goal),
         p.paused && el("p", { class: "hint" }, "Echipa e pe pauza. Mesajele raman in asteptare pana o pornesti.")),
       el("div", { class: "head-actions" },
         el("div", { class: "actions" },
@@ -123,7 +269,8 @@ export async function workspaceView(root, projectId) {
           p.paused
             ? el("button", { class: "btn primary", onclick: () => projectAction("resume") }, "Porneste echipa")
             : el("button", { class: "btn", onclick: () => projectAction("stop") }, "Opreste echipa")),
-        openBar)));
+        openBar)),
+      tabsNav);
   }
 
   function buildOpenBar(editors) {
@@ -215,7 +362,7 @@ export async function workspaceView(root, projectId) {
       avatar(a.name, kindOf(a), 36),
       el("div", {},
         el("div", { class: "member-name" }, a.name, a.role && el("span", { class: "hint" }, "· " + a.role)),
-        el("div", { class: "hint" }, !boss
+        el("div", { class: "hint thread-hint" }, !boss
           ? "Thread direct. Ii dai obiective aici, iar el delegheaza echipei lui."
           : `Thread direct. ${boss.name} primeste in copie ce ii scrii.`)));
     input.placeholder = isLead ? `Scrie-i lui ${a.name}...` : `Mesaj pentru ${a.name}`;
@@ -223,11 +370,23 @@ export async function workspaceView(root, projectId) {
   }
 
   // ---------- thread ----------
-  async function select(id) {
-    if (id !== state.selected) { state.pending = []; renderChips(); }
+  // select: schimba agentul din panou; panel ("details"/"chat") alege si tab-ul panoului
+  async function select(id, panel) {
+    if (id !== state.selected) {
+      if (!leaveEditor()) { renderTeam(); return; }
+      state.pending = [];
+      renderChips();
+    }
+    const changed = id !== state.selected;
     state.selected = id;
+    if (panel) state.panel = panel;
+    renderTabs();
     renderTeam();
+    renderStrip();
     renderConsoleHead();
+    renderDetails();
+    syncHash();
+    if (!changed) return;
     await loadThread();
     syncLive();
   }
@@ -492,7 +651,7 @@ export async function workspaceView(root, projectId) {
       return;
     }
     if (gone()) return;
-    if (!selectedAgent()) state.selected = firstRootId(); // agent sters
+    if (!selectedAgent()) { state.selected = firstRootId(); syncHash(); } // agent sters
     renderAll();
     syncLive();
   }
@@ -507,6 +666,7 @@ export async function workspaceView(root, projectId) {
   syncLive();
 
   // stream-ul proiectului se deschide abia acum: pana aici nu exista nimic de inchis
+  syncHash();
   if (gone()) {
     stopLive();
     window.removeEventListener("dragover", guardOver);
@@ -535,8 +695,9 @@ export async function workspaceView(root, projectId) {
   };
 
 
-  return () => {
+  const cleanup = () => {
     disposed = true;
+    editor?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
@@ -545,4 +706,5 @@ export async function workspaceView(root, projectId) {
     stopLive();
     clearTimeout(reloadTimer);
   };
+  return { cleanup, update };
 }

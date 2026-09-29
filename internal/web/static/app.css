@@ -221,3 +221,37 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .link-menu { position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); min-width: 200px; }
 .link-menu button { text-align: left; background: none; border: 0; border-radius: 6px; padding: 7px 10px; color: var(--text); font: 13px var(--sans); cursor: pointer; }
 .link-menu button:hover { background: var(--card-2); }
+
+/* ---------- tab-urile proiectului si panoul din dreapta ---------- */
+.ws-head { display: grid; gap: 14px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab { padding: 8px 14px; text-decoration: none; color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab:hover { color: var(--text); }
+.tab[aria-current="page"] { color: var(--text); border-bottom-color: var(--amber); }
+.tab-body[hidden], .team-strip[hidden], .details[hidden], .chat[hidden], .panel-tabs[hidden] { display: none; }
+.team-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.strip-agent { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px 0 5px; border-radius: 16px; border: 1px solid var(--line-2); background: var(--card-2); color: var(--text); font: 600 12px var(--sans); cursor: pointer; }
+.strip-agent:hover { border-color: var(--muted); }
+.strip-agent.selected { border-color: var(--amber); background: var(--amber-bg); }
+.panel-tabs { display: flex; gap: 4px; padding: 8px 14px 0; border-bottom: 1px solid var(--line); }
+.panel-tab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 6px 12px; color: var(--muted); font: 600 13px var(--sans); cursor: pointer; }
+.panel-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--amber); }
+.chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.details { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+.agent-editor { display: grid; gap: 14px; }
+.agent-editor .check { font-size: 13px; }
+.preview-box summary { cursor: pointer; font-size: 13px; color: var(--soft); font-weight: 600; }
+.preview-box .preview { margin-top: 8px; max-height: 320px; }
+.editor-actions { display: flex; gap: 8px; align-items: center; position: sticky; bottom: -14px; background: var(--card); padding: 10px 0 14px; border-top: 1px solid var(--line); }
+.editor-actions .grow { flex: 1; }
+.canvas-tip { position: absolute; left: 12px; bottom: 8px; font-size: 11px; color: var(--dim); pointer-events: none; }
+.toast.ok { background: #16302b; color: #cdeee7; border-color: #2a5a51; }
+
+/* pe Echipa, canvas-ul umple inaltimea ecranului, langa panou */
+@media (min-width: 901px) {
+  .ws[data-tab="echipa"] .ws-main { height: calc(100vh - 44px); position: sticky; top: 16px; display: flex; flex-direction: column; }
+  .ws[data-tab="echipa"] .team-body { flex: 1; min-height: 0; display: flex; }
+  .ws[data-tab="echipa"] .team-body .canvas-wrap:not(.full) { flex: 1; display: flex; flex-direction: column; }
+  .ws[data-tab="echipa"] .team-body .canvas-wrap:not(.full) svg.team-canvas { flex: 1; min-height: 0; height: auto; }
+}
+.console.on-details .thread-hint { display: none; }

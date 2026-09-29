@@ -80,9 +80,11 @@ export function field(label, input, hint) {
 }
 
 let toastTimer;
-export function toast(message) {
+// kind: "error" (implicit) sau "ok" pentru confirmari scurte
+export function toast(message, kind = "error") {
   const box = document.getElementById("toast");
   box.textContent = message;
+  box.classList.toggle("ok", kind === "ok");
   box.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { box.hidden = true; }, 5000);

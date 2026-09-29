@@ -29,7 +29,8 @@ function autoLayout(agents, width) {
 
 const shorten = (s, n = 26) => (s.length > n ? s.slice(0, n - 3) + "..." : s);
 
-export function teamCanvas({ onSelect, onEdit, onChanged }) {
+// onCreate(pos): agent nou; pos e {x, y} in coordonate SVG (dublu-click pe gol) sau null (butonul "+ Agent").
+export function teamCanvas({ onSelect, onEdit, onChanged, onCreate }) {
   let project = { agents: [] };
   let selectedId = null;
   let selectedLink = null;   // "p:<id>" sau "r:<id>"
@@ -46,8 +47,11 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
   const fullBtn = el("button", { type: "button", class: "btn small canvas-full-toggle", onclick: () => setFull(!wrap.classList.contains("full")) }, "Ecran mare");
   const legend = (cls, label) => el("span", { class: "legend-item" },
     svg("svg", { width: 28, height: 8, "aria-hidden": "true" }, svg("line", { x1: 1, y1: 4, x2: 27, y2: 4, class: "edge " + cls })), label);
-  const bar = el("div", { class: "canvas-bar" }, legend("delegate", "Delegare"), legend("review", "Review"), el("span", { class: "grow" }), deleteBtn, fullBtn);
-  const wrap = el("div", { class: "canvas-wrap", tabindex: "0" }, bar, svgEl);
+  const addBtn = el("button", { type: "button", class: "btn small primary", onclick: () => onCreate(null) }, "+ Agent");
+  const bar = el("div", { class: "canvas-bar" }, legend("delegate", "Delegare"), legend("review", "Review"),
+    el("span", { class: "grow" }), deleteBtn, fullBtn, addBtn);
+  const tip = el("span", { class: "canvas-tip" }, "Trage de \u25CF ca sa legi \u00b7 dublu-click pe gol = agent nou");
+  const wrap = el("div", { class: "canvas-wrap", tabindex: "0" }, bar, svgEl, tip);
 
   function setFull(on) {
     wrap.classList.toggle("full", on);
@@ -348,6 +352,12 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
   // ---------- evenimente pe canvas ----------
   svgEl.addEventListener("click", (e) => {
     if (e.target === svgEl) { selectedLink = null; syncLinkSelection(); }
+  });
+  // dublu-click pe gol: agent nou cu centrul in punctul respectiv
+  svgEl.addEventListener("dblclick", (e) => {
+    if (e.target !== svgEl) return;
+    const p = toSvg(e);
+    onCreate({ x: Math.round(p.x - NODE_W / 2), y: Math.round(p.y - NODE_H / 2) });
   });
   wrap.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
