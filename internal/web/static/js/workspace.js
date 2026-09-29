@@ -19,7 +19,11 @@ export async function workspaceView(root, projectId) {
     open: new Set(),  // task-urile deschise pe board (raman deschise la redesenare)
     liveRunId: null,
     liveStream: null,
+    doneRunId: null,  // ultimul run terminat: activeRunId poate ramane vechi pana la reload
   };
+  let disposed = false; // view-ul a fost inchis: nu mai deschidem stream-uri si nu mai desenam
+  // view-ul e inchis daca s-a apelat curatarea sau daca #view a fost golit intre timp
+  const gone = () => disposed || !header.isConnected;
   state.selected = state.project.agents[0]?.id ?? null;
 
   const header = el("div");
@@ -79,6 +83,10 @@ export async function workspaceView(root, projectId) {
 
   function renderTeam() {
     const [lead, ...workers] = state.project.agents;
+    if (!lead) {
+      team.replaceChildren(el("p", { class: "hint" }, "Proiectul nu are niciun agent."));
+      return;
+    }
     team.replaceChildren(
       memberCard(lead, true),
       workers.length
@@ -170,7 +178,7 @@ export async function workspaceView(root, projectId) {
     const id = state.selected;
     if (!id) return;
     const messages = await api(`/api/agents/${id}/messages`);
-    if (id !== state.selected) return; // s-a schimbat selectia intre timp
+    if (gone() || id !== state.selected) return; // s-a schimbat selectia intre timp
     stopLive();
     state.seen = new Set();
     thread.replaceChildren();
@@ -224,9 +232,11 @@ export async function workspaceView(root, projectId) {
 
   // ---------- run-ul live al agentului selectat ----------
   function syncLive() {
+    if (gone()) return;
     const a = selectedAgent();
     const runId = a?.activeRunId || null;
     if (runId === state.liveRunId) return;
+    if (runId && runId === state.doneRunId) return; // run terminat, activeRunId e inca vechi
     stopLive();
     if (!runId) return;
     state.liveRunId = runId;
@@ -240,6 +250,7 @@ export async function workspaceView(root, projectId) {
       let ev;
       try { ev = JSON.parse(msg.data); } catch { return; }
       if (ev.type === "app_done") {
+        state.doneRunId = runId;
         stopLive(); // raspunsul final vine ca mesaj normal in thread
         return;
       }
@@ -286,6 +297,7 @@ export async function workspaceView(root, projectId) {
       toast(err.message);
       return;
     }
+    if (gone()) return;
     if (!selectedAgent()) state.selected = state.project.agents[0]?.id ?? null; // agent sters
     renderAll();
     syncLive();
@@ -295,6 +307,12 @@ export async function workspaceView(root, projectId) {
     reloadTimer = setTimeout(reload, 150);
   };
 
+  renderAll();
+  await loadThread();
+  syncLive();
+
+  // stream-ul proiectului se deschide abia acum: pana aici nu exista nimic de inchis
+  if (gone()) { stopLive(); return () => {}; }
   let hadError = false;
   const events = new EventSource(`/api/projects/${projectId}/events`);
   events.onmessage = (msg) => {
@@ -313,11 +331,9 @@ export async function workspaceView(root, projectId) {
     syncLive();
   };
 
-  renderAll();
-  await loadThread();
-  syncLive();
 
   return () => {
+    disposed = true;
     events.close();
     stopLive();
     clearTimeout(reloadTimer);
