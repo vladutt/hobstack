@@ -54,21 +54,48 @@ var leadTools = []Tool{
 	},
 }
 
-var workerTools = []Tool{
+var reportTool = Tool{
+	Name:        "report_done",
+	Description: "Raporteaza sefului ca ai terminat un task (sau ca esti blocat). Task-ul trece in Review, la reviewer-ul tau daca ai unul.",
+	InputSchema: schema([]string{"summary"}, map[string]any{
+		"task":    str("Task-ul raportat, ex. T-3. Intr-un run pe task e implicit task-ul curent; altfel e obligatoriu."),
+		"summary": str("Rezumatul cerut in definition of done, sau problema care te blocheaza"),
+	}),
+}
+
+var reviewTools = []Tool{
 	{
-		Name:        "report_done",
-		Description: "Raporteaza lead-ului ca ai terminat task-ul curent (sau ca esti blocat). Task-ul trece in Review.",
-		InputSchema: schema([]string{"summary"}, map[string]any{
-			"summary": str("Rezumatul cerut in definition of done, sau problema care te blocheaza"),
+		Name:        "review_approve",
+		Description: "Aproba munca unui agent pe care il verifici. Task-ul trece la liderul care l-a creat, pentru decizia finala.",
+		InputSchema: schema([]string{"task"}, map[string]any{
+			"task": str("Task-ul verificat, ex. T-3"),
+			"note": str("Optional: o nota pentru lider"),
+		}),
+	},
+	{
+		Name:        "review_reject",
+		Description: "Respinge munca unui agent pe care il verifici, cu feedback concret. Task-ul revine agentului. Dupa 3 respingeri sau trimiteri inapoi, task-ul se blocheaza si decide utilizatorul.",
+		InputSchema: schema([]string{"task", "feedback"}, map[string]any{
+			"task":     str("Task-ul verificat, ex. T-3"),
+			"feedback": str("Ce e gresit si ce trebuie schimbat, concret"),
 		}),
 	},
 }
 
+// toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
+// Un agent radacina fara copii nu primeste niciun tool.
 func toolsFor(c Caller) []Tool {
-	if c.Lead {
-		return leadTools
+	out := []Tool{}
+	if c.IsLead {
+		out = append(out, leadTools...)
 	}
-	return workerTools
+	if c.HasParent {
+		out = append(out, reportTool)
+	}
+	if c.IsReviewer {
+		out = append(out, reviewTools...)
+	}
+	return out
 }
 
 func allowed(c Caller, name string) bool {

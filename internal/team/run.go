@@ -57,8 +57,10 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		return err
 	}
 
+	roles := store.RolesOf(a, agents)
 	t.mu.Lock()
-	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID, Lead: a.Position == store.PositionLead}
+	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
+		IsLead: roles.IsLead, HasParent: !roles.IsRoot, IsReviewer: roles.IsReviewer}
 	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
 	t.mu.Unlock()
 
@@ -164,29 +166,37 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	if task.Status != store.StatusInProgress {
 		return nil // a apelat report_done sau Stop team l-a pus inapoi in Queued
 	}
-	var noteText string
+	agents, err := t.st.ListAgents(ar.projectID)
+	if err != nil {
+		return err
+	}
 	switch o.Status {
 	case store.RunStopped:
 		task.Status = store.StatusQueued
 	case store.RunFailed:
 		task.Status = store.StatusReview
+		task.ReviewStage = store.StageLead
 		task.Result = "run esuat: " + o.Error
-		noteText = fmt.Sprintf("Run-ul lui %s pe %s a esuat: %s", a.Name, task.Ref(), o.Error)
+		boss, hasBoss := decider(task, agents)
+		if !hasBoss { // nimeni nu poate decide: decide utilizatorul
+			task.Status, task.ReviewStage = store.StatusBlocked, store.StageNone
+		}
+		if err := t.st.SaveTask(&task); err != nil {
+			return err
+		}
+		t.emit(ar.projectID, "task", task)
+		if !hasBoss {
+			return nil
+		}
+		return t.note(ar.projectID, boss.ID, clip(fmt.Sprintf("Run-ul lui %s pe %s a esuat: %s", a.Name, task.Ref(), o.Error)), false)
 	default:
-		task.Status = store.StatusReview
 		task.Result = strings.TrimSpace(o.Result)
-		noteText = fmt.Sprintf("%s a terminat %s fara report_done (review): %s", a.Name, task.Ref(), task.Result)
+		_, err := t.toReview(&task, a, agents, fmt.Sprintf("%s a terminat %s fara report_done", a.Name, task.Ref()))
+		return err
 	}
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
 	}
 	t.emit(ar.projectID, "task", task)
-	if noteText == "" {
-		return nil
-	}
-	lead, err := t.st.Lead(ar.projectID)
-	if err != nil {
-		return err
-	}
-	return t.note(ar.projectID, lead.ID, clip(noteText), false)
+	return nil
 }

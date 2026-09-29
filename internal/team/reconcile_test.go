@@ -101,7 +101,7 @@ func TestFullFlow(t *testing.T) {
 	f.wantStatus(t, 3, store.StatusQueued)
 
 	// Rook raporteaza T-1: lead-ul e trezit cu --resume si notificarea
-	if _, err := f.tm.ReportDone(f.caller(t, rook1), "A e gata"); err != nil {
+	if _, err := f.tm.ReportDone(f.caller(t, rook1), "", "A e gata"); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)

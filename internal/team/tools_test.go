@@ -5,6 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"foreman/internal/mcp"
 	"foreman/internal/store"
 )
 
@@ -81,7 +82,7 @@ func TestListTasks(t *testing.T) {
 func TestReportDone(t *testing.T) {
 	f := setup(t)
 	task := f.task(t, "A", f.rook, store.StatusInProgress)
-	text, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "A e gata")
+	text, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", "A e gata")
 	if err != nil || text != "T-1 e in Review. Lead va verifica." {
 		t.Fatalf("%q %v", text, err)
 	}
@@ -99,14 +100,17 @@ func TestReportDoneErrors(t *testing.T) {
 	queued := f.task(t, "A", f.rook, store.StatusQueued)
 	running := f.task(t, "B", f.rook, store.StatusInProgress)
 	cases := map[string]error{}
-	_, cases["fara task"] = f.tm.ReportDone(f.workerCaller(f.rook, 0), "x")
-	_, cases["lead"] = f.tm.ReportDone(f.leadCaller(), "x")
-	_, cases["task care nu e in lucru"] = f.tm.ReportDone(f.workerCaller(f.rook, queued.ID), "x")
-	_, cases["rezumat gol"] = f.tm.ReportDone(f.workerCaller(f.rook, running.ID), "  ")
+	_, cases["fara task"] = f.tm.ReportDone(f.workerCaller(f.rook, 0), "", "x")
+	_, cases["lead"] = f.tm.ReportDone(f.leadCaller(), "", "x") // raportezi direct utilizatorului
+	_, cases["task care nu e in lucru"] = f.tm.ReportDone(f.workerCaller(f.rook, queued.ID), "", "x")
+	_, cases["rezumat gol"] = f.tm.ReportDone(f.workerCaller(f.rook, running.ID), "", "  ")
 	for name, err := range cases {
 		if err == nil {
 			t.Errorf("%s: trebuia eroare", name)
 		}
+	}
+	if err := cases["lead"]; err == nil || !strings.Contains(err.Error(), "raportezi direct utilizatorului") {
+		t.Errorf("lead: %v", err)
 	}
 }
 
@@ -114,7 +118,7 @@ func TestLongSummaryIsClipped(t *testing.T) {
 	f := setup(t)
 	task := f.task(t, "A", f.rook, store.StatusInProgress)
 	long := strings.Repeat("x", 10000)
-	if _, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), long); err != nil {
+	if _, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", long); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.wantStatus(t, 1, store.StatusReview); got.Result != long {
@@ -139,7 +143,7 @@ func TestSendBackThenBlock(t *testing.T) {
 		if got.Feedback != "mai bine" || got.SendBacks != i {
 			t.Fatalf("dupa trimiterea %d: %+v", i, got)
 		}
-		got.Status = store.StatusReview // worker-ul a raportat din nou
+		got.Status, got.ReviewStage = store.StatusReview, store.StageLead // worker-ul a raportat din nou
 		f.st.SaveTask(&got)
 	}
 	text, err := f.tm.SendBack(f.leadCaller(), "1", "tot nu")
@@ -186,5 +190,233 @@ func TestResolveUnknownToken(t *testing.T) {
 	f := setup(t)
 	if _, ok := f.tm.Resolve("nimic"); ok {
 		t.Fatal("token necunoscut rezolvat")
+	}
+}
+
+func TestCreateTaskDirectReportsOnly(t *testing.T) {
+	f := setup(t)
+	sub := f.agent(t, "Sub", &f.lead, nil)
+	wes := f.agent(t, "Wes", &sub, nil)
+	_, err := f.tm.CreateTask(f.leadCaller(), "A", "", "Wes")
+	if err == nil || !strings.Contains(err.Error(), `"Wes" nu e in echipa ta directa. Echipa ta directa: Rook, Vera, Sub`) {
+		t.Fatalf("worker indirect: %v", err)
+	}
+	// flag vechi: Rook a fost lider cand a pornit run-ul, dar acum nu mai are copii
+	stale := mcp.Caller{ProjectID: f.p.ID, AgentID: f.rook.ID, IsLead: true, HasParent: true}
+	if _, err := f.tm.CreateTask(stale, "A", "", "Vera"); err == nil || !strings.Contains(err.Error(), "doar un lider") {
+		t.Fatalf("lider fara copii: %v", err)
+	}
+	parent := f.task(t, "Import", sub, store.StatusInProgress)
+	sc := mcp.Caller{ProjectID: f.p.ID, AgentID: sub.ID, IsLead: true, HasParent: true, TaskID: parent.ID}
+	if _, err := f.tm.CreateTask(sc, "Parser", "", "wes"); err != nil {
+		t.Fatal(err)
+	}
+	got := f.wantStatus(t, 2, store.StatusQueued)
+	if got.AssigneeID != wes.ID || *got.CreatorID != sub.ID || got.ParentTaskID == nil || *got.ParentTaskID != parent.ID {
+		t.Fatalf("sub-task: %+v", got)
+	}
+	// run de notificari (fara task), dar cu un singur task in lucru: tot sub-task al lui
+	sc.TaskID = 0
+	f.tm.CreateTask(sc, "Lexer", "", "Wes")
+	if got := f.wantStatus(t, 3, store.StatusQueued); got.ParentTaskID == nil || *got.ParentTaskID != parent.ID {
+		t.Fatalf("T-3 parinte: %+v", got.ParentTaskID)
+	}
+}
+
+func TestReportDoneTaskParam(t *testing.T) {
+	f := setup(t)
+	sub := f.agent(t, "Sub", &f.lead, nil)
+	wes := f.agent(t, "Wes", &sub, nil)
+	parent := f.task(t, "Import", sub, store.StatusInProgress)
+	child := store.Task{ProjectID: f.p.ID, Title: "Parser", AssigneeID: wes.ID, CreatorID: &sub.ID, ParentTaskID: &parent.ID}
+	f.st.CreateTask(&child)
+	sc := mcp.Caller{ProjectID: f.p.ID, AgentID: sub.ID, IsLead: true, HasParent: true} // run de notificari
+	errs := map[string]string{"": "spune pentru ce task", "T-1": "mai are sub-task-uri deschise: T-2", "T-2": "nu e asignat tie"}
+	for ref, want := range errs {
+		if _, err := f.tm.ReportDone(sc, ref, "x"); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("ref %q: %v, vreau %q", ref, err, want)
+		}
+	}
+	child.Status = store.StatusDone
+	f.st.SaveTask(&child)
+	text, err := f.tm.ReportDone(sc, "t-1", "Import gata")
+	if err != nil || text != "T-1 e in Review. Lead va verifica." {
+		t.Fatalf("%q %v", text, err)
+	}
+	if got := f.wantStatus(t, 1, store.StatusReview); got.ReviewStage != store.StageLead || got.Result != "Import gata" {
+		t.Fatalf("T-1: %+v", got)
+	}
+}
+
+func TestReviewApproveAndReject(t *testing.T) {
+	f := setup(t)
+	f.rook.ReviewerID = &f.vera.ID
+	if err := f.st.UpdateAgent(f.rook); err != nil {
+		t.Fatal(err)
+	}
+	task := f.task(t, "A", f.rook, store.StatusInProgress)
+	text, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", "A e gata")
+	if err != nil || text != "T-1 e in Review. Vera va verifica." {
+		t.Fatalf("%q %v", text, err)
+	}
+	if got := f.wantStatus(t, 1, store.StatusReview); got.ReviewStage != store.StageReviewer {
+		t.Fatalf("stage = %q", got.ReviewStage)
+	}
+	pending, _ := f.st.Undelivered(f.vera.ID)
+	if len(pending) != 1 || pending[0].Text != "Rook a terminat T-1. Verifica-l cu review_approve sau review_reject: A e gata" {
+		t.Fatalf("notificari Vera: %+v", pending)
+	}
+	if p, _ := f.st.Undelivered(f.lead.ID); len(p) != 0 {
+		t.Fatal("lead-ul nu trebuie notificat inainte de review")
+	}
+	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err == nil || !strings.Contains(err.Error(), "inca la review la Vera") {
+		t.Fatalf("accept inainte de review: %v", err)
+	}
+	vc := mcp.Caller{ProjectID: f.p.ID, AgentID: f.vera.ID, HasParent: true, IsReviewer: true}
+	other := mcp.Caller{ProjectID: f.p.ID, AgentID: f.lead.ID, IsLead: true, IsReviewer: true}
+	if _, err := f.tm.ReviewApprove(other, "T-1", ""); err == nil || !strings.Contains(err.Error(), "nu verifici munca lui Rook") {
+		t.Fatalf("alt reviewer: %v", err)
+	}
+	if _, err := f.tm.ReviewReject(vc, "T-1", "  "); err == nil {
+		t.Fatal("feedback gol trebuia refuzat")
+	}
+
+	text, err = f.tm.ReviewReject(vc, "T-1", "Lipsesc testele")
+	if err != nil || text != "T-1 trimis inapoi lui Rook (1/3)." {
+		t.Fatalf("reject: %q %v", text, err)
+	}
+	got := f.wantStatus(t, 1, store.StatusQueued)
+	if got.Feedback != "Lipsesc testele" || got.SendBacks != 1 || got.ReviewStage != store.StageNone {
+		t.Fatalf("dupa reject: %+v", got)
+	}
+	if !f.hasMessage(f.rook.ID, "T-1 respins la review de Vera: Lipsesc testele") {
+		t.Fatal("Rook trebuie sa vada respingerea")
+	}
+
+	got.Status, got.ReviewStage = store.StatusReview, store.StageReviewer
+	f.st.SaveTask(&got)
+	text, err = f.tm.ReviewApprove(vc, "T-1", "arata bine")
+	if err != nil || text != "T-1 a trecut la Lead pentru decizie." {
+		t.Fatalf("approve: %q %v", text, err)
+	}
+	if got := f.wantStatus(t, 1, store.StatusReview); got.ReviewStage != store.StageLead {
+		t.Fatalf("stage dupa approve = %q", got.ReviewStage)
+	}
+	pending, _ = f.st.Undelivered(f.lead.ID)
+	last := pending[len(pending)-1].Text
+	if !strings.HasPrefix(last, "Vera a aprobat T-1 lucrat de Rook (review): A e gata") || !strings.HasSuffix(last, "Nota: arata bine") {
+		t.Fatalf("notificare lead: %q", last)
+	}
+	if _, err := f.tm.ReviewApprove(vc, "T-1", ""); err == nil {
+		t.Fatal("a doua aprobare trebuia refuzata")
+	}
+}
+
+func TestReviewRejectBlocksAtThree(t *testing.T) {
+	f := setup(t)
+	f.rook.ReviewerID = &f.vera.ID
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "A", f.rook, store.StatusReview)
+	vc := mcp.Caller{ProjectID: f.p.ID, AgentID: f.vera.ID, HasParent: true, IsReviewer: true}
+	for i := 1; i <= 3; i++ {
+		task, _ = f.st.GetTask(task.ID)
+		task.Status, task.ReviewStage = store.StatusReview, store.StageReviewer
+		f.st.SaveTask(&task)
+		if _, err := f.tm.ReviewReject(vc, "T-1", "tot nu"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.wantStatus(t, 1, store.StatusBlocked)
+	if !f.hasMessage(f.lead.ID, "T-1 e blocat dupa 3 respingeri sau trimiteri inapoi") {
+		t.Fatal("decidentul trebuie anuntat de blocare")
+	}
+}
+
+func TestReviewWithoutDeciderBlocksTask(t *testing.T) {
+	f := setup(t)
+	// task-ul ajunge in review prin run-ul terminat fara report_done, dupa ce
+	// asignatul a ramas fara sef si fara creator
+	wes := f.agent(t, "Wes", nil, nil)
+	task := f.task(t, "A", wes, store.StatusInProgress)
+	task.CreatorID = nil
+	task.Result = "gata"
+	f.st.SaveTask(&task)
+	agents, _ := f.st.ListAgents(f.p.ID)
+	who, err := f.tm.toReview(&task, wes, agents, "Wes a terminat T-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if who.ID != 0 {
+		t.Fatalf("nu trebuia notificat nimeni: %+v", who)
+	}
+	got := f.wantStatus(t, 1, store.StatusBlocked)
+	if got.ReviewStage != store.StageNone {
+		t.Fatalf("stage = %q", got.ReviewStage)
+	}
+	if !f.hasMessage(wes.ID, "Nu are cine sa verifice T-1: agentul nu are sef. Leaga-l de un lider pe canvas.") {
+		t.Fatal("asignatul trebuie anuntat")
+	}
+}
+
+func TestAcceptOnlyByCreatorOrAncestor(t *testing.T) {
+	f := setup(t)
+	sub := f.agent(t, "Sub", &f.lead, nil)
+	wes := f.agent(t, "Wes", &sub, nil)
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: wes.ID, CreatorID: &sub.ID}
+	f.st.CreateTask(&task)
+	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
+	f.st.SaveTask(&task)
+	stranger := mcp.Caller{ProjectID: f.p.ID, AgentID: f.rook.ID, IsLead: true, HasParent: true}
+	if _, err := f.tm.AcceptTask(stranger, "T-1", ""); err == nil || !strings.Contains(err.Error(), "doar liderul care a creat T-1") {
+		t.Fatalf("accept strain: %v", err)
+	}
+	if _, err := f.tm.SendBack(stranger, "T-1", "x"); err == nil {
+		t.Fatal("send_back strain trebuia refuzat")
+	}
+	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err != nil {
+		t.Fatalf("stramosul creatorului: %v", err)
+	}
+}
+
+func TestAcceptWithoutCreatorByAncestor(t *testing.T) {
+	f := setup(t)
+	sub := f.agent(t, "Sub", &f.lead, nil)
+	wes := f.agent(t, "Wes", &sub, nil)
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: wes.ID, CreatorID: &sub.ID}
+	f.st.CreateTask(&task)
+	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
+	f.st.SaveTask(&task)
+	if err := f.st.DeleteAgent(sub.ID); err != nil { // Wes trece la Lead, creator_id devine NULL
+		t.Fatal(err)
+	}
+	stranger := mcp.Caller{ProjectID: f.p.ID, AgentID: f.rook.ID, IsLead: true, HasParent: true}
+	if _, err := f.tm.AcceptTask(stranger, "T-1", ""); err == nil {
+		t.Fatal("Rook nu e sef al lui Wes")
+	}
+	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err != nil {
+		t.Fatalf("seful asignatului: %v", err)
+	}
+}
+
+func TestSubtaskAcceptNotifiesParentAssignee(t *testing.T) {
+	f := setup(t)
+	sub := f.agent(t, "Sub", &f.lead, nil)
+	wes := f.agent(t, "Wes", &sub, nil)
+	parent := f.task(t, "Import", sub, store.StatusInProgress)
+	for _, title := range []string{"A", "B"} {
+		c := store.Task{ProjectID: f.p.ID, Title: title, AssigneeID: wes.ID, CreatorID: &sub.ID, ParentTaskID: &parent.ID}
+		f.st.CreateTask(&c)
+		c.Status, c.ReviewStage = store.StatusReview, store.StageLead
+		f.st.SaveTask(&c)
+	}
+	sc := mcp.Caller{ProjectID: f.p.ID, AgentID: sub.ID, IsLead: true, HasParent: true}
+	f.tm.AcceptTask(sc, "T-2", "")
+	if f.hasMessage(sub.ID, "Toate sub-task-urile") {
+		t.Fatal("T-3 e inca deschis: prea devreme")
+	}
+	f.tm.AcceptTask(sc, "T-3", "")
+	pending, _ := f.st.Undelivered(sub.ID)
+	if len(pending) != 1 || !strings.HasPrefix(pending[0].Text, "Toate sub-task-urile pentru T-1 sunt gata.") {
+		t.Fatalf("notificare sub-lider: %+v", pending)
 	}
 }

@@ -33,16 +33,27 @@ func (f *fakeBackend) SendBack(c Caller, task, feedback string) (string, error) 
 	f.calls = append(f.calls, "send_back|"+task+"|"+feedback)
 	return "ok", f.err
 }
-func (f *fakeBackend) ReportDone(c Caller, summary string) (string, error) {
-	f.calls = append(f.calls, "report_done|"+summary)
+func (f *fakeBackend) ReportDone(c Caller, task, summary string) (string, error) {
+	f.calls = append(f.calls, "report_done|"+task+"|"+summary)
+	return "ok", f.err
+}
+func (f *fakeBackend) ReviewApprove(c Caller, task, note string) (string, error) {
+	f.calls = append(f.calls, "review_approve|"+task+"|"+note)
+	return "ok", f.err
+}
+func (f *fakeBackend) ReviewReject(c Caller, task, feedback string) (string, error) {
+	f.calls = append(f.calls, "review_reject|"+task+"|"+feedback)
 	return "ok", f.err
 }
 
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 	t.Helper()
 	fb := &fakeBackend{callers: map[string]Caller{
-		"lead":   {ProjectID: 1, AgentID: 1, Lead: true},
-		"worker": {ProjectID: 1, AgentID: 2, TaskID: 5},
+		"lead":     {ProjectID: 1, AgentID: 1, IsLead: true},
+		"worker":   {ProjectID: 1, AgentID: 2, TaskID: 5, HasParent: true},
+		"sublead":  {ProjectID: 1, AgentID: 3, IsLead: true, HasParent: true},
+		"reviewer": {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
+		"solo":     {ProjectID: 1, AgentID: 5},
 	}}
 	mux := http.NewServeMux()
 	srv := NewServer(fb)
@@ -150,6 +161,48 @@ func TestToolsListByRole(t *testing.T) {
 	}
 	if got := strings.Join(names("worker"), ","); got != "report_done" {
 		t.Fatalf("worker: %s", got)
+	}
+	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done" {
+		t.Fatalf("sublead: %s", got)
+	}
+	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject" {
+		t.Fatalf("reviewer: %s", got)
+	}
+	if got := names("solo"); len(got) != 0 {
+		t.Fatalf("solo: %v", got)
+	}
+	// lista goala trebuie sa fie [], nu null
+	_, resp := rpc(t, ts, "solo", `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+	if tools, ok := result(t, resp)["tools"].([]any); !ok || len(tools) != 0 {
+		t.Fatalf("solo tools: %v", result(t, resp)["tools"])
+	}
+}
+
+func TestCallReportDoneWithTask(t *testing.T) {
+	fb, ts := setup(t)
+	rpc(t, ts, "sublead", `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"report_done","arguments":{"task":"T-4","summary":"gata"}}}`)
+	if len(fb.calls) != 1 || fb.calls[0] != "report_done|T-4|gata" {
+		t.Fatalf("apeluri: %v", fb.calls)
+	}
+}
+
+func TestCallReviewTools(t *testing.T) {
+	fb, ts := setup(t)
+	rpc(t, ts, "reviewer", `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"review_approve","arguments":{"task":3,"note":"ok"}}}`)
+	rpc(t, ts, "reviewer", `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"review_reject","arguments":{"task":"T-3","feedback":"lipsesc teste"}}}`)
+	if len(fb.calls) != 2 || fb.calls[0] != "review_approve|3|ok" || fb.calls[1] != "review_reject|T-3|lipsesc teste" {
+		t.Fatalf("apeluri: %v", fb.calls)
+	}
+}
+
+func TestWorkerCannotReview(t *testing.T) {
+	fb, ts := setup(t)
+	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"review_approve","arguments":{"task":"T-3"}}}`)
+	if text, isErr := toolText(t, resp); !isErr || !strings.Contains(text, "nu e disponibil") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	if len(fb.calls) != 0 {
+		t.Fatalf("backend-ul nu trebuia apelat: %v", fb.calls)
 	}
 }
 

@@ -125,11 +125,11 @@ func (f *fixture) agent(t *testing.T, name string, parent, reviewer *store.Agent
 }
 
 func (f *fixture) leadCaller() mcp.Caller {
-	return mcp.Caller{ProjectID: f.p.ID, AgentID: f.lead.ID, Lead: true}
+	return mcp.Caller{ProjectID: f.p.ID, AgentID: f.lead.ID, IsLead: true}
 }
 
 func (f *fixture) workerCaller(a store.Agent, taskID int64) mcp.Caller {
-	return mcp.Caller{ProjectID: f.p.ID, AgentID: a.ID, TaskID: taskID}
+	return mcp.Caller{ProjectID: f.p.ID, AgentID: a.ID, TaskID: taskID, HasParent: true}
 }
 
 // caller gaseste identitatea MCP a unui run pornit, din --mcp-config.
@@ -154,12 +154,15 @@ func (f *fixture) caller(t *testing.T, spec runner.Spec) mcp.Caller {
 // task creeaza un task direct in store, cu statusul dorit.
 func (f *fixture) task(t *testing.T, title string, who store.Agent, status string) store.Task {
 	t.Helper()
-	task := store.Task{ProjectID: f.p.ID, Title: title, AssigneeID: who.ID}
+	task := store.Task{ProjectID: f.p.ID, Title: title, AssigneeID: who.ID, CreatorID: &f.lead.ID}
 	if err := f.st.CreateTask(&task); err != nil {
 		t.Fatal(err)
 	}
 	if status != store.StatusQueued {
 		task.Status = status
+		if status == store.StatusReview {
+			task.ReviewStage = store.StageLead
+		}
 		if err := f.st.SaveTask(&task); err != nil {
 			t.Fatal(err)
 		}
