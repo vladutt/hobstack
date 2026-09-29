@@ -96,8 +96,8 @@ func setup(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rook := store.Agent{ProjectID: p.ID, Name: "Rook", Role: "Backend Dev", Position: store.PositionWorker, Model: "sonnet", Tools: []string{"write"}}
-	vera := store.Agent{ProjectID: p.ID, Name: "Vera", Role: "QA", Position: store.PositionWorker, Model: "haiku"}
+	rook := store.Agent{ProjectID: p.ID, Name: "Rook", Role: "Backend Dev", ParentID: &lead.ID, Model: "sonnet", Tools: []string{"write"}}
+	vera := store.Agent{ProjectID: p.ID, Name: "Vera", Role: "QA", ParentID: &lead.ID, Model: "haiku"}
 	for _, a := range []*store.Agent{&rook, &vera} {
 		if err := st.CreateAgent(a); err != nil {
 			t.Fatal(err)
@@ -106,6 +106,22 @@ func setup(t *testing.T) *fixture {
 	fs := newFakeStarter()
 	tm := New(st, fs, events.NewHub(), "http://127.0.0.1:7777")
 	return &fixture{st: st, tm: tm, fs: fs, p: p, lead: lead, rook: rook, vera: vera}
+}
+
+// agent adauga un agent in proiectul fixture-ului; parent/reviewer pot fi nil.
+func (f *fixture) agent(t *testing.T, name string, parent, reviewer *store.Agent) store.Agent {
+	t.Helper()
+	a := store.Agent{ProjectID: f.p.ID, Name: name, Role: "Dev", Model: "haiku"}
+	if parent != nil {
+		a.ParentID = &parent.ID
+	}
+	if reviewer != nil {
+		a.ReviewerID = &reviewer.ID
+	}
+	if err := f.st.CreateAgent(&a); err != nil {
+		t.Fatal(err)
+	}
+	return a
 }
 
 func (f *fixture) leadCaller() mcp.Caller {

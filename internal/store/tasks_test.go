@@ -168,3 +168,59 @@ func TestDeleteProjectCascades(t *testing.T) {
 		}
 	}
 }
+
+func TestRequeueKeepsWaitingParent(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	sub := newAgent(t, s, p.ID, "Sub", &lead.ID)
+	w := newAgent(t, s, p.ID, "W", &sub.ID)
+	parent := Task{ProjectID: p.ID, Title: "Import", AssigneeID: sub.ID, CreatorID: &lead.ID}
+	s.CreateTask(&parent)
+	parent.Status = StatusInProgress
+	s.SaveTask(&parent)
+	child := Task{ProjectID: p.ID, Title: "Parser", AssigneeID: w.ID, CreatorID: &sub.ID, ParentTaskID: &parent.ID}
+	s.CreateTask(&child)
+	child.Status, child.ReviewStage = StatusInProgress, StageNone
+	s.SaveTask(&child)
+
+	subs, err := s.Subtasks(parent.ID)
+	if err != nil || len(subs) != 1 || subs[0].ID != child.ID || *subs[0].CreatorID != sub.ID {
+		t.Fatalf("Subtasks = %+v, %v", subs, err)
+	}
+	if err := s.RequeueInProgress(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetTask(parent.ID); got.Status != StatusInProgress {
+		t.Fatalf("parintele care asteapta a fost mutat in %s", got.Status)
+	}
+	if got, _ := s.GetTask(child.ID); got.Status != StatusQueued {
+		t.Fatalf("sub-task-ul trebuia in queued: %s", got.Status)
+	}
+	child.Status = StatusDone
+	s.SaveTask(&child)
+	if err := s.RequeueAllInProgress(); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetTask(parent.ID); got.Status != StatusQueued {
+		t.Fatalf("fara sub-task-uri deschise, parintele revine in queued: %s", got.Status)
+	}
+	if subs, _ := s.Subtasks(child.ID); subs == nil || len(subs) != 0 {
+		t.Fatal("Subtasks trebuie sa intoarca [] nu nil")
+	}
+}
+
+func TestReviewStageSaved(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	task := Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID}
+	s.CreateTask(&task)
+	if task.ReviewStage != StageNone || task.CreatorID != nil || task.ParentTaskID != nil {
+		t.Fatalf("task nou: %+v", task)
+	}
+	task.Status, task.ReviewStage = StatusReview, StageReviewer
+	s.SaveTask(&task)
+	if got, _ := s.GetTask(task.ID); got.ReviewStage != StageReviewer {
+		t.Fatalf("review_stage = %q", got.ReviewStage)
+	}
+}

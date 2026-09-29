@@ -34,6 +34,14 @@ func nullID(id int64) any {
 	return id
 }
 
+// nullPtr transforma un pointer nil in NULL pentru coloanele optionale.
+func nullPtr(p *int64) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
 func (s *Store) CreateRun(r *Run) error {
 	ts := now()
 	r.Status = RunRunning

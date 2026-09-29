@@ -342,7 +342,7 @@ func TestUnlimitedParallel(t *testing.T) {
 	f := setup(t)
 	f.p.MaxParallel = 0 // fara limita
 	f.st.UpdateProject(f.p)
-	quill := store.Agent{ProjectID: f.p.ID, Name: "Quill", Position: store.PositionWorker, Model: "haiku"}
+	quill := store.Agent{ProjectID: f.p.ID, Name: "Quill", ParentID: &f.lead.ID, Model: "haiku"}
 	if err := f.st.CreateAgent(&quill); err != nil {
 		t.Fatal(err)
 	}

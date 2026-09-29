@@ -87,7 +87,11 @@ func (e *env) createProject(t *testing.T, workdir string) store.Project {
 
 func (e *env) addWorker(t *testing.T, projectID int64, name string) store.Agent {
 	t.Helper()
-	a := store.Agent{ProjectID: projectID, Name: name, Position: store.PositionWorker, Model: "sonnet"}
+	agents, err := e.st.ListAgents(projectID)
+	if err != nil || len(agents) == 0 {
+		t.Fatalf("proiect fara agenti: %v", err)
+	}
+	a := store.Agent{ProjectID: projectID, Name: name, ParentID: &agents[0].ID, Model: "sonnet"}
 	if err := e.st.CreateAgent(&a); err != nil {
 		t.Fatal(err)
 	}
@@ -236,9 +240,11 @@ func TestDeleteAgentConflicts(t *testing.T) {
 	if code, _ := e.do(t, "DELETE", "/api/agents/"+itoa(w.ID), nil); code != http.StatusConflict {
 		t.Errorf("worker cu task-uri: %d", code)
 	}
-	lead, _ := e.st.Lead(p.ID)
+	// ultimul agent din proiect nu se poate sterge
+	solo := e.createProject(t, t.TempDir())
+	lead, _ := e.st.Lead(solo.ID)
 	if code, _ := e.do(t, "DELETE", "/api/agents/"+itoa(lead.ID), nil); code != http.StatusConflict {
-		t.Errorf("lead: %d", code)
+		t.Errorf("ultimul agent: %d", code)
 	}
 }
 

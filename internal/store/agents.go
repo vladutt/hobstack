@@ -7,17 +7,23 @@ import (
 	"time"
 )
 
+// Deprecated: rolul reiese din legaturi. Se sterge in Task 5.
 const (
 	PositionLead   = "lead"
 	PositionWorker = "worker"
 )
+
+// LinkError: legatura ceruta intre agenti incalca un invariant (sef, reviewer, ciclu).
+type LinkError string
+
+func (e LinkError) Error() string { return string(e) }
 
 type Agent struct {
 	ID           int64     `json:"id"`
 	ProjectID    int64     `json:"projectId"`
 	Name         string    `json:"name"`
 	Role         string    `json:"role"`
-	Position     string    `json:"position"`
+	Position     string    `json:"position"` // Deprecated: rolul reiese din legaturi. Se sterge in Task 5.
 	Model        string    `json:"model"`
 	Background   string    `json:"background"`
 	Instructions string    `json:"instructions"`
@@ -26,15 +32,22 @@ type Agent struct {
 	SessionID    string    `json:"sessionId"`
 	PromptHash   string    `json:"-"`
 	CreatedAt    time.Time `json:"createdAt"`
+
+	ParentID         *int64   `json:"parentId"`         // nil = raporteaza utilizatorului (radacina)
+	ReviewerID       *int64   `json:"reviewerId"`       // nil = nu il verifica nimeni
+	Responsibilities string   `json:"responsibilities"` // "Ce ia"
+	PosX             *float64 `json:"posX"`             // nil = asezare automata pe canvas
+	PosY             *float64 `json:"posY"`
 }
 
-const agentCols = `id, project_id, name, role, position, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at`
+const agentCols = `id, project_id, name, role, position, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y`
 
 func scanAgent(sc scanner) (Agent, error) {
 	var a Agent
 	var tools, created string
 	err := sc.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Role, &a.Position, &a.Model, &a.Background,
-		&a.Instructions, &a.DoneDef, &tools, &a.SessionID, &a.PromptHash, &created)
+		&a.Instructions, &a.DoneDef, &tools, &a.SessionID, &a.PromptHash, &created,
+		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, ErrNotFound
 	}
@@ -61,9 +74,13 @@ func toolsJSON(tools []string) string {
 
 func insertAgent(ex execer, a *Agent) error {
 	created := now()
-	res, err := ex.Exec(`INSERT INTO agents (project_id, name, role, position, model, background, instructions, done_def, tools, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.ProjectID, a.Name, a.Role, a.Position, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools), created)
+	if a.Position == "" {
+		a.Position = PositionWorker // coloana are CHECK si NOT NULL
+	}
+	res, err := ex.Exec(`INSERT INTO agents (project_id, name, role, position, model, background, instructions, done_def, tools, parent_id, reviewer_id, responsibilities, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.ProjectID, a.Name, a.Role, a.Position, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools),
+		nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.Responsibilities, created)
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -80,19 +97,86 @@ func insertAgent(ex execer, a *Agent) error {
 	return nil
 }
 
-// CreateAgent adauga un agent. Intoarce ErrConflict daca numele exista deja in
-// proiect (fara diferenta intre litere mari si mici) sau daca ar fi al doilea lead.
-func (s *Store) CreateAgent(a *Agent) error { return insertAgent(s.db, a) }
+// queryer e implementat si de *sql.DB si de *sql.Tx.
+type queryer interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// checkLinks verifica invariantii legaturilor inainte de salvare: seful si
+// reviewer-ul sunt din acelasi proiect, nimeni nu e propriul sef sau
+// reviewer, iar lantul de sefi nu face cerc.
+func checkLinks(q queryer, a Agent) error {
+	if a.ParentID != nil {
+		if *a.ParentID == a.ID {
+			return LinkError("un agent nu poate fi propriul sef")
+		}
+		if !inProject(q, *a.ParentID, a.ProjectID) {
+			return LinkError("seful ales nu e in acest proiect")
+		}
+		// Urcam pe lantul de sefi pornind de la noul sef. Daca ajungem la
+		// agentul editat, legatura ar inchide un cerc. Un agent nou (ID 0) nu e
+		// inca seful nimanui, deci nu poate crea un ciclu.
+		if a.ID != 0 {
+			cur := *a.ParentID
+			for steps := 0; steps < 10000; steps++ { // limita: protectie la date deja stricate
+				if cur == a.ID {
+					return LinkError("legatura ar crea un ciclu")
+				}
+				var next sql.NullInt64
+				if err := q.QueryRow(`SELECT parent_id FROM agents WHERE id = ?`, cur).Scan(&next); err != nil {
+					return err
+				}
+				if !next.Valid {
+					break
+				}
+				cur = next.Int64
+			}
+		}
+	}
+	if a.ReviewerID != nil {
+		if *a.ReviewerID == a.ID {
+			return LinkError("un agent nu poate fi propriul reviewer")
+		}
+		if !inProject(q, *a.ReviewerID, a.ProjectID) {
+			return LinkError("reviewer-ul ales nu e in acest proiect")
+		}
+	}
+	return nil
+}
+
+func inProject(q queryer, agentID, projectID int64) bool {
+	var n int
+	q.QueryRow(`SELECT COUNT(*) FROM agents WHERE id = ? AND project_id = ?`, agentID, projectID).Scan(&n)
+	return n == 1
+}
+
+// CreateAgent adauga un agent dupa ce verifica legaturile (LinkError). Intoarce
+// ErrConflict daca numele exista deja in proiect (fara diferenta intre litere
+// mari si mici).
+func (s *Store) CreateAgent(a *Agent) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := checkLinks(tx, *a); err != nil {
+		return err
+	}
+	if err := insertAgent(tx, a); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 func (s *Store) GetAgent(id int64) (Agent, error) {
 	return scanAgent(s.db.QueryRow(`SELECT `+agentCols+` FROM agents WHERE id = ?`, id))
 }
 
-// ListAgents intoarce echipa proiectului: lead-ul primul, apoi workerii in
-// ordinea in care au fost adaugati.
+// ListAgents intoarce echipa proiectului: radacinile primele, apoi restul, in
+// ordinea adaugarii.
 func (s *Store) ListAgents(projectID int64) ([]Agent, error) {
 	rows, err := s.db.Query(`SELECT `+agentCols+` FROM agents WHERE project_id = ?
-		ORDER BY position = 'lead' DESC, id`, projectID)
+		ORDER BY parent_id IS NOT NULL, id`, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +192,11 @@ func (s *Store) ListAgents(projectID int64) ([]Agent, error) {
 	return out, rows.Err()
 }
 
+// Lead intoarce prima radacina a proiectului.
+//
+// Deprecated: rolul reiese din legaturi. Se sterge in Task 5.
 func (s *Store) Lead(projectID int64) (Agent, error) {
-	return scanAgent(s.db.QueryRow(`SELECT `+agentCols+` FROM agents WHERE project_id = ? AND position = 'lead'`, projectID))
+	return scanAgent(s.db.QueryRow(`SELECT `+agentCols+` FROM agents WHERE project_id = ? AND parent_id IS NULL ORDER BY id LIMIT 1`, projectID))
 }
 
 // FindAgentByName cauta dupa nume fara diferenta intre litere mari si mici.
@@ -118,34 +205,68 @@ func (s *Store) FindAgentByName(projectID int64, name string) (Agent, error) {
 		WHERE project_id = ? AND name = ? COLLATE NOCASE`, projectID, name))
 }
 
-// UpdateAgent salveaza campurile editabile. Pozitia si proiectul nu se schimba.
+// UpdateAgent salveaza campurile editabile si legaturile (dupa checkLinks).
+// Proiectul si pozitia pe canvas nu se schimba aici.
 func (s *Store) UpdateAgent(a Agent) error {
-	res, err := s.db.Exec(`UPDATE agents SET name = ?, role = ?, model = ?, background = ?, instructions = ?, done_def = ?, tools = ?
-		WHERE id = ?`, a.Name, a.Role, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools), a.ID)
-	if isUnique(err) {
-		return ErrConflict
-	}
-	return mustAffect(res, err)
-}
-
-// DeleteAgent sterge un worker. Lead-ul si agentii care au task-uri nu se pot
-// sterge (ErrConflict): task-urile ar ramane fara asignat.
-func (s *Store) DeleteAgent(id int64) error {
-	a, err := s.GetAgent(id)
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	if a.Position == PositionLead {
-		return ErrConflict
-	}
-	var n int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE assignee_id = ?`, id).Scan(&n); err != nil {
+	defer tx.Rollback()
+	if err := checkLinks(tx, a); err != nil {
 		return err
 	}
-	if n > 0 {
+	res, err := tx.Exec(`UPDATE agents SET name = ?, role = ?, model = ?, background = ?, instructions = ?, done_def = ?, tools = ?,
+		responsibilities = ?, parent_id = ?, reviewer_id = ?
+		WHERE id = ?`, a.Name, a.Role, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools),
+		a.Responsibilities, nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.ID)
+	if isUnique(err) {
 		return ErrConflict
 	}
-	return mustAffect(s.db.Exec(`DELETE FROM agents WHERE id = ?`, id))
+	if err := mustAffect(res, err); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// SetAgentPosition retine pozitia agentului pe canvas.
+func (s *Store) SetAgentPosition(id int64, x, y float64) error {
+	return mustAffect(s.db.Exec(`UPDATE agents SET pos_x = ?, pos_y = ? WHERE id = ?`, x, y, id))
+}
+
+// DeleteAgent sterge un agent. Copiii lui trec la seful lui (sau devin
+// radacini), iar cei pe care ii verifica raman fara reviewer. Agentii cu
+// task-uri si ultimul agent din proiect nu se pot sterge (ErrConflict).
+func (s *Store) DeleteAgent(id int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	a, err := scanAgent(tx.QueryRow(`SELECT `+agentCols+` FROM agents WHERE id = ?`, id))
+	if err != nil {
+		return err
+	}
+	var tasks, others int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE assignee_id = ?`, id).Scan(&tasks); err != nil {
+		return err
+	}
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM agents WHERE project_id = ? AND id != ?`, a.ProjectID, id).Scan(&others); err != nil {
+		return err
+	}
+	if tasks > 0 || others == 0 {
+		return ErrConflict
+	}
+	if _, err := tx.Exec(`UPDATE agents SET parent_id = ? WHERE parent_id = ?`, nullPtr(a.ParentID), id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE agents SET reviewer_id = NULL WHERE reviewer_id = ?`, id); err != nil {
+		return err
+	}
+	if err := mustAffect(tx.Exec(`DELETE FROM agents WHERE id = ?`, id)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetSession retine sesiunea Claude a agentului (pentru --resume) si hash-ul

@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// Etapele de review ale unui task aflat in Review.
+const (
+	StageNone     = ""
+	StageReviewer = "reviewer"
+	StageLead     = "lead"
+)
+
 const (
 	StatusQueued     = "queued"
 	StatusInProgress = "in_progress"
@@ -28,18 +35,23 @@ type Task struct {
 	SendBacks   int       `json:"sendBacks"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+
+	CreatorID    *int64 `json:"creatorId"`    // liderul care decide; nil la task-uri al caror creator a fost sters
+	ParentTaskID *int64 `json:"parentTaskId"` // task-ul din care a fost spart
+	ReviewStage  string `json:"reviewStage"`  // "", "reviewer", "lead"
 }
 
 // Ref e forma afisata a task-ului: T-3.
 func (t Task) Ref() string { return fmt.Sprintf("T-%d", t.Number) }
 
-const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at`
+const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage`
 
 func scanTask(sc scanner) (Task, error) {
 	var t Task
 	var created, updated string
 	err := sc.Scan(&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description, &t.AssigneeID,
-		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated)
+		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated,
+		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
 	}
@@ -63,8 +75,10 @@ func (s *Store) CreateTask(t *Task) error {
 	}
 	ts := now()
 	t.Status = StatusQueued
-	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status, ts, ts)
+	t.ReviewStage = StageNone
+	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, creator_id, parent_task_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status,
+		nullPtr(t.CreatorID), nullPtr(t.ParentTaskID), ts, ts)
 	if err != nil {
 		return err
 	}
@@ -101,11 +115,12 @@ func (s *Store) ListTasks(projectID int64) ([]Task, error) {
 	return out, rows.Err()
 }
 
-// SaveTask salveaza starea unui task: status, rezultat, feedback, trimiteri inapoi.
+// SaveTask salveaza starea unui task: status, rezultat, feedback, trimiteri
+// inapoi, etapa de review.
 func (s *Store) SaveTask(t *Task) error {
 	ts := now()
-	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, updated_at = ?
-		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, ts, t.ID))
+	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, review_stage = ?, updated_at = ?
+		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, ts, t.ID))
 	if err != nil {
 		return err
 	}
@@ -113,15 +128,40 @@ func (s *Store) SaveTask(t *Task) error {
 	return nil
 }
 
+// Subtasks intoarce task-urile sparte din parentTaskID, in ordinea numarului.
+func (s *Store) Subtasks(parentTaskID int64) ([]Task, error) {
+	rows, err := s.db.Query(`SELECT `+taskCols+` FROM tasks WHERE parent_task_id = ? ORDER BY number`, parentTaskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Task{}
+	for rows.Next() {
+		t, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// notWaitingParent: un task cu sub-task-uri nefinalizate nu are nevoie de un run
+// nou; il tine in lucru sub-liderul pana cand toate sub-task-urile sunt Done.
+const notWaitingParent = ` AND NOT EXISTS (SELECT 1 FROM tasks sub WHERE sub.parent_task_id = tasks.id AND sub.status != 'done')`
+
 // RequeueInProgress muta task-urile In progress ale proiectului inapoi in Queued
-// (la Stop team: procesele au fost oprite, munca se reia mai tarziu).
+// (la Stop team: procesele au fost oprite, munca se reia mai tarziu). Cele care
+// asteapta sub-task-uri raman In progress.
 func (s *Store) RequeueInProgress(projectID int64) error {
-	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ? WHERE project_id = ? AND status = 'in_progress'`, now(), projectID)
+	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?
+		WHERE project_id = ? AND status = 'in_progress'`+notWaitingParent, now(), projectID)
 	return err
 }
 
 // RequeueAllInProgress face acelasi lucru pentru toate proiectele (la pornirea serverului).
 func (s *Store) RequeueAllInProgress() error {
-	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ? WHERE status = 'in_progress'`, now())
+	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?
+		WHERE status = 'in_progress'`+notWaitingParent, now())
 	return err
 }
