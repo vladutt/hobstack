@@ -66,7 +66,8 @@ const howWorker = `Lucreaza doar pe task-ul primit si nu modifica lucruri din af
 
 const howReviewer = `Verifici munca agentilor din "Revizuiesti munca lui" (din mesajul turei). Cand primesti un task de verificat, ` +
 	`citeste rezultatul si fisierele schimbate, apoi apeleaza mcp__team__review_approve daca e bun, sau ` +
-	`mcp__team__review_reject cu feedback concret: ce e gresit si ce trebuie schimbat.`
+	`mcp__team__review_reject cu feedback concret: ce e gresit si ce trebuie schimbat. ` +
+	`Citeste fisierele modificate ca sa verifici munca, nu te baza doar pe rezumat.`
 
 const howSolo = `Vorbesti direct cu utilizatorul si nu ai echipa. Raspunde la mesajele lui si fa munca ceruta.`
 
