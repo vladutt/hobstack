@@ -90,7 +90,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .preview { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px; max-height: 460px; overflow: auto; color: var(--soft); margin: 0; }
 
 /* workspace (Task 12) */
-.ws { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
+.ws { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 32vw, 440px); gap: 18px; align-items: start; }
 .ws-main { display: grid; gap: 18px; min-width: 0; }
 .team { display: grid; gap: 12px; }
 .team-workers { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
@@ -142,10 +142,14 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 
 .toast { position: fixed; bottom: 20px; right: 20px; background: #3a2220; color: #f3d6d2; border: 1px solid #5c302c; padding: 10px 14px; border-radius: 10px; max-width: 420px; z-index: 10; }
 
-@media (max-width: 1100px) {
-  .ws { grid-template-columns: minmax(0, 1fr); }
-  .console { position: static; height: 560px; }
+/* sub 1250px board-ul trece pe 2 coloane, dar chat-ul ramane in dreapta */
+@media (max-width: 1250px) {
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* abia pe ecrane inguste trecem pe o coloana; chat-ul vine primul, nu ultimul */
+@media (max-width: 900px) {
+  .ws { grid-template-columns: minmax(0, 1fr); }
+  .console { position: static; order: -1; height: 65vh; min-height: 380px; }
 }
 @media (max-width: 720px) {
   .shell { grid-template-columns: minmax(0, 1fr); }
