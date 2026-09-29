@@ -82,9 +82,42 @@ var reviewTools = []Tool{
 	},
 }
 
+var proposeSetupTool = Tool{
+	Name:        "propose_setup",
+	Description: "Trimite propunerea de proiect si echipa. Apeleaza-l o singura data, la final. Daca primesti o eroare, corecteaza propunerea si apeleaza din nou.",
+	InputSchema: schema([]string{"name", "goal", "context", "agents"}, map[string]any{
+		"name":      str("Numele proiectului, scurt"),
+		"goal":      str("Obiectivul: cum arata gata"),
+		"context":   str("Context comun pentru toti agentii: stack, comenzi de build/test/rulare, conventii, structura"),
+		"rationale": str("Pe scurt: de ce aceasta echipa"),
+		"agents": map[string]any{
+			"type":        "array",
+			"description": "2-6 agenti (maxim 12). Cel putin unul cu reportsTo gol (raporteaza utilizatorului).",
+			"items": schema([]string{"name", "role", "responsibilities", "reportsTo"}, map[string]any{
+				"name":             str("Nume scurt, unic, ex. Rook"),
+				"role":             str("Rolul, ex. Backend Developer"),
+				"model":            map[string]any{"type": "string", "enum": []string{"opus", "sonnet", "haiku"}, "description": "Modelul Claude"},
+				"responsibilities": str("Ce ia: tipurile de task-uri pe care le primeste"),
+				"reportsTo":        str("Numele sefului din aceasta propunere; gol = raporteaza utilizatorului"),
+				"reviewedBy":       str("Optional: numele celui care ii verifica munca"),
+				"background":       str("Ce stie despre acest proiect"),
+				"instructions":     str("Cum lucreaza si ce nu face niciodata"),
+				"doneDef":          str("Ce preda cand termina"),
+				"tools": map[string]any{
+					"type":  "array",
+					"items": map[string]any{"type": "string", "enum": []string{"write", "git"}},
+				},
+			}),
+		},
+	}),
+}
+
 // toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
 // Un agent radacina fara copii nu primeste niciun tool.
 func toolsFor(c Caller) []Tool {
+	if c.SetupID != "" {
+		return []Tool{proposeSetupTool} // analistul din wizard nu are tool-uri de echipa
+	}
 	out := []Tool{}
 	if c.IsLead {
 		out = append(out, leadTools...)

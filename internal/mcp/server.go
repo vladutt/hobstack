@@ -16,10 +16,11 @@ type Caller struct {
 	ProjectID  int64
 	AgentID    int64
 	RunID      string
-	TaskID     int64 // 0 = run fara task
-	IsLead     bool  // are agenti direct sub el
-	HasParent  bool  // are sef, deci raporteaza cu report_done
-	IsReviewer bool  // verifica munca cuiva
+	TaskID     int64  // 0 = run fara task
+	IsLead     bool   // are agenti direct sub el
+	HasParent  bool   // are sef, deci raporteaza cu report_done
+	IsReviewer bool   // verifica munca cuiva
+	SetupID    string // != "" = analistul din wizard; vede doar propose_setup
 }
 
 // Backend face munca propriu-zisa. Erorile intoarse ajung la agent ca
@@ -33,6 +34,7 @@ type Backend interface {
 	ReportDone(c Caller, task, summary string) (string, error)
 	ReviewApprove(c Caller, task, note string) (string, error)
 	ReviewReject(c Caller, task, feedback string) (string, error)
+	ProposeSetup(c Caller, args json.RawMessage) (string, error)
 }
 
 type Server struct {
@@ -148,6 +150,9 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		text, err = s.backend.ReviewApprove(c, arg("task"), arg("note"))
 	case "review_reject":
 		text, err = s.backend.ReviewReject(c, arg("task"), arg("feedback"))
+	case "propose_setup":
+		raw, _ := json.Marshal(p.Arguments)
+		text, err = s.backend.ProposeSetup(c, raw)
 	}
 	if err != nil {
 		return toolResult(err.Error(), true)

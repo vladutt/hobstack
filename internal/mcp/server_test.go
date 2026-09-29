@@ -46,6 +46,11 @@ func (f *fakeBackend) ReviewReject(c Caller, task, feedback string) (string, err
 	return "ok", f.err
 }
 
+func (f *fakeBackend) ProposeSetup(c Caller, args json.RawMessage) (string, error) {
+	f.calls = append(f.calls, "propose_setup|"+c.SetupID+"|"+string(args))
+	return "Propunere primita.", f.err
+}
+
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 	t.Helper()
 	fb := &fakeBackend{callers: map[string]Caller{
@@ -54,6 +59,7 @@ func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 		"sublead":  {ProjectID: 1, AgentID: 3, IsLead: true, HasParent: true},
 		"reviewer": {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
 		"solo":     {ProjectID: 1, AgentID: 5},
+		"setup":    {SetupID: "s1"},
 	}}
 	mux := http.NewServeMux()
 	srv := NewServer(fb)
@@ -251,5 +257,34 @@ func TestInvalidJSON(t *testing.T) {
 	_, resp := rpc(t, ts, "lead", `{nu e json`)
 	if e, ok := resp["error"].(map[string]any); !ok || e["code"].(float64) != -32700 {
 		t.Fatalf("JSON invalid: %v", resp)
+	}
+}
+
+func TestSetupCallerSeesOnlyProposeSetup(t *testing.T) {
+	fb, ts := setup(t)
+	names := func(token string) []string {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+		var out []string
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			out = append(out, tool.(map[string]any)["name"].(string))
+		}
+		return out
+	}
+	if got := names("setup"); len(got) != 1 || got[0] != "propose_setup" {
+		t.Fatalf("tools pentru setup: %v", got)
+	}
+	for _, n := range names("lead") {
+		if n == "propose_setup" {
+			t.Fatal("lead-ul nu trebuie sa vada propose_setup")
+		}
+	}
+	_, resp := rpc(t, ts, "setup", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"propose_setup","arguments":{"name":"Shop","agents":[]}}}`)
+	if _, isErr := toolText(t, resp); isErr || len(fb.calls) != 1 || !strings.HasPrefix(fb.calls[0], `propose_setup|s1|{`) {
+		t.Fatalf("apel: %v %v", resp, fb.calls)
+	}
+	// un lead nu poate apela propose_setup
+	_, resp = rpc(t, ts, "lead", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"propose_setup","arguments":{}}}`)
+	if _, isErr := toolText(t, resp); !isErr {
+		t.Fatal("lead-ul nu trebuia sa poata apela propose_setup")
 	}
 }

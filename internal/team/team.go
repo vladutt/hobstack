@@ -8,6 +8,8 @@ package team
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"sync"
 
 	"foreman/internal/config"
@@ -192,4 +194,9 @@ func clip(s string) string {
 		return s
 	}
 	return string(r[:noteMax]) + " [...]"
+}
+
+// ProposeSetup apartine wizard-ului (pachetul setup); echipa nu il serveste.
+func (t *Team) ProposeSetup(mcp.Caller, json.RawMessage) (string, error) {
+	return "", errors.New("propose_setup nu e disponibil aici")
 }
