@@ -33,6 +33,7 @@ type env struct {
 	dirs     Dirs
 	pickPath string // ce intoarce picker-ul fals
 	pickErr  error
+	srv      *Server
 }
 
 func setup(t *testing.T) *env {
@@ -49,6 +50,7 @@ func setup(t *testing.T) *env {
 	e := &env{st: st, tm: tm, dirs: dirs}
 	pick := func(context.Context) (string, error) { return e.pickPath, e.pickErr }
 	srv := New(st, tm, runner.NewManager("claude-inexistent", t.TempDir()), hub, mcp.NewServer(tm), dirs, pick, true)
+	e.srv = srv
 	e.ts = httptest.NewServer(srv.Handler())
 	t.Cleanup(e.ts.Close)
 	return e

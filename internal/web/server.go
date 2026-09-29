@@ -42,6 +42,7 @@ type Server struct {
 	dirs    Dirs
 	pick    func(context.Context) (string, error) // dialogul nativ de ales folder
 	canPick bool
+	opener  Opener // nil = butoanele "Deschide" nu sunt disponibile
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
@@ -63,6 +64,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/projects/{id}/stop", s.stopProject)
 	mux.HandleFunc("POST /api/projects/{id}/resume", s.resumeProject)
 	mux.HandleFunc("GET /api/projects/{id}/events", s.projectEvents)
+	mux.HandleFunc("POST /api/projects/{id}/open", s.openProject)
 
 	mux.HandleFunc("POST /api/projects/{id}/agents", s.createAgent)
 	mux.HandleFunc("PUT /api/agents/{id}", s.updateAgent)
@@ -120,7 +122,7 @@ func guard(next http.Handler) http.Handler {
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick, "models": models.All})
+	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick, "models": models.All, "editors": s.editors()})
 }
 
 // badRequest e o eroare de validare; mesajul ajunge ca atare in UI (400).

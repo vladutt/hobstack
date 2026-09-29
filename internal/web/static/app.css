@@ -119,6 +119,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .task-detail { font-size: 12px; color: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; display: grid; gap: 6px; }
 .badge-blocked { font-size: 11px; font-weight: 600; color: var(--red); margin-left: auto; }
 .ws-head .page-head { margin-bottom: 0; }
+.head-actions { display: grid; gap: 8px; justify-items: end; }
+.open-bar { gap: 6px; }
+.select-small { width: auto; height: 28px; padding: 0 8px; font-size: 12px; border-radius: 8px; }
 /* chat-ul incepe din varful paginii si ocupa exact inaltimea ecranului, deci campul de scris e mereu vizibil */
 .console { position: sticky; top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; height: calc(100vh - 44px); min-height: 360px; }
 .console-head { display: flex; gap: 10px; align-items: center; padding: 14px; border-bottom: 1px solid var(--line); }

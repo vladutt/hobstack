@@ -22,6 +22,10 @@ export async function workspaceView(root, projectId) {
     pending: [],      // fisiere alese pentru urmatorul mesaj
     doneRunId: null,  // ultimul run terminat: activeRunId poate ramane vechi pana la reload
   };
+  // butoanele "Deschide": create o singura data si mutate in header la fiecare
+  // redesenare, ca selectia de editor sa nu se piarda
+  const info = await api("/api/info").catch(() => ({ editors: [] }));
+  const openBar = buildOpenBar(info.editors || []);
   let disposed = false; // view-ul a fost inchis: nu mai deschidem stream-uri si nu mai desenam
   // view-ul e inchis daca s-a apelat curatarea sau daca #view a fost golit intre timp
   const gone = () => disposed || !header.isConnected;
@@ -108,11 +112,38 @@ export async function workspaceView(root, projectId) {
         el("div", { class: "actions" }, el("h1", {}, p.name), pill(p.status)),
         p.goal && el("p", { class: "muted" }, "Obiectiv: " + p.goal),
         p.paused && el("p", { class: "hint" }, "Echipa e pe pauza. Mesajele raman in asteptare pana o pornesti.")),
-      el("div", { class: "actions" },
-        el("a", { class: "btn", href: `#/p/${projectId}/edit` }, "Instructiuni proiect"),
-        p.paused
-          ? el("button", { class: "btn primary", onclick: () => projectAction("resume") }, "Porneste echipa")
-          : el("button", { class: "btn", onclick: () => projectAction("stop") }, "Opreste echipa"))));
+      el("div", { class: "head-actions" },
+        el("div", { class: "actions" },
+          el("a", { class: "btn", href: `#/p/${projectId}/edit` }, "Instructiuni proiect"),
+          p.paused
+            ? el("button", { class: "btn primary", onclick: () => projectAction("resume") }, "Porneste echipa")
+            : el("button", { class: "btn", onclick: () => projectAction("stop") }, "Opreste echipa")),
+        openBar)));
+  }
+
+  function buildOpenBar(editors) {
+    let saved = null;
+    try { saved = localStorage.getItem("foreman-editor"); } catch {}
+    const known = editors.some((e) => e.id === saved);
+    const select = el("select", {
+      class: "select-small", "aria-label": "Editor",
+      value: known ? saved : editors[0]?.id,
+      onchange: () => { try { localStorage.setItem("foreman-editor", select.value); } catch {} },
+    }, editors.map((e) => el("option", { value: e.id }, e.name)));
+    return el("div", { class: "actions open-bar" },
+      el("span", { class: "hint" }, "Deschide:"),
+      el("button", { type: "button", class: "btn small", onclick: () => openIn("folder") }, "Folder"),
+      el("button", { type: "button", class: "btn small", onclick: () => openIn("browser") }, "Browser"),
+      editors.length > 0 && [select,
+        el("button", { type: "button", class: "btn small", onclick: () => openIn("editor", select.value) }, "Editor")]);
+  }
+
+  async function openIn(target, editor) {
+    try {
+      await api(`/api/projects/${projectId}/open`, { method: "POST", body: { target, editor } });
+    } catch (err) {
+      toast(err.message);
+    }
   }
 
   function renderTeam() {

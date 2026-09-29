@@ -18,6 +18,7 @@ import (
 	"foreman/internal/config"
 	"foreman/internal/events"
 	"foreman/internal/mcp"
+	"foreman/internal/opener"
 	"foreman/internal/picker"
 	"foreman/internal/runner"
 	"foreman/internal/store"
@@ -96,9 +97,13 @@ func start(args []string) error {
 	}
 	go tm.Run(ctx)
 
+	webSrv := web.New(st, tm, mgr, hub, mcp.NewServer(tm),
+		web.Dirs{Projects: paths.Projects, Workspaces: paths.Workspaces}, picker.Pick, picker.Available())
+	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
+	webSrv.SetOpener(opener.New())
+
 	srv := &http.Server{
-		Handler: web.New(st, tm, mgr, hub, mcp.NewServer(tm),
-			web.Dirs{Projects: paths.Projects, Workspaces: paths.Workspaces}, picker.Pick, picker.Available()).Handler(),
+		Handler:           webSrv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}

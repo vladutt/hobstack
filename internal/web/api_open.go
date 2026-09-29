@@ -1,0 +1,88 @@
+package web
+
+import (
+	"errors"
+	"net/http"
+	"os"
+	"strings"
+
+	"foreman/internal/opener"
+)
+
+// Opener deschide folderul proiectului in Finder, in editor sau pagina lui
+// html in browser. In productie e *opener.Opener, in teste un fals.
+type Opener interface {
+	Editors() []opener.Editor
+	OpenFolder(dir string) error
+	OpenFile(path string) error
+	OpenInEditor(id, dir string) error
+}
+
+// SetOpener activeaza butoanele "Deschide". Fara el, ruta intoarce 501.
+func (s *Server) SetOpener(o Opener) { s.opener = o }
+
+func (s *Server) editors() []opener.Editor {
+	if s.opener == nil {
+		return []opener.Editor{}
+	}
+	return s.opener.Editors()
+}
+
+// openProject: POST /api/projects/{id}/open cu {target: folder|browser|editor, editor}.
+func (s *Server) openProject(w http.ResponseWriter, r *http.Request) {
+	if s.opener == nil {
+		writeErr(w, http.StatusNotImplemented, "deschiderea nu e disponibila pe acest sistem")
+		return
+	}
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	p, err := s.st.GetProject(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct {
+		Target string `json:"target"`
+		Editor string `json:"editor"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
+		fail(w, badRequest("folderul de lucru nu exista: "+p.Workdir))
+		return
+	}
+
+	switch strings.TrimSpace(in.Target) {
+	case "folder":
+		err = s.opener.OpenFolder(p.Workdir)
+	case "browser":
+		var page string
+		page, err = opener.FindHTML(p.Workdir)
+		if errors.Is(err, opener.ErrNoHTML) {
+			fail(w, badRequest(err.Error()))
+			return
+		}
+		if err == nil {
+			err = s.opener.OpenFile(page)
+		}
+	case "editor":
+		err = s.opener.OpenInEditor(in.Editor, p.Workdir)
+		if errors.Is(err, opener.ErrUnknownEditor) {
+			fail(w, badRequest(err.Error()))
+			return
+		}
+	default:
+		fail(w, badRequest("target necunoscut; foloseste folder, browser sau editor"))
+		return
+	}
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
