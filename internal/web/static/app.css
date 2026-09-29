@@ -146,6 +146,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 @media (max-width: 1250px) {
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* intre 900 si 1050px coloana din stanga e ingusta: board-ul trece pe o coloana */
+@media (max-width: 1050px) and (min-width: 901px) {
+  .board { grid-template-columns: minmax(0, 1fr); }
+}
 /* abia pe ecrane inguste trecem pe o coloana; chat-ul vine primul, nu ultimul */
 @media (max-width: 900px) {
   .ws { grid-template-columns: minmax(0, 1fr); }
