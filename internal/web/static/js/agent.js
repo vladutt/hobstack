@@ -58,7 +58,7 @@ export async function agentView(root, projectId, agentId) {
           field("Model Claude", model, "opus: cel mai capabil. sonnet: echilibrat. haiku: rapid si ieftin.")),
         el("section", { class: "section" },
           el("h2", {}, "Tool-uri"),
-          el("p", { class: "hint" }, "Citirea fisierelor e mereu permisa. git push, rm -rf, sudo si instalarile de pachete sunt mereu blocate."),
+          el("p", { class: "hint" }, "Citirea fisierelor e mereu permisa. git push, rm -rf, sudo si instalarile de pachete sunt blocate ca prefix de comanda; cu Comenzi shell activ, un agent le poate ocoli. Da shell doar agentilor in care ai incredere (aprobarile vin intr-o versiune viitoare)."),
           tools.map((t) => el("label", { class: "check" }, t.box, t.label)))),
       el("div", { class: "form" },
         el("section", { class: "section" },

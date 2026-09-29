@@ -17,6 +17,7 @@ const routes = [
 ];
 
 let cleanup = null;
+let seq = 0; // numarul rutei curente: un view lent nu are voie sa strice ruta noua
 
 async function route() {
   if (cleanup) {
@@ -24,13 +25,20 @@ async function route() {
     cleanup = null;
   }
   const root = document.getElementById("view");
-  root.replaceChildren();
+  const my = ++seq;
+  const box = document.createElement("div"); // container nou pentru fiecare ruta
+  root.replaceChildren(box);
   const hash = location.hash || "#/";
   for (const [pattern, view] of routes) {
     const m = hash.match(pattern);
     if (!m) continue;
     try {
-      cleanup = (await view(root, m)) || null;
+      const c = await view(box, m);
+      if (my !== seq) {
+        if (c) c(); // ruta s-a schimbat intre timp: curatam imediat
+        return;
+      }
+      cleanup = c || null;
     } catch (err) {
       toast(err.message);
     }
