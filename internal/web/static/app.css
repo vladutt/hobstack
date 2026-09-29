@@ -153,3 +153,22 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   .view { padding: 18px 16px; }
   .board, .row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* fisiere si atasamente */
+.input-row { display: flex; gap: 8px; align-items: stretch; }
+.input-row input { flex: 1; min-width: 0; }
+.files-list { display: grid; gap: 6px; }
+.file-row { display: flex; gap: 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-2); }
+.file-row a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dropping { outline: 2px dashed var(--amber); outline-offset: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips:empty { display: none; }
+.chip { display: inline-flex; gap: 6px; align-items: center; padding: 2px 4px 2px 10px; border: 1px solid var(--line-2); border-radius: 999px; font-size: 12px; background: var(--amber-bg); max-width: 100%; overflow-wrap: anywhere; }
+.chip button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 6px; }
+.chip button:hover { color: var(--amber); }
+.clip { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--soft); cursor: pointer; height: 40px; padding: 0 10px; font-size: 16px; }
+.clip:hover { border-color: var(--amber); }
+.attachments { display: flex; flex-wrap: wrap; gap: 6px; max-width: 320px; }
+.msg.me .attachments { justify-content: flex-end; }
+.attachments img { display: block; max-width: 180px; max-height: 180px; border-radius: 8px; border: 1px solid var(--line); }
+.attachments .file-link { font-size: 12px; color: var(--amber); overflow-wrap: anywhere; }

@@ -39,10 +39,19 @@ export async function projectFormView(root, id) {
   const name = el("input", { type: "text", value: p.name, placeholder: "ex. HoReCa QR", required: true, maxlength: 80 });
   const goal = el("textarea", { value: p.goal, placeholder: "Un MVP si un prototip clickable pentru inscrieri prin QR." });
   const context = el("textarea", { value: p.context, rows: 7, placeholder: "Stack, conventii, ce e deja decis, ce e interzis." });
-  const workdir = el("input", { type: "text", value: p.workdir, placeholder: "~/projects/horeca-qr", required: true });
+  const workdir = el("input", { id: "f-workdir", type: "text", value: p.workdir, placeholder: "gol = ~/Foreman/<nume proiect>" });
+  // butonul "Alege..." apare doar daca serverul poate deschide dialogul nativ
+  let canPick = false;
+  try { canPick = (await api("/api/info")).canPickFolder; } catch { /* fara buton */ }
+  const pickBtn = canPick && el("button", { type: "button", class: "btn", onclick: pickFolder }, "Alege...");
   // 0 = fara limita; in formular apare ca un camp gol
   const parallel = el("input", { type: "number", min: 1, max: 100, value: p.maxParallel || "", placeholder: "fara limita" });
   const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd || "", placeholder: "fara limita" });
+
+  // eticheta trebuie sa arate spre input, nu spre containerul cu buton
+  const folderField = field("Folder de lucru", el("div", { class: "input-row" }, workdir, pickBtn),
+    "Optional. Daca il lasi gol, se creeaza automat. O cale care nu exista se creeaza.");
+  folderField.querySelector("label").setAttribute("for", "f-workdir");
 
   root.append(el("form", { class: "form", onsubmit: save },
     el("header", { class: "page-head" },
@@ -61,7 +70,7 @@ export async function projectFormView(root, id) {
         field("Nume", name),
         field("Obiectiv: cum arata gata", goal),
         field("Context comun: il citeste fiecare agent", context),
-        field("Folder de lucru", workdir, "Toata echipa lucreaza in acest folder. Trebuie sa existe.")),
+        folderField),
       el("section", { class: "section" },
         el("h2", {}, "Cum lucreaza echipa"),
         el("div", { class: "row" },
@@ -70,6 +79,20 @@ export async function projectFormView(root, id) {
         el("p", { class: "hint" }, "Ambele sunt optionale: lasa-le goale pentru fara limita. Bugetul conteaza doar daca folosesti API key (cu abonament nu platesti per run); cand e setat, un run se opreste la atingerea lui. Lead-ul nu intra in limita de workeri."),
         !id && el("p", { class: "hint" }, "Primesti un lead implicit. Workerii ii adaugi din pagina proiectului.")))));
   name.focus();
+
+  async function pickFolder() {
+    pickBtn.disabled = true;
+    pickBtn.textContent = "Se deschide...";
+    try {
+      const r = await api("/api/pick-folder", { method: "POST" });
+      if (r && r.path) workdir.value = r.path; // 204 = a renuntat
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      pickBtn.disabled = false;
+      pickBtn.textContent = "Alege...";
+    }
+  }
 
   async function save(e) {
     e.preventDefault();

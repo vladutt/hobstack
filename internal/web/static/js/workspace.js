@@ -1,4 +1,4 @@
-import { api } from "./api.js";
+import { api, upload } from "./api.js";
 import { el, avatar, pill, toast, clock } from "./ui.js";
 import { liveRenderer } from "./live.js";
 
@@ -19,6 +19,7 @@ export async function workspaceView(root, projectId) {
     open: new Set(),  // task-urile deschise pe board (raman deschise la redesenare)
     liveRunId: null,
     liveStream: null,
+    pending: [],      // fisiere alese pentru urmatorul mesaj
     doneRunId: null,  // ultimul run terminat: activeRunId poate ramane vechi pana la reload
   };
   let disposed = false; // view-ul a fost inchis: nu mai deschidem stream-uri si nu mai desenam
@@ -30,18 +31,45 @@ export async function workspaceView(root, projectId) {
   const team = el("div", { class: "team" });
   const board = el("div", { class: "board" });
   const count = el("span", { class: "hint" });
+  const filesList = el("div", { class: "files-list" });
+  const projectPicker = el("input", { type: "file", multiple: true, hidden: true });
+  projectPicker.addEventListener("change", () => { uploadProjectFiles(projectPicker.files); projectPicker.value = ""; });
+  const filesSection = el("section", { class: "section" },
+    el("div", { class: "section-head" },
+      el("h2", {}, "Fisiere"),
+      el("button", { type: "button", class: "btn small", onclick: () => projectPicker.click() }, "Incarca"),
+      projectPicker),
+    filesList);
+  setupDrop(filesSection, uploadProjectFiles);
   const consoleHead = el("div", { class: "console-head" });
   const thread = el("div", { class: "thread", "aria-live": "polite" });
   const input = el("textarea", { rows: 1, "aria-label": "Mesaj" });
   const note = el("span", { class: "hint" });
+  const chips = el("div", { class: "chips" });
+  const chatPicker = el("input", { type: "file", multiple: true, hidden: true });
+  chatPicker.addEventListener("change", () => { addPending(chatPicker.files); chatPicker.value = ""; });
+  const clip = el("button", {
+    type: "button", class: "clip", "aria-label": "Ataseaza fisiere", title: "Ataseaza fisiere",
+    onclick: () => chatPicker.click(),
+  }, "\u{1F4CE}");
   const composer = el("form", { onsubmit: send },
-    input, el("button", { type: "submit", class: "btn primary" }, "Trimite"));
+    clip, chatPicker, input, el("button", { type: "submit", class: "btn primary" }, "Trimite"));
+  input.addEventListener("paste", (e) => {
+    const files = e.clipboardData?.files;
+    if (!files || !files.length) return;
+    e.preventDefault();
+    addPending(files);
+  });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       composer.requestSubmit();
     }
   });
+
+  const consoleBox = el("aside", { class: "console" },
+    consoleHead, thread, el("div", { class: "composer" }, chips, composer, note));
+  setupDrop(consoleBox, addPending);
 
   root.append(
     header,
@@ -54,9 +82,9 @@ export async function workspaceView(root, projectId) {
           team),
         el("section", { class: "section" },
           el("div", { class: "section-head" }, el("h2", {}, "Task-uri"), count),
-          board)),
-      el("aside", { class: "console" },
-        consoleHead, thread, el("div", { class: "composer" }, composer, note))));
+          board),
+        filesSection),
+      consoleBox));
 
   // ---------- desenare ----------
   function renderAll() {
@@ -207,7 +235,8 @@ export async function workspaceView(root, projectId) {
     const mine = m.author === "user";
     return el("div", { class: "msg" + (mine ? " me" : ""), "data-id": m.id },
       el("span", { class: "msg-meta" }, `${mine ? "Tu" : m.author} · ${clock(m.createdAt)}`),
-      el("div", { class: "bubble" }, m.text),
+      m.text && el("div", { class: "bubble" }, m.text),
+      m.attachments && m.attachments.length > 0 && el("div", { class: "attachments" }, m.attachments.map(attachmentNode)),
       mine && !m.delivered && el("span", { class: "pending" }, "in asteptare"));
   }
 
@@ -219,15 +248,126 @@ export async function workspaceView(root, projectId) {
   async function send(e) {
     e.preventDefault();
     const text = input.value.trim();
-    if (!text || !state.selected) return;
+    if ((!text && !state.pending.length) || !state.selected) return;
     try {
-      const m = await api(`/api/agents/${state.selected}/messages`, { method: "POST", body: { text } });
+      let m;
+      const path = `/api/agents/${state.selected}/messages`;
+      if (state.pending.length) {
+        const fd = new FormData();
+        fd.append("text", text);
+        for (const f of state.pending) fd.append("files", f, f.name);
+        m = await upload(path, fd);
+      } else {
+        m = await api(path, { method: "POST", body: { text } });
+      }
       input.value = "";
+      state.pending = [];
+      renderChips();
       addMessage(m);
       scrollDown(true);
     } catch (err) {
       toast(err.message);
     }
+  }
+
+  // ---------- atasamente in chat ----------
+  function addPending(fileList) {
+    for (const f of Array.from(fileList)) {
+      // imaginile lipite (Cmd+V) vin adesea cu numele generic "image.png"
+      const generic = f.type.startsWith("image/") && (!f.name || /^image\.\w+$/.test(f.name));
+      const file = generic
+        ? new File([f], `screenshot-${new Date().toTimeString().slice(0, 8).replaceAll(":", "")}.png`, { type: f.type })
+        : f;
+      state.pending.push(file);
+    }
+    renderChips();
+  }
+
+  function renderChips() {
+    chips.replaceChildren(...state.pending.map((f, i) =>
+      el("span", { class: "chip" }, f.name,
+        el("button", {
+          type: "button", "aria-label": `Scoate ${f.name}`,
+          onclick: () => { state.pending.splice(i, 1); renderChips(); },
+        }, "\u00d7"))));
+  }
+
+  function attachmentNode(a) {
+    const url = `/api/files/${a.id}`;
+    if (a.mime && a.mime.startsWith("image/")) {
+      return el("a", { href: url, target: "_blank", rel: "noopener" },
+        el("img", { src: url, alt: a.name, loading: "lazy" }));
+    }
+    return el("a", { class: "file-link", href: url, target: "_blank", rel: "noopener" }, a.name);
+  }
+
+  // ---------- fisiere de proiect ----------
+  function fmtSize(n) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  async function loadFiles() {
+    let files;
+    try {
+      files = await api(`/api/projects/${projectId}/files`);
+    } catch (err) {
+      toast(err.message);
+      return;
+    }
+    if (gone()) return;
+    if (!files.length) {
+      filesList.replaceChildren(el("p", { class: "hint" }, "Niciun fisier. Trage fisiere aici sau apasa Incarca."));
+      return;
+    }
+    filesList.replaceChildren(...files.map((f) =>
+      el("div", { class: "file-row" },
+        el("a", { href: `/api/files/${f.id}`, target: "_blank", rel: "noopener" }, f.name),
+        el("span", { class: "hint" }, fmtSize(f.size)),
+        el("button", {
+          type: "button", class: "btn small", "aria-label": `Sterge ${f.name}`,
+          onclick: () => removeFile(f),
+        }, "x"))));
+  }
+
+  async function uploadProjectFiles(fileList) {
+    const list = Array.from(fileList);
+    if (!list.length) return;
+    const fd = new FormData();
+    for (const f of list) fd.append("files", f, f.name);
+    try {
+      await upload(`/api/projects/${projectId}/files`, fd);
+    } catch (err) {
+      toast(err.message);
+    }
+    await loadFiles();
+  }
+
+  async function removeFile(f) {
+    if (!confirm(`Stergi fisierul ${f.name}?`)) return;
+    try {
+      await api(`/api/files/${f.id}`, { method: "DELETE" });
+    } catch (err) {
+      toast(err.message);
+    }
+    await loadFiles();
+  }
+
+  // drag & drop: dragover cu preventDefault, altfel browserul nu accepta drop-ul
+  function setupDrop(node, onFiles) {
+    let depth = 0; // dragenter/dragleave se declanseaza si pe copii
+    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
+    node.addEventListener("dragenter", (e) => { if (hasFiles(e)) { depth++; node.classList.add("dropping"); } });
+    node.addEventListener("dragover", (e) => { if (hasFiles(e)) e.preventDefault(); });
+    node.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; node.classList.remove("dropping"); } });
+    node.addEventListener("drop", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      node.classList.remove("dropping");
+      onFiles(e.dataTransfer.files);
+    });
   }
 
   // ---------- run-ul live al agentului selectat ----------
@@ -308,6 +448,7 @@ export async function workspaceView(root, projectId) {
   };
 
   renderAll();
+  loadFiles();
   await loadThread();
   syncLive();
 
@@ -319,6 +460,7 @@ export async function workspaceView(root, projectId) {
     let ev;
     try { ev = JSON.parse(msg.data); } catch { return; }
     if (ev.type === "message" && ev.data.agentId === state.selected) addMessage(ev.data);
+    if (ev.type === "files") loadFiles();
     scheduleReload();
   };
   events.onerror = () => { hadError = true; };
@@ -327,6 +469,7 @@ export async function workspaceView(root, projectId) {
     if (!hadError) return;
     hadError = false;
     await reload();
+    loadFiles();
     await loadThread();
     syncLive();
   };
