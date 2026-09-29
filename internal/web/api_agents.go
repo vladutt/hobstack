@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -13,16 +14,19 @@ import (
 )
 
 type agentInput struct {
-	Name         string   `json:"name"`
-	Role         string   `json:"role"`
-	Model        string   `json:"model"`
-	Background   string   `json:"background"`
-	Instructions string   `json:"instructions"`
-	DoneDef      string   `json:"doneDef"`
-	Tools        []string `json:"tools"`
+	Name             string   `json:"name"`
+	Role             string   `json:"role"`
+	Model            string   `json:"model"`
+	Background       string   `json:"background"`
+	Instructions     string   `json:"instructions"`
+	DoneDef          string   `json:"doneDef"`
+	Tools            []string `json:"tools"`
+	Responsibilities string   `json:"responsibilities"`
+	ParentID         *int64   `json:"parentId"`   // null sau lipsa = radacina
+	ReviewerID       *int64   `json:"reviewerId"` // null sau lipsa = fara reviewer
 }
 
-// apply valideaza input-ul si il copiaza in agent (fara pozitie si proiect).
+// apply valideaza input-ul si il copiaza in agent (fara proiect si pozitie; legaturile se valideaza in store).
 func (in agentInput) apply(a *store.Agent) error {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
@@ -44,12 +48,15 @@ func (in agentInput) apply(a *store.Agent) error {
 	a.Background = strings.TrimSpace(in.Background)
 	a.Instructions = strings.TrimSpace(in.Instructions)
 	a.DoneDef = strings.TrimSpace(in.DoneDef)
+	a.Responsibilities = strings.TrimSpace(in.Responsibilities)
+	a.ParentID, a.ReviewerID = in.ParentID, in.ReviewerID
 	for _, err := range []error{
 		maxLen("numele agentului", a.Name, 40),
 		maxLen("rolul", a.Role, 80),
 		maxLen("background", a.Background, 10000),
 		maxLen("instructiunile", a.Instructions, 10000),
 		maxLen("definition of done", a.DoneDef, 4000),
+		maxLen("responsabilitatile", a.Responsibilities, 2000),
 	} {
 		if err != nil {
 			return err
@@ -73,7 +80,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	a := store.Agent{ProjectID: pid, Position: store.PositionWorker}
+	a := store.Agent{ProjectID: pid}
 	if err := in.apply(&a); err != nil {
 		fail(w, err)
 		return
@@ -95,6 +102,8 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	// pornim de la agentul salvat: din corp se iau doar campurile editabile,
+	// niciodata projectId sau pozitia de pe canvas
 	a, err := s.st.GetAgent(id)
 	if err != nil {
 		fail(w, err)
@@ -136,7 +145,7 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.st.DeleteAgent(id); errors.Is(err, store.ErrConflict) {
-		writeErr(w, http.StatusConflict, "lead-ul si agentii care au task-uri nu pot fi stersi")
+		writeErr(w, http.StatusConflict, "agentii care au task-uri si ultimul agent din proiect nu pot fi stersi")
 		return
 	} else if err != nil {
 		fail(w, err)
@@ -228,12 +237,13 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 // promptPreview compileaza system prompt-ul din campurile nesalvate ale editorului.
+// Seful vine din parentId (null = radacina); lider/reviewer reies din legaturile salvate.
 func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		ProjectID    int64  `json:"projectId"`
+		AgentID      int64  `json:"agentId"` // 0 = agent nou
 		Name         string `json:"name"`
 		Role         string `json:"role"`
-		Position     string `json:"position"`
 		ParentID     *int64 `json:"parentId"`
 		Background   string `json:"background"`
 		Instructions string `json:"instructions"`
@@ -248,22 +258,53 @@ func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	a := store.Agent{
-		Name: strings.TrimSpace(in.Name), Role: strings.TrimSpace(in.Role), Position: in.Position,
-		Background: in.Background, Instructions: in.Instructions, DoneDef: in.DoneDef,
-	}
-	if a.Name == "" {
-		a.Name = "Agent"
-	}
-	// echipa reala + agentul nou (ID 0): seful e parentId din cerere, altfel prima radacina
-	team, err := s.st.ListAgents(p.ID)
+	agents, err := s.st.ListAgents(p.ID)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	a.ParentID = in.ParentID
-	if a.ParentID == nil && len(team) > 0 {
-		a.ParentID = &team[0].ID
+	if in.ParentID != nil {
+		if _, ok := store.FindAgent(agents, *in.ParentID); !ok {
+			fail(w, badRequest("seful ales nu e in acest proiect"))
+			return
+		}
+		if *in.ParentID == in.AgentID {
+			fail(w, badRequest("un agent nu poate fi propriul sef"))
+			return
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"prompt": prompt.System(p, a, prompt.LinksFor(a, team))})
+	a := store.Agent{
+		ID: in.AgentID, ProjectID: p.ID, Name: strings.TrimSpace(in.Name), Role: strings.TrimSpace(in.Role),
+		Background: in.Background, Instructions: in.Instructions, DoneDef: in.DoneDef, ParentID: in.ParentID,
+	}
+	if a.Name == "" {
+		a.Name = "Agent"
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"prompt": prompt.System(p, a, prompt.LinksFor(a, agents))})
+}
+
+// setAgentPosition retine pozitia agentului pe canvas (fara eveniment SSE).
+func (s *Server) setAgentPosition(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct {
+		X float64 `json:"x"`
+		Y float64 `json:"y"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	if math.Abs(in.X) > 100000 || math.Abs(in.Y) > 100000 {
+		fail(w, badRequest("pozitie invalida"))
+		return
+	}
+	if err := s.st.SetAgentPosition(id, in.X, in.Y); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -58,7 +58,7 @@ func (s *Store) CreateProject(p *Project) (Agent, error) {
 	}
 	p.CreatedAt = parseTime(created)
 
-	lead := Agent{ProjectID: p.ID, Name: "Lead", Role: "Lead", Position: PositionLead, Model: "sonnet"}
+	lead := Agent{ProjectID: p.ID, Name: "Lead", Role: "Lead", Model: "sonnet"}
 	if err := insertAgent(tx, &lead); err != nil {
 		return Agent{}, err
 	}

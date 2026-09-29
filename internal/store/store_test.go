@@ -76,10 +76,6 @@ func TestCreateProjectAddsLeadAndDefaults(t *testing.T) {
 	if lead.ParentID != nil || lead.Name != "Lead" || lead.Model != "sonnet" || len(lead.Tools) != 0 {
 		t.Fatalf("lead = %+v", lead)
 	}
-	got, err := s.Lead(p.ID)
-	if err != nil || got.ID != lead.ID {
-		t.Fatalf("Lead() = %+v, %v", got, err)
-	}
 }
 
 func TestUpdateAndDeleteProject(t *testing.T) {

@@ -104,17 +104,33 @@ type detail struct {
 	Done   int    `json:"done"`
 	Total  int    `json:"total"`
 	Team   []struct {
-		Name     string `json:"name"`
-		Position string `json:"position"`
+		Name   string
+		IsLead bool `json:"isLead"`
+		IsRoot bool `json:"isRoot"`
 	} `json:"team"`
 	Agents []struct {
-		ID          int64  `json:"id"`
-		Name        string `json:"name"`
-		Position    string `json:"position"`
-		Status      string `json:"status"`
-		ActiveRunID string `json:"activeRunId"`
+		ID               int64  `json:"id"`
+		Name             string `json:"name"`
+		Status           string `json:"status"`
+		ActiveRunID      string `json:"activeRunId"`
+		ParentID         *int64 `json:"parentId"`
+		ReviewerID       *int64 `json:"reviewerId"`
+		Responsibilities string
+		IsLead           bool `json:"isLead"`
+		IsRoot           bool `json:"isRoot"`
+		IsReviewer       bool `json:"isReviewer"`
 	} `json:"agents"`
 	Tasks []store.Task `json:"tasks"`
+}
+
+// root intoarce prima radacina a proiectului (Lead-ul creat odata cu el).
+func (e *env) root(t *testing.T, projectID int64) store.Agent {
+	t.Helper()
+	agents, err := e.st.ListAgents(projectID)
+	if err != nil || len(agents) == 0 {
+		t.Fatalf("proiect fara agenti: %v", err)
+	}
+	return agents[0]
 }
 
 func (e *env) detail(t *testing.T, id int64) detail {
@@ -178,7 +194,7 @@ func TestCreateProjectCreatesLead(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
 	d := e.detail(t, p.ID)
-	if d.Status != "Idle" || len(d.Agents) != 1 || d.Agents[0].Position != "lead" || d.Agents[0].Status != "Idle" || len(d.Tasks) != 0 {
+	if d.Status != "Idle" || len(d.Agents) != 1 || !d.Agents[0].IsRoot || d.Agents[0].IsLead || d.Agents[0].ParentID != nil || d.Agents[0].Status != "Idle" || len(d.Tasks) != 0 {
 		t.Fatalf("detaliu = %+v", d)
 	}
 }
@@ -205,13 +221,14 @@ func TestProjectsListProgress(t *testing.T) {
 func TestAgentCRUD(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
 	path := "/api/projects/" + itoa(p.ID) + "/agents"
-	good := map[string]any{"name": "Rook", "role": "Backend", "model": "sonnet", "tools": []string{"write", "write", "git"}}
+	good := map[string]any{"name": "Rook", "role": "Backend", "model": "sonnet", "parentId": root.ID, "tools": []string{"write", "write", "git"}}
 
 	code, raw := e.do(t, "POST", path, good)
 	var a store.Agent
 	json.Unmarshal(raw, &a)
-	if code != 201 || a.Position != "worker" || len(a.Tools) != 2 {
+	if code != 201 || a.ParentID == nil || *a.ParentID != root.ID || len(a.Tools) != 2 {
 		t.Fatalf("creare: %d %s", code, raw)
 	}
 	if code, _ := e.do(t, "POST", path, map[string]any{"name": "rook", "model": "sonnet"}); code != http.StatusConflict {
@@ -242,7 +259,7 @@ func TestDeleteAgentConflicts(t *testing.T) {
 	}
 	// ultimul agent din proiect nu se poate sterge
 	solo := e.createProject(t, t.TempDir())
-	lead, _ := e.st.Lead(solo.ID)
+	lead := e.root(t, solo.ID)
 	if code, _ := e.do(t, "DELETE", "/api/agents/"+itoa(lead.ID), nil); code != http.StatusConflict {
 		t.Errorf("ultimul agent: %d", code)
 	}
@@ -251,8 +268,9 @@ func TestDeleteAgentConflicts(t *testing.T) {
 func TestPromptPreview(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
 	code, raw := e.do(t, "POST", "/api/prompt-preview", map[string]any{
-		"projectId": p.ID, "name": "Nova", "role": "Frontend Developer", "position": "worker", "background": "Vue 3",
+		"projectId": p.ID, "name": "Nova", "role": "Frontend Developer", "parentId": root.ID, "background": "Vue 3",
 	})
 	if code != 200 || !strings.Contains(string(raw), "Esti Nova, Frontend Developer, in proiectul ApiUnit. Raportezi lui Lead.") {
 		t.Fatalf("%d %s", code, raw)
@@ -270,7 +288,7 @@ func TestPostMessageToWorker(t *testing.T) {
 	if code != 201 || !strings.Contains(string(raw), `"delivered":false`) {
 		t.Fatalf("%d %s", code, raw)
 	}
-	lead, _ := e.st.Lead(p.ID)
+	lead := e.root(t, p.ID)
 	_, raw = e.do(t, "GET", "/api/agents/"+itoa(lead.ID)+"/messages", nil)
 	var msgs []store.Message
 	json.Unmarshal(raw, &msgs)
@@ -304,7 +322,7 @@ func TestStopResumeAndBlocked(t *testing.T) {
 func TestDeleteActiveProject409(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
-	lead, _ := e.st.Lead(p.ID)
+	lead := e.root(t, p.ID)
 	e.tm.UserMessage(lead.ID, "porneste", nil)
 	if err := e.tm.Reconcile(p.ID); err != nil {
 		t.Fatal(err)

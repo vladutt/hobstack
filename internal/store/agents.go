@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-// Deprecated: rolul reiese din legaturi. Se sterge in Task 5.
-const (
-	PositionLead   = "lead"
-	PositionWorker = "worker"
-)
-
 // LinkError: legatura ceruta intre agenti incalca un invariant (sef, reviewer, ciclu).
 type LinkError string
 
@@ -23,7 +17,6 @@ type Agent struct {
 	ProjectID    int64     `json:"projectId"`
 	Name         string    `json:"name"`
 	Role         string    `json:"role"`
-	Position     string    `json:"position"` // Deprecated: rolul reiese din legaturi. Se sterge in Task 5.
 	Model        string    `json:"model"`
 	Background   string    `json:"background"`
 	Instructions string    `json:"instructions"`
@@ -40,12 +33,12 @@ type Agent struct {
 	PosY             *float64 `json:"posY"`
 }
 
-const agentCols = `id, project_id, name, role, position, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y`
+const agentCols = `id, project_id, name, role, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y`
 
 func scanAgent(sc scanner) (Agent, error) {
 	var a Agent
 	var tools, created string
-	err := sc.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Role, &a.Position, &a.Model, &a.Background,
+	err := sc.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Role, &a.Model, &a.Background,
 		&a.Instructions, &a.DoneDef, &tools, &a.SessionID, &a.PromptHash, &created,
 		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -74,12 +67,9 @@ func toolsJSON(tools []string) string {
 
 func insertAgent(ex execer, a *Agent) error {
 	created := now()
-	if a.Position == "" {
-		a.Position = PositionWorker // coloana are CHECK si NOT NULL
-	}
 	res, err := ex.Exec(`INSERT INTO agents (project_id, name, role, position, model, background, instructions, done_def, tools, parent_id, reviewer_id, responsibilities, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.ProjectID, a.Name, a.Role, a.Position, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools),
+		VALUES (?, ?, ?, 'worker', ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 'worker': coloana veche, pastrata doar pentru ca e NOT NULL
+		a.ProjectID, a.Name, a.Role, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools),
 		nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.Responsibilities, created)
 	if isUnique(err) {
 		return ErrConflict
@@ -190,13 +180,6 @@ func (s *Store) ListAgents(projectID int64) ([]Agent, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
-}
-
-// Lead intoarce prima radacina a proiectului.
-//
-// Deprecated: rolul reiese din legaturi. Se sterge in Task 5.
-func (s *Store) Lead(projectID int64) (Agent, error) {
-	return scanAgent(s.db.QueryRow(`SELECT `+agentCols+` FROM agents WHERE project_id = ? AND parent_id IS NULL ORDER BY id LIMIT 1`, projectID))
 }
 
 // FindAgentByName cauta dupa nume fara diferenta intre litere mari si mici.

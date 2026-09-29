@@ -69,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/projects/{id}/agents", s.createAgent)
 	mux.HandleFunc("PUT /api/agents/{id}", s.updateAgent)
 	mux.HandleFunc("DELETE /api/agents/{id}", s.deleteAgent)
+	mux.HandleFunc("PUT /api/agents/{id}/position", s.setAgentPosition)
 	mux.HandleFunc("GET /api/agents/{id}/messages", s.listMessages)
 	mux.HandleFunc("POST /api/agents/{id}/messages", s.postMessage)
 	mux.HandleFunc("POST /api/prompt-preview", s.promptPreview)
@@ -140,9 +141,12 @@ func maxLen(label, value string, max int) error {
 // fail traduce o eroare intr-un raspuns HTTP.
 func fail(w http.ResponseWriter, err error) {
 	var br badRequest
+	var le store.LinkError
 	switch {
 	case errors.As(err, &br):
 		writeErr(w, http.StatusBadRequest, br.Error())
+	case errors.As(err, &le):
+		writeErr(w, http.StatusBadRequest, le.Error())
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "nu exista")
 	case errors.Is(err, team.ErrNotBlocked):

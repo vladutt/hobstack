@@ -71,9 +71,10 @@ func expandHome(path string) (string, error) {
 }
 
 type memberBrief struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	Position string `json:"position"`
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	IsLead bool   `json:"isLead"`
+	IsRoot bool   `json:"isRoot"`
 }
 
 type projectCard struct {
@@ -86,6 +87,7 @@ type projectCard struct {
 
 type agentView struct {
 	store.Agent
+	store.Roles
 	Status      string      `json:"status"`
 	ActiveRunID string      `json:"activeRunId"`
 	CurrentTask *store.Task `json:"currentTask"`
@@ -109,7 +111,8 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 	}
 	c := projectCard{Project: p, Team: []memberBrief{}, Total: len(tasks), Status: "Idle"}
 	for _, a := range agents {
-		c.Team = append(c.Team, memberBrief{ID: a.ID, Name: a.Name, Position: a.Position})
+		r := store.RolesOf(a, agents)
+		c.Team = append(c.Team, memberBrief{ID: a.ID, Name: a.Name, IsLead: r.IsLead, IsRoot: r.IsRoot})
 	}
 	busy := s.team.ProjectActive(p.ID)
 	for _, t := range tasks {
@@ -166,7 +169,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks}
 	for _, a := range agents {
 		status, current := s.team.AgentStatus(a, tasks)
-		d.Agents = append(d.Agents, agentView{Agent: a, Status: status, ActiveRunID: s.team.ActiveRunID(a.ID), CurrentTask: current})
+		d.Agents = append(d.Agents, agentView{Agent: a, Roles: store.RolesOf(a, agents), Status: status, ActiveRunID: s.team.ActiveRunID(a.ID), CurrentTask: current})
 	}
 	writeJSON(w, http.StatusOK, d)
 }
