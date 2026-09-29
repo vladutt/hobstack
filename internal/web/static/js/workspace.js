@@ -66,7 +66,7 @@ export async function workspaceView(root, projectId, route) {
     onSelect: (id) => select(id),
     onEdit: (id) => select(id, "details"),
     onChanged: () => reload(),
-    onCreate: (pos) => createAgent(pos),
+    onCreate: (pos, parentId) => createAgent(pos, parentId),
   });
   // pe Task-uri si Fisiere alegi cu cine vorbesti din banda cu echipa
   const strip = el("div", { class: "team-strip", "aria-label": "Echipa" });
@@ -207,15 +207,16 @@ export async function workspaceView(root, projectId, route) {
     return true;
   }
 
-  // createAgent: agent nou sub prima radacina, pus pe canvas unde ai dat dublu-click
-  async function createAgent(pos) {
+  // createAgent: agent nou pus pe canvas la pos. Fara parentId nu are sef
+  // (raporteaza utilizatorului); cu parentId apare direct in echipa acelui agent.
+  async function createAgent(pos, parentId = null) {
     if (!leaveEditor()) return;
     const names = new Set(state.project.agents.map((a) => a.name.toLowerCase()));
     let name = "Agent nou";
     for (let i = 2; names.has(name.toLowerCase()); i++) name = `Agent nou ${i}`;
     const body = agentBody({
       name, role: "", model: "sonnet", background: "", instructions: "", doneDef: "",
-      tools: ["write"], responsibilities: "", parentId: firstRootId(), reviewerId: null,
+      tools: ["write"], responsibilities: "", parentId, reviewerId: null,
     });
     try {
       const a = await api(`/api/projects/${projectId}/agents`, { method: "POST", body });

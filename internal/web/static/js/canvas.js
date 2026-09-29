@@ -29,7 +29,8 @@ function autoLayout(agents, width) {
 
 const shorten = (s, n = 26) => (s.length > n ? s.slice(0, n - 3) + "..." : s);
 
-// onCreate(pos): agent nou; pos e {x, y} in coordonate SVG (dublu-click pe gol) sau null (butonul "+ Agent").
+// onCreate(pos, parentId): agent nou; pos e {x, y} in coordonate SVG sau null (butonul "+ Agent").
+// parentId: seful agentului nou (null = fara sef, raporteaza utilizatorului).
 export function teamCanvas({ onSelect, onEdit, onChanged, onCreate }) {
   let project = { agents: [] };
   let selectedId = null;
@@ -50,7 +51,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate }) {
   const addBtn = el("button", { type: "button", class: "btn small primary", onclick: () => onCreate(null) }, "+ Agent");
   const bar = el("div", { class: "canvas-bar" }, legend("delegate", "Delegare"), legend("review", "Review"),
     el("span", { class: "grow" }), deleteBtn, fullBtn, addBtn);
-  const tip = el("span", { class: "canvas-tip" }, "Trage de \u25CF ca sa legi \u00b7 dublu-click pe gol = agent nou");
+  const tip = el("span", { class: "canvas-tip" }, "Trage de \u25CF pe un agent ca sa legi, sau in gol ca sa faci un agent nou sub el \u00b7 dublu-click pe gol = agent fara sef");
   const wrap = el("div", { class: "canvas-wrap", tabindex: "0" }, bar, svgEl, tip);
 
   function setFull(on) {
@@ -96,7 +97,16 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate }) {
   function edgePath(kind, from, to, bend) {
     const a = rect(from), b = rect(to);
     if (!a || !b) return "";
-    if (kind === "delegate") return vCurve(a.x + a.w / 2, a.y + a.h, b.x + b.w / 2, b.y);
+    if (kind === "delegate") {
+      const dx = b.x + b.w / 2 - (a.x + a.w / 2);
+      // de la "Tu" spre un agent din lateral: iese pe o parte, pe deasupra celorlalte
+      // noduri, ca sa nu para ca pleaca din agentul de sub "Tu"
+      if (from === "you" && Math.abs(dx) > NODE_W / 2) {
+        const x1 = dx < 0 ? a.x : a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2;
+        return `M ${x1} ${y1} C ${x2} ${y1}, ${x2} ${y1}, ${x2} ${b.y}`;
+      }
+      return vCurve(a.x + a.w / 2, a.y + a.h, b.x + b.w / 2, b.y);
+    }
     // review: ancorat pe laturile orientate una spre alta, deplasat cu o daca e nevoie
     const o = bend ? BEND : 0;
     const dx = b.x + b.w / 2 - (a.x + a.w / 2), dy = b.y + b.h / 2 - (a.y + a.h / 2);
@@ -284,11 +294,17 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate }) {
       h.removeEventListener("pointerup", up);
       h.removeEventListener("pointercancel", up);
       temp.remove();
-      const hit = document.elementFromPoint(ev.clientX, ev.clientY)?.closest("[data-agent]");
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const hit = under?.closest("[data-agent]");
       const targetId = hit ? Number(hit.dataset.agent) : null;
       busy = false;
       if (ev.type === "pointerup" && targetId && targetId !== sourceId) showMenu(sourceId, targetId, ev);
-      else flush();
+      else if (ev.type === "pointerup" && under === svgEl) {
+        // lasat in gol: agent nou sub sursa (de pe "Tu": fara sef), centrat unde ai lasat
+        const p = toSvg(ev);
+        flush();
+        onCreate({ x: Math.round(p.x - NODE_W / 2), y: Math.round(p.y) }, sourceId === "you" ? null : sourceId);
+      } else flush();
     };
     h.addEventListener("pointermove", move);
     h.addEventListener("pointerup", up);
