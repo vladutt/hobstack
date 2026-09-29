@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"sync"
 
+	"foreman/internal/config"
 	"foreman/internal/events"
 	"foreman/internal/mcp"
 	"foreman/internal/runner"
@@ -35,6 +36,10 @@ type Team struct {
 	runs    Starter
 	hub     *events.Hub
 	baseURL string // ex. http://127.0.0.1:7777, pentru URL-ul serverului MCP
+
+	// filesRoot e radacina folderelor de proiect (config.Paths.Projects).
+	// Goala = agentii nu primesc fisiere (cazul testelor).
+	filesRoot string
 
 	// work serializeaza toate schimbarile de stare: tool-uri MCP, final de run,
 	// reconciliere, actiuni din UI. E mai simplu decat sa analizam fiecare
@@ -66,6 +71,17 @@ func New(st *store.Store, runs Starter, hub *events.Hub, baseURL string) *Team {
 		pending: map[int64]bool{},
 		wake:    make(chan struct{}, 1),
 	}
+}
+
+// SetFilesRoot seteaza radacina cu fisierele proiectelor.
+func (t *Team) SetFilesRoot(root string) { t.filesRoot = root }
+
+// filesDir intoarce folderul cu fisierele unui proiect, sau "" fara radacina.
+func (t *Team) filesDir(projectID int64) string {
+	if t.filesRoot == "" {
+		return ""
+	}
+	return config.ProjectFilesDir(t.filesRoot, projectID)
 }
 
 // Resolve gaseste agentul dupa token-ul din URL-ul MCP (implementeaza mcp.Backend).

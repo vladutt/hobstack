@@ -289,7 +289,7 @@ func TestDeleteActiveProject409(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
 	lead, _ := e.st.Lead(p.ID)
-	e.tm.UserMessage(lead.ID, "porneste")
+	e.tm.UserMessage(lead.ID, "porneste", nil)
 	if err := e.tm.Reconcile(p.ID); err != nil {
 		t.Fatal(err)
 	}

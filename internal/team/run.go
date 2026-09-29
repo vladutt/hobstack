@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -18,6 +19,26 @@ import (
 func (t *Team) startRun(p store.Project, a, lead store.Agent, taskID int64, turn string) error {
 	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
 		return fmt.Errorf("folderul de lucru %s nu exista", p.Workdir)
+	}
+
+	// fisierele proiectului: agentul are voie sa citeasca folderul si le vede in tura
+	var extraArgs []string
+	if dir := t.filesDir(p.ID); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		extraArgs = []string{"--add-dir", dir}
+		files, err := t.st.ListProjectFiles(p.ID)
+		if err != nil {
+			return err
+		}
+		refs := make([]prompt.FileRef, 0, len(files))
+		for _, f := range files {
+			refs = append(refs, prompt.FileRef{Name: f.Name, Path: filepath.Join(dir, f.Stored)})
+		}
+		if block := prompt.FilesBlock(refs); block != "" {
+			turn += "\n\n" + block
+		}
 	}
 
 	system := prompt.System(p, a, lead.Name)
@@ -45,7 +66,7 @@ func (t *Team) startRun(p store.Project, a, lead store.Agent, taskID int64, turn
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
 		Dir:    p.Workdir,
-		Args:   t.args(p, a, system, turn, token, resume),
+		Args:   append(t.args(p, a, system, turn, token, resume), extraArgs...),
 		Prompt: turn,
 	}
 	agentID := a.ID

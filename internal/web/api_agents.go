@@ -187,7 +187,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	m, err := s.team.UserMessage(id, text)
+	m, err := s.team.UserMessage(id, text, nil)
 	if err != nil {
 		fail(w, err)
 		return

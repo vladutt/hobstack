@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"foreman/internal/prompt"
@@ -99,7 +100,7 @@ func (t *Team) Reconcile(projectID int64) error {
 		if err := t.st.SaveTask(task); err != nil {
 			return err
 		}
-		turn := prompt.WorkerTurn(t.members(agents, tasks), *task, lead.Name, texts(msgs, false))
+		turn := prompt.WorkerTurn(t.members(agents, tasks), *task, lead.Name, t.texts(p.ID, msgs, false))
 		if err := t.startRun(p, w, lead, task.ID, turn); err != nil {
 			task.Status = store.StatusQueued
 			if err := t.st.SaveTask(task); err != nil {
@@ -129,7 +130,7 @@ func (t *Team) Reconcile(projectID int64) error {
 		if len(msgs) == 0 {
 			continue
 		}
-		if err := t.startRun(p, w, lead, 0, prompt.DirectTurn(texts(msgs, false))); err != nil {
+		if err := t.startRun(p, w, lead, 0, prompt.DirectTurn(t.texts(p.ID, msgs, false))); err != nil {
 			return t.startFailed(p, lead, w, err)
 		}
 		if err := t.delivered(p.ID, msgs); err != nil {
@@ -146,7 +147,7 @@ func (t *Team) Reconcile(projectID int64) error {
 	if err != nil || len(notes) == 0 {
 		return err
 	}
-	if err := t.startRun(p, lead, lead, 0, prompt.LeadTurn(t.members(agents, tasks), texts(notes, true))); err != nil {
+	if err := t.startRun(p, lead, lead, 0, prompt.LeadTurn(t.members(agents, tasks), t.texts(p.ID, notes, true))); err != nil {
 		return t.startFailed(p, lead, lead, err)
 	}
 	return t.delivered(p.ID, notes)
@@ -162,14 +163,19 @@ func (t *Team) members(agents []store.Agent, tasks []store.Task) []prompt.Member
 }
 
 // texts extrage textele mesajelor; pentru lead marcam ce a scris utilizatorul.
-func texts(msgs []store.Message, labelUser bool) []string {
+// Fiecare atasament apare ca linie separata cu calea fisierului.
+func (t *Team) texts(projectID int64, msgs []store.Message, labelUser bool) []string {
+	dir := t.filesDir(projectID)
 	out := make([]string, 0, len(msgs))
 	for _, m := range msgs {
+		text := m.Text
 		if labelUser && m.Author == store.AuthorUser {
-			out = append(out, "Utilizatorul: "+m.Text)
-		} else {
-			out = append(out, m.Text)
+			text = "Utilizatorul: " + text
 		}
+		for _, a := range m.Attachments {
+			text += fmt.Sprintf("\nAtasat: %s (%s)", filepath.Join(dir, a.Stored), a.Name)
+		}
+		out = append(out, text)
 	}
 	return out
 }
@@ -295,7 +301,7 @@ func (t *Team) Recover() error {
 
 // UserMessage salveaza un mesaj de la utilizator catre un agent. Agentul il
 // primeste la urmatorul run; pentru un worker, lead-ul primeste o copie.
-func (t *Team) UserMessage(agentID int64, text string) (store.Message, error) {
+func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (store.Message, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
 
@@ -306,6 +312,15 @@ func (t *Team) UserMessage(agentID int64, text string) (store.Message, error) {
 	m := store.Message{ProjectID: a.ProjectID, AgentID: a.ID, Kind: store.KindMsg, Author: store.AuthorUser, Text: text, Delivered: false}
 	if err := t.st.AddMessage(&m); err != nil {
 		return store.Message{}, err
+	}
+	// atasamentele se leaga inainte de emit/Kick, ca UI-ul si tura sa le vada
+	if err := t.st.LinkAttachments(attachmentIDs, m.ID); err != nil {
+		return store.Message{}, err
+	}
+	for _, id := range attachmentIDs {
+		if att, err := t.st.GetAttachment(id); err == nil && att.MessageID == m.ID {
+			m.Attachments = append(m.Attachments, att)
+		}
 	}
 	t.emit(a.ProjectID, "message", m)
 	if a.Position == store.PositionWorker {

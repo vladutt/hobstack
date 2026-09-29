@@ -21,7 +21,7 @@ func turn(spec runner.Spec) string { return argValue(spec.Args, "-p") }
 
 func TestLeadWakesOnUserMessage(t *testing.T) {
 	f := setup(t)
-	if _, err := f.tm.UserMessage(f.lead.ID, "Fa importul"); err != nil {
+	if _, err := f.tm.UserMessage(f.lead.ID, "Fa importul", nil); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)
@@ -77,7 +77,7 @@ func TestRunArguments(t *testing.T) {
 
 func TestFullFlow(t *testing.T) {
 	f := setup(t)
-	f.tm.UserMessage(f.lead.ID, "Fa importul")
+	f.tm.UserMessage(f.lead.ID, "Fa importul", nil)
 	mustReconcile(t, f)
 	lead1 := f.fs.last(t, f.lead)
 	lc := f.caller(t, lead1)
@@ -228,7 +228,7 @@ func TestResumeWakesLeadForReview(t *testing.T) {
 
 func TestWorkdirChangeStartsNewSession(t *testing.T) {
 	f := setup(t)
-	f.tm.UserMessage(f.rook.ID, "salut")
+	f.tm.UserMessage(f.rook.ID, "salut", nil)
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: "done", SessionID: "s-rook", Result: "ok"})
 
@@ -236,7 +236,7 @@ func TestWorkdirChangeStartsNewSession(t *testing.T) {
 	if err := f.st.UpdateProject(f.p); err != nil {
 		t.Fatal(err)
 	}
-	f.tm.UserMessage(f.rook.ID, "din nou")
+	f.tm.UserMessage(f.rook.ID, "din nou", nil)
 	mustReconcile(t, f)
 	if hasFlag(f.fs.last(t, f.rook).Args, "--resume") {
 		t.Fatal("folder schimbat: nu trebuia --resume")
@@ -261,7 +261,7 @@ func TestRecover(t *testing.T) {
 
 func TestMissingWorkdirPausesProject(t *testing.T) {
 	f := setup(t)
-	f.tm.UserMessage(f.lead.ID, "salut")
+	f.tm.UserMessage(f.lead.ID, "salut", nil)
 	os.RemoveAll(f.p.Workdir)
 	mustReconcile(t, f)
 	if f.fs.count() != 0 {
@@ -278,7 +278,7 @@ func TestMissingWorkdirPausesProject(t *testing.T) {
 func TestPromptChangeStartsNewSession(t *testing.T) {
 	f := setup(t)
 	f.st.SetSession(f.rook.ID, "s-vechi", "hash-vechi")
-	f.tm.UserMessage(f.rook.ID, "salut")
+	f.tm.UserMessage(f.rook.ID, "salut", nil)
 	mustReconcile(t, f)
 	if hasFlag(f.fs.last(t, f.rook).Args, "--resume") {
 		t.Fatal("prompt schimbat: nu trebuia --resume")
@@ -290,7 +290,7 @@ func TestPromptChangeStartsNewSession(t *testing.T) {
 
 func TestDirectMessageToWorker(t *testing.T) {
 	f := setup(t)
-	f.tm.UserMessage(f.rook.ID, "ce faci?")
+	f.tm.UserMessage(f.rook.ID, "ce faci?", nil)
 	mustReconcile(t, f)
 	if got := turn(f.fs.last(t, f.rook)); !strings.Contains(got, "Mesaje de la utilizator") || !strings.Contains(got, "ce faci?") {
 		t.Fatalf("worker: %q", got)
