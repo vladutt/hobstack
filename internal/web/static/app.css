@@ -118,7 +118,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .task-who { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .task-detail { font-size: 12px; color: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; display: grid; gap: 6px; }
 .badge-blocked { font-size: 11px; font-weight: 600; color: var(--red); margin-left: auto; }
-.console { position: sticky; top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; height: calc(100vh - 56px); min-height: 420px; }
+.ws-head .page-head { margin-bottom: 0; }
+/* chat-ul incepe din varful paginii si ocupa exact inaltimea ecranului, deci campul de scris e mereu vizibil */
+.console { position: sticky; top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; height: calc(100vh - 44px); min-height: 360px; }
 .console-head { display: flex; gap: 10px; align-items: center; padding: 14px; border-bottom: 1px solid var(--line); }
 .thread { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .msg { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
@@ -153,6 +155,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 /* abia pe ecrane inguste trecem pe o coloana; chat-ul vine primul, nu ultimul */
 @media (max-width: 900px) {
   .ws { grid-template-columns: minmax(0, 1fr); }
+  /* pe o coloana: titlul, apoi chat-ul, apoi restul */
+  .ws-main { display: contents; }
+  .ws-head { order: -2; }
   .console { position: static; order: -1; height: 65vh; min-height: 380px; }
 }
 @media (max-width: 720px) {

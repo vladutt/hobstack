@@ -29,7 +29,9 @@ export async function workspaceView(root, projectId) {
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const dropResets = []; // resetari de contor + outline, apelate la orice drop/dragend
-  const header = el("div");
+  // titlul proiectului sta in coloana din stanga, ca chat-ul sa inceapa din
+  // varful paginii si sa incapa intreg pe ecran (inclusiv campul de scris)
+  const header = el("div", { class: "ws-head" });
   const team = el("div", { class: "team" });
   const board = el("div", { class: "board" });
   const count = el("span", { class: "hint" });
@@ -76,9 +78,9 @@ export async function workspaceView(root, projectId) {
   setupDrop(consoleBox, addPending);
 
   root.append(
-    header,
     el("div", { class: "ws" },
       el("div", { class: "ws-main" },
+        header,
         el("section", { class: "section" },
           el("div", { class: "section-head" },
             el("div", {}, el("h2", {}, "Echipa"), el("span", { class: "hint" }, "Selecteaza un agent ca sa vorbesti direct cu el")),
