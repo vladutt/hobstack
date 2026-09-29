@@ -85,24 +85,29 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
   const vCurve = (x1, y1, x2, y2) => { const ym = (y1 + y2) / 2; return `M ${x1} ${y1} C ${x1} ${ym}, ${x2} ${ym}, ${x2} ${y2}`; };
   const hCurve = (x1, y1, x2, y2) => { const xm = (x1 + x2) / 2; return `M ${x1} ${y1} C ${xm} ${y1}, ${xm} ${y2}, ${x2} ${y2}`; };
 
-  function edgePath(kind, from, to) {
+  // BEND: cat de mult se deplaseaza curba de review cand reviewer-ul e si seful,
+  // ca sa nu acopere linia de delegare (care altfel n-ar mai putea fi selectata)
+  const BEND = 28;
+
+  function edgePath(kind, from, to, bend) {
     const a = rect(from), b = rect(to);
     if (!a || !b) return "";
     if (kind === "delegate") return vCurve(a.x + a.w / 2, a.y + a.h, b.x + b.w / 2, b.y);
-    // review: ancorat pe laturile orientate una spre alta
+    // review: ancorat pe laturile orientate una spre alta, deplasat cu o daca e nevoie
+    const o = bend ? BEND : 0;
     const dx = b.x + b.w / 2 - (a.x + a.w / 2), dy = b.y + b.h / 2 - (a.y + a.h / 2);
     if (Math.abs(dy) > Math.abs(dx)) {
       return dy > 0
-        ? vCurve(a.x + a.w / 2, a.y + a.h, b.x + b.w / 2, b.y)
-        : vCurve(a.x + a.w / 2, a.y, b.x + b.w / 2, b.y + b.h);
+        ? vCurve(a.x + a.w / 2 + o, a.y + a.h, b.x + b.w / 2 + o, b.y)
+        : vCurve(a.x + a.w / 2 + o, a.y, b.x + b.w / 2 + o, b.y + b.h);
     }
     return dx > 0
-      ? hCurve(a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2)
-      : hCurve(a.x, a.y + a.h / 2, b.x + b.w, b.y + b.h / 2);
+      ? hCurve(a.x + a.w, a.y + a.h / 2 + o, b.x, b.y + b.h / 2 + o)
+      : hCurve(a.x, a.y + a.h / 2 + o, b.x + b.w, b.y + b.h / 2 + o);
   }
 
   function redrawEdges() {
-    for (const e of edges) for (const p of e.els) p.setAttribute("d", edgePath(e.kind, e.from, e.to));
+    for (const e of edges) for (const p of e.els) p.setAttribute("d", edgePath(e.kind, e.from, e.to, e.bend));
   }
 
   // ---------- desenare ----------
@@ -131,7 +136,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
     const edgeLayer = svg("g", { class: "edges" });
     edges = [];
     const ids = new Set(agents.map((a) => a.id));
-    const addEdge = (kind, from, to, link, deletable) => {
+    const addEdge = (kind, from, to, link, deletable, bend = false) => {
       const visible = svg("path", { class: `edge ${kind}`, "data-link": link, "marker-end": kind === "review" ? "url(#arrow-review)" : "url(#arrow)" });
       const els = [visible];
       edgeLayer.append(visible);
@@ -143,12 +148,12 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
         edgeLayer.append(hit);
         els.push(hit);
       }
-      edges.push({ kind, from, to, els });
+      edges.push({ kind, from, to, els, bend });
     };
     for (const a of agents) {
       if (a.parentId && ids.has(a.parentId)) addEdge("delegate", a.parentId, a.id, "p:" + a.id, true);
       else if (!a.parentId) addEdge("delegate", "you", a.id, "p:" + a.id, false);
-      if (a.reviewerId && ids.has(a.reviewerId)) addEdge("review", a.reviewerId, a.id, "r:" + a.id, true);
+      if (a.reviewerId && ids.has(a.reviewerId)) addEdge("review", a.reviewerId, a.id, "r:" + a.id, true, a.reviewerId === a.parentId);
     }
     redrawEdges();
 
