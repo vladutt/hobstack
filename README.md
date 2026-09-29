@@ -11,6 +11,7 @@ cu orice agent. Totul se vede live pe un board si ramane salvat in SQLite.
     go run ./cmd/foreman start
 
 Deschide http://127.0.0.1:7777. Optiuni: `--port 8080`, `--no-open`.
+Folderul de lucru al proiectului e optional: daca nu alegi unul, se foloseste `~/Foreman/<nume>`.
 Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
 
 ## Build
@@ -34,12 +35,15 @@ Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
 - API-ul accepta doar Host 127.0.0.1/localhost si cere `Content-Type: application/json` pe
   request-urile care modifica ceva (protectie impotriva paginilor web care ar trimite cereri
   catre aplicatie).
+- Fisierele atasate proiectului stau in `~/.foreman/projects/<id>/files/`; agentii le primesc cu
+  `--add-dir` si le citesc cu Read (inclusiv imagini si PDF).
 - La pornire toate proiectele sunt pe pauza: nimic nu ruleaza (si nu costa) fara sa apesi "Porneste echipa".
 
 ## Date
 
     ~/.foreman/foreman.db           proiecte, agenti, task-uri, run-uri, mesaje
     ~/.foreman/logs/runs/<id>.jsonl logul brut al fiecarui run
+    ~/.foreman/projects/<id>/files/ fisierele atasate proiectului
 
 ## Structura
 
