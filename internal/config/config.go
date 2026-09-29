@@ -5,11 +5,18 @@ import (
 	"path/filepath"
 )
 
-// Paths tine toate locatiile de pe disc folosite de agentdash.
+// AppName e numele aplicatiei. Din el se deriva folderul de date, fisierul
+// bazei de date si textele afisate. Ca sa redenumesti aplicatia: schimbi
+// constanta, redenumesti cmd/<nume> si rulezi `go mod edit -module <nume>`
+// plus un replace pe importuri.
+const AppName = "foreman"
+
+// Paths tine toate locatiile de pe disc folosite de aplicatie.
 type Paths struct {
-	Root   string // ~/.agentdash
-	Agents string // ~/.agentdash/agents
-	Logs   string // ~/.agentdash/logs/runs
+	Root   string // ~/.foreman
+	DB     string // ~/.foreman/foreman.db
+	Logs   string // ~/.foreman/logs/runs
+	Agents string // ~/.foreman/agents (modelul vechi cu foldere, dispare in Task 5)
 }
 
 func Default() (Paths, error) {
@@ -17,17 +24,18 @@ func Default() (Paths, error) {
 	if err != nil {
 		return Paths{}, err
 	}
-	root := filepath.Join(home, ".agentdash")
+	root := filepath.Join(home, "."+AppName)
 	return Paths{
 		Root:   root,
-		Agents: filepath.Join(root, "agents"),
+		DB:     filepath.Join(root, AppName+".db"),
 		Logs:   filepath.Join(root, "logs", "runs"),
+		Agents: filepath.Join(root, "agents"),
 	}, nil
 }
 
 // Ensure creeaza folderele daca nu exista.
 func (p Paths) Ensure() error {
-	for _, d := range []string{p.Root, p.Agents, p.Logs} {
+	for _, d := range []string{p.Root, p.Logs, p.Agents} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err
 		}

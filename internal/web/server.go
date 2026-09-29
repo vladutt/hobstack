@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"agentdash/internal/agent"
-	"agentdash/internal/config"
-	"agentdash/internal/runner"
+	"foreman/internal/agent"
+	"foreman/internal/config"
+	"foreman/internal/runner"
 )
 
 //go:embed static

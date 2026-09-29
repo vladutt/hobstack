@@ -15,21 +15,21 @@ import (
 	"syscall"
 	"time"
 
-	"agentdash/internal/agent"
-	"agentdash/internal/config"
-	"agentdash/internal/runner"
-	"agentdash/internal/web"
+	"foreman/internal/agent"
+	"foreman/internal/config"
+	"foreman/internal/runner"
+	"foreman/internal/web"
 )
 
-const usage = `agentdash - control local pentru agentii Claude Code
+const usage = `%[1]s - echipe de agenti Claude Code, local
 
 Utilizare:
-  agentdash start [--port 7777] [--no-open]
+  %[1]s start [--port 7777] [--no-open]
 `
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Print(usage)
+		fmt.Printf(usage, config.AppName)
 		os.Exit(1)
 	}
 
@@ -38,7 +38,7 @@ func main() {
 	case "start":
 		err = start(os.Args[2:])
 	default:
-		fmt.Print(usage)
+		fmt.Printf(usage, config.AppName)
 		os.Exit(1)
 	}
 	if err != nil {
@@ -90,7 +90,7 @@ func start(args []string) error {
 	}
 
 	url := "http://" + addr
-	log.Printf("agentdash ruleaza pe %s", url)
+	log.Printf("%s ruleaza pe %s", config.AppName, url)
 	log.Printf("agenti: %s", paths.Agents)
 	log.Printf("claude: %s", claudeBin)
 	if !*noOpen {

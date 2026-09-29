@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"agentdash/internal/agent"
+	"foreman/internal/agent"
 )
 
 var (
@@ -318,7 +318,7 @@ func (m *Manager) Stop(id string) error {
 	return nil
 }
 
-// Shutdown opreste toate run-urile active (la Ctrl+C pe agentdash).
+// Shutdown opreste toate run-urile active (la Ctrl+C).
 func (m *Manager) Shutdown() {
 	m.mu.Lock()
 	ids := make([]string, 0, len(m.active))
