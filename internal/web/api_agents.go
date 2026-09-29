@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"slices"
@@ -125,6 +126,7 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.linksChanged(a.ProjectID)
 	s.hub.Publish(a.ProjectID, "agent", map[string]int64{"id": a.ID})
 	writeJSON(w, http.StatusOK, a)
 }
@@ -151,8 +153,17 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.linksChanged(a.ProjectID)
 	s.hub.Publish(a.ProjectID, "agent", map[string]int64{"id": id})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// linksChanged anunta echipa ca legaturile s-au putut schimba (ex. un reviewer
+// disparut). Agentul e deja salvat, deci o eroare aici doar se logheaza.
+func (s *Server) linksChanged(projectID int64) {
+	if err := s.team.LinksChanged(projectID); err != nil {
+		log.Printf("proiectul %d, legaturi schimbate: %v", projectID, err)
+	}
 }
 
 func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {

@@ -292,3 +292,110 @@ func TestRootAssigneeWithoutDeciderGetsUserNote(t *testing.T) {
 		t.Fatal("non-radacina fara decident primeste sfatul cu liderul")
 	}
 }
+
+// atReviewer pune T-1 (al lui Rook) in etapa reviewer, cu Vera ca reviewer,
+// si marcheaza notificarea Vera ca livrata (ca dupa run-ul ei).
+func atReviewer(t *testing.T, f *fixture) store.Task {
+	t.Helper()
+	f.rook.ReviewerID = &f.vera.ID
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "A", f.rook, store.StatusInProgress)
+	if _, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", "A e gata"); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := f.st.Undelivered(f.vera.ID)
+	for _, m := range pending {
+		f.st.MarkDelivered([]int64{m.ID})
+	}
+	return task
+}
+
+func TestLeadDecidesWhenReviewerLinkGone(t *testing.T) {
+	f := setup(t)
+	atReviewer(t, f)
+	f.rook.ReviewerID = nil
+	f.st.UpdateAgent(f.rook)
+	// fara reviewer, etapa "reviewer" nu mai blocheaza decizia liderului
+	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 1, store.StatusDone)
+}
+
+func TestResumeWakesDeciderWhenReviewerGone(t *testing.T) {
+	f := setup(t)
+	atReviewer(t, f)
+	f.rook.ReviewerID = nil
+	f.st.UpdateAgent(f.rook)
+	f.tm.Stop(f.p.ID)
+	f.tm.Resume(f.p.ID)
+	pending, _ := f.st.Undelivered(f.lead.ID)
+	if len(pending) != 1 || pending[0].Text != "Echipa a fost repornita. Asteapta decizia ta: T-1." {
+		t.Fatalf("Lead: %+v", pending)
+	}
+}
+
+func TestLinksChangedMovesOrphanReviewToLead(t *testing.T) {
+	f := setup(t)
+	atReviewer(t, f)
+	f.rook.ReviewerID = nil
+	f.st.UpdateAgent(f.rook)
+	if err := f.tm.LinksChanged(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.wantStatus(t, 1, store.StatusReview); got.ReviewStage != store.StageLead {
+		t.Fatalf("stage = %q", got.ReviewStage)
+	}
+	pending, _ := f.st.Undelivered(f.lead.ID)
+	if len(pending) != 1 || !strings.Contains(pending[0].Text, "Rook a terminat T-1") || !strings.Contains(pending[0].Text, "A e gata") {
+		t.Fatalf("Lead: %+v", pending)
+	}
+	if p, _ := f.st.Undelivered(f.vera.ID); len(p) != 0 {
+		t.Fatalf("Vera nu mai verifica: %+v", p)
+	}
+	// a doua apelare nu mai schimba nimic
+	f.tm.LinksChanged(f.p.ID)
+	if p, _ := f.st.Undelivered(f.lead.ID); len(p) != 1 {
+		t.Fatalf("nota dubla: %+v", p)
+	}
+}
+
+func TestLinksChangedBlocksRootWithoutDecider(t *testing.T) {
+	f := setup(t)
+	solo := f.agent(t, "Solo", nil, &f.vera)
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: solo.ID} // fara creator
+	f.st.CreateTask(&task)
+	task.Status, task.ReviewStage = store.StatusReview, store.StageReviewer
+	f.st.SaveTask(&task)
+	solo.ReviewerID = nil
+	f.st.UpdateAgent(solo)
+	if err := f.tm.LinksChanged(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 1, store.StatusBlocked)
+	if !f.hasMessage(solo.ID, "Utilizatorul decide din board") {
+		t.Fatal("radacina trebuie trimisa la board")
+	}
+}
+
+func TestLinksChangedNotifiesNewReviewer(t *testing.T) {
+	f := setup(t)
+	atReviewer(t, f)
+	rev := f.agent(t, "Rev", &f.lead, nil)
+	f.rook.ReviewerID = &rev.ID
+	f.st.UpdateAgent(f.rook)
+	if err := f.tm.LinksChanged(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := f.st.Undelivered(rev.ID)
+	if len(pending) != 1 || !strings.HasPrefix(pending[0].Text, "Rook a terminat T-1 si asteapta review-ul tau.") {
+		t.Fatalf("Rev: %+v", pending)
+	}
+	if got := f.wantStatus(t, 1, store.StatusReview); got.ReviewStage != store.StageReviewer {
+		t.Fatalf("stage = %q", got.ReviewStage)
+	}
+	rc := f.workerCaller(rev, 0)
+	if _, err := f.tm.ReviewApprove(rc, "T-1", ""); err != nil {
+		t.Fatal(err)
+	}
+}

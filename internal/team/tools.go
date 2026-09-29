@@ -150,6 +150,41 @@ func decider(task store.Task, agents []store.Agent) (store.Agent, bool) {
 	return store.Agent{}, false
 }
 
+// reviewerOf intoarce reviewer-ul asignatului task-ului, daca are unul care exista.
+func reviewerOf(task store.Task, agents []store.Agent) (store.Agent, bool) {
+	w, ok := store.FindAgent(agents, task.AssigneeID)
+	if !ok || w.ReviewerID == nil {
+		return store.Agent{}, false
+	}
+	return store.FindAgent(agents, *w.ReviewerID)
+}
+
+// decisionOwner intoarce agentul care trebuie sa decida acum un task din
+// Review sau Blocked: reviewer-ul in etapa reviewer (daca inca exista),
+// altfel decidentul. Intoarce 0 daca nu decide nimeni.
+func decisionOwner(task store.Task, agents []store.Agent) int64 {
+	if task.Status != store.StatusReview && task.Status != store.StatusBlocked {
+		return 0
+	}
+	if task.Status == store.StatusReview && task.ReviewStage == store.StageReviewer {
+		if r, ok := reviewerOf(task, agents); ok {
+			return r.ID
+		}
+	}
+	if d, ok := decider(task, agents); ok {
+		return d.ID
+	}
+	return 0
+}
+
+// noDeciderText e nota pentru asignatul unui task pe care nu il poate decide nimeni.
+func noDeciderText(task store.Task, assignee store.Agent) string {
+	if assignee.ParentID == nil {
+		return fmt.Sprintf("Nu are cine sa verifice %s. Utilizatorul decide din board (Accepta / Deblocheaza).", task.Ref())
+	}
+	return fmt.Sprintf("Nu are cine sa verifice %s: agentul nu are sef. Leaga-l de un lider pe canvas.", task.Ref())
+}
+
 // canDecide: accept_task si send_back sunt permise creatorului si oricarui
 // sef de-al lui. Fara creator (sters), oricarui sef al asignatului.
 func canDecide(callerID int64, task store.Task, agents []store.Agent) bool {
@@ -185,11 +220,7 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 	}
 	switch {
 	case !hasWho:
-		text := fmt.Sprintf("Nu are cine sa verifice %s: agentul nu are sef. Leaga-l de un lider pe canvas.", task.Ref())
-		if assignee.ParentID == nil {
-			text = fmt.Sprintf("Nu are cine sa verifice %s. Utilizatorul decide din board (Accepta / Deblocheaza).", task.Ref())
-		}
-		t.note(task.ProjectID, assignee.ID, text, true)
+		t.note(task.ProjectID, assignee.ID, noDeciderText(*task, assignee), true)
 	case task.ReviewStage == store.StageReviewer:
 		t.note(who.ProjectID, who.ID, clip(fmt.Sprintf("%s. Verifica-l cu review_approve sau review_reject: %s", headline, task.Result)), false)
 	default:
@@ -286,8 +317,8 @@ func (t *Team) AcceptTask(c mcp.Caller, ref, note string) (string, error) {
 	if err := t.checkNotAtReviewer(task, agents); err != nil {
 		return "", err
 	}
-	isLeadReview := task.Status == store.StatusReview && task.ReviewStage == store.StageLead
-	if !isLeadReview && task.Status != store.StatusBlocked {
+	// checkNotAtReviewer a trecut: task-ul e la lider (sau reviewer-ul a disparut)
+	if task.Status != store.StatusReview && task.Status != store.StatusBlocked {
 		return "", fmt.Errorf("%s e %s; se accepta doar task-uri din review sau blocked", task.Ref(), task.Status)
 	}
 	task.Status = store.StatusDone
@@ -309,18 +340,18 @@ func (t *Team) AcceptTask(c mcp.Caller, ref, note string) (string, error) {
 	return task.Ref() + " e Done.", nil
 }
 
-// checkNotAtReviewer refuza decizia liderului cat timp task-ul e la reviewer.
+// checkNotAtReviewer refuza decizia liderului cat timp task-ul e la un
+// reviewer care exista. Daca asignatul nu mai are reviewer (legatura stearsa
+// sau reviewer sters), decide liderul, altfel task-ul ar ramane agatat.
 func (t *Team) checkNotAtReviewer(task store.Task, agents []store.Agent) error {
 	if task.Status != store.StatusReview || task.ReviewStage != store.StageReviewer {
 		return nil
 	}
-	name := "reviewer"
-	if w, ok := store.FindAgent(agents, task.AssigneeID); ok && w.ReviewerID != nil {
-		if r, ok := store.FindAgent(agents, *w.ReviewerID); ok {
-			name = r.Name
-		}
+	r, ok := reviewerOf(task, agents)
+	if !ok {
+		return nil
 	}
-	return fmt.Errorf("%s e inca la review la %s", task.Ref(), name)
+	return fmt.Errorf("%s e inca la review la %s", task.Ref(), r.Name)
 }
 
 func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
@@ -345,7 +376,7 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 	if err := t.checkNotAtReviewer(task, agents); err != nil {
 		return "", err
 	}
-	if task.Status != store.StatusReview || task.ReviewStage != store.StageLead {
+	if task.Status != store.StatusReview {
 		return "", fmt.Errorf("%s e %s; se trimit inapoi doar task-uri din review", task.Ref(), task.Status)
 	}
 	worker, ok := store.FindAgent(agents, task.AssigneeID)
@@ -472,7 +503,7 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		if err := t.st.SaveTask(&task); err != nil {
 			return "", err
 		}
-		t.note(c.ProjectID, worker.ID, fmt.Sprintf("Nu are cine sa verifice %s: agentul nu are sef. Leaga-l de un lider pe canvas.", task.Ref()), true)
+		t.note(c.ProjectID, worker.ID, noDeciderText(task, worker), true)
 		t.emit(c.ProjectID, "task", task)
 		return fmt.Sprintf("%s e blocat: nu are cine sa decida. Decide utilizatorul.", task.Ref()), nil
 	}

@@ -303,17 +303,9 @@ func (t *Team) wakeForDecisions(projectID int64) error {
 	}
 	waiting := map[int64][]string{}
 	for _, task := range tasks {
-		var who int64
-		switch {
-		case task.Status == store.StatusReview && task.ReviewStage == store.StageReviewer:
-			if w, ok := store.FindAgent(agents, task.AssigneeID); ok && w.ReviewerID != nil {
-				who = *w.ReviewerID
-			}
-		case task.Status == store.StatusReview || task.Status == store.StatusBlocked:
-			if d, ok := decider(task, agents); ok {
-				who = d.ID
-			}
-		case task.Status == store.StatusInProgress && allSubtasksDone(task.ID, tasks):
+		// reviewer-ul, sau decidentul daca reviewer-ul a disparut
+		who := decisionOwner(task, agents)
+		if task.Status == store.StatusInProgress && allSubtasksDone(task.ID, tasks) {
 			who = task.AssigneeID
 		}
 		if who != 0 {
@@ -331,6 +323,80 @@ func (t *Team) wakeForDecisions(projectID int64) error {
 		}
 		if len(pending) == 0 {
 			t.note(projectID, a.ID, "Echipa a fost repornita. Asteapta decizia ta: "+strings.Join(refs, ", ")+".", false)
+		}
+	}
+	return nil
+}
+
+// LinksChanged se apeleaza din web dupa ce un agent a fost editat sau sters.
+// Pentru fiecare task care asteapta la reviewer:
+//   - daca asignatul nu mai are reviewer, task-ul trece la decident (sau,
+//     fara decident, in Blocked, si decide utilizatorul);
+//   - altfel reviewer-ul curent (poate unul nou) e anuntat, daca nu are deja
+//     mesaje in asteptare. Nu stim cui s-a trimis nota initiala, deci o nota
+//     in plus e pretul acceptat pentru a nu lasa task-ul agatat.
+func (t *Team) LinksChanged(projectID int64) error {
+	t.work.Lock()
+	err := t.relinkReviews(projectID)
+	t.work.Unlock()
+	if err != nil {
+		return err
+	}
+	t.Kick(projectID)
+	return nil
+}
+
+// relinkReviews face munca din LinksChanged. Se apeleaza cu t.work blocat.
+func (t *Team) relinkReviews(projectID int64) error {
+	agents, err := t.st.ListAgents(projectID)
+	if err != nil {
+		return err
+	}
+	tasks, err := t.st.ListTasks(projectID)
+	if err != nil {
+		return err
+	}
+	// reviewerii care au deja mesaje in asteptare nu mai primesc nota
+	hasPending := map[int64]bool{}
+	for _, a := range agents {
+		if hasPending[a.ID], err = t.st.HasUndelivered(a.ID); err != nil {
+			return err
+		}
+	}
+	for i := range tasks {
+		task := &tasks[i]
+		if task.Status != store.StatusReview || task.ReviewStage != store.StageReviewer {
+			continue
+		}
+		assignee, _ := store.FindAgent(agents, task.AssigneeID)
+		if r, ok := reviewerOf(*task, agents); ok {
+			if !hasPending[r.ID] {
+				text := fmt.Sprintf("%s a terminat %s si asteapta review-ul tau. Verifica-l cu review_approve sau review_reject: %s", assignee.Name, task.Ref(), task.Result)
+				if err := t.note(projectID, r.ID, clip(text), false); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		// reviewer-ul a disparut: decide liderul
+		boss, hasBoss := decider(*task, agents)
+		task.ReviewStage = store.StageLead
+		if !hasBoss {
+			task.Status, task.ReviewStage = store.StatusBlocked, store.StageNone
+		}
+		if err := t.st.SaveTask(task); err != nil {
+			return err
+		}
+		t.emit(projectID, "task", *task)
+		if !hasBoss {
+			if err := t.note(projectID, assignee.ID, noDeciderText(*task, assignee), true); err != nil {
+				return err
+			}
+			continue
+		}
+		text := fmt.Sprintf("%s a terminat %s; nu mai are reviewer, decizi tu (review): %s", assignee.Name, task.Ref(), task.Result)
+		if err := t.note(projectID, boss.ID, clip(text), false); err != nil {
+			return err
 		}
 	}
 	return nil

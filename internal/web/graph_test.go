@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"foreman/internal/mcp"
 	"foreman/internal/store"
 )
 
@@ -161,5 +162,73 @@ func TestDeleteAgentReparentsViaAPI(t *testing.T) {
 	}
 	if a, _ := e.st.GetAgent(leaf.ID); a.ParentID == nil || *a.ParentID != root.ID {
 		t.Fatalf("Leaf nu a trecut la Lead: %+v", a.ParentID)
+	}
+}
+
+// Cand asignatul isi pierde reviewer-ul (legatura stearsa sau reviewer sters),
+// task-ul din etapa reviewer trece la lider, care e anuntat si poate decide.
+func TestReviewerLossMovesTaskToLead(t *testing.T) {
+	for _, how := range []string{"unlink", "delete"} {
+		t.Run(how, func(t *testing.T) {
+			e := setup(t)
+			p := e.createProject(t, t.TempDir())
+			root := e.root(t, p.ID)
+			rook := e.addWorker(t, p.ID, "Rook")
+			vera := e.addWorker(t, p.ID, "Vera")
+			rook.ReviewerID = &vera.ID
+			e.st.UpdateAgent(rook)
+			task := store.Task{ProjectID: p.ID, Title: "A", AssigneeID: rook.ID, CreatorID: &root.ID}
+			e.st.CreateTask(&task)
+			task.Status, task.ReviewStage, task.Result = store.StatusReview, store.StageReviewer, "A e gata"
+			e.st.SaveTask(&task)
+
+			if how == "unlink" {
+				body := map[string]any{"name": "Rook", "model": "sonnet", "parentId": root.ID, "reviewerId": nil}
+				if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(rook.ID), body); code != 200 {
+					t.Fatalf("PUT: %d %s", code, raw)
+				}
+			} else if code, raw := e.do(t, "DELETE", "/api/agents/"+itoa(vera.ID), nil); code != http.StatusNoContent {
+				t.Fatalf("DELETE: %d %s", code, raw)
+			}
+			got, _ := e.st.GetTask(task.ID)
+			if got.Status != store.StatusReview || got.ReviewStage != store.StageLead {
+				t.Fatalf("task: %s/%s", got.Status, got.ReviewStage)
+			}
+			pending, _ := e.st.Undelivered(root.ID)
+			if len(pending) != 1 || !strings.Contains(pending[0].Text, "Rook a terminat T-1") {
+				t.Fatalf("Lead: %+v", pending)
+			}
+			if _, err := e.tm.AcceptTask(mcp.Caller{ProjectID: p.ID, AgentID: root.ID, IsLead: true}, "T-1", ""); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// Reviewer schimbat pe canvas: reviewer-ul nou e anuntat si poate aproba.
+func TestNewReviewerGetsPendingReview(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
+	rook := e.addWorker(t, p.ID, "Rook")
+	vera := e.addWorker(t, p.ID, "Vera")
+	bea := e.addWorker(t, p.ID, "Bea")
+	rook.ReviewerID = &vera.ID
+	e.st.UpdateAgent(rook)
+	task := store.Task{ProjectID: p.ID, Title: "A", AssigneeID: rook.ID, CreatorID: &root.ID}
+	e.st.CreateTask(&task)
+	task.Status, task.ReviewStage = store.StatusReview, store.StageReviewer
+	e.st.SaveTask(&task)
+
+	body := map[string]any{"name": "Rook", "model": "sonnet", "parentId": root.ID, "reviewerId": bea.ID}
+	if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(rook.ID), body); code != 200 {
+		t.Fatalf("PUT: %d %s", code, raw)
+	}
+	pending, _ := e.st.Undelivered(bea.ID)
+	if len(pending) != 1 || !strings.Contains(pending[0].Text, "asteapta review-ul tau") {
+		t.Fatalf("Bea: %+v", pending)
+	}
+	if _, err := e.tm.ReviewApprove(mcp.Caller{ProjectID: p.ID, AgentID: bea.ID, HasParent: true, IsReviewer: true}, "T-1", ""); err != nil {
+		t.Fatal(err)
 	}
 }
