@@ -234,6 +234,7 @@ func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 		Name         string `json:"name"`
 		Role         string `json:"role"`
 		Position     string `json:"position"`
+		ParentID     *int64 `json:"parentId"`
 		Background   string `json:"background"`
 		Instructions string `json:"instructions"`
 		DoneDef      string `json:"doneDef"`
@@ -254,15 +255,15 @@ func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 	if a.Name == "" {
 		a.Name = "Agent"
 	}
-	leadName := a.Name
-	if a.Position != store.PositionLead {
-		a.Position = store.PositionWorker
-		lead, err := s.st.Lead(p.ID)
-		if err != nil {
-			fail(w, err)
-			return
-		}
-		leadName = lead.Name
+	// echipa reala + agentul nou (ID 0): seful e parentId din cerere, altfel prima radacina
+	team, err := s.st.ListAgents(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"prompt": prompt.System(p, a, leadName)})
+	a.ParentID = in.ParentID
+	if a.ParentID == nil && len(team) > 0 {
+		a.ParentID = &team[0].ID
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"prompt": prompt.System(p, a, prompt.LinksFor(a, team))})
 }

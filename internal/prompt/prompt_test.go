@@ -11,91 +11,124 @@ import (
 
 var proj = store.Project{Name: "ApiUnit", Goal: "Import din OpenAPI 3.1", Context: "Stack: PHP 8.3"}
 
-func TestSystemWorker(t *testing.T) {
-	a := store.Agent{Name: "Rook", Role: "Backend Dev", Position: store.PositionWorker,
-		Background: "Stie Laravel.", DoneDef: "rezumat si fisiere schimbate"}
-	got := System(proj, a, "Atlas")
-	for _, want := range []string{
-		"# Rol\nEsti Rook, Backend Dev, worker in proiectul ApiUnit. Raportezi lui Atlas (lead).",
-		"# Background\nStie Laravel.",
-		"# Cand termini un task\nApeleaza mcp__team__report_done cu: rezumat si fisiere schimbate",
-		"# Proiect\nObiectiv: Import din OpenAPI 3.1\n\nContext comun:\nStack: PHP 8.3",
-		"# Cum lucrezi\nLucreaza doar pe task-ul primit",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("lipseste %q din:\n%s", want, got)
+func TestSystemRoles(t *testing.T) {
+	a := store.Agent{Name: "Sub", Role: "Tech Lead", Background: "Stie Laravel.", DoneDef: "rezumat si fisiere schimbate"}
+	cases := []struct {
+		name      string
+		links     Links
+		want, not []string
+	}{
+		{"worker", Links{BossName: "Atlas"},
+			[]string{"# Rol\nEsti Sub, Tech Lead, in proiectul ApiUnit. Raportezi lui Atlas.",
+				"# Cand termini un task\nApeleaza mcp__team__report_done cu: rezumat si fisiere schimbate",
+				"# Cum lucrezi\nLucreaza doar pe task-ul primit", "# Background\nStie Laravel."},
+			[]string{"create_task", "review_approve"}},
+		{"sub-lider", Links{BossName: "Atlas", IsLead: true},
+			[]string{"mcp__team__create_task", "opreste-te fara report_done", `"Ce ia"`},
+			[]string{"Lucreaza doar pe task-ul primit", "review_approve"}},
+		{"radacina lider", Links{IsLead: true},
+			[]string{"Raportezi utilizatorului.", "mcp__team__create_task",
+				"# Cand termini\nCand obiectivul e atins, scrie utilizatorului un rezumat. Rezumatul contine: rezumat si fisiere schimbate"},
+			[]string{"report_done"}},
+		{"reviewer", Links{BossName: "Atlas", IsReviewer: true},
+			[]string{"mcp__team__review_approve", "mcp__team__review_reject", "Lucreaza doar pe task-ul primit"},
+			[]string{"create_task"}},
+		{"singur", Links{},
+			[]string{"Raportezi utilizatorului.", "Vorbesti direct cu utilizatorul"},
+			[]string{"mcp__team__"}},
+	}
+	for _, c := range cases {
+		got := System(proj, a, c.links)
+		for _, w := range c.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s: lipseste %q din:\n%s", c.name, w, got)
+			}
+		}
+		for _, n := range c.not {
+			if strings.Contains(got, n) {
+				t.Errorf("%s: nu trebuia %q in:\n%s", c.name, n, got)
+			}
 		}
 	}
-	if strings.Contains(got, "# Instructiuni") {
-		t.Error("sectiunea goala Instructiuni nu trebuia sa apara")
+	if got := System(store.Project{Name: "X"}, store.Agent{Name: "A"}, Links{}); !strings.Contains(got, "Esti A, agent, in proiectul X.") {
+		t.Errorf("rol gol: %s", got)
+	}
+	// radacina lider: propozitia despre rezumat apare o singura data
+	if got := System(proj, a, Links{IsLead: true}); strings.Count(got, "scrie utilizatorului un rezumat") != 1 {
+		t.Errorf("propozitia se repeta:\n%s", got)
 	}
 }
 
-func TestSystemLead(t *testing.T) {
-	a := store.Agent{Name: "Atlas", Position: store.PositionLead}
-	got := System(store.Project{Name: "X"}, a, "Atlas")
-	for _, want := range []string{
-		"Esti Atlas, lead, lead in proiectul X. Raportezi utilizatorului.",
-		"# Cand termini\nCand obiectivul e atins, scrie utilizatorului un rezumat.",
-		"mcp__team__create_task",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("lipseste %q din:\n%s", want, got)
+func TestLinksFor(t *testing.T) {
+	one, two := int64(1), int64(2)
+	lead := store.Agent{ID: 1, Name: "Atlas"}
+	sub := store.Agent{ID: 2, Name: "Sub", ParentID: &one}
+	wes := store.Agent{ID: 3, Name: "Wes", ParentID: &two, ReviewerID: &one}
+	team := []store.Agent{lead, sub, wes}
+	cases := map[string]struct {
+		a    store.Agent
+		want Links
+	}{
+		"coordonator": {lead, Links{IsLead: true, IsReviewer: true}},
+		"sub-lider":   {sub, Links{BossName: "Atlas", IsLead: true}},
+		"worker":      {wes, Links{BossName: "Sub"}},
+		"agent nou":   {store.Agent{ParentID: &two}, Links{BossName: "Sub"}},
+	}
+	for name, c := range cases {
+		if got := LinksFor(c.a, team); got != c.want {
+			t.Errorf("%s: %+v, vreau %+v", name, got, c.want)
 		}
 	}
-	if strings.Contains(got, "# Proiect") {
-		t.Error("proiect fara obiectiv si context: sectiunea nu trebuia sa apara")
+}
+
+func TestTeamBlock(t *testing.T) {
+	got := Team([]Member{{Name: "Rook", Role: "Backend Dev", Responsibilities: "API si baze de date", Status: "Idle"}, {Name: "Vera"}})
+	if got != "Echipa ta directa:\n- Rook: Backend Dev, Idle\n  Ce ia: API si baze de date\n- Vera" {
+		t.Fatalf("Team = %q", got)
+	}
+	if Team(nil) != "" {
+		t.Fatal("echipa goala trebuie sa dea text gol")
+	}
+}
+
+func TestContextAndTurns(t *testing.T) {
+	c := TurnContext{
+		Direct:    []Member{{Name: "Wes", Role: "Dev", Status: "Idle"}},
+		Reviewees: []string{"Ana", "Ion"},
+		OpenTasks: []OpenTask{{Ref: "T-1", Title: "Import", Done: 1, Total: 2}, {Ref: "T-4", Title: "Export"}},
+	}
+	ctx := "Echipa ta directa:\n- Wes: Dev, Idle" +
+		"\n\nRevizuiesti munca lui: Ana, Ion" +
+		"\n\nTask-urile tale deschise:\n- T-1: Import (sub-task-uri gata: 1 din 2)\n- T-4: Export (fara sub-task-uri inca)"
+	if got := Context(c); got != ctx {
+		t.Fatalf("Context =\n%s", got)
+	}
+	if Context(TurnContext{}) != "" {
+		t.Fatal("context gol")
+	}
+	task := store.Task{Number: 3, Title: "Parser", Description: "Doar local.", Feedback: "Lipsesc testele."}
+	got := TaskTurn(c, task, []string{"T-5 [done] Lexer -> Wes"}, []string{"Utilizatorul: grabeste-te"})
+	want := ctx + "\n\nTask T-3: Parser\nDoar local." +
+		"\n\nSub-task-uri deja create pentru acest task (nu le crea din nou):\n- T-5 [done] Lexer -> Wes" +
+		"\n\nFeedback la incercarea anterioara:\nLipsesc testele." +
+		"\n\nNotificari:\n- Utilizatorul: grabeste-te"
+	if got != want {
+		t.Fatalf("TaskTurn =\n%s\nvreau\n%s", got, want)
+	}
+	if got := TaskTurn(TurnContext{}, store.Task{Number: 1, Title: "A"}, nil, nil); got != "Task T-1: A" {
+		t.Fatalf("simplu: %q", got)
+	}
+	if got := NotifyTurn(TurnContext{}, []string{"salut"}); got != "Notificari:\n- salut" {
+		t.Fatalf("NotifyTurn gol: %q", got)
+	}
+	if got := NotifyTurn(c, []string{"x"}); got != ctx+"\n\nNotificari:\n- x" {
+		t.Fatalf("NotifyTurn: %q", got)
 	}
 }
 
 func TestHashStable(t *testing.T) {
 	if Hash("a") != Hash("a") || Hash("a") == Hash("b") || len(Hash("a")) != 64 {
 		t.Fatal("Hash nu e sha256 hex stabil")
-	}
-}
-
-var team = []Member{
-	{Name: "Atlas", Role: "Tech Lead", Position: "lead", Status: "Working"},
-	{Name: "Rook", Role: "Backend Dev", Position: "worker", Status: "Idle"},
-	{Name: "Vera", Position: "worker"},
-}
-
-func TestTeam(t *testing.T) {
-	want := "Echipa:\n- Atlas: lead, Tech Lead, Working\n- Rook: worker, Backend Dev, Idle\n- Vera: worker"
-	if got := Team(team); got != want {
-		t.Fatalf("Team =\n%s\nvreau\n%s", got, want)
-	}
-}
-
-func TestWorkerTurn(t *testing.T) {
-	task := store.Task{Number: 3, Title: "Parser $ref", Description: "Doar referinte locale.", Feedback: "Lipsesc testele."}
-	got := WorkerTurn(team, task, "Atlas", []string{"Grabeste-te"})
-	want := Team(team) +
-		"\n\nTask T-3: Parser $ref\nDoar referinte locale." +
-		"\n\nFeedback de la Atlas la incercarea anterioara:\nLipsesc testele." +
-		"\n\nMesaje noi de la utilizator:\n- Grabeste-te"
-	if got != want {
-		t.Fatalf("WorkerTurn =\n%s\nvreau\n%s", got, want)
-	}
-	plain := WorkerTurn(team, store.Task{Number: 1, Title: "A"}, "Atlas", nil)
-	if plain != Team(team)+"\n\nTask T-1: A" {
-		t.Fatalf("fara extra: %q", plain)
-	}
-}
-
-func TestDirectAndLeadTurn(t *testing.T) {
-	if got := DirectTurn([]string{"salut"}); got != "Mesaje de la utilizator (nu ai un task activ, raspunde direct):\n- salut" {
-		t.Fatalf("DirectTurn = %q", got)
-	}
-	got := LeadTurn(team, []string{"Utilizatorul: fa X", "Rook a terminat T-1"})
-	if got != Team(team)+"\n\nNotificari:\n- Utilizatorul: fa X\n- Rook a terminat T-1" {
-		t.Fatalf("LeadTurn = %q", got)
-	}
-	// mesajele turei nu au voie sa inceapa cu "-": claude le-ar lua drept flag
-	for _, s := range []string{got, DirectTurn([]string{"-x"}), WorkerTurn(team, store.Task{Title: "-x"}, "A", nil)} {
-		if strings.HasPrefix(s, "-") {
-			t.Fatalf("mesaj care incepe cu '-': %q", s)
-		}
 	}
 }
 

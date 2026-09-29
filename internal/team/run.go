@@ -16,7 +16,7 @@ import (
 
 // startRun porneste un run pentru agent. taskID = 0 inseamna run fara task
 // (lead sau mesaj direct). Se apeleaza cu t.work blocat.
-func (t *Team) startRun(p store.Project, a, lead store.Agent, taskID int64, turn string) error {
+func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, taskID int64, turn string) error {
 	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
 		return fmt.Errorf("folderul de lucru %s nu exista", p.Workdir)
 	}
@@ -41,7 +41,7 @@ func (t *Team) startRun(p store.Project, a, lead store.Agent, taskID int64, turn
 		}
 	}
 
-	system := prompt.System(p, a, lead.Name)
+	system := prompt.System(p, a, prompt.LinksFor(a, agents))
 	// Claude tine sesiunile pe cwd, deci un alt folder de lucru inseamna alta sesiune.
 	hash := prompt.Hash(p.Workdir + "\n" + system)
 	// Claude retine system prompt-ul de la inceputul sesiunii. Daca s-a schimbat

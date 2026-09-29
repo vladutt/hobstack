@@ -29,7 +29,7 @@ func TestLeadWakesOnUserMessage(t *testing.T) {
 		t.Fatalf("run-uri pornite: %d", f.fs.count())
 	}
 	spec := f.fs.last(t, f.lead)
-	if !strings.Contains(turn(spec), "Utilizatorul: Fa importul") || !strings.HasPrefix(turn(spec), "Echipa:") {
+	if !strings.Contains(turn(spec), "Utilizatorul: Fa importul") || !strings.HasPrefix(turn(spec), "Echipa ta directa:") {
 		t.Fatalf("mesajul turei: %q", turn(spec))
 	}
 	if spec.Dir != f.p.Workdir || argValue(spec.Args, "--model") != "sonnet" || hasFlag(spec.Args, "--resume") {
@@ -70,7 +70,7 @@ func TestRunArguments(t *testing.T) {
 	if !strings.Contains(argValue(args, "--mcp-config"), `"url":"http://127.0.0.1:7777/mcp/`) {
 		t.Errorf("--mcp-config = %s", argValue(args, "--mcp-config"))
 	}
-	if !strings.Contains(argValue(args, "--append-system-prompt"), "Esti Rook, Backend Dev, worker in proiectul ApiUnit") {
+	if !strings.Contains(argValue(args, "--append-system-prompt"), "Esti Rook, Backend Dev, in proiectul ApiUnit. Raportezi lui Lead.") {
 		t.Error("system prompt gresit")
 	}
 }
@@ -133,7 +133,7 @@ func TestFullFlow(t *testing.T) {
 
 	mustReconcile(t, f)
 	rook3 := f.fs.last(t, f.rook)
-	if !strings.Contains(turn(rook3), "Task T-1: A") || !strings.Contains(turn(rook3), "Feedback de la Lead la incercarea anterioara:\nLipsesc testele") {
+	if !strings.Contains(turn(rook3), "Task T-1: A") || !strings.Contains(turn(rook3), "Feedback la incercarea anterioara:\nLipsesc testele") {
 		t.Fatalf("rook3: %q", turn(rook3))
 	}
 	lead3 := f.fs.last(t, f.lead)
@@ -292,7 +292,7 @@ func TestDirectMessageToWorker(t *testing.T) {
 	f := setup(t)
 	f.tm.UserMessage(f.rook.ID, "ce faci?", nil)
 	mustReconcile(t, f)
-	if got := turn(f.fs.last(t, f.rook)); !strings.Contains(got, "Mesaje de la utilizator") || !strings.Contains(got, "ce faci?") {
+	if got := turn(f.fs.last(t, f.rook)); !strings.Contains(got, "Notificari:\n- Utilizatorul: ce faci?") {
 		t.Fatalf("worker: %q", got)
 	}
 	if got := turn(f.fs.last(t, f.lead)); !strings.Contains(got, "Utilizatorul -> Rook: ce faci?") {

@@ -254,7 +254,7 @@ func TestPromptPreview(t *testing.T) {
 	code, raw := e.do(t, "POST", "/api/prompt-preview", map[string]any{
 		"projectId": p.ID, "name": "Nova", "role": "Frontend Developer", "position": "worker", "background": "Vue 3",
 	})
-	if code != 200 || !strings.Contains(string(raw), "Esti Nova, Frontend Developer, worker in proiectul ApiUnit. Raportezi lui Lead (lead).") {
+	if code != 200 || !strings.Contains(string(raw), "Esti Nova, Frontend Developer, in proiectul ApiUnit. Raportezi lui Lead.") {
 		t.Fatalf("%d %s", code, raw)
 	}
 }

@@ -100,8 +100,8 @@ func (t *Team) Reconcile(projectID int64) error {
 		if err := t.st.SaveTask(task); err != nil {
 			return err
 		}
-		turn := prompt.WorkerTurn(t.members(agents, tasks), *task, lead.Name, t.texts(p.ID, msgs, false))
-		if err := t.startRun(p, w, lead, task.ID, turn); err != nil {
+		turn := prompt.TaskTurn(t.turnContext(w, agents, tasks, task.ID), *task, subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs))
+		if err := t.startRun(p, w, agents, task.ID, turn); err != nil {
 			task.Status = store.StatusQueued
 			if err := t.st.SaveTask(task); err != nil {
 				return err
@@ -130,7 +130,7 @@ func (t *Team) Reconcile(projectID int64) error {
 		if len(msgs) == 0 {
 			continue
 		}
-		if err := t.startRun(p, w, lead, 0, prompt.DirectTurn(t.texts(p.ID, msgs, false))); err != nil {
+		if err := t.startRun(p, w, agents, 0, prompt.NotifyTurn(t.turnContext(w, agents, tasks, 0), t.texts(p.ID, msgs))); err != nil {
 			return t.startFailed(p, lead, w, err)
 		}
 		if err := t.delivered(p.ID, msgs); err != nil {
@@ -147,17 +147,55 @@ func (t *Team) Reconcile(projectID int64) error {
 	if err != nil || len(notes) == 0 {
 		return err
 	}
-	if err := t.startRun(p, lead, lead, 0, prompt.LeadTurn(t.members(agents, tasks), t.texts(p.ID, notes, true))); err != nil {
+	if err := t.startRun(p, lead, agents, 0, prompt.NotifyTurn(t.turnContext(lead, agents, tasks, 0), t.texts(p.ID, notes))); err != nil {
 		return t.startFailed(p, lead, lead, err)
 	}
 	return t.delivered(p.ID, notes)
 }
 
-// members construieste lista echipei cu statusul curent al fiecaruia.
-func (t *Team) members(agents []store.Agent, tasks []store.Task) []prompt.Member {
-	out := make([]prompt.Member, 0, len(agents))
-	for _, a := range agents {
-		out = append(out, prompt.Member{Name: a.Name, Role: a.Role, Position: a.Position, Status: t.statusOf(a, tasks, false)})
+// turnContext aduna ce depinde de locul agentului in echipa: echipa lui
+// directa, cine ii verifica munca si task-urile deschise (doar pentru lideri).
+func (t *Team) turnContext(a store.Agent, agents []store.Agent, tasks []store.Task, currentTaskID int64) prompt.TurnContext {
+	var c prompt.TurnContext
+	for _, child := range store.Children(a.ID, agents) {
+		c.Direct = append(c.Direct, prompt.Member{
+			Name: child.Name, Role: child.Role, Responsibilities: child.Responsibilities,
+			Status: t.statusOf(child, tasks, false),
+		})
+	}
+	for _, o := range agents {
+		if o.ReviewerID != nil && *o.ReviewerID == a.ID {
+			c.Reviewees = append(c.Reviewees, o.Name)
+		}
+	}
+	if len(c.Direct) == 0 {
+		return c
+	}
+	for _, task := range tasks {
+		if task.AssigneeID != a.ID || task.Status != store.StatusInProgress || task.ID == currentTaskID {
+			continue
+		}
+		open := prompt.OpenTask{Ref: task.Ref(), Title: task.Title}
+		for _, sub := range tasks {
+			if sub.ParentTaskID != nil && *sub.ParentTaskID == task.ID {
+				open.Total++
+				if sub.Status == store.StatusDone {
+					open.Done++
+				}
+			}
+		}
+		c.OpenTasks = append(c.OpenTasks, open)
+	}
+	return c
+}
+
+// subtaskLines descrie sub-task-urile unui task, cate un rand: "T-5 [done] Lexer -> Wes".
+func subtaskLines(taskID int64, tasks []store.Task, byID map[int64]store.Agent) []string {
+	var out []string
+	for _, sub := range tasks {
+		if sub.ParentTaskID != nil && *sub.ParentTaskID == taskID {
+			out = append(out, fmt.Sprintf("%s [%s] %s -> %s", sub.Ref(), sub.Status, sub.Title, byID[sub.AssigneeID].Name))
+		}
 	}
 	return out
 }
@@ -167,14 +205,14 @@ func (t *Team) attachedLine(dir string, a store.Attachment) string {
 	return fmt.Sprintf("\nAtasat: %s (%s)", filepath.Join(dir, a.Stored), a.Name)
 }
 
-// texts extrage textele mesajelor; pentru lead marcam ce a scris utilizatorul.
+// texts extrage textele mesajelor; ce a scris utilizatorul e marcat mereu.
 // Fiecare atasament apare ca linie separata cu calea fisierului.
-func (t *Team) texts(projectID int64, msgs []store.Message, labelUser bool) []string {
+func (t *Team) texts(projectID int64, msgs []store.Message) []string {
 	dir := t.filesDir(projectID)
 	out := make([]string, 0, len(msgs))
 	for _, m := range msgs {
 		text := m.Text
-		if labelUser && m.Author == store.AuthorUser {
+		if m.Author == store.AuthorUser {
 			text = "Utilizatorul: " + text
 		}
 		for _, a := range m.Attachments {
