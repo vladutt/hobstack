@@ -61,7 +61,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged }) {
     // redesenarea vine din ResizeObserver
   }
   function fullEscape(e) {
-    if (e.key !== "Escape") return;
+    if (e.key !== "Escape" || wrap.contains(e.target)) return; // in wrap se ocupa handler-ul lui
     const t = document.activeElement;
     if (t && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type !== "button"))) return;
     if (menu) closeMenu(); else setFull(false);
