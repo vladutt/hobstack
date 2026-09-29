@@ -1,43 +1,52 @@
-# agentdash
+# Foreman
 
-Control local pentru agentii Claude Code. Un singur binar, UI in browser pe 127.0.0.1.
+Echipe de agenti Claude Code, local. Un singur binar Go, UI in browser pe 127.0.0.1.
 
-## Rulare in dev
+Fiecare proiect are o echipa: un **lead** care primeste obiectivul, il sparge in task-uri
+si le da **workerilor**, apoi verifica ce vine inapoi. Tu vorbesti cu lead-ul sau direct
+cu orice agent. Totul se vede live pe un board si ramane salvat in SQLite.
 
-    go run ./cmd/agentdash start
+## Rulare
 
-Deschide automat http://127.0.0.1:7777. Optiuni: `--port 8080`, `--no-open`.
+    go run ./cmd/foreman start
+
+Deschide http://127.0.0.1:7777. Optiuni: `--port 8080`, `--no-open`.
+Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
 
 ## Build
 
-    go build -o agentdash ./cmd/agentdash
-    GOOS=darwin GOARCH=arm64 go build -o agentdash-mac ./cmd/agentdash
+    go build -o foreman ./cmd/foreman
+    GOOS=darwin GOARCH=arm64 go build -o foreman-mac ./cmd/foreman
 
-## Agenti
+## Cum functioneaza
 
-Un agent = un folder in `~/.agentdash/agents/<nume>/`:
+- Agentii ruleaza ca `claude -p` headless, cu folderul proiectului ca working directory.
+- Aplicatia expune un server MCP pe `/mcp/<token>`. Lead-ul are tool-urile `create_task`,
+  `list_tasks`, `accept_task` si `send_back`, iar workerii au `report_done`.
+- Cand un worker termina, lead-ul e trezit (`--resume`) cu rezultatul.
+- Permisiunile vin doar din aplicatie (`--settings` inline, `--setting-sources user`). `CLAUDE.md`
+  din repo-ul proiectului se citeste in continuare. `git push`, `rm -rf`, `sudo` si instalarile
+  de pachete sunt mereu blocate.
+- La pornire toate proiectele sunt pe pauza: nimic nu ruleaza (si nu costa) fara sa apesi „Porneste echipa”.
 
-    CLAUDE.md               rolul si regulile agentului
-    .claude/settings.json   permisiuni (ce tool-uri are voie sa foloseasca)
-    .mcp.json               MCP servers (optional)
+## Date
 
-Claude ruleaza cu folderul agentului ca working directory. La prima pornire se creeaza un agent `demo` read-only.
-
-Important: in modul `-p` nu exista prompt interactiv de permisiuni. Actiunile care nu sunt in `permissions.allow` sunt refuzate (cele read-only, ca Read sau `ls`, sunt permise oricum), deci configureaza settings.json pentru fiecare agent.
-
-Folderele agentilor nu trebuie marcate ca "trusted" in Claude Code: runner-ul trimite explicit `--settings .claude/settings.json` si `--mcp-config .mcp.json` (daca exista), plus `--setting-sources user`, ca sa nu mai citeasca settings-ul de proiect si sa nu mai apara avertismentul de trust.
+    ~/.foreman/foreman.db           proiecte, agenti, task-uri, run-uri, mesaje
+    ~/.foreman/logs/runs/<id>.jsonl logul brut al fiecarui run
 
 ## Structura
 
-    cmd/agentdash/        CLI: start, oprire curata la Ctrl+C
-    internal/config/      caile de pe disc (~/.agentdash)
-    internal/agent/       citeste agentii din foldere
-    internal/runner/      porneste claude, parseaza stream-json, log + broadcast
-    internal/web/         API + SSE, UI embedded in binar
+    cmd/foreman/        CLI: start, oprire curata la Ctrl+C
+    internal/config/    AppName si caile de pe disc
+    internal/store/     SQLite (modernc.org/sqlite, fara CGO)
+    internal/prompt/    system prompt, mesajul turei, permisiuni, config MCP
+    internal/runner/    porneste claude, parseaza stream-json, log + broadcast
+    internal/mcp/       server MCP minimal (JSON-RPC peste HTTP)
+    internal/team/      scheduler-ul: tool-urile echipei, pornire/final de run-uri
+    internal/events/    evenimente live per proiect (SSE)
+    internal/web/       API, SSE, UI embedded
 
-Loguri per run: `~/.agentdash/logs/runs/<id>.jsonl`.
+## Redenumire
 
-## Stare MVP
-
-Gata: start, lista agenti, run cu output live, chat continuu (--resume), stop (omoara si procesele copil).
-Urmeaza: SQLite pentru istoric si sesiuni persistente dupa restart, lista run-urilor, cost per run.
+Numele e in `internal/config/config.go` (`AppName`). Il schimbi acolo, redenumesti
+`cmd/<nume>`, rulezi `go mod edit -module <nume>` si faci replace pe importuri.

@@ -4,3 +4,5 @@
 /foreman-*
 .DS_Store
 .idea/
+foreman.exe
+*.exe
