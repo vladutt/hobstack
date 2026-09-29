@@ -16,7 +16,11 @@ import (
 	"time"
 
 	"foreman/internal/config"
+	"foreman/internal/events"
+	"foreman/internal/mcp"
 	"foreman/internal/runner"
+	"foreman/internal/store"
+	"foreman/internal/team"
 	"foreman/internal/web"
 )
 
@@ -31,7 +35,6 @@ func main() {
 		fmt.Printf(usage, config.AppName)
 		os.Exit(1)
 	}
-
 	var err error
 	switch os.Args[1] {
 	case "start":
@@ -59,34 +62,46 @@ func start(args []string) error {
 	if err := paths.Ensure(); err != nil {
 		return fmt.Errorf("nu pot crea %s: %w", paths.Root, err)
 	}
-
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {
 		return errors.New("nu gasesc 'claude' in PATH. Instaleaza Claude Code si incearca din nou")
 	}
+	st, err := store.Open(paths.DB)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
 
 	// contextul se anuleaza la Ctrl+C / SIGTERM si ajunge in toate request-urile,
 	// deci conexiunile SSE se inchid singure la oprire
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	mgr := runner.NewManager(claudeBin, paths.Logs)
+	// deschidem portul primul, ca sa esuam clar daca e ocupat
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           web.New(mgr).Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		BaseContext:       func(net.Listener) context.Context { return ctx },
-	}
-
-	// deschidem portul inainte de browser, ca sa esuam clar daca e ocupat
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("portul %d e ocupat, incearca --port: %w", *port, err)
 	}
-
 	url := "http://" + addr
+
+	hub := events.NewHub()
+	mgr := runner.NewManager(claudeBin, paths.Logs)
+	tm := team.New(st, mgr, hub, url)
+	// dupa un restart: run-urile vechi devin "interrupted" si totul sta pe pauza
+	if err := tm.Recover(); err != nil {
+		return fmt.Errorf("recuperarea starii: %w", err)
+	}
+	go tm.Run(ctx)
+
+	srv := &http.Server{
+		Handler:           web.New(st, tm, mgr, hub, mcp.NewServer(tm)).Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
+
 	log.Printf("%s ruleaza pe %s", config.AppName, url)
+	log.Printf("date: %s", paths.Root)
 	log.Printf("claude: %s", claudeBin)
 	if !*noOpen {
 		openBrowser(url)

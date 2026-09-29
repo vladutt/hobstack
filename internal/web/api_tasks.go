@@ -1,0 +1,25 @@
+package web
+
+import "net/http"
+
+// Butoanele de pe task-urile blocate: utilizatorul decide.
+func (s *Server) acceptTask(w http.ResponseWriter, r *http.Request) {
+	s.taskAction(w, r, s.team.AcceptBlocked)
+}
+
+func (s *Server) unblockTask(w http.ResponseWriter, r *http.Request) {
+	s.taskAction(w, r, s.team.Unblock)
+}
+
+func (s *Server) taskAction(w http.ResponseWriter, r *http.Request, action func(int64) error) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if err := action(id); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

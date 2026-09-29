@@ -1,84 +1,121 @@
+// Package web serveste UI-ul, API-ul REST, stream-urile SSE si serverul MCP.
 package web
 
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"log"
 	"net/http"
-	"time"
+	"strconv"
+	"unicode/utf8"
 
+	"foreman/internal/config"
+	"foreman/internal/events"
 	"foreman/internal/runner"
+	"foreman/internal/store"
+	"foreman/internal/team"
 )
 
 //go:embed static
 var staticFS embed.FS
 
 type Server struct {
+	st   *store.Store
+	team *team.Team
 	runs *runner.Manager
+	hub  *events.Hub
+	mcp  http.Handler
 }
 
-func New(runs *runner.Manager) *Server {
-	return &Server{runs: runs}
+func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler) *Server {
+	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler}
 }
 
 func (s *Server) Handler() http.Handler {
 	static, _ := fs.Sub(staticFS, "static")
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(static))
+	mux.HandleFunc("GET /api/info", s.info)
+
+	mux.HandleFunc("GET /api/projects", s.listProjects)
+	mux.HandleFunc("POST /api/projects", s.createProject)
+	mux.HandleFunc("GET /api/projects/{id}", s.getProject)
+	mux.HandleFunc("PUT /api/projects/{id}", s.updateProject)
+	mux.HandleFunc("DELETE /api/projects/{id}", s.deleteProject)
+	mux.HandleFunc("POST /api/projects/{id}/stop", s.stopProject)
+	mux.HandleFunc("POST /api/projects/{id}/resume", s.resumeProject)
+	mux.HandleFunc("GET /api/projects/{id}/events", s.projectEvents)
+
+	mux.HandleFunc("POST /api/projects/{id}/agents", s.createAgent)
+	mux.HandleFunc("PUT /api/agents/{id}", s.updateAgent)
+	mux.HandleFunc("DELETE /api/agents/{id}", s.deleteAgent)
+	mux.HandleFunc("GET /api/agents/{id}/messages", s.listMessages)
+	mux.HandleFunc("POST /api/agents/{id}/messages", s.postMessage)
+	mux.HandleFunc("POST /api/prompt-preview", s.promptPreview)
+
+	mux.HandleFunc("POST /api/tasks/{id}/accept", s.acceptTask)
+	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)
+
 	mux.HandleFunc("GET /api/runs/{id}/events", s.streamRun)
+
+	// MCP: POST pentru JSON-RPC; GET doar ca sa raspunda 405 (Claude incearca si GET).
+	// Rutele sunt separate pe metoda ca sa nu intre in conflict cu "GET /".
+	mux.Handle("POST /mcp/{token}", s.mcp)
+	mux.Handle("GET /mcp/{token}", s.mcp)
 	return mux
 }
 
-// streamRun trimite evenimentele unui run prin Server-Sent Events:
-// mai intai tot istoricul, apoi live pana se termina run-ul.
-func (s *Server) streamRun(w http.ResponseWriter, r *http.Request) {
-	run, err := s.runs.Get(r.PathValue("id"))
-	if err != nil {
-		writeErr(w, http.StatusNotFound, err.Error())
-		return
-	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		writeErr(w, http.StatusInternalServerError, "streaming nesuportat")
-		return
-	}
-	sseHeaders(w)
+func (s *Server) info(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"name": config.AppName})
+}
 
-	replay, ch, done := run.Subscribe()
-	for _, line := range replay {
-		fmt.Fprintf(w, "data: %s\n\n", line)
-	}
-	flusher.Flush()
-	if done {
-		return
-	}
-	defer run.Unsubscribe(ch)
+// badRequest e o eroare de validare; mesajul ajunge ca atare in UI (400).
+type badRequest string
 
-	// ping periodic, ca browserul sa nu inchida conexiunea
-	ping := time.NewTicker(15 * time.Second)
-	defer ping.Stop()
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-ping.C:
-			fmt.Fprint(w, ": ping\n\n")
-			flusher.Flush()
-		case line, ok := <-ch:
-			if !ok {
-				return
-			}
-			fmt.Fprintf(w, "data: %s\n\n", line)
-			flusher.Flush()
-		}
+func (e badRequest) Error() string { return string(e) }
+
+func maxLen(label, value string, max int) error {
+	if utf8.RuneCountInString(value) > max {
+		return badRequest(fmt.Sprintf("%s: maxim %d de caractere", label, max))
+	}
+	return nil
+}
+
+// fail traduce o eroare intr-un raspuns HTTP.
+func fail(w http.ResponseWriter, err error) {
+	var br badRequest
+	switch {
+	case errors.As(err, &br):
+		writeErr(w, http.StatusBadRequest, br.Error())
+	case errors.Is(err, store.ErrNotFound):
+		writeErr(w, http.StatusNotFound, "nu exista")
+	case errors.Is(err, team.ErrNotBlocked):
+		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, store.ErrConflict):
+		writeErr(w, http.StatusConflict, "conflict cu starea curenta")
+	default:
+		log.Printf("eroare API: %v", err)
+		writeErr(w, http.StatusInternalServerError, "eroare interna, vezi logul serverului")
 	}
 }
 
-func sseHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
+func pathID(r *http.Request) (int64, error) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		return 0, badRequest("id invalid")
+	}
+	return id, nil
+}
+
+func decode(r *http.Request, v any) error {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(v); err != nil {
+		return badRequest("JSON invalid")
+	}
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
