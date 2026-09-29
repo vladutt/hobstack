@@ -2,6 +2,7 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -25,16 +26,26 @@ import (
 //go:embed static
 var staticFS embed.FS
 
-type Server struct {
-	st   *store.Store
-	team *team.Team
-	runs *runner.Manager
-	hub  *events.Hub
-	mcp  http.Handler
+// Dirs sunt folderele gestionate de aplicatie.
+type Dirs struct {
+	Projects   string // fisierele proiectelor: <Projects>/<id>/files
+	Workspaces string // folderele de lucru create implicit: <Workspaces>/<slug>
 }
 
-func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler) *Server {
-	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler}
+type Server struct {
+	st      *store.Store
+	team    *team.Team
+	runs    *runner.Manager
+	hub     *events.Hub
+	mcp     http.Handler
+	dirs    Dirs
+	pick    func(context.Context) (string, error) // dialogul nativ de ales folder
+	canPick bool
+}
+
+func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
+	dirs Dirs, pick func(context.Context) (string, error), canPick bool) *Server {
+	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -58,6 +69,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agents/{id}/messages", s.listMessages)
 	mux.HandleFunc("POST /api/agents/{id}/messages", s.postMessage)
 	mux.HandleFunc("POST /api/prompt-preview", s.promptPreview)
+
+	mux.HandleFunc("GET /api/projects/{id}/files", s.listFiles)
+	mux.HandleFunc("POST /api/projects/{id}/files", s.uploadFiles)
+	mux.HandleFunc("GET /api/files/{id}", s.serveFile)
+	mux.HandleFunc("DELETE /api/files/{id}", s.deleteFile)
+	mux.HandleFunc("POST /api/pick-folder", s.pickFolder)
 
 	mux.HandleFunc("POST /api/tasks/{id}/accept", s.acceptTask)
 	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)
@@ -86,18 +103,23 @@ func guard(next http.Handler) http.Handler {
 			return
 		}
 		// Content-Type: cererile care schimba starea trebuie sa fie JSON, chiar
-		// si fara body (stop/resume/accept). /mcp e exceptat.
-		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet &&
-			!strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-			writeErr(w, http.StatusUnsupportedMediaType, "Content-Type trebuie sa fie application/json")
-			return
+		// si fara body (stop/resume/accept), sau multipart cu header custom
+		// (un formular din alt site nu poate trimite X-Foreman). /mcp e exceptat.
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet {
+			ct := r.Header.Get("Content-Type")
+			ok := strings.HasPrefix(ct, "application/json") ||
+				(strings.HasPrefix(ct, "multipart/form-data") && r.Header.Get("X-Foreman") == "1")
+			if !ok {
+				writeErr(w, http.StatusUnsupportedMediaType, "Content-Type trebuie sa fie application/json (sau multipart cu X-Foreman: 1)")
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"name": config.AppName})
+	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick})
 }
 
 // badRequest e o eroare de validare; mesajul ajunge ca atare in UI (400).

@@ -18,6 +18,7 @@ import (
 	"foreman/internal/config"
 	"foreman/internal/events"
 	"foreman/internal/mcp"
+	"foreman/internal/picker"
 	"foreman/internal/runner"
 	"foreman/internal/store"
 	"foreman/internal/team"
@@ -88,6 +89,7 @@ func start(args []string) error {
 	hub := events.NewHub()
 	mgr := runner.NewManager(claudeBin, paths.Logs)
 	tm := team.New(st, mgr, hub, url)
+	tm.SetFilesRoot(paths.Projects)
 	// dupa un restart: run-urile vechi devin "interrupted" si totul sta pe pauza
 	if err := tm.Recover(); err != nil {
 		return fmt.Errorf("recuperarea starii: %w", err)
@@ -95,7 +97,8 @@ func start(args []string) error {
 	go tm.Run(ctx)
 
 	srv := &http.Server{
-		Handler:           web.New(st, tm, mgr, hub, mcp.NewServer(tm)).Handler(),
+		Handler: web.New(st, tm, mgr, hub, mcp.NewServer(tm),
+			web.Dirs{Projects: paths.Projects, Workspaces: paths.Workspaces}, picker.Pick, picker.Available()).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}

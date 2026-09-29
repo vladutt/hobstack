@@ -171,24 +171,57 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	var in struct {
-		Text string `json:"text"`
-	}
-	if err := decode(r, &in); err != nil {
-		fail(w, err)
-		return
-	}
-	text := strings.TrimSpace(in.Text)
-	if text == "" {
-		fail(w, badRequest("mesajul e gol"))
-		return
+	var text string
+	var saved []store.Attachment
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		agent, err := s.st.GetAgent(id)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		files, err := s.readUploads(w, r)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		text = strings.TrimSpace(r.FormValue("text"))
+		if text == "" && len(files) == 0 {
+			fail(w, badRequest("mesajul e gol"))
+			return
+		}
+		if saved, err = s.saveUploads(agent.ProjectID, store.KindMessageFile, files); err != nil {
+			fail(w, err)
+			return
+		}
+		if text == "" {
+			text = "(vezi atasamentele)"
+		}
+	} else {
+		var in struct {
+			Text string `json:"text"`
+		}
+		if err := decode(r, &in); err != nil {
+			fail(w, err)
+			return
+		}
+		text = strings.TrimSpace(in.Text)
+		if text == "" {
+			fail(w, badRequest("mesajul e gol"))
+			return
+		}
 	}
 	if err := maxLen("mesajul", text, 10000); err != nil {
+		s.discardUploads(saved)
 		fail(w, err)
 		return
 	}
-	m, err := s.team.UserMessage(id, text, nil)
+	ids := []int64{}
+	for _, a := range saved {
+		ids = append(ids, a.ID)
+	}
+	m, err := s.team.UserMessage(id, text, ids)
 	if err != nil {
+		s.discardUploads(saved)
 		fail(w, err)
 		return
 	}

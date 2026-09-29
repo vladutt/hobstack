@@ -1,9 +1,11 @@
 package web
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"foreman/internal/store"
@@ -20,7 +22,7 @@ type projectInput struct {
 
 // toProject valideaza input-ul. Limitele de lungime exista pentru ca aceste
 // texte ajung in argumentele lui claude, iar sistemul le limiteaza lungimea.
-func (in projectInput) toProject() (store.Project, error) {
+func (in projectInput) toProject(workspaces string) (store.Project, error) {
 	p := store.Project{
 		Name:        strings.TrimSpace(in.Name),
 		Goal:        strings.TrimSpace(in.Goal),
@@ -40,17 +42,11 @@ func (in projectInput) toProject() (store.Project, error) {
 			return p, err
 		}
 	}
-	dir, err := expandHome(strings.TrimSpace(in.Workdir))
+	dir, err := resolveWorkdir(in.Workdir, p.Name, workspaces)
 	if err != nil {
 		return p, err
 	}
-	if !filepath.IsAbs(dir) {
-		return p, badRequest("folderul de lucru trebuie sa fie o cale absoluta, ex. /Users/tu/proiect sau ~/proiect")
-	}
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return p, badRequest("folderul de lucru nu exista: " + dir)
-	}
-	p.Workdir = filepath.Clean(dir)
+	p.Workdir = dir
 	// 0 (sau camp gol in UI) inseamna fara limita, la ambele.
 	if p.MaxParallel < 0 || p.MaxParallel > 100 {
 		return p, badRequest("workeri in paralel: gol pentru fara limita, sau intre 1 si 100")
@@ -180,7 +176,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	p, err := in.toProject()
+	p, err := in.toProject(s.dirs.Workspaces)
 	if err != nil {
 		fail(w, err)
 		return
@@ -208,7 +204,10 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	p, err := in.toProject()
+	if strings.TrimSpace(in.Workdir) == "" {
+		in.Workdir = existing.Workdir // gol = pastreaza folderul de acum
+	}
+	p, err := in.toProject(s.dirs.Workspaces)
 	if err != nil {
 		fail(w, err)
 		return
@@ -236,6 +235,10 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	if err := s.st.DeleteProject(id); err != nil {
 		fail(w, err)
 		return
+	}
+	// fisierele proiectului; folderul de lucru nu se atinge niciodata
+	if err := os.RemoveAll(filepath.Join(s.dirs.Projects, strconv.FormatInt(id, 10))); err != nil {
+		log.Printf("nu pot sterge fisierele proiectului %d: %v", id, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

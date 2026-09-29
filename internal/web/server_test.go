@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -26,9 +27,12 @@ func (nopStarter) Start(runner.Spec, func(runner.Outcome)) (*runner.Run, error) 
 func (nopStarter) Stop(string) error                                            { return nil }
 
 type env struct {
-	st *store.Store
-	tm *team.Team
-	ts *httptest.Server
+	st       *store.Store
+	tm       *team.Team
+	ts       *httptest.Server
+	dirs     Dirs
+	pickPath string // ce intoarce picker-ul fals
+	pickErr  error
 }
 
 func setup(t *testing.T) *env {
@@ -40,10 +44,14 @@ func setup(t *testing.T) *env {
 	t.Cleanup(func() { st.Close() })
 	hub := events.NewHub()
 	tm := team.New(st, nopStarter{}, hub, "http://127.0.0.1:0")
-	srv := New(st, tm, runner.NewManager("claude-inexistent", t.TempDir()), hub, mcp.NewServer(tm))
-	ts := httptest.NewServer(srv.Handler())
-	t.Cleanup(ts.Close)
-	return &env{st: st, tm: tm, ts: ts}
+	dirs := Dirs{Projects: t.TempDir(), Workspaces: t.TempDir()}
+	tm.SetFilesRoot(dirs.Projects)
+	e := &env{st: st, tm: tm, dirs: dirs}
+	pick := func(context.Context) (string, error) { return e.pickPath, e.pickErr }
+	srv := New(st, tm, runner.NewManager("claude-inexistent", t.TempDir()), hub, mcp.NewServer(tm), dirs, pick, true)
+	e.ts = httptest.NewServer(srv.Handler())
+	t.Cleanup(e.ts.Close)
+	return e
 }
 
 func (e *env) do(t *testing.T, method, path string, body any) (int, []byte) {
@@ -131,7 +139,7 @@ func TestCreateProjectValidation(t *testing.T) {
 	cases := []map[string]any{
 		{"name": "", "workdir": t.TempDir()},
 		{"name": "X", "workdir": "relativ/folder"},
-		{"name": "X", "workdir": filepath.Join(t.TempDir(), "nu-exista")},
+		{"name": "X", "workdir": existingFile(t)},
 		{"name": "X", "workdir": t.TempDir(), "maxParallel": -1},
 		{"name": "X", "workdir": t.TempDir(), "budgetUsd": 0.01},
 		{"name": "X", "workdir": t.TempDir(), "budgetUsd": -1},
@@ -350,4 +358,14 @@ func TestProjectLimitsOptional(t *testing.T) {
 	if code != http.StatusCreated || !strings.Contains(string(raw), `"maxParallel":20`) || !strings.Contains(string(raw), `"budgetUsd":2.5`) {
 		t.Fatalf("limite setate explicit: %d %s", code, raw)
 	}
+}
+
+// existingFile intoarce o cale care exista, dar e fisier (nu folder).
+func existingFile(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "fisier.txt")
+	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
