@@ -3,6 +3,7 @@ package team
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
@@ -184,7 +185,11 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 	}
 	switch {
 	case !hasWho:
-		t.note(task.ProjectID, assignee.ID, fmt.Sprintf("Nu are cine sa verifice %s: agentul nu are sef. Leaga-l de un lider pe canvas.", task.Ref()), true)
+		text := fmt.Sprintf("Nu are cine sa verifice %s: agentul nu are sef. Leaga-l de un lider pe canvas.", task.Ref())
+		if assignee.ParentID == nil {
+			text = fmt.Sprintf("Nu are cine sa verifice %s. Utilizatorul decide din board (Accepta / Deblocheaza).", task.Ref())
+		}
+		t.note(task.ProjectID, assignee.ID, text, true)
 	case task.ReviewStage == store.StageReviewer:
 		t.note(who.ProjectID, who.ID, clip(fmt.Sprintf("%s. Verifica-l cu review_approve sau review_reject: %s", headline, task.Result)), false)
 	default:
@@ -296,8 +301,9 @@ func (t *Team) AcceptTask(c mcp.Caller, ref, note string) (string, error) {
 	}
 	t.note(c.ProjectID, c.AgentID, text, true)
 	t.emit(c.ProjectID, "task", task)
+	// task-ul e deja Done: o eroare la trezirea parintelui nu face accept-ul esuat
 	if err := t.afterDone(task); err != nil {
-		return "", err
+		log.Printf("dupa accept %s: %v", task.Ref(), err)
 	}
 	t.Kick(c.ProjectID)
 	return task.Ref() + " e Done.", nil

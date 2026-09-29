@@ -353,7 +353,7 @@ func TestReviewWithoutDeciderBlocksTask(t *testing.T) {
 	if got.ReviewStage != store.StageNone {
 		t.Fatalf("stage = %q", got.ReviewStage)
 	}
-	if !f.hasMessage(wes.ID, "Nu are cine sa verifice T-1: agentul nu are sef. Leaga-l de un lider pe canvas.") {
+	if !f.hasMessage(wes.ID, "Nu are cine sa verifice T-1. Utilizatorul decide din board (Accepta / Deblocheaza).") {
 		t.Fatal("asignatul trebuie anuntat")
 	}
 }

@@ -38,9 +38,13 @@ func (t *Team) Run(ctx context.Context) {
 	}
 }
 
-// Reconcile porneste run-urile care trebuie pornite in proiect, in ordinea:
-// workerii pentru task-urile din Queued, workerii cu mesaje directe, apoi
-// lead-ul daca are notificari. E sigur de apelat oricand si de oricate ori.
+// Reconcile porneste run-urile care trebuie pornite in proiect:
+//  1. orice agent inactiv cu un task in Queued primeste un run pe task,
+//     in ordinea numarului;
+//  2. altfel, un agent inactiv cu mesaje nelivrate primeste un run de notificari.
+//
+// max_parallel se aplica doar agentilor care au sef; radacinile vorbesc cu
+// utilizatorul si pornesc mereu. E sigur de apelat oricand si de oricate ori.
 func (t *Team) Reconcile(projectID int64) error {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -56,13 +60,9 @@ func (t *Team) Reconcile(projectID int64) error {
 		return nil
 	}
 	agents, err := t.st.ListAgents(projectID)
-	if err != nil {
+	if err != nil || len(agents) == 0 {
 		return err
 	}
-	if len(agents) == 0 || agents[0].Position != store.PositionLead {
-		return fmt.Errorf("proiectul %d nu are lead", projectID)
-	}
-	lead, workers := agents[0], agents[1:]
 	tasks, err := t.st.ListTasks(projectID)
 	if err != nil {
 		return err
@@ -72,15 +72,22 @@ func (t *Team) Reconcile(projectID int64) error {
 		byID[a.ID] = a
 	}
 	running := 0
-	for _, w := range workers {
-		if t.isActive(w.ID) {
+	for _, a := range agents {
+		if a.ParentID != nil && t.isActive(a.ID) {
 			running++
 		}
 	}
-	// full: s-a atins limita de workeri in paralel (0 = fara limita)
-	full := func() bool { return p.MaxParallel > 0 && running >= p.MaxParallel }
+	full := func(a store.Agent) bool {
+		return a.ParentID != nil && p.MaxParallel > 0 && running >= p.MaxParallel
+	}
+	started := func(a store.Agent) {
+		if a.ParentID != nil {
+			running++
+		}
+	}
+	notify := agents[0] // prima radacina: aici apar erorile de pornire
 
-	// 1. task-urile din Queued, in ordinea numarului
+	// 1. task-urile din Queued
 	hasQueued := map[int64]bool{}
 	for i := range tasks {
 		task := &tasks[i]
@@ -88,11 +95,11 @@ func (t *Team) Reconcile(projectID int64) error {
 			continue
 		}
 		hasQueued[task.AssigneeID] = true
-		if full() || t.isActive(task.AssigneeID) {
+		a, ok := byID[task.AssigneeID]
+		if !ok || t.isActive(a.ID) || full(a) {
 			continue
 		}
-		w := byID[task.AssigneeID]
-		msgs, err := t.st.Undelivered(w.ID)
+		msgs, err := t.st.Undelivered(a.ID)
 		if err != nil {
 			return err
 		}
@@ -100,57 +107,44 @@ func (t *Team) Reconcile(projectID int64) error {
 		if err := t.st.SaveTask(task); err != nil {
 			return err
 		}
-		turn := prompt.TaskTurn(t.turnContext(w, agents, tasks, task.ID), *task, subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs))
-		if err := t.startRun(p, w, agents, task.ID, turn); err != nil {
+		turn := prompt.TaskTurn(t.turnContext(a, agents, tasks, task.ID), *task,
+			subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs))
+		if err := t.startRun(p, a, agents, task.ID, turn); err != nil {
 			task.Status = store.StatusQueued
 			if err := t.st.SaveTask(task); err != nil {
 				return err
 			}
-			return t.startFailed(p, lead, w, err)
+			return t.startFailed(p, notify, a, err)
 		}
 		if err := t.delivered(p.ID, msgs); err != nil {
 			return err
 		}
 		t.emit(p.ID, "task", *task)
-		running++
+		started(a)
 	}
 
-	// 2. workeri fara task, carora utilizatorul le-a scris direct
-	for _, w := range workers {
-		if full() {
-			break
-		}
-		if t.isActive(w.ID) || hasQueued[w.ID] {
+	// 2. run-uri de notificari
+	for _, a := range agents {
+		if t.isActive(a.ID) || hasQueued[a.ID] || full(a) {
 			continue
 		}
-		msgs, err := t.st.Undelivered(w.ID)
+		notes, err := t.st.Undelivered(a.ID)
 		if err != nil {
 			return err
 		}
-		if len(msgs) == 0 {
+		if len(notes) == 0 {
 			continue
 		}
-		if err := t.startRun(p, w, agents, 0, prompt.NotifyTurn(t.turnContext(w, agents, tasks, 0), t.texts(p.ID, msgs))); err != nil {
-			return t.startFailed(p, lead, w, err)
+		turn := prompt.NotifyTurn(t.turnContext(a, agents, tasks, 0), t.texts(p.ID, notes))
+		if err := t.startRun(p, a, agents, 0, turn); err != nil {
+			return t.startFailed(p, notify, a, err)
 		}
-		if err := t.delivered(p.ID, msgs); err != nil {
+		if err := t.delivered(p.ID, notes); err != nil {
 			return err
 		}
-		running++
+		started(a)
 	}
-
-	// 3. lead-ul, daca are notificari (mesaje de la utilizator, rezultate)
-	if t.isActive(lead.ID) {
-		return nil
-	}
-	notes, err := t.st.Undelivered(lead.ID)
-	if err != nil || len(notes) == 0 {
-		return err
-	}
-	if err := t.startRun(p, lead, agents, 0, prompt.NotifyTurn(t.turnContext(lead, agents, tasks, 0), t.texts(p.ID, notes))); err != nil {
-		return t.startFailed(p, lead, lead, err)
-	}
-	return t.delivered(p.ID, notes)
+	return nil
 }
 
 // turnContext aduna ce depinde de locul agentului in echipa: echipa lui
@@ -241,11 +235,11 @@ func (t *Team) delivered(projectID int64, msgs []store.Message) error {
 
 // startFailed: un run nu a putut porni (ex. folderul de lucru a disparut).
 // Punem proiectul pe pauza ca sa nu reincercam in bucla si explicam in thread.
-func (t *Team) startFailed(p store.Project, lead, a store.Agent, cause error) error {
+func (t *Team) startFailed(p store.Project, notify, a store.Agent, cause error) error {
 	if err := t.st.SetPaused(p.ID, true); err != nil {
 		return err
 	}
-	t.note(p.ID, lead.ID, fmt.Sprintf("Nu pot porni %s: %v. Proiectul e pe pauza.", a.Name, cause), true)
+	t.note(p.ID, notify.ID, fmt.Sprintf("Nu pot porni %s: %v. Proiectul e pe pauza.", a.Name, cause), true)
 	t.emit(p.ID, "project", map[string]int64{"id": p.ID})
 	return nil
 }
@@ -283,7 +277,7 @@ func (t *Team) Resume(projectID int64) error {
 	t.work.Lock()
 	err := t.st.SetPaused(projectID, false)
 	if err == nil {
-		err = t.wakeLeadForDecisions(projectID)
+		err = t.wakeForDecisions(projectID)
 	}
 	t.work.Unlock()
 	if err != nil {
@@ -294,36 +288,66 @@ func (t *Team) Resume(projectID int64) error {
 	return nil
 }
 
-// wakeLeadForDecisions: notificarile se marcheaza livrate cand porneste run-ul
-// lead-ului. Daca run-ul a fost oprit (Stop/restart), dupa Resume nu mai e nimic
-// nelivrat, iar task-urile din review/blocked ar ramane uitate. Aici adaugam o
-// nota noua. Se apeleaza cu t.work blocat.
-func (t *Team) wakeLeadForDecisions(projectID int64) error {
-	lead, err := t.st.Lead(projectID)
+// wakeForDecisions: la Resume, notificarile livrate unui run oprit s-au
+// pierdut. Fiecare agent care are ceva de decis primeste o nota noua:
+// reviewer-ul pentru task-urile la review, decidentul pentru cele la lider
+// sau blocate, sub-liderul pentru un task ale carui sub-task-uri sunt gata.
+func (t *Team) wakeForDecisions(projectID int64) error {
+	agents, err := t.st.ListAgents(projectID)
 	if err != nil {
-		return err
-	}
-	if t.isActive(lead.ID) {
-		return nil
-	}
-	pending, err := t.st.Undelivered(lead.ID)
-	if err != nil || len(pending) > 0 {
 		return err
 	}
 	tasks, err := t.st.ListTasks(projectID)
 	if err != nil {
 		return err
 	}
-	var refs []string
+	waiting := map[int64][]string{}
 	for _, task := range tasks {
-		if task.Status == store.StatusReview || task.Status == store.StatusBlocked {
-			refs = append(refs, task.Ref())
+		var who int64
+		switch {
+		case task.Status == store.StatusReview && task.ReviewStage == store.StageReviewer:
+			if w, ok := store.FindAgent(agents, task.AssigneeID); ok && w.ReviewerID != nil {
+				who = *w.ReviewerID
+			}
+		case task.Status == store.StatusReview || task.Status == store.StatusBlocked:
+			if d, ok := decider(task, agents); ok {
+				who = d.ID
+			}
+		case task.Status == store.StatusInProgress && allSubtasksDone(task.ID, tasks):
+			who = task.AssigneeID
+		}
+		if who != 0 {
+			waiting[who] = append(waiting[who], task.Ref())
 		}
 	}
-	if len(refs) > 0 {
-		t.note(projectID, lead.ID, "Echipa a fost repornita. Asteapta decizia ta: "+strings.Join(refs, ", ")+".", false)
+	for _, a := range agents {
+		refs := waiting[a.ID]
+		if len(refs) == 0 || t.isActive(a.ID) {
+			continue
+		}
+		pending, err := t.st.Undelivered(a.ID)
+		if err != nil {
+			return err
+		}
+		if len(pending) == 0 {
+			t.note(projectID, a.ID, "Echipa a fost repornita. Asteapta decizia ta: "+strings.Join(refs, ", ")+".", false)
+		}
 	}
 	return nil
+}
+
+// allSubtasksDone: true doar daca task-ul are cel putin un sub-task si toate sunt Done.
+func allSubtasksDone(taskID int64, tasks []store.Task) bool {
+	found := false
+	for _, sub := range tasks {
+		if sub.ParentTaskID != nil && *sub.ParentTaskID == taskID {
+			if sub.Status != store.StatusDone {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
 }
 
 // Recover aduce baza de date intr-o stare curata la pornirea serverului:
@@ -343,7 +367,7 @@ func (t *Team) Recover() error {
 }
 
 // UserMessage salveaza un mesaj de la utilizator catre un agent. Agentul il
-// primeste la urmatorul run; pentru un worker, lead-ul primeste o copie.
+// primeste la urmatorul run; pentru un agent cu sef, seful primeste o copie.
 func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (store.Message, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -366,17 +390,13 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 		}
 	}
 	t.emit(a.ProjectID, "message", m)
-	if a.Position == store.PositionWorker {
-		lead, err := t.st.Lead(a.ProjectID)
-		if err != nil {
-			return store.Message{}, err
-		}
+	if a.ParentID != nil {
 		note := fmt.Sprintf("Utilizatorul -> %s: %s", a.Name, text)
 		dir := t.filesDir(a.ProjectID)
 		for _, att := range m.Attachments {
 			note += t.attachedLine(dir, att)
 		}
-		t.note(a.ProjectID, lead.ID, clip(note), false)
+		t.note(a.ProjectID, *a.ParentID, clip(note), false)
 	}
 	t.Kick(a.ProjectID)
 	return m, nil
@@ -385,7 +405,7 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 func (t *Team) AcceptBlocked(taskID int64) error { return t.resolveBlocked(taskID, true) }
 func (t *Team) Unblock(taskID int64) error       { return t.resolveBlocked(taskID, false) }
 
-// resolveBlocked aplica decizia utilizatorului pe un task blocat si il anunta pe lead.
+// resolveBlocked aplica decizia utilizatorului pe un task blocat si anunta decidentul lui.
 func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -397,23 +417,31 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	if task.Status != store.StatusBlocked {
 		return ErrNotBlocked
 	}
-	lead, err := t.st.Lead(task.ProjectID)
+	agents, err := t.st.ListAgents(task.ProjectID)
 	if err != nil {
 		return err
 	}
 	text := "Utilizatorul a acceptat " + task.Ref() + "."
 	if accept {
 		task.Status = store.StatusDone
+		task.ReviewStage = store.StageNone
 	} else {
 		task.Status = store.StatusQueued
 		task.SendBacks = 0
-		text = "Utilizatorul a deblocat " + task.Ref() + "; worker-ul il reia cu ultimul feedback."
+		text = "Utilizatorul a deblocat " + task.Ref() + "; asignatul il reia cu ultimul feedback."
 	}
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
 	}
-	t.note(task.ProjectID, lead.ID, text, false)
+	if d, ok := decider(task, agents); ok {
+		t.note(task.ProjectID, d.ID, text, false)
+	}
 	t.emit(task.ProjectID, "task", task)
+	if accept {
+		if err := t.afterDone(task); err != nil {
+			log.Printf("dupa accept %s: %v", task.Ref(), err)
+		}
+	}
 	t.Kick(task.ProjectID)
 	return nil
 }

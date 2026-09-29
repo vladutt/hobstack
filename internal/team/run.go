@@ -170,6 +170,25 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	if err != nil {
 		return err
 	}
+	subs, err := t.st.Subtasks(task.ID)
+	if err != nil {
+		return err
+	}
+	var open []string
+	for _, s := range subs {
+		if s.Status != store.StatusDone {
+			open = append(open, s.Ref())
+		}
+	}
+	// Un sub-lider care a spart task-ul se opreste fara report_done. Task-ul
+	// ramane in lucru (oricum s-ar fi terminat run-ul) pana cand toate
+	// sub-task-urile ajung in Done; atunci afterDone il trezeste.
+	if len(open) > 0 {
+		if o.Status == store.RunStopped {
+			return nil
+		}
+		return t.note(ar.projectID, a.ID, fmt.Sprintf("%s asteapta sub-task-urile: %s.", task.Ref(), strings.Join(open, ", ")), true)
+	}
 	switch o.Status {
 	case store.RunStopped:
 		task.Status = store.StatusQueued
