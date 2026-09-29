@@ -65,6 +65,62 @@ func (s *Store) CreateProject(p *Project) (Agent, error) {
 	return lead, tx.Commit()
 }
 
+// NewMember e un agent din echipa unui proiect nou. Parent si Reviewer sunt
+// indecsi in aceeasi lista (-1 = niciunul); id-urile nu exista inca.
+type NewMember struct {
+	Agent            Agent
+	Parent, Reviewer int
+}
+
+// CreateProjectWithTeam creeaza proiectul si echipa data (fara Lead-ul
+// implicit) intr-o singura tranzactie: la orice eroare nu ramane nimic.
+// Validarea legaturilor (cicluri, radacina) se face inainte, de apelant.
+func (s *Store) CreateProjectWithTeam(p *Project, team []NewMember) ([]Agent, error) {
+	created := now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, created)
+	if err != nil {
+		return nil, err
+	}
+	if p.ID, err = res.LastInsertId(); err != nil {
+		return nil, err
+	}
+	p.CreatedAt = parseTime(created)
+
+	// intai toti agentii, fara legaturi; apoi legaturile, cand avem id-urile
+	agents := make([]Agent, len(team))
+	for i, m := range team {
+		a := m.Agent
+		a.ProjectID, a.ParentID, a.ReviewerID, a.Detached = p.ID, nil, nil, false
+		if err := insertAgent(tx, &a); err != nil {
+			return nil, err
+		}
+		agents[i] = a
+	}
+	idAt := func(i int) *int64 {
+		if i < 0 || i >= len(agents) {
+			return nil
+		}
+		id := agents[i].ID
+		return &id
+	}
+	for i, m := range team {
+		agents[i].ParentID, agents[i].ReviewerID = idAt(m.Parent), idAt(m.Reviewer)
+		if _, err := tx.Exec(`UPDATE agents SET parent_id = ?, reviewer_id = ? WHERE id = ?`,
+			nullPtr(agents[i].ParentID), nullPtr(agents[i].ReviewerID), agents[i].ID); err != nil {
+			return nil, err
+		}
+	}
+	return agents, tx.Commit()
+}
+
 func (s *Store) GetProject(id int64) (Project, error) {
 	return scanProject(s.db.QueryRow(`SELECT `+projectCols+` FROM projects WHERE id = ?`, id))
 }
