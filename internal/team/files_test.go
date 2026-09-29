@@ -55,3 +55,20 @@ func TestNoFilesRootNoAddDir(t *testing.T) {
 		t.Fatal("fara SetFilesRoot nu trebuie --add-dir")
 	}
 }
+
+func TestWorkerMessageAttachmentsReachLead(t *testing.T) {
+	f := setup(t)
+	root := t.TempDir()
+	f.tm.SetFilesRoot(root)
+	img := store.Attachment{ProjectID: f.p.ID, Kind: store.KindMessageFile, Name: "bug.png", Stored: "bb-bug.png", Size: 1, Mime: "image/png"}
+	f.st.AddAttachment(&img)
+	if _, err := f.tm.UserMessage(f.rook.ID, "vezi", []int64{img.ID}); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	got := turn(f.fs.last(t, f.lead))
+	want := "Utilizatorul -> Rook: vezi\nAtasat: " + filepath.Join(root, "1", "files", "bb-bug.png") + " (bug.png)"
+	if !strings.Contains(got, want) {
+		t.Fatalf("tura lead-ului:\n%s", got)
+	}
+}

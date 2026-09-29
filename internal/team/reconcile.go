@@ -162,6 +162,11 @@ func (t *Team) members(agents []store.Agent, tasks []store.Task) []prompt.Member
 	return out
 }
 
+// attachedLine e formatul unic al liniei de atasament din tura unui agent.
+func (t *Team) attachedLine(dir string, a store.Attachment) string {
+	return fmt.Sprintf("\nAtasat: %s (%s)", filepath.Join(dir, a.Stored), a.Name)
+}
+
 // texts extrage textele mesajelor; pentru lead marcam ce a scris utilizatorul.
 // Fiecare atasament apare ca linie separata cu calea fisierului.
 func (t *Team) texts(projectID int64, msgs []store.Message, labelUser bool) []string {
@@ -173,7 +178,7 @@ func (t *Team) texts(projectID int64, msgs []store.Message, labelUser bool) []st
 			text = "Utilizatorul: " + text
 		}
 		for _, a := range m.Attachments {
-			text += fmt.Sprintf("\nAtasat: %s (%s)", filepath.Join(dir, a.Stored), a.Name)
+			text += t.attachedLine(dir, a)
 		}
 		out = append(out, text)
 	}
@@ -328,7 +333,12 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 		if err != nil {
 			return store.Message{}, err
 		}
-		t.note(a.ProjectID, lead.ID, clip(fmt.Sprintf("Utilizatorul -> %s: %s", a.Name, text)), false)
+		note := fmt.Sprintf("Utilizatorul -> %s: %s", a.Name, text)
+		dir := t.filesDir(a.ProjectID)
+		for _, att := range m.Attachments {
+			note += t.attachedLine(dir, att)
+		}
+		t.note(a.ProjectID, lead.ID, clip(note), false)
 	}
 	t.Kick(a.ProjectID)
 	return m, nil
