@@ -1,0 +1,290 @@
+package team
+
+import (
+	"errors"
+	"os"
+	"strings"
+	"testing"
+
+	"foreman/internal/runner"
+	"foreman/internal/store"
+)
+
+func mustReconcile(t *testing.T, f *fixture) {
+	t.Helper()
+	if err := f.tm.Reconcile(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func turn(spec runner.Spec) string { return argValue(spec.Args, "-p") }
+
+func TestLeadWakesOnUserMessage(t *testing.T) {
+	f := setup(t)
+	if _, err := f.tm.UserMessage(f.lead.ID, "Fa importul"); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	if f.fs.count() != 1 {
+		t.Fatalf("run-uri pornite: %d", f.fs.count())
+	}
+	spec := f.fs.last(t, f.lead)
+	if !strings.Contains(turn(spec), "Utilizatorul: Fa importul") || !strings.HasPrefix(turn(spec), "Echipa:") {
+		t.Fatalf("mesajul turei: %q", turn(spec))
+	}
+	if spec.Dir != f.p.Workdir || argValue(spec.Args, "--model") != "sonnet" || hasFlag(spec.Args, "--resume") {
+		t.Fatalf("spec = %+v", spec)
+	}
+	mustReconcile(t, f) // mesajul e livrat: nu se mai porneste nimic
+	if f.fs.count() != 1 {
+		t.Fatalf("a doua reconciliere a pornit ceva: %d", f.fs.count())
+	}
+}
+
+func TestRunArguments(t *testing.T) {
+	f := setup(t)
+	f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	args := f.fs.last(t, f.rook).Args
+	for _, flag := range []string{"--strict-mcp-config", "--verbose"} {
+		if !hasFlag(args, flag) {
+			t.Errorf("lipseste %s", flag)
+		}
+	}
+	checks := map[string]string{
+		"--output-format":   "stream-json",
+		"--setting-sources": "user",
+		"--max-budget-usd":  "1.00",
+		"--model":           "sonnet",
+	}
+	for flag, want := range checks {
+		if got := argValue(args, flag); got != want {
+			t.Errorf("%s = %q, vreau %q", flag, got, want)
+		}
+	}
+	if !strings.Contains(argValue(args, "--settings"), `"Edit"`) {
+		t.Error("Rook are tool-ul write: --settings trebuia sa permita Edit")
+	}
+	if !strings.Contains(argValue(args, "--mcp-config"), `"url":"http://127.0.0.1:7777/mcp/`) {
+		t.Errorf("--mcp-config = %s", argValue(args, "--mcp-config"))
+	}
+	if !strings.Contains(argValue(args, "--append-system-prompt"), "Esti Rook, Backend Dev, worker in proiectul ApiUnit") {
+		t.Error("system prompt gresit")
+	}
+}
+
+func TestFullFlow(t *testing.T) {
+	f := setup(t)
+	f.tm.UserMessage(f.lead.ID, "Fa importul")
+	mustReconcile(t, f)
+	lead1 := f.fs.last(t, f.lead)
+	lc := f.caller(t, lead1)
+	for _, x := range [][2]string{{"A", "Rook"}, {"B", "Vera"}, {"C", "rook"}} {
+		if _, err := f.tm.CreateTask(lc, x[0], "", x[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.fs.finish(lead1.ID, runner.Outcome{Status: "done", SessionID: "s-lead", Result: "Am delegat."})
+	if !f.hasMessage(f.lead.ID, "Am delegat.") {
+		t.Fatal("raspunsul final al lead-ului lipseste din thread")
+	}
+
+	// doi workeri in paralel; T-3 asteapta dupa Rook
+	mustReconcile(t, f)
+	rook1, vera1 := f.fs.last(t, f.rook), f.fs.last(t, f.vera)
+	if !strings.Contains(turn(rook1), "Task T-1: A") || !strings.Contains(turn(vera1), "Task T-2: B") {
+		t.Fatalf("ture: %q / %q", turn(rook1), turn(vera1))
+	}
+	f.wantStatus(t, 1, store.StatusInProgress)
+	f.wantStatus(t, 3, store.StatusQueued)
+
+	// Rook raporteaza T-1: lead-ul e trezit cu --resume si notificarea
+	if _, err := f.tm.ReportDone(f.caller(t, rook1), "A e gata"); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	lead2 := f.fs.last(t, f.lead)
+	if lead2.ID == lead1.ID || !strings.Contains(turn(lead2), "Rook a terminat T-1 (review): A e gata") {
+		t.Fatalf("lead-ul nu a fost trezit corect: %q", turn(lead2))
+	}
+	if argValue(lead2.Args, "--resume") != "s-lead" {
+		t.Fatalf("--resume = %q", argValue(lead2.Args, "--resume"))
+	}
+
+	// procesul lui Rook se termina: preia T-3, continuand sesiunea
+	f.fs.finish(rook1.ID, runner.Outcome{Status: "done", SessionID: "s-rook", Result: "gata"})
+	mustReconcile(t, f)
+	rook2 := f.fs.last(t, f.rook)
+	if !strings.Contains(turn(rook2), "Task T-3: C") || argValue(rook2.Args, "--resume") != "s-rook" {
+		t.Fatalf("rook2: %q resume=%q", turn(rook2), argValue(rook2.Args, "--resume"))
+	}
+
+	// lead-ul trimite T-1 inapoi; Rook termina T-3 fara report_done
+	if _, err := f.tm.SendBack(f.caller(t, lead2), "T-1", "Lipsesc testele"); err != nil {
+		t.Fatal(err)
+	}
+	f.fs.finish(lead2.ID, runner.Outcome{Status: "done", SessionID: "s-lead"})
+	f.fs.finish(rook2.ID, runner.Outcome{Status: "done", SessionID: "s-rook", Result: "C e gata"})
+	if got := f.wantStatus(t, 3, store.StatusReview); got.Result != "C e gata" {
+		t.Fatalf("T-3 rezultat = %q", got.Result)
+	}
+
+	mustReconcile(t, f)
+	rook3 := f.fs.last(t, f.rook)
+	if !strings.Contains(turn(rook3), "Task T-1: A") || !strings.Contains(turn(rook3), "Feedback de la Lead la incercarea anterioara:\nLipsesc testele") {
+		t.Fatalf("rook3: %q", turn(rook3))
+	}
+	lead3 := f.fs.last(t, f.lead)
+	if !strings.Contains(turn(lead3), "Rook a terminat T-3 fara report_done (review): C e gata") {
+		t.Fatalf("lead3: %q", turn(lead3))
+	}
+	if _, err := f.tm.AcceptTask(f.caller(t, lead3), "T-3", ""); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 3, store.StatusDone)
+}
+
+func TestMaxParallel(t *testing.T) {
+	f := setup(t)
+	f.p.MaxParallel = 1
+	f.st.UpdateProject(f.p)
+	f.task(t, "A", f.rook, store.StatusQueued)
+	f.task(t, "B", f.vera, store.StatusQueued)
+	mustReconcile(t, f)
+	if f.fs.count() != 1 {
+		t.Fatalf("run-uri pornite: %d, vreau 1", f.fs.count())
+	}
+	f.wantStatus(t, 2, store.StatusQueued)
+}
+
+func TestFailedWorkerRunGoesToReview(t *testing.T) {
+	f := setup(t)
+	f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: "failed", Error: "Reached maximum budget ($1)"})
+	if got := f.wantStatus(t, 1, store.StatusReview); got.Result != "run esuat: Reached maximum budget ($1)" {
+		t.Fatalf("rezultat = %q", got.Result)
+	}
+	pending, _ := f.st.Undelivered(f.lead.ID)
+	if len(pending) != 1 || !strings.Contains(pending[0].Text, "Run-ul lui Rook pe T-1 a esuat") {
+		t.Fatalf("notificari lead: %+v", pending)
+	}
+	if !f.hasMessage(f.rook.ID, "Run esuat: Reached maximum budget") {
+		t.Error("lipseste evenimentul din thread-ul worker-ului")
+	}
+}
+
+func TestStopAndResume(t *testing.T) {
+	f := setup(t)
+	f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	run := f.fs.last(t, f.rook)
+
+	if err := f.tm.Stop(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.fs.stopped) != 1 || f.fs.stopped[0] != run.ID {
+		t.Fatalf("oprite: %v", f.fs.stopped)
+	}
+	f.wantStatus(t, 1, store.StatusQueued)
+	if p, _ := f.st.GetProject(f.p.ID); !p.Paused {
+		t.Fatal("proiectul nu e pe pauza")
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "stopped", Error: "oprit"})
+	mustReconcile(t, f)
+	if f.fs.count() != 1 {
+		t.Fatal("pe pauza nu trebuie sa porneasca nimic")
+	}
+
+	if err := f.tm.Resume(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	if f.fs.count() != 2 {
+		t.Fatalf("dupa Resume: %d run-uri", f.fs.count())
+	}
+}
+
+func TestRecover(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "A", f.rook, store.StatusInProgress)
+	f.st.CreateRun(&store.Run{ID: "r-vechi", AgentID: f.rook.ID, TaskID: task.ID})
+	if err := f.tm.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := f.st.GetRun("r-vechi"); r.Status != store.RunInterrupted {
+		t.Fatalf("run vechi: %q", r.Status)
+	}
+	f.wantStatus(t, 1, store.StatusQueued)
+	if p, _ := f.st.GetProject(f.p.ID); !p.Paused {
+		t.Fatal("dupa Recover proiectul trebuie sa fie pe pauza")
+	}
+}
+
+func TestMissingWorkdirPausesProject(t *testing.T) {
+	f := setup(t)
+	f.tm.UserMessage(f.lead.ID, "salut")
+	os.RemoveAll(f.p.Workdir)
+	mustReconcile(t, f)
+	if f.fs.count() != 0 {
+		t.Fatal("nu trebuia pornit nimic")
+	}
+	if p, _ := f.st.GetProject(f.p.ID); !p.Paused {
+		t.Fatal("proiectul trebuia pus pe pauza")
+	}
+	if !f.hasMessage(f.lead.ID, "Nu pot porni Lead") {
+		t.Fatal("lipseste explicatia din thread-ul lead-ului")
+	}
+}
+
+func TestPromptChangeStartsNewSession(t *testing.T) {
+	f := setup(t)
+	f.st.SetSession(f.rook.ID, "s-vechi", "hash-vechi")
+	f.tm.UserMessage(f.rook.ID, "salut")
+	mustReconcile(t, f)
+	if hasFlag(f.fs.last(t, f.rook).Args, "--resume") {
+		t.Fatal("prompt schimbat: nu trebuia --resume")
+	}
+	if !f.hasMessage(f.rook.ID, "sesiune noua") {
+		t.Fatal("lipseste evenimentul de sesiune noua")
+	}
+}
+
+func TestDirectMessageToWorker(t *testing.T) {
+	f := setup(t)
+	f.tm.UserMessage(f.rook.ID, "ce faci?")
+	mustReconcile(t, f)
+	if got := turn(f.fs.last(t, f.rook)); !strings.Contains(got, "Mesaje de la utilizator") || !strings.Contains(got, "ce faci?") {
+		t.Fatalf("worker: %q", got)
+	}
+	if got := turn(f.fs.last(t, f.lead)); !strings.Contains(got, "Utilizatorul -> Rook: ce faci?") {
+		t.Fatalf("lead: %q", got)
+	}
+	msgs, _ := f.st.ListMessages(f.rook.ID)
+	if !msgs[0].Delivered {
+		t.Fatal("mesajul trebuia marcat livrat")
+	}
+}
+
+func TestBlockedTaskActions(t *testing.T) {
+	f := setup(t)
+	a := f.task(t, "A", f.rook, store.StatusBlocked)
+	b := f.task(t, "B", f.rook, store.StatusBlocked)
+	c := f.task(t, "C", f.rook, store.StatusQueued)
+	if err := f.tm.Unblock(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.wantStatus(t, 1, store.StatusQueued); got.SendBacks != 0 {
+		t.Fatalf("send_backs = %d", got.SendBacks)
+	}
+	if err := f.tm.AcceptBlocked(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 2, store.StatusDone)
+	if err := f.tm.AcceptBlocked(c.ID); !errors.Is(err, ErrNotBlocked) {
+		t.Fatalf("task neblocat: %v", err)
+	}
+	if !f.hasMessage(f.lead.ID, "Utilizatorul a deblocat T-1") {
+		t.Fatal("lead-ul trebuie anuntat")
+	}
+}

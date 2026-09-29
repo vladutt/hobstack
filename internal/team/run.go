@@ -1,0 +1,167 @@
+package team
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+
+	"foreman/internal/mcp"
+	"foreman/internal/prompt"
+	"foreman/internal/runner"
+	"foreman/internal/store"
+)
+
+// startRun porneste un run pentru agent. taskID = 0 inseamna run fara task
+// (lead sau mesaj direct). Se apeleaza cu t.work blocat.
+func (t *Team) startRun(p store.Project, a, lead store.Agent, taskID int64, turn string) error {
+	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
+		return fmt.Errorf("folderul de lucru %s nu exista", p.Workdir)
+	}
+
+	system := prompt.System(p, a, lead.Name)
+	hash := prompt.Hash(system)
+	// Claude retine system prompt-ul de la inceputul sesiunii. Daca s-a schimbat
+	// (agent sau proiect editat), --resume l-ar ignora, deci pornim sesiune noua.
+	resume := a.SessionID != "" && a.PromptHash == hash
+	if a.SessionID != "" && !resume {
+		t.note(p.ID, a.ID, "Instructiunile s-au schimbat, pornesc o sesiune noua.", true)
+	}
+
+	runID := runner.NewID()
+	token := newToken()
+	if err := t.st.CreateRun(&store.Run{ID: runID, AgentID: a.ID, TaskID: taskID}); err != nil {
+		return err
+	}
+
+	t.mu.Lock()
+	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID, Lead: a.Position == store.PositionLead}
+	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
+	t.mu.Unlock()
+
+	spec := runner.Spec{
+		ID:     runID,
+		Key:    fmt.Sprintf("agent-%d", a.ID),
+		Dir:    p.Workdir,
+		Args:   t.args(p, a, system, turn, token, resume),
+		Prompt: turn,
+	}
+	agentID := a.ID
+	if _, err := t.runs.Start(spec, func(o runner.Outcome) { t.finish(agentID, hash, o) }); err != nil {
+		t.mu.Lock()
+		delete(t.tokens, token)
+		delete(t.active, a.ID)
+		t.mu.Unlock()
+		t.st.FinishRun(runID, store.RunFailed, 0, err.Error())
+		return err
+	}
+	t.emit(p.ID, "agent", map[string]int64{"id": a.ID})
+	return nil
+}
+
+// args construieste linia de comanda pentru claude.
+func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, resume bool) []string {
+	args := []string{
+		"-p", turn,
+		"--output-format", "stream-json", "--verbose",
+		"--model", a.Model,
+		"--append-system-prompt", system,
+		// setarile globale ale utilizatorului raman; .claude/settings.json din
+		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
+		"--setting-sources", "user",
+		"--settings", prompt.Settings(a.Tools),
+		"--mcp-config", prompt.MCPConfig(t.baseURL + "/mcp/" + token),
+		"--strict-mcp-config",
+		"--max-budget-usd", strconv.FormatFloat(p.BudgetUSD, 'f', 2, 64),
+	}
+	if resume {
+		args = append(args, "--resume", a.SessionID)
+	}
+	return args
+}
+
+// finish e apelata de runner cand procesul claude s-a terminat.
+func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
+	t.work.Lock()
+	defer t.work.Unlock()
+
+	t.mu.Lock()
+	ar, ok := t.active[agentID]
+	if ok && ar.runID == o.RunID {
+		delete(t.active, agentID)
+		delete(t.tokens, ar.token)
+	}
+	t.mu.Unlock()
+	if !ok || ar.runID != o.RunID {
+		log.Printf("run %s terminat, dar nu era activ", o.RunID)
+		return
+	}
+
+	if err := t.recordOutcome(ar, agentID, hash, o); err != nil {
+		log.Printf("finalul run-ului %s: %v", o.RunID, err)
+	}
+	t.emit(ar.projectID, "agent", map[string]int64{"id": agentID})
+	t.Kick(ar.projectID)
+}
+
+func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.Outcome) error {
+	if err := t.st.FinishRun(o.RunID, o.Status, o.CostUSD, o.Error); err != nil {
+		return err
+	}
+	if o.SessionID != "" {
+		if err := t.st.SetSession(agentID, o.SessionID, hash); err != nil {
+			return err
+		}
+	}
+	a, err := t.st.GetAgent(agentID)
+	if err != nil {
+		return err
+	}
+	if text := strings.TrimSpace(o.Result); text != "" {
+		m := store.Message{ProjectID: ar.projectID, AgentID: a.ID, Kind: store.KindMsg, Author: a.Name, Text: text, RunID: o.RunID, Delivered: true}
+		if err := t.st.AddMessage(&m); err != nil {
+			return err
+		}
+		t.emit(ar.projectID, "message", m)
+	}
+	if o.Status == store.RunFailed {
+		t.note(ar.projectID, a.ID, "Run esuat: "+o.Error, true)
+	}
+	if ar.taskID == 0 {
+		return nil
+	}
+
+	task, err := t.st.GetTask(ar.taskID)
+	if err != nil {
+		return err
+	}
+	if task.Status != store.StatusInProgress {
+		return nil // a apelat report_done sau Stop team l-a pus inapoi in Queued
+	}
+	var noteText string
+	switch o.Status {
+	case store.RunStopped:
+		task.Status = store.StatusQueued
+	case store.RunFailed:
+		task.Status = store.StatusReview
+		task.Result = "run esuat: " + o.Error
+		noteText = fmt.Sprintf("Run-ul lui %s pe %s a esuat: %s", a.Name, task.Ref(), o.Error)
+	default:
+		task.Status = store.StatusReview
+		task.Result = strings.TrimSpace(o.Result)
+		noteText = fmt.Sprintf("%s a terminat %s fara report_done (review): %s", a.Name, task.Ref(), task.Result)
+	}
+	if err := t.st.SaveTask(&task); err != nil {
+		return err
+	}
+	t.emit(ar.projectID, "task", task)
+	if noteText == "" {
+		return nil
+	}
+	lead, err := t.st.Lead(ar.projectID)
+	if err != nil {
+		return err
+	}
+	return t.note(ar.projectID, lead.ID, clip(noteText), false)
+}
