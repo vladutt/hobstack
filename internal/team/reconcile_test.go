@@ -354,3 +354,24 @@ func TestUnlimitedParallel(t *testing.T) {
 		t.Fatalf("run-uri pornite: %d, vreau 3 (fara limita)", f.fs.count())
 	}
 }
+
+// Cu max_parallel mic, cine are de decis (aici reviewer-ul) porneste inaintea
+// task-urilor din coada; altfel review-ul ar astepta dupa toata coada.
+func TestDecisionsBeforeQueue(t *testing.T) {
+	f := setup(t)
+	f.p.MaxParallel = 1
+	f.st.UpdateProject(f.p)
+	f.rook.ReviewerID = &f.vera.ID
+	f.st.UpdateAgent(f.rook)
+	done := f.task(t, "A", f.rook, store.StatusInProgress)
+	if _, err := f.tm.ReportDone(f.workerCaller(f.rook, done.ID), "", "A e gata"); err != nil {
+		t.Fatal(err)
+	}
+	f.task(t, "B", f.rook, store.StatusQueued)
+	f.task(t, "C", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	if f.fs.count() != 1 || f.fs.last(t, f.vera).ID == "" {
+		t.Fatalf("run-uri: %d, vreau doar Vera", f.fs.count())
+	}
+	f.wantStatus(t, 2, store.StatusQueued)
+}

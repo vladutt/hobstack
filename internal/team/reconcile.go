@@ -39,6 +39,9 @@ func (t *Team) Run(ctx context.Context) {
 }
 
 // Reconcile porneste run-urile care trebuie pornite in proiect:
+//  0. agentii care au ceva de decis (review, accept, send_back) si mesaje
+//     nelivrate primesc intai un run de notificari: o decizie deblocheaza
+//     alti agenti, deci nu asteapta dupa toata coada;
 //  1. orice agent inactiv cu un task in Queued primeste un run pe task,
 //     in ordinea numarului;
 //  2. altfel, un agent inactiv cu mesaje nelivrate primeste un run de notificari.
@@ -87,6 +90,44 @@ func (t *Team) Reconcile(projectID int64) error {
 	}
 	notify := agents[0] // prima radacina: aici apar erorile de pornire
 
+	// failed devine true daca un run nu a pornit: proiectul e pe pauza si ne oprim
+	failed := false
+	notifyRun := func(a store.Agent) error {
+		if t.isActive(a.ID) || full(a) {
+			return nil
+		}
+		notes, err := t.st.Undelivered(a.ID)
+		if err != nil || len(notes) == 0 {
+			return err
+		}
+		turn := prompt.NotifyTurn(t.turnContext(a, agents, tasks, 0), t.texts(p.ID, notes))
+		if err := t.startRun(p, a, agents, 0, turn); err != nil {
+			failed = true
+			return t.startFailed(p, notify, a, err)
+		}
+		if err := t.delivered(p.ID, notes); err != nil {
+			return err
+		}
+		started(a)
+		return nil
+	}
+
+	// 0. cine are de decis porneste primul
+	decides := map[int64]bool{}
+	for _, task := range tasks {
+		if id := decisionOwner(task, agents); id != 0 {
+			decides[id] = true
+		}
+	}
+	for _, a := range agents {
+		if !decides[a.ID] {
+			continue
+		}
+		if err := notifyRun(a); err != nil || failed {
+			return err
+		}
+	}
+
 	// 1. task-urile din Queued
 	hasQueued := map[int64]bool{}
 	for i := range tasks {
@@ -125,24 +166,12 @@ func (t *Team) Reconcile(projectID int64) error {
 
 	// 2. run-uri de notificari
 	for _, a := range agents {
-		if t.isActive(a.ID) || hasQueued[a.ID] || full(a) {
+		if hasQueued[a.ID] {
 			continue
 		}
-		notes, err := t.st.Undelivered(a.ID)
-		if err != nil {
+		if err := notifyRun(a); err != nil || failed {
 			return err
 		}
-		if len(notes) == 0 {
-			continue
-		}
-		turn := prompt.NotifyTurn(t.turnContext(a, agents, tasks, 0), t.texts(p.ID, notes))
-		if err := t.startRun(p, a, agents, 0, turn); err != nil {
-			return t.startFailed(p, notify, a, err)
-		}
-		if err := t.delivered(p.ID, notes); err != nil {
-			return err
-		}
-		started(a)
 	}
 	return nil
 }
