@@ -27,6 +27,8 @@ export async function workspaceView(root, projectId) {
   const gone = () => disposed || !header.isConnected;
   state.selected = state.project.agents[0]?.id ?? null;
 
+  const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
+  const dropResets = []; // resetari de contor + outline, apelate la orice drop/dragend
   const header = el("div");
   const team = el("div", { class: "team" });
   const board = el("div", { class: "board" });
@@ -52,12 +54,14 @@ export async function workspaceView(root, projectId) {
     type: "button", class: "clip", "aria-label": "Ataseaza fisiere", title: "Ataseaza fisiere",
     onclick: () => chatPicker.click(),
   }, "\u{1F4CE}");
-  const composer = el("form", { onsubmit: send },
-    clip, chatPicker, input, el("button", { type: "submit", class: "btn primary" }, "Trimite"));
+  let sending = false; // trimitere in curs: blocheaza dublul submit
+  const sendBtn = el("button", { type: "submit", class: "btn primary" }, "Trimite");
+  const composer = el("form", { onsubmit: send }, clip, chatPicker, input, sendBtn);
   input.addEventListener("paste", (e) => {
     const files = e.clipboardData?.files;
     if (!files || !files.length) return;
-    e.preventDefault();
+    // daca e si text (ex. copiat din Word), lasam textul sa se lipeasca
+    if (!e.clipboardData.getData("text/plain")) e.preventDefault();
     addPending(files);
   });
   input.addEventListener("keydown", (e) => {
@@ -195,6 +199,7 @@ export async function workspaceView(root, projectId) {
 
   // ---------- thread ----------
   async function select(id) {
+    if (id !== state.selected) { state.pending = []; renderChips(); }
     state.selected = id;
     renderTeam();
     renderConsoleHead();
@@ -235,7 +240,7 @@ export async function workspaceView(root, projectId) {
     const mine = m.author === "user";
     return el("div", { class: "msg" + (mine ? " me" : ""), "data-id": m.id },
       el("span", { class: "msg-meta" }, `${mine ? "Tu" : m.author} · ${clock(m.createdAt)}`),
-      m.text && el("div", { class: "bubble" }, m.text),
+      m.text ? el("div", { class: "bubble" }, m.text) : null,
       m.attachments && m.attachments.length > 0 && el("div", { class: "attachments" }, m.attachments.map(attachmentNode)),
       mine && !m.delivered && el("span", { class: "pending" }, "in asteptare"));
   }
@@ -248,7 +253,9 @@ export async function workspaceView(root, projectId) {
   async function send(e) {
     e.preventDefault();
     const text = input.value.trim();
-    if ((!text && !state.pending.length) || !state.selected) return;
+    if ((!text && !state.pending.length) || !state.selected || sending) return;
+    sending = true;
+    sendBtn.disabled = true;
     try {
       let m;
       const path = `/api/agents/${state.selected}/messages`;
@@ -267,6 +274,9 @@ export async function workspaceView(root, projectId) {
       scrollDown(true);
     } catch (err) {
       toast(err.message);
+    } finally {
+      sending = false;
+      sendBtn.disabled = false;
     }
   }
 
@@ -275,9 +285,13 @@ export async function workspaceView(root, projectId) {
     for (const f of Array.from(fileList)) {
       // imaginile lipite (Cmd+V) vin adesea cu numele generic "image.png"
       const generic = f.type.startsWith("image/") && (!f.name || /^image\.\w+$/.test(f.name));
-      const file = generic
-        ? new File([f], `screenshot-${new Date().toTimeString().slice(0, 8).replaceAll(":", "")}.png`, { type: f.type })
-        : f;
+      let file = f;
+      if (generic) {
+        const ext = { "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" }[f.type] || "png";
+        const d = new Date();
+        const t = d.toTimeString().slice(0, 8).replaceAll(":", "") + String(d.getMilliseconds()).padStart(3, "0");
+        file = new File([f], `screenshot-${t}.${ext}`, { type: f.type });
+      }
       state.pending.push(file);
     }
     renderChips();
@@ -357,7 +371,7 @@ export async function workspaceView(root, projectId) {
   // drag & drop: dragover cu preventDefault, altfel browserul nu accepta drop-ul
   function setupDrop(node, onFiles) {
     let depth = 0; // dragenter/dragleave se declanseaza si pe copii
-    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
+    dropResets.push(() => { depth = 0; node.classList.remove("dropping"); });
     node.addEventListener("dragenter", (e) => { if (hasFiles(e)) { depth++; node.classList.add("dropping"); } });
     node.addEventListener("dragover", (e) => { if (hasFiles(e)) e.preventDefault(); });
     node.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; node.classList.remove("dropping"); } });
@@ -369,6 +383,17 @@ export async function workspaceView(root, projectId) {
       onFiles(e.dataTransfer.files);
     });
   }
+
+  // garda la nivel de fereastra: un fisier scapat pe langa zone ar naviga browserul
+  const guardOver = (e) => { if (hasFiles(e)) e.preventDefault(); };
+  const guardDrop = (e) => {
+    if (hasFiles(e)) e.preventDefault();
+    dropResets.forEach((fn) => fn());
+  };
+  const guardEnd = () => dropResets.forEach((fn) => fn());
+  window.addEventListener("dragover", guardOver);
+  window.addEventListener("drop", guardDrop);
+  window.addEventListener("dragend", guardEnd);
 
   // ---------- run-ul live al agentului selectat ----------
   function syncLive() {
@@ -453,7 +478,13 @@ export async function workspaceView(root, projectId) {
   syncLive();
 
   // stream-ul proiectului se deschide abia acum: pana aici nu exista nimic de inchis
-  if (gone()) { stopLive(); return () => {}; }
+  if (gone()) {
+    stopLive();
+    window.removeEventListener("dragover", guardOver);
+    window.removeEventListener("drop", guardDrop);
+    window.removeEventListener("dragend", guardEnd);
+    return () => {};
+  }
   let hadError = false;
   const events = new EventSource(`/api/projects/${projectId}/events`);
   events.onmessage = (msg) => {
@@ -477,6 +508,9 @@ export async function workspaceView(root, projectId) {
 
   return () => {
     disposed = true;
+    window.removeEventListener("dragover", guardOver);
+    window.removeEventListener("drop", guardDrop);
+    window.removeEventListener("dragend", guardEnd);
     events.close();
     stopLive();
     clearTimeout(reloadTimer);
