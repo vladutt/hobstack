@@ -186,6 +186,10 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	// id-urile pot fi refolosite: un folder ramas de la un proiect vechi nu are ce cauta aici
+	if err := os.RemoveAll(filepath.Join(s.dirs.Projects, strconv.FormatInt(p.ID, 10))); err != nil {
+		log.Printf("curatare folder vechi proiect %d: %v", p.ID, err)
+	}
 	writeJSON(w, http.StatusCreated, p)
 }
 

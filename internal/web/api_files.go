@@ -67,6 +67,7 @@ func (s *Server) saveOne(dir string, projectID int64, kind string, fh *multipart
 			a.Mime = "application/octet-stream"
 		}
 	}
+	a.Mime = normalizeMime(a.Mime)
 	src, err := fh.Open()
 	if err != nil {
 		return a, err
@@ -91,6 +92,15 @@ func (s *Server) saveOne(dir string, projectID int64, kind string, fh *multipart
 		return a, err
 	}
 	return a, nil
+}
+
+// normalizeMime adauga charset la text/plain fara parametri, ca browserul
+// sa nu ghiceasca gresit codarea (romana cu diacritice).
+func normalizeMime(m string) string {
+	if strings.EqualFold(strings.TrimSpace(m), "text/plain") {
+		return "text/plain; charset=utf-8"
+	}
+	return m
 }
 
 // discardUploads sterge fisierele si randurile create de un request esuat.
@@ -189,7 +199,8 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request) {
 	if inlineTypes[strings.TrimSpace(base)] {
 		disposition = "inline"
 	}
-	w.Header().Set("Content-Type", a.Mime)
+	w.Header().Set("Content-Type", normalizeMime(a.Mime)) // si fisierele salvate mai demult
+	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// viewerul de PDF din Chrome nu merge sub sandbox; restul tipurilor raman in sandbox
 	if strings.TrimSpace(base) != "application/pdf" {

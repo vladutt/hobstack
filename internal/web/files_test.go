@@ -140,6 +140,33 @@ func TestServeFileHeaders(t *testing.T) {
 	if res.Header.Get("Content-Security-Policy") != "sandbox" {
 		t.Errorf("csp = %q", res.Header.Get("Content-Security-Policy"))
 	}
+	if res.Header.Get("Cross-Origin-Resource-Policy") != "same-origin" {
+		t.Errorf("corp = %q", res.Header.Get("Cross-Origin-Resource-Policy"))
+	}
+}
+
+func TestTextPlainGetsCharset(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	// fisier salvat cu mime fara charset (ca inainte de fix)
+	dir := config.ProjectFilesDir(e.dirs.Projects, p.ID)
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "aa-n.txt"), []byte("salut"), 0o644)
+	a := store.Attachment{ProjectID: p.ID, Kind: store.KindProjectFile, Name: "n.txt", Stored: "aa-n.txt", Size: 5, Mime: "text/plain"}
+	if err := e.st.AddAttachment(&a); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.Get(e.ts.URL + "/api/files/" + itoa(a.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if got := res.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("content-type la servire = %q", got)
+	}
+	if normalizeMime("text/plain") != "text/plain; charset=utf-8" || normalizeMime("image/png") != "image/png" {
+		t.Error("normalizeMime")
+	}
 }
 
 func TestUploadTooBig(t *testing.T) {
@@ -282,5 +309,19 @@ func TestInvalidInputCreatesNoFolder(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(e.dirs.Workspaces, "x")); !os.IsNotExist(err) {
 		t.Errorf("folderul orfan exista: %v", err)
+	}
+}
+
+func TestCreateProjectClearsStaleFilesDir(t *testing.T) {
+	e := setup(t)
+	old := filepath.Join(e.dirs.Projects, "1", "files")
+	os.MkdirAll(old, 0o755)
+	os.WriteFile(filepath.Join(old, "vechi.txt"), []byte("x"), 0o644)
+	p := e.createProject(t, t.TempDir())
+	if p.ID != 1 {
+		t.Fatalf("astept id 1, am %d", p.ID)
+	}
+	if _, err := os.Stat(filepath.Join(old, "vechi.txt")); !os.IsNotExist(err) {
+		t.Fatalf("vechi.txt trebuia sters: %v", err)
 	}
 }
