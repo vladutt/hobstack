@@ -185,10 +185,42 @@ function foldersEditor(initial, canPick, agents) {
       placeholder: "Stack, build/test commands, conventions for this folder." });
     const pickBtn = canPick && el("button", { type: "button", class: "btn", onclick: () => pickInto(path, pickBtn) }, "Browse...");
     const r = { id: f.id || 0, name, path, context };
+    // contextul se poate copia din CLAUDE.md-ul folderului: automat cand alegi
+    // calea si campul e gol, sau oricand din buton (textul ramane editabil)
+    const ctxHint = el("span", { class: "hint" });
+    const loadBtn = el("button", { type: "button", class: "btn small", onclick: () => loadClaudeMd(true) }, "Load CLAUDE.md");
+    async function loadClaudeMd(manual) {
+      const p = path.value.trim();
+      if (!p) {
+        if (manual) toast("Choose the folder path first.");
+        return;
+      }
+      if (!manual && context.value.trim()) return;
+      let res;
+      try {
+        res = await api(`/api/folder-context?path=${encodeURIComponent(p)}`);
+      } catch (err) {
+        if (manual) toast(err.message);
+        return;
+      }
+      if (!res.found) {
+        ctxHint.textContent = manual ? "There is no CLAUDE.md in this folder." : "";
+        return;
+      }
+      const current = context.value.trim();
+      if (!manual && current) return; // utilizatorul a scris intre timp
+      if (manual && current && current !== res.content && !confirm("Replace the current context with the folder's CLAUDE.md?")) return;
+      context.value = res.content;
+      ctxHint.textContent = res.truncated ? "Loaded from CLAUDE.md (cut to 20000 characters)." : "Loaded from CLAUDE.md.";
+    }
+    path.addEventListener("change", () => loadClaudeMd(false));
+    const ctxField = field("Context for this folder", context);
+    ctxField.insertBefore(el("div", { class: "field-head" }, ctxField.querySelector("label"), loadBtn), context);
+    ctxField.append(ctxHint);
     r.removeBtn = el("button", { type: "button", class: "btn small danger", onclick: () => remove(r) }, "Remove folder");
     r.el = el("div", { class: "folder-row" },
       el("div", { class: "row" }, field("Name", name), field("Path", el("div", { class: "input-row" }, path, pickBtn))),
-      field("Context for this folder", context),
+      ctxField,
       el("div", { class: "actions" }, el("span", { class: "grow" }), r.removeBtn));
     rows.push(r);
     draw();
@@ -226,7 +258,10 @@ async function pickInto(input, btn) {
   btn.textContent = "Opening...";
   try {
     const r = await api("/api/pick-folder", { method: "POST" });
-    if (r && r.path) input.value = r.path; // 204 = a renuntat
+    if (r && r.path) {
+      input.value = r.path; // 204 = a renuntat
+      input.dispatchEvent(new Event("change")); // ca la scrierea de mana (ex. incarca CLAUDE.md)
+    }
   } catch (err) {
     toast(err.message);
   } finally {
