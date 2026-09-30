@@ -84,3 +84,40 @@ func TestDetailListsUserDecisions(t *testing.T) {
 		t.Fatalf("userDecides: %s", raw)
 	}
 }
+
+// task-uri ale utilizatorului intr-un proiect fara etape si mutarea lor
+func TestUserTaskAndAssignAPI(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
+	path := "/api/projects/" + itoa(p.ID)
+	code, raw := e.do(t, "POST", path+"/agents", map[string]any{"name": "Vera", "model": "haiku", "parentId": root.ID})
+	var vera store.Agent
+	json.Unmarshal(raw, &vera)
+	if code != 201 {
+		t.Fatalf("agent: %d %s", code, raw)
+	}
+	if code, raw := e.do(t, "POST", path+"/tasks", map[string]any{"title": "A"}); code != 400 || !strings.Contains(string(raw), "alege agentul") {
+		t.Fatalf("fara agent: %d %s", code, raw)
+	}
+	code, raw = e.do(t, "POST", path+"/tasks", map[string]any{"title": "A", "assigneeId": root.ID})
+	var task store.Task
+	json.Unmarshal(raw, &task)
+	if code != 201 || task.AssigneeID != root.ID || !task.ByUser {
+		t.Fatalf("creare: %d %s", code, raw)
+	}
+	if code, raw := e.do(t, "POST", "/api/tasks/"+itoa(task.ID)+"/assign", map[string]any{"agentId": vera.ID}); code != 204 {
+		t.Fatalf("assign: %d %s", code, raw)
+	}
+	if got, _ := e.st.GetTask(task.ID); got.AssigneeID != vera.ID {
+		t.Fatalf("asignat: %+v", got)
+	}
+	if code, _ := e.do(t, "POST", "/api/tasks/"+itoa(task.ID)+"/assign", map[string]any{"agentId": 99999}); code != 400 {
+		t.Fatalf("agent strain: %d", code)
+	}
+	task.Status = store.StatusInProgress
+	e.st.SaveTask(&task)
+	if code, _ := e.do(t, "POST", "/api/tasks/"+itoa(task.ID)+"/assign", map[string]any{"agentId": root.ID}); code != 409 {
+		t.Fatalf("in lucru: %d", code)
+	}
+}

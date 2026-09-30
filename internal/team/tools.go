@@ -282,7 +282,7 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		task.ReviewStage = store.StageLead
 		who, hasWho = decider(*task, agents)
 	}
-	if !hasWho {
+	if !hasWho && !task.ByUser {
 		// nimeni nu poate decide: nu lasam task-ul blocat in Review, decide utilizatorul
 		task.Status = store.StatusBlocked
 		task.ReviewStage = store.StageNone
@@ -291,6 +291,8 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		return store.Agent{}, err
 	}
 	switch {
+	case !hasWho && task.ByUser:
+		// task-ul utilizatorului: decide el din board (Accepta / Trimite inapoi)
 	case !hasWho:
 		t.note(task.ProjectID, assignee.ID, noDeciderText(*task, assignee), true)
 	case task.ReviewStage == store.StageReviewer:
@@ -623,6 +625,16 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		return "", err
 	}
 	reviewer, _ := store.FindAgent(agents, c.AgentID)
+	if task.ByUser {
+		// creat de utilizator: dupa verificare decide el
+		task.ReviewStage = store.StageLead
+		if err := t.st.SaveTask(&task); err != nil {
+			return "", err
+		}
+		t.note(c.ProjectID, reviewer.ID, "A aprobat "+task.Ref(), true)
+		t.emit(c.ProjectID, "task", task)
+		return fmt.Sprintf("%s a trecut la utilizator pentru decizie.", task.Ref()), nil
+	}
 	boss, ok := decider(task, agents)
 	if !ok {
 		task.Status, task.ReviewStage = store.StatusBlocked, store.StageNone

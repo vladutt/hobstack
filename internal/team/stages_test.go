@@ -1,6 +1,7 @@
 package team
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -51,15 +52,15 @@ func TestStageCreateAndFirstFree(t *testing.T) {
 	_ = runner.Outcome{}
 }
 
-func TestUserCreateTaskNeedsStages(t *testing.T) {
-	f := setup(t)
-	if _, err := f.tm.UserCreateTask(f.p.ID, "x", ""); err != ErrNoStages {
-		t.Fatalf("fara etape: %v", err)
-	}
-	f2, _, stages := stagesFixture(t)
-	task, err := f2.tm.UserCreateTask(f2.p.ID, "Login", "cu parola")
+func TestUserCreateTaskInStages(t *testing.T) {
+	f, _, stages := stagesFixture(t)
+	task, err := f.tm.UserCreateTask(f.p.ID, "Login", "cu parola", 0)
 	if err != nil || !task.ByUser || task.CreatorID != nil || task.StageID == nil || *task.StageID != stages[0].ID {
 		t.Fatalf("%+v %v", task, err)
+	}
+	var ae AssignError
+	if _, err := f.tm.UserCreateTask(f.p.ID, "X", "", f.vera.ID); !errors.As(err, &ae) {
+		t.Fatalf("Vera nu e in prima etapa: %v", err)
 	}
 }
 
@@ -174,7 +175,7 @@ func TestStageRejectLimitBlocks(t *testing.T) {
 
 func TestUserTaskDecidedByUser(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "")
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0)
 	// sarim direct la finalul etapelor
 	task.StageID, task.Status, task.ReviewStage = nil, store.StatusReview, store.StageLead
 	f.st.SaveTask(&task)
@@ -284,7 +285,7 @@ func TestBlockedAfterFinalSendBackKeepsStage(t *testing.T) {
 // Important din review: seful asignatului nu decide un task creat de utilizator
 func TestLeadCannotDecideUserTask(t *testing.T) {
 	f, _, _ := stagesFixture(t)
-	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "")
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0)
 	task.StageID, task.Status, task.ReviewStage, task.AssigneeID = nil, store.StatusReview, store.StageLead, f.vera.ID
 	f.st.SaveTask(&task)
 	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err == nil {

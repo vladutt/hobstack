@@ -92,6 +92,7 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
+		AssigneeID  int64  `json:"assigneeId"` // 0 = primul liber (doar in proiectele cu etape)
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -108,9 +109,10 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	task, err := s.team.UserCreateTask(pid, title, strings.TrimSpace(in.Description))
-	if errors.Is(err, team.ErrNoStages) {
-		fail(w, badRequest(err.Error()))
+	task, err := s.team.UserCreateTask(pid, title, strings.TrimSpace(in.Description), in.AssigneeID)
+	var ae team.AssignError
+	if errors.As(err, &ae) {
+		fail(w, badRequest(ae.Error()))
 		return
 	}
 	if err != nil {
@@ -144,6 +146,34 @@ func (s *Server) decideTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err.Error())
 	case err != nil && strings.Contains(err.Error(), "scrie ce trebuie"):
 		fail(w, badRequest(err.Error()))
+	case err != nil:
+		fail(w, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// assignTask: utilizatorul muta un task (in asteptare sau blocat) la alt agent.
+func (s *Server) assignTask(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct {
+		AgentID int64 `json:"agentId"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	err = s.team.AssignTask(id, in.AgentID)
+	var ae team.AssignError
+	switch {
+	case errors.As(err, &ae):
+		fail(w, badRequest(ae.Error()))
+	case errors.Is(err, team.ErrTaskBusy):
+		writeErr(w, http.StatusConflict, err.Error())
 	case err != nil:
 		fail(w, err)
 	default:
