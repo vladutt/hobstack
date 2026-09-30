@@ -40,6 +40,9 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
   let pendingProject = null; // proiect primit cat timp un drag e activ
   let busy = false;          // mutare sau legare in curs
   let pos = new Map();       // id -> {x, y} (in coordonate SVG)
+  // ultimul viewBox, pe marimea canvas-ului: la aceeasi marime doar creste, ca o
+  // mutare sa nu rescaleze (si sa nu "miste") restul nodurilor
+  let lastView = null;       // {width, height, box: [minX, minY, maxX, maxY]}
   let youPos = { x: 0, y: TOP };
   let edges = [];            // {kind, from, to, els: [path...]}
   let nodeEls = new Map();   // id -> g.node
@@ -149,6 +152,11 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
       minX = Math.min(minX, p.x - 24); minY = Math.min(minY, p.y - 24);
       maxX = Math.max(maxX, p.x + NODE_W + 24); maxY = Math.max(maxY, p.y + NODE_H + 24);
     }
+    if (lastView && lastView.width === width && lastView.height === height) {
+      const [a, b, c, d] = lastView.box;
+      minX = Math.min(minX, a); minY = Math.min(minY, b); maxX = Math.max(maxX, c); maxY = Math.max(maxY, d);
+    }
+    lastView = { width, height, box: [minX, minY, maxX, maxY] };
     svgEl.setAttribute("viewBox", `${minX} ${minY} ${maxX - minX} ${maxY - minY}`);
 
     const defs = svg("defs", {},
@@ -254,11 +262,12 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
         g.classList.add("dragging");
       }
       const p = toSvg(ev);
-      // ramane in viewBox-ul curent, ca nodul sa nu dispara pana la drop
+      // ramane in viewBox-ul curent, cu marginea de 24 din draw(): la drop nu se
+      // mareste viewBox-ul, deci nu se rescaleaza restul canvas-ului
       const vb = svgEl.viewBox.baseVal;
       const np = {
-        x: Math.min(Math.max(start.pos.x + p.x - start.p.x, vb.x), vb.x + vb.width - NODE_W),
-        y: Math.min(Math.max(start.pos.y + p.y - start.p.y, vb.y), vb.y + vb.height - NODE_H),
+        x: Math.min(Math.max(start.pos.x + p.x - start.p.x, vb.x + 24), vb.x + vb.width - NODE_W - 24),
+        y: Math.min(Math.max(start.pos.y + p.y - start.p.y, vb.y + 24), vb.y + vb.height - NODE_H - 24),
       };
       pos.set(id, np);
       g.setAttribute("transform", `translate(${np.x} ${np.y})`);
@@ -273,14 +282,19 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
         onSelect(id);
         return;
       }
-      const np = pos.get(id);
-      const x = Math.round(np.x), y = Math.round(np.y);
+      // salvam nodul mutat si "inghetam" nodurile asezate automat: fara pozitie
+      // salvata, autoLayout le-ar reimparti pe nivel si ar sari fara sa le atingi
+      const toSave = project.agents
+        .filter((a) => a.id === id || a.posX == null || a.posY == null)
+        .map((a) => { const p = pos.get(a.id); return { id: a.id, x: Math.round(p.x), y: Math.round(p.y) }; });
       try {
-        await api(`/api/agents/${id}/position`, { method: "PUT", body: { x, y } });
-        // tinem pozitia si in proiectul din memorie pana vine cel reincarcat
+        await Promise.all(toSave.map((s) => api(`/api/agents/${s.id}/position`, { method: "PUT", body: { x: s.x, y: s.y } })));
+        // tinem pozitiile si in proiectul din memorie pana vine cel reincarcat
         for (const proj of [project, pendingProject]) {
-          const a = proj?.agents.find((ag) => ag.id === id);
-          if (a) { a.posX = x; a.posY = y; }
+          for (const s of toSave) {
+            const a = proj?.agents.find((ag) => ag.id === s.id);
+            if (a) { a.posX = s.x; a.posY = s.y; }
+          }
         }
       } catch (err) {
         toast(err.message);
