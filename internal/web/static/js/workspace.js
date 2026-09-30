@@ -4,6 +4,7 @@ import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
+import { questionBox } from "./questions.js";
 
 const COLUMNS = [
   { title: "Queued", statuses: ["queued"] },
@@ -68,6 +69,11 @@ export async function workspaceView(root, projectId, route) {
   // varful paginii si sa incapa intreg pe ecran (inclusiv campul de scris)
   const header = el("div", { class: "ws-head" });
   const tabsNav = el("nav", { class: "tabs", "aria-label": "Project sections" });
+  // intrebarile deschise ale agentilor ("Needs you"): containerul se creeaza o
+  // singura data si nu se scoate din pagina, ca raspunsul tastat sa nu se piarda
+  const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true });
+  let needsKey = null;  // id-urile intrebarilor desenate ultima data in banda
+  let pageHead = null;  // capul paginii desenat ultima data (inlocuit la fiecare renderHeader)
   const canvas = teamCanvas({
     onSelect: (id) => select(id),
     onEdit: (id) => select(id, "details"),
@@ -125,7 +131,10 @@ export async function workspaceView(root, projectId, route) {
   // panoul din dreapta: pe Echipa are doua tab-uri (Detalii | Chat), altfel doar chat
   const panelTabs = el("div", { class: "panel-tabs", role: "tablist" });
   const detailsBox = el("div", { class: "details" });
-  const chatBox = el("div", { class: "chat" }, thread, el("div", { class: "composer" }, chips, composer, note));
+  // intrebarea deschisa a agentului selectat, deasupra campului de scris
+  const chatQuestion = el("div", { class: "chat-question", hidden: true });
+  let chatQuestionKey = null; // id-ul intrebarii desenate ultima data in chat
+  const chatBox = el("div", { class: "chat" }, thread, chatQuestion, el("div", { class: "composer" }, chips, composer, note));
   const consoleBox = el("aside", { class: "console" }, consoleHead, panelTabs, detailsBox, chatBox);
   setupDrop(chatBox, addPending);
 
@@ -149,7 +158,51 @@ export async function workspaceView(root, projectId, route) {
     renderStrip();
     renderBoard();
     renderConsoleHead();
+    renderChatQuestion();
+    renderNeeds();
     renderDetails();
+  }
+
+  // ---------- intrebari catre utilizator ----------
+  // openQuestionOf: prima intrebare deschisa a agentului (sunt in ordinea sosirii)
+  function openQuestionOf(agentId) {
+    return (state.project.questions || []).find((q) => q.agentId === agentId) || null;
+  }
+
+  // questionNode: caseta unei intrebari, cu numele agentului si task-ul (T-<nr>) daca are
+  function questionNode(q) {
+    const p = state.project;
+    const agent = p.agents.find((a) => a.id === q.agentId);
+    const task = q.taskId ? p.tasks.find((t) => t.id === q.taskId) : null;
+    return questionBox(q, {
+      agentName: agent ? agent.name : "Agent",
+      taskRef: task ? ref(task) : null,
+      onDone: reload,
+    });
+  }
+
+  // renderNeeds: banda "Needs you". O redesenam doar cand se schimba setul de
+  // intrebari: reload-urile dese (SSE) ar sterge raspunsul pe care il scrii.
+  function renderNeeds() {
+    const questions = state.project.questions || [];
+    const key = questions.map((q) => q.id).join(",");
+    if (key === needsKey) return;
+    needsKey = key;
+    needsBox.hidden = !questions.length;
+    needsBox.replaceChildren(
+      el("h2", {}, `Needs you (${questions.length})`),
+      questions.map(questionNode));
+  }
+
+  // renderChatQuestion: intrebarea agentului selectat in chat; aceeasi regula:
+  // redesenam doar cand se schimba intrebarea
+  function renderChatQuestion() {
+    const q = state.selected ? openQuestionOf(state.selected) : null;
+    const key = q ? String(q.id) : "";
+    if (key === chatQuestionKey) return;
+    chatQuestionKey = key;
+    chatQuestion.hidden = !q;
+    chatQuestion.replaceChildren(...(q ? [questionNode(q)] : []));
   }
 
   // renderTabs: tab-ul activ al paginii si al panoului din dreapta
@@ -182,6 +235,7 @@ export async function workspaceView(root, projectId, route) {
     },
       avatar(a.name, kindOf(a), 22),
       el("span", {}, a.name),
+      openQuestionOf(a.id) ? el("span", { class: "ask-mark", title: "Waiting for your answer" }, "?") : null,
       el("span", { class: "dot " + (a.status || "idle").toLowerCase() }))));
   }
 
@@ -295,7 +349,7 @@ export async function workspaceView(root, projectId, route) {
     openFolder.replaceChildren(...folders.map((f) => el("option", { value: f.id }, f.name)));
     if (folders.some((f) => String(f.id) === keep)) openFolder.value = keep;
     openFolder.hidden = folders.length < 2;
-    header.replaceChildren(el("header", { class: "page-head" },
+    const head = el("header", { class: "page-head" },
       el("div", {},
         el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / ", p.name),
         el("div", { class: "actions" }, el("h1", {}, p.name), pill(p.status)),
@@ -307,8 +361,12 @@ export async function workspaceView(root, projectId, route) {
           p.paused
             ? el("button", { class: "btn primary", onclick: () => projectAction("resume") }, "Start team")
             : el("button", { class: "btn", onclick: () => projectAction("stop") }, "Stop team")),
-        openBar)),
-      tabsNav);
+        openBar));
+    // inlocuim doar capul paginii: banda "Needs you" ramane in pagina (altfel
+    // campul in care scrii ar pierde focusul la fiecare reload)
+    if (pageHead) pageHead.replaceWith(head);
+    else header.replaceChildren(head, needsBox, tabsNav);
+    pageHead = head;
   }
 
   function buildOpenBar(editors) {
@@ -563,6 +621,7 @@ export async function workspaceView(root, projectId, route) {
     renderTeam();
     renderStrip();
     renderConsoleHead();
+    renderChatQuestion();
     renderDetails();
     syncHash();
     if (!changed) return;

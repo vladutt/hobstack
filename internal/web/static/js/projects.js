@@ -86,8 +86,11 @@ function setupCard(s, refresh) {
 
 function projectCard(p) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  return el("a", { class: "card", href: `#/p/${p.id}` },
-    el("div", { class: "card-top" }, el("span", { class: "card-title" }, p.name), pill(p.status)),
+  const asks = p.openQuestions || 0; // intrebari ale agentilor care asteapta raspuns
+  return el("a", { class: "card" + (asks > 0 ? " needs-you-card" : ""), href: `#/p/${p.id}` },
+    el("div", { class: "card-top" }, el("span", { class: "card-title" }, p.name),
+      el("span", { class: "actions" }, pill(p.status),
+        asks ? el("span", { class: "pill pill-ask" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null)),
     el("p", { class: "muted clamp" }, p.goal || "No goal yet."),
     el("div", { class: "avatars" },
       el("span", { class: "stack" }, p.team.map((m) => avatar(m.name, kindOf(m), 28))),

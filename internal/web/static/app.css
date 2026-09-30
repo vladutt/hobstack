@@ -320,3 +320,20 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .folder-row { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; background: var(--card-2); }
 .folder-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .folder-chips[hidden], .folder-row .btn[hidden], .folder-rows .btn[hidden] { display: none; }
+
+/* intrebari catre utilizator ("Needs you") */
+.needs-you { display: grid; gap: 10px; }
+.needs-you[hidden] { display: none; }
+.needs-you h2 { font-size: 14px; color: var(--amber); margin: 0; }
+.question { border: 1px solid var(--amber); background: var(--amber-bg); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
+.question-head { font-size: 13px; }
+.question-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.question-answer { display: flex; gap: 8px; align-items: flex-start; }
+.question-answer textarea { flex: 1; min-width: 0; }
+.ask-mark { color: var(--amber); font-weight: 700; }
+.node text.ask-mark { fill: var(--amber); font: 700 14px var(--sans); }
+.pill-ask { background: rgba(229, 165, 75, .14); color: var(--amber); }
+.card.needs-you-card { border-color: var(--amber); }
+/* in chat: intrebarea sta intre thread si campul de scris, cu inaltime limitata */
+.chat-question { border-top: 1px solid var(--line); padding: 12px 12px 0; max-height: 45%; overflow-y: auto; flex-shrink: 0; }
+.chat-question[hidden] { display: none; }

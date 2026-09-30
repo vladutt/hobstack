@@ -222,7 +222,10 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
         svg("text", { class: "sub", x: 46, y: 40 }, shorten([a.role, (project.folders || []).length > 1 ? folderOf(project, a)?.name : ""].filter(Boolean).join(" \u00b7 "))),
         svg("text", { class: "sub" + (a.detached ? " unlinked" : ""), x: 46, y: 54 },
           a.detached ? "detached" : a.responsibilities ? shorten("Takes: " + a.responsibilities) : ""),
-        svg("circle", { class: dot, cx: NODE_W - 22, cy: 14, r: 4 })),
+        svg("circle", { class: dot, cx: NODE_W - 22, cy: 14, r: 4 }),
+        // "?": agentul asteapta un raspuns de la utilizator
+        (project.questions || []).some((q) => q.agentId === a.id)
+          ? svg("text", { class: "ask-mark", x: NODE_W - 40, y: 18 }, "?") : null),
       handle(NODE_W / 2, NODE_H, a.id), del);
     g.addEventListener("pointerdown", (e) => startMove(e, a.id, g));
     g.addEventListener("dblclick", () => onEdit(a.id));
