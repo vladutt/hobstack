@@ -58,12 +58,12 @@ function setupCard(s, refresh) {
   const stop = act(() => api(`/api/setup/${s.id}/stop`, { method: "POST" }));
   const dismiss = act(() => api(`/api/setup/${s.id}`, { method: "DELETE" }));
   const retry = act(async () => {
-    const next = await api("/api/setup", { method: "POST", body: { workdir: s.workdir, description: s.description, model: s.model } });
+    const next = await api("/api/setup", { method: "POST", body: { workdirs: s.workdirs, description: s.description, model: s.model } });
     await api(`/api/setup/${s.id}`, { method: "DELETE" });
     location.hash = `#/setup/${next.id}`;
   });
   const text = s.status === "failed" ? s.error
-    : s.proposal?.goal || s.description || s.workdir;
+    : s.proposal?.goal || s.description || (s.workdirs || []).join(", ");
   const buttons = {
     running: [el("a", { class: "btn", href }, "Watch"), el("button", { type: "button", class: "btn", onclick: stop }, "Stop")],
     ready: [el("a", { class: "btn primary", href }, "Review proposal"), el("button", { type: "button", class: "btn", onclick: dismiss }, "Dismiss")],

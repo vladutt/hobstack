@@ -8,7 +8,7 @@ import { liveRenderer } from "./live.js";
 // redeschide la pasul la care a ajuns (cardul din Proiecte duce aici).
 export async function setupView(root, id) {
   const info = await api("/api/info");
-  const form = { workdir: "", description: "", model: "sonnet" };
+  const form = { workdirs: [""], description: "", model: "sonnet" };
   let session = null;   // {id, runId}
   let stream = null;    // EventSource-ul analizei
   let closed = false;
@@ -24,8 +24,26 @@ export async function setupView(root, id) {
 
   // ---------- pasul 1 ----------
   function stepChoose() {
-    const workdir = el("input", { type: "text", value: form.workdir, placeholder: "e.g. ~/code/shop (optional)" });
-    const pickBtn = info.canPickFolder && el("button", { type: "button", class: "btn", onclick: pick }, "Browse...");
+    // lista de foldere: un rand cu input, "Browse..." si buton de stergere
+    const folderBox = el("div", { class: "folder-rows" });
+    const inputs = [];
+    const addFolder = (value = "") => {
+      const input = el("input", { type: "text", value, placeholder: inputs.length ? "e.g. ~/code/probe-landing" : "e.g. ~/code/shop (optional)" });
+      const pick = info.canPickFolder && el("button", { type: "button", class: "btn", onclick: async () => {
+        try { const r = await api("/api/pick-folder", { method: "POST" }); if (r?.path) input.value = r.path; } catch (err) { toast(err.message); }
+      } }, "Browse...");
+      const row = el("div", { class: "input-row" }, input, pick);
+      const del = el("button", { type: "button", class: "btn", "aria-label": "Remove folder", onclick: () => {
+        inputs.splice(inputs.indexOf(input), 1); row.remove(); syncDel();
+      } }, "\u00d7");
+      row.append(del);
+      input.del = del;
+      inputs.push(input);
+      folderBox.append(row);
+      syncDel();
+    };
+    const syncDel = () => inputs.forEach((i) => { i.del.hidden = inputs.length === 1; });
+    (form.workdirs.length ? form.workdirs : [""]).forEach((v) => addFolder(v));
     const description = el("textarea", { value: form.description, rows: 5, maxlength: 4000,
       placeholder: "What do you want to do? e.g. refactor checkout and add payment tests. Required if you do not pick a folder." });
     const model = el("select", { value: form.model },
@@ -33,21 +51,18 @@ export async function setupView(root, id) {
     const go = el("button", { type: "submit", class: "btn primary" }, "Analyze");
     body.replaceChildren(el("form", { class: "section wizard-step", onsubmit: start },
       el("h2", {}, "1. What to analyze"),
-      field("Project folder", el("div", { class: "input-row" }, workdir, pickBtn),
-        "The folder is not modified: the AI only reads. Empty = new project; the folder is created at the end."),
+      el("div", { class: "field" },
+        el("span", { class: "label" }, "Project folders"),
+        folderBox,
+        el("div", { class: "actions" }, el("button", { type: "button", class: "btn small", onclick: () => addFolder() }, "+ Add folder")),
+        el("span", { class: "hint" }, "The folders are not modified: the AI only reads. Several folders = one project with several parts (e.g. client + landing page). Empty = new project; the folder is created at the end.")),
       field("What do you want to do?", description),
       field("Model for the analysis", model, "Sonnet is a good balance; Haiku is faster."),
       el("div", { class: "actions" }, go)));
 
-    async function pick() {
-      try {
-        const r = await api("/api/pick-folder", { method: "POST" });
-        if (r?.path) workdir.value = r.path;
-      } catch (err) { toast(err.message); }
-    }
     async function start(e) {
       e.preventDefault();
-      Object.assign(form, { workdir: workdir.value.trim(), description: description.value.trim(), model: model.value });
+      Object.assign(form, { workdirs: inputs.map((i) => i.value.trim()).filter(Boolean), description: description.value.trim(), model: model.value });
       go.disabled = true;
       try {
         await begin();
@@ -125,6 +140,14 @@ export async function setupView(root, id) {
     const goal = el("textarea", { value: p.goal, rows: 3 });
     const context = el("textarea", { value: p.context, rows: 8 });
     const tree = el("pre", { class: "wizard-tree" });
+    // foldere: campurile editabile ale fiecarui folder propus
+    const folders = (p.folders || []).map((f) => ({
+      path: f.path,
+      name: el("input", { type: "text", value: f.name, maxlength: 40 }),
+      context: el("textarea", { value: f.context || "", rows: 3 }),
+    }));
+    const many = folders.length > 1;
+    const folderIndex = (name) => Math.max(0, (p.folders || []).findIndex((f) => f.name.toLowerCase() === (name || "").toLowerCase()));
     // un rand per agent propus, cu referinte la input-uri
     const rows = p.agents.map((a) => {
       const r = {
@@ -133,6 +156,8 @@ export async function setupView(root, id) {
         role: el("input", { type: "text", value: a.role, maxlength: 80 }),
         model: el("select", { value: a.model }, (info.models || []).map((m) => el("option", { value: m.id }, m.label))),
         resp: el("textarea", { value: a.responsibilities, rows: 2 }),
+        folder: many && el("select", { value: String(folderIndex(a.folder)) },
+          folders.map((f, i) => el("option", { value: i }, f.name.value))),
         parent: el("select", {}), reviewer: el("select", {}),
         parentName: a.reportsTo || "", reviewerName: a.reviewedBy || "",
         oldName: a.name, // numele de dinainte de o redenumire (pentru legaturile celorlalti)
@@ -146,6 +171,7 @@ export async function setupView(root, id) {
         el("div", { class: "row" }, field("Name", r.name), field("Role", r.role)),
         el("div", { class: "row" }, field("Model", r.model), field("Takes", r.resp)),
         el("div", { class: "row" }, field("Reports to", r.parent), field("Reviewed by", r.reviewer)),
+        r.folder && el("div", { class: "row" }, field("Folder", r.folder)),
         el("div", { class: "field" }, el("span", { class: "label" }, "Tools"),
           el("div", { class: "wizard-tools" }, r.tools.map((t) => el("label", { class: "check" }, t.box, t.label)))),
         el("details", {}, el("summary", {}, "Prompt"),
@@ -187,6 +213,7 @@ export async function setupView(root, id) {
           if (seen.has(r)) continue;
           seen.add(r);
           lines.push("  ".repeat(depth) + "\u2514 " + r.name.value.trim() + (r.role.value ? " \u00b7 " + r.role.value : "") +
+            (many ? "  [" + folders[Number(r.folder.value)].name.value.trim() + "]" : "") +
             (r.effReviewer ? "  (reviewed by " + r.effReviewer + ")" : ""));
           walk(r.name.value.trim(), depth + 1);
         }
@@ -213,7 +240,13 @@ export async function setupView(root, id) {
         sync();
       });
       r.role.addEventListener("input", () => drawTree(rows.filter((x) => x.include.checked)));
+      r.folder?.addEventListener("change", () => drawTree(rows.filter((x) => x.include.checked)));
     }
+    // numele unui folder se schimba: etichetele din selectele agentilor le urmeaza
+    folders.forEach((f, i) => f.name.addEventListener("input", () => {
+      for (const r of rows) if (r.folder) r.folder.options[i].textContent = f.name.value;
+      drawTree(rows.filter((x) => x.include.checked));
+    }));
 
     const createBtn = el("button", { type: "button", class: "btn primary", onclick: create }, "Create project");
     body.replaceChildren(el("div", { class: "wizard-review" },
@@ -221,6 +254,11 @@ export async function setupView(root, id) {
         el("h2", {}, "3. Proposal"),
         field("Name", name), field("Goal", goal), field("Shared context", context),
         p.rationale && el("div", { class: "field" }, el("span", { class: "label" }, "Why this team"), el("p", { class: "muted" }, p.rationale))),
+      folders.length > 0 && el("section", { class: "section" },
+        el("h2", {}, many ? "Folders" : "Folder"),
+        folders.map((f) => el("div", { class: "folder-row" },
+          el("div", { class: "row" }, field("Name", f.name), el("div", { class: "field" }, el("span", { class: "label" }, "Path"), el("code", {}, f.path || "new folder"))),
+          field("Context for this folder", f.context)))),
       el("section", { class: "section" },
         el("div", { class: "section-head" }, el("h2", {}, "Team"), el("span", { class: "hint" }, "Uncheck what you do not want; you can also adjust the links on the canvas after creation.")),
         tree, rows.map((r) => r.el)),
@@ -235,12 +273,14 @@ export async function setupView(root, id) {
         responsibilities: r.resp.value, reportsTo: r.effParent, reviewedBy: r.effReviewer,
         background: r.background.value, instructions: r.instructions.value, doneDef: r.doneDef.value,
         tools: r.tools.filter((t) => t.box.checked).map((t) => t.id),
+        folder: r.folder ? folders[Number(r.folder.value)].name.value.trim() : "",
       }));
       createBtn.disabled = true;
       try {
         const proj = await api("/api/projects/setup", { method: "POST", body: {
-          setupId: session?.id, workdir: form.workdir,
-          proposal: { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "", agents },
+          setupId: session?.id, workdir: form.workdirs[0] || "",
+          proposal: { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "",
+            folders: folders.map((f) => ({ path: f.path, name: f.name.value.trim(), context: f.context.value })), agents },
         } });
         location.hash = `#/p/${proj.id}/team`;
       } catch (err) {
@@ -259,7 +299,7 @@ export async function setupView(root, id) {
       stepChoose();
       return () => { closed = true; closeStream(); };
     }
-    Object.assign(form, { workdir: session.workdir, description: session.description, model: session.model || form.model });
+    Object.assign(form, { workdirs: session.workdirs || [], description: session.description, model: session.model || form.model });
     if (session.status === "running") stepAnalyze();
     else if (session.status === "ready") stepReview(session.proposal);
     else stepFailed(session);
