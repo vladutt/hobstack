@@ -2,7 +2,9 @@ package prompt
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // ValidTools sunt tool-urile pe care le poti bifa la un agent, in ordinea din UI.
@@ -32,17 +34,35 @@ var denyAlways = []string{
 
 // Settings intoarce JSON-ul pentru --settings. In modul -p, ce lipseste din
 // allow sau apare in deny e refuzat automat, fara sa intrebe pe nimeni.
-func Settings(tools []string) string {
+// home e folderul agentului: cu tool-ul write, scrie doar acolo ("" = oriunde).
+func Settings(tools []string, home string) string {
 	allow := slices.Clone(alwaysAllow)
 	for _, name := range ValidTools {
-		if slices.Contains(tools, name) {
-			allow = append(allow, toolRules[name]...)
+		if !slices.Contains(tools, name) {
+			continue
 		}
+		if name == "write" && home != "" {
+			for _, tool := range toolRules["write"] {
+				allow = append(allow, tool+"("+pathRule(home)+")")
+			}
+			continue
+		}
+		allow = append(allow, toolRules[name]...)
 	}
 	b, _ := json.Marshal(map[string]any{
 		"permissions": map[string]any{"allow": allow, "deny": denyAlways},
 	})
 	return string(b)
+}
+
+// pathRule: tot ce e sub dir, in sintaxa regulilor Claude Code. O cale absoluta
+// incepe cu "//" (ex. //Users/ana/shop/**); pe Windows C:\x devine //c/x/**.
+func pathRule(dir string) string {
+	p := filepath.Clean(dir)
+	if v := filepath.VolumeName(p); len(v) == 2 && v[1] == ':' {
+		p = "/" + strings.ToLower(v[:1]) + p[2:]
+	}
+	return "/" + strings.TrimSuffix(filepath.ToSlash(p), "/") + "/**"
 }
 
 // MCPConfig intoarce JSON-ul pentru --mcp-config: un singur server, "team",

@@ -34,7 +34,7 @@ func LinksFor(a store.Agent, team []store.Agent) Links {
 
 // Member e un rand din "Echipa ta directa".
 type Member struct {
-	Name, Role, Responsibilities, Status string
+	Name, Role, Responsibilities, Status, Folder string
 }
 
 // OpenTask e un task primit de un lider si inca in lucru.
@@ -112,8 +112,26 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if g := strings.TrimSpace(p.Goal); g != "" {
 		proj = append(proj, "Goal: "+g)
 	}
+	// cu mai multe foldere, agentul afla unde lucreaza si ce poate doar citi
+	if len(p.Folders) > 1 {
+		home := store.HomeFolder(a, p.Folders)
+		lines := []string{"Folders:"}
+		for _, f := range p.Folders {
+			access := "read only"
+			if f.ID == home.ID {
+				access = "your folder"
+			}
+			lines = append(lines, fmt.Sprintf("- %s: %s (%s)", f.Name, f.Path, access))
+		}
+		proj = append(proj, strings.Join(lines, "\n"))
+	}
 	if c := strings.TrimSpace(p.Context); c != "" {
 		proj = append(proj, "Shared context:\n"+c)
+	}
+	for _, f := range p.Folders {
+		if c := strings.TrimSpace(f.Context); c != "" {
+			proj = append(proj, "Context for "+f.Name+":\n"+c)
+		}
 	}
 	section(&b, "Project", strings.Join(proj, "\n\n"))
 
@@ -166,6 +184,9 @@ func Team(members []Member) string {
 			if p != "" {
 				parts = append(parts, p)
 			}
+		}
+		if m.Folder != "" {
+			parts = append(parts, "folder: "+m.Folder)
 		}
 		if len(parts) > 0 {
 			b.WriteString(": " + strings.Join(parts, ", "))

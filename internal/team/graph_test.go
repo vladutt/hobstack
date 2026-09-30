@@ -252,14 +252,14 @@ func TestTurnContext(t *testing.T) {
 	agents, _ := f.st.ListAgents(f.p.ID)
 	tasks, _ := f.st.ListTasks(f.p.ID)
 
-	got := f.tm.turnContext(sub, agents, tasks, cur.ID)
+	got := f.tm.turnContext(sub, agents, tasks, cur.ID, nil)
 	if len(got.Direct) != 1 || got.Direct[0].Name != "Wes" {
 		t.Fatalf("Direct: %+v", got.Direct)
 	}
 	if len(got.OpenTasks) != 1 || got.OpenTasks[0].Ref != other.Ref() || got.OpenTasks[0].Done != 1 || got.OpenTasks[0].Total != 2 {
 		t.Fatalf("OpenTasks: %+v", got.OpenTasks)
 	}
-	if r := f.tm.turnContext(rev, agents, tasks, 0).Reviewees; len(r) != 1 || r[0] != "Wes" {
+	if r := f.tm.turnContext(rev, agents, tasks, 0, nil).Reviewees; len(r) != 1 || r[0] != "Wes" {
 		t.Fatalf("Reviewees: %v", r)
 	}
 }

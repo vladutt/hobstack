@@ -17,17 +17,24 @@ import (
 // startRun porneste un run pentru agent. taskID = 0 inseamna run fara task
 // (lead sau mesaj direct). Se apeleaza cu t.work blocat.
 func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, taskID int64, turn string) error {
-	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
-		return fmt.Errorf("the working folder %s does not exist", p.Workdir)
+	home := store.HomeFolder(a, p.Folders)
+	if info, err := os.Stat(home.Path); err != nil || !info.IsDir() {
+		return fmt.Errorf("the folder %s (%s) does not exist", home.Name, home.Path)
 	}
 
-	// fisierele proiectului: agentul are voie sa citeasca folderul si le vede in tura
+	// celelalte foldere ale proiectului: agentul le poate citi (scrie doar in al lui)
 	var extraArgs []string
+	for _, f := range p.Folders {
+		if f.ID != home.ID {
+			extraArgs = append(extraArgs, "--add-dir", f.Path)
+		}
+	}
+	// fisierele proiectului: agentul are voie sa citeasca folderul si le vede in tura
 	if dir := t.filesDir(p.ID); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		extraArgs = []string{"--add-dir", dir}
+		extraArgs = append(extraArgs, "--add-dir", dir)
 		files, err := t.st.ListProjectFiles(p.ID)
 		if err != nil {
 			return err
@@ -43,7 +50,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 
 	system := prompt.System(p, a, prompt.LinksFor(a, agents))
 	// Claude tine sesiunile pe cwd, deci un alt folder de lucru inseamna alta sesiune.
-	hash := prompt.Hash(p.Workdir + "\n" + system)
+	hash := prompt.Hash(home.Path + "\n" + system)
 	// Claude retine system prompt-ul de la inceputul sesiunii. Daca s-a schimbat
 	// (agent sau proiect editat), --resume l-ar ignora, deci pornim sesiune noua.
 	resume := a.SessionID != "" && a.PromptHash == hash
@@ -81,7 +88,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	spec := runner.Spec{
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
-		Dir:    p.Workdir,
+		Dir:    home.Path,
 		Args:   append(t.args(p, a, system, turn, token, resume), extraArgs...),
 		Prompt: turn,
 	}
@@ -108,7 +115,9 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, 
 		// setarile globale ale utilizatorului raman; .claude/settings.json din
 		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
 		"--setting-sources", "user",
-		"--settings", prompt.Settings(a.Tools),
+		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path),
+		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
+		"--permission-mode", "dontAsk",
 		"--mcp-config", prompt.MCPConfig(t.baseURL + "/mcp/" + token),
 		"--strict-mcp-config",
 	}

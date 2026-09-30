@@ -145,6 +145,8 @@ func (m *Manager) args(s *Session, model string) []string {
 		"--model", model,
 		"--append-system-prompt", systemPrompt,
 		"--setting-sources", "user",
+		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
+		"--permission-mode", "dontAsk",
 		"--settings", string(settings),
 		"--mcp-config", prompt.MCPConfig(m.baseURL + "/mcp/" + s.token),
 		"--strict-mcp-config",

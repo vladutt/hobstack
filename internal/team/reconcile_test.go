@@ -64,8 +64,9 @@ func TestRunArguments(t *testing.T) {
 	if hasFlag(args, "--max-budget-usd") {
 		t.Error("fara buget setat nu trebuie trimis --max-budget-usd")
 	}
-	if !strings.Contains(argValue(args, "--settings"), `"Edit"`) {
-		t.Error("Rook are tool-ul write: --settings trebuia sa permita Edit")
+	// scrisul e restrans la folderul agentului, deci regula are calea in paranteze
+	if !strings.Contains(argValue(args, "--settings"), `"Edit(`) {
+		t.Error("Rook are tool-ul write: --settings trebuia sa permita Edit in folderul lui")
 	}
 	if !strings.Contains(argValue(args, "--mcp-config"), `"url":"http://127.0.0.1:7777/mcp/`) {
 		t.Errorf("--mcp-config = %s", argValue(args, "--mcp-config"))

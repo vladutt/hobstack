@@ -72,7 +72,7 @@ func TestManagerHappyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := f.specs[0]
-	if spec.Dir != dir || spec.ID != s.RunID || !strings.Contains(strings.Join(spec.Args, " "), "mcp__team__propose_setup") {
+	if spec.Dir != dir || spec.ID != s.RunID || !strings.Contains(strings.Join(spec.Args, " "), "mcp__team__propose_setup") || !strings.Contains(strings.Join(spec.Args, " "), "--permission-mode dontAsk") {
 		t.Fatalf("spec: %+v", spec)
 	}
 	b := m.Wrap(innerBackend{})

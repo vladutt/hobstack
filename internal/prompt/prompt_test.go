@@ -140,7 +140,7 @@ func TestSettings(t *testing.T) {
 			Deny  []string `json:"deny"`
 		} `json:"permissions"`
 	}
-	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"})), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"}, "")), &cfg); err != nil {
 		t.Fatal(err)
 	}
 	allow := cfg.Permissions.Allow
@@ -160,7 +160,7 @@ func TestSettings(t *testing.T) {
 		}
 	}
 	// fara tool-uri: doar citire + echipa
-	json.Unmarshal([]byte(Settings(nil)), &cfg)
+	json.Unmarshal([]byte(Settings(nil, "")), &cfg)
 	if len(cfg.Permissions.Allow) != 4 {
 		t.Errorf("allow fara tool-uri = %v", cfg.Permissions.Allow)
 	}

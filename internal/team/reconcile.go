@@ -96,7 +96,7 @@ func (t *Team) Reconcile(projectID int64) error {
 	notify := agents[0] // prima radacina: aici apar erorile de pornire
 	// ctxFor: contextul turei; liderii si radacinile unui proiect cu etape vad si etapele
 	ctxFor := func(a store.Agent, currentTaskID int64) prompt.TurnContext {
-		c := t.turnContext(a, agents, tasks, currentTaskID)
+		c := t.turnContext(a, agents, tasks, currentTaskID, p.Folders)
 		if r := store.RolesOf(a, agents); r.IsLead || r.IsRoot {
 			c.Stages = stagesOverview(stages, agents)
 		}
@@ -218,13 +218,17 @@ func (t *Team) Reconcile(projectID int64) error {
 
 // turnContext aduna ce depinde de locul agentului in echipa: echipa lui
 // directa, cine ii verifica munca si task-urile deschise (doar pentru lideri).
-func (t *Team) turnContext(a store.Agent, agents []store.Agent, tasks []store.Task, currentTaskID int64) prompt.TurnContext {
+func (t *Team) turnContext(a store.Agent, agents []store.Agent, tasks []store.Task, currentTaskID int64, folders []store.Folder) prompt.TurnContext {
 	var c prompt.TurnContext
 	for _, child := range store.Children(a.ID, agents) {
-		c.Direct = append(c.Direct, prompt.Member{
+		m := prompt.Member{
 			Name: child.Name, Role: child.Role, Responsibilities: child.Responsibilities,
 			Status: t.statusOf(child, tasks, false),
-		})
+		}
+		if len(folders) > 1 { // cu un singur folder nu adauga nimic
+			m.Folder = store.HomeFolder(child, folders).Name
+		}
+		c.Direct = append(c.Direct, m)
 	}
 	for _, o := range agents {
 		if o.ReviewerID != nil && *o.ReviewerID == a.ID {
