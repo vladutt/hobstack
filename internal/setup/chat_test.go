@@ -37,7 +37,10 @@ func readySession(t *testing.T) (*Manager, *fakeStarter, Session) {
 
 func TestChatResumesWithCurrentProposal(t *testing.T) {
 	m, f, s := readySession(t)
-	cur := *s.Proposal
+	cur, err := cloneProposal(*s.Proposal)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cur.Agents[1].Tools = []string{"write", "shell"} // utilizatorul a bifat shell la Bob
 	cur.Context = "edited by the user"
 	got, err := m.Chat(s.ID, "add a QA agent", cur)
@@ -116,7 +119,7 @@ func TestChatValidation(t *testing.T) {
 	if _, err := m.Chat(s.ID, strings.Repeat("x", 4001), *s.Proposal); err == nil {
 		t.Fatal("mesaj prea lung")
 	}
-	bad := *s.Proposal
+	bad, _ := cloneProposal(*s.Proposal)
 	bad.Agents = nil
 	if _, err := m.Chat(s.ID, "hi", bad); err == nil {
 		t.Fatal("propunere invalida")
@@ -229,5 +232,52 @@ func TestChatRefusesHiddenSession(t *testing.T) {
 	}
 	if _, err := m.Chat(s.ID, "hi", *s.Proposal); !errors.Is(err, ErrNotReady) {
 		t.Fatalf("hidden: %v", err)
+	}
+}
+
+// redenumirea pastreaza tool-urile bifate de utilizator; un agent cu adevarat nou nu primeste shell
+func TestChatRenameKeepsTools(t *testing.T) {
+	m, f, s := readySession(t)
+	cur, _ := cloneProposal(*s.Proposal)
+	cur.Agents[1].Tools = []string{"write", "shell"}
+	if _, err := m.Chat(s.ID, "rename Bob to Rob", cur); err != nil {
+		t.Fatal(err)
+	}
+	spec := f.specs[len(f.specs)-1]
+	b := m.Wrap(innerBackend{})
+	c, _ := b.Resolve(tokenOf(t, spec))
+	rename := `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Rob","role":"Dev","reportsTo":"Ana","tools":["write","shell"]}]}`
+	if _, err := b.ProposeSetup(c, json.RawMessage(rename)); err != nil {
+		t.Fatalf("redenumire: %v", err)
+	}
+	// Bob ramane (nu e redenumire), Vera e noua: shell refuzat
+	added := `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Rob","role":"Dev","reportsTo":"Ana","tools":["write","shell"]},{"name":"Vera","role":"QA","reportsTo":"Ana","tools":["shell"]}]}`
+	if _, err := b.ProposeSetup(c, json.RawMessage(added)); err == nil || !strings.Contains(err.Error(), "shell") {
+		t.Fatalf("agent nou cu shell: %v", err)
+	}
+}
+
+// Undo in timpul unui run de chat e refuzat
+func TestUndoWhileBusy(t *testing.T) {
+	m, _, s := readySession(t)
+	if _, err := m.Chat(s.ID, "hi", *s.Proposal); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Undo(s.ID); !errors.Is(err, ErrBusy) {
+		t.Fatalf("undo busy: %v", err)
+	}
+}
+
+// la pornire, folderele temporare orfane (sesiunile sunt doar in memorie) se sterg
+func TestNewCleansTempRoot(t *testing.T) {
+	root := t.TempDir()
+	orphan := filepath.Join(root, "abc")
+	os.MkdirAll(filepath.Join(orphan, "sub"), 0o755)
+	os.WriteFile(filepath.Join(orphan, "sub", "f"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(root, "loose"), []byte("x"), 0o644)
+	New(&fakeStarter{done: map[string]func(runner.Outcome){}}, "http://127.0.0.1:1", root)
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("%v %v", err, entries)
 	}
 }

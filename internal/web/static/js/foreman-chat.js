@@ -13,7 +13,7 @@ import { liveRenderer } from "./live.js";
 //   onChanged(session)  chemat cand versiunea propunerii a crescut sau dupa Undo
 //   onBusy(bool)        chemat cand Foreman incepe / termina (setup.js blocheaza formularul)
 //
-// Intoarce { el, setDisabled(bool), destroy() }. Elementul se poate muta in alta
+// Intoarce { el, destroy() }. Elementul se poate muta in alta
 // parte a paginii (setup.js il muta la reconstruirea formularului): conversatia si
 // stream-ul in curs raman, fiindca instanta e aceeasi.
 export function foremanChat({ session, appName, folderMode, collect, onChanged, onBusy = () => {} }) {
@@ -43,11 +43,9 @@ export function foremanChat({ session, appName, folderMode, collect, onChanged, 
 
   // draw redeseneaza conversatia din `chat`; caseta live (daca exista) ramane la final
   function draw() {
-    let lastForeman = -1;
-    chat.forEach((m, i) => { if (m.role === "foreman") lastForeman = i; });
     const msgs = chat.map((m, i) => {
       const role = m.role === "user" || m.role === "foreman" ? m.role : "event";
-      const undo = undoable && i === lastForeman && !busy
+      const undo = undoable && i === chat.length - 1 && !busy
         ? el("div", { class: "fc-undo" }, el("button", { type: "button", class: "btn small", onclick: undoLast }, "Undo"))
         : null;
       return el("div", { class: `fc-msg ${role}` }, m.text, undo);
@@ -56,14 +54,10 @@ export function foremanChat({ session, appName, folderMode, collect, onChanged, 
     thread.scrollTop = thread.scrollHeight;
   }
 
-  function setDisabled(on) {
-    input.disabled = on;
-    sendBtn.disabled = on;
-  }
-
   function setBusy(on) {
     busy = on;
-    setDisabled(on);
+    input.disabled = on;
+    sendBtn.disabled = on;
     onBusy(on);
   }
 
@@ -77,6 +71,9 @@ export function foremanChat({ session, appName, folderMode, collect, onChanged, 
       if (!s) s = await api(`/api/setup/${id}`); // protectie: raspuns fara corp
     } catch (err) {
       toast(err.message);
+      // serverul poate fi apucat sa adauge mesajul si un eveniment "failed": refacem conversatia
+      try { chat = (await api(`/api/setup/${id}`))?.chat || chat; } catch { /* ramane cum era */ }
+      draw();
       setBusy(false);
       return; // textul ramane in camp, se poate retrimite
     }
@@ -162,7 +159,6 @@ export function foremanChat({ session, appName, folderMode, collect, onChanged, 
 
   return {
     el: root,
-    setDisabled,
     destroy() { destroyed = true; closeStream(); root.remove(); },
   };
 }

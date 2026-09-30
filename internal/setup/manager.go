@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -99,6 +100,16 @@ type Manager struct {
 }
 
 func New(st Starter, baseURL, tempRoot string) *Manager {
+	// sesiunile sunt doar in memorie: dupa repornire folderele temporare raman orfane
+	if tempRoot != "" {
+		if entries, err := os.ReadDir(tempRoot); err == nil {
+			for _, e := range entries {
+				if err := os.RemoveAll(filepath.Join(tempRoot, e.Name())); err != nil {
+					log.Printf("setup: nu pot sterge %s: %v", e.Name(), err)
+				}
+			}
+		}
+	}
 	return &Manager{starter: st, baseURL: baseURL, tempRoot: tempRoot,
 		sessions: map[string]*Session{}, tokens: map[string]string{}}
 }
@@ -364,7 +375,7 @@ func (m *Manager) Chat(id, message string, current Proposal) (Session, error) {
 		m.mu.Unlock()
 		return Session{}, ErrBusy
 	}
-	if s.Status != StatusReady {
+	if s.hidden || s.Status != StatusReady { // un Dismiss intre cele doua lock-uri sterge folderul temporar
 		m.mu.Unlock()
 		return Session{}, ErrNotReady
 	}
@@ -555,9 +566,35 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 		if err := ValidateProposal(&p, false, existing); err != nil {
 			return "", err
 		}
+		// redenumire: un singur agent trimis a disparut si unul singur e nou => e acelasi agent,
+		// deci pastreaza tool-urile lui
+		var newNames []string
+		seen := map[string]bool{}
 		for _, a := range p.Agents {
+			n := strings.ToLower(a.Name)
+			seen[n] = true
+			if _, known := chatTools[n]; !known {
+				newNames = append(newNames, n)
+			}
+		}
+		var missing []string
+		for n := range chatTools {
+			if !seen[n] {
+				missing = append(missing, n)
+			}
+		}
+		renamedFrom := map[string]string{}
+		if len(missing) == 1 && len(newNames) == 1 {
+			renamedFrom[newNames[0]] = missing[0]
+		}
+		for _, a := range p.Agents {
+			n := strings.ToLower(a.Name)
+			allowed := chatTools[n]
+			if old, ok := renamedFrom[n]; ok {
+				allowed = chatTools[old]
+			}
 			for _, tool := range a.Tools {
-				if tool == "write" || tool == "git" || slices.Contains(chatTools[strings.ToLower(a.Name)], tool) {
+				if tool == "write" || tool == "git" || slices.Contains(allowed, tool) {
 					continue
 				}
 				return "", ValidationError(fmt.Sprintf("you may not add the shell or web tools (%s: %s); the user adds them", a.Name, tool))
