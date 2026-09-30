@@ -267,20 +267,29 @@ export async function setupView(root, id) {
         el("span", { class: "grow" }), createBtn)));
     sync();
 
+    // numele efectiv al folderului, ca in backend: numele scris, altfel ultimul
+    // segment al caii, altfel "Main". Acelasi nume merge la folder si la agenti.
+    function folderName(f) {
+      const typed = f.name.value.trim();
+      if (typed) return typed;
+      const last = (f.path || "").split(/[\\/]/).filter(Boolean).pop();
+      return last || "Main";
+    }
+
     async function create() {
       const agents = rows.filter((r) => r.include.checked).map((r) => ({
         name: r.name.value.trim(), role: r.role.value.trim(), model: r.model.value,
         responsibilities: r.resp.value, reportsTo: r.effParent, reviewedBy: r.effReviewer,
         background: r.background.value, instructions: r.instructions.value, doneDef: r.doneDef.value,
         tools: r.tools.filter((t) => t.box.checked).map((t) => t.id),
-        folder: r.folder ? folders[Number(r.folder.value)].name.value.trim() : "",
+        folder: r.folder ? folderName(folders[Number(r.folder.value)]) : "",
       }));
       createBtn.disabled = true;
       try {
         const proj = await api("/api/projects/setup", { method: "POST", body: {
           setupId: session?.id, workdir: form.workdirs[0] || "",
           proposal: { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "",
-            folders: folders.map((f) => ({ path: f.path, name: f.name.value.trim(), context: f.context.value })), agents },
+            folders: folders.map((f) => ({ path: f.path, name: folderName(f), context: f.context.value })), agents },
         } });
         location.hash = `#/p/${proj.id}/team`;
       } catch (err) {

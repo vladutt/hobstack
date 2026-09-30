@@ -194,3 +194,17 @@ func TestCreateProjectFromSetupSingleFolderNoPath(t *testing.T) {
 		t.Fatalf("folder nou: %+v", d.Folders)
 	}
 }
+
+func TestCreateProjectFromSetupNestedFolders(t *testing.T) {
+	e := withSetup(t)
+	outer := t.TempDir()
+	proposal := map[string]any{
+		"name": "Probe", "goal": "g", "context": "c",
+		"folders": []map[string]any{{"path": outer, "name": "A"}, {"path": filepath.Join(outer, "web"), "name": "B"}},
+		"agents":  []map[string]any{{"name": "Ana", "role": "Lead", "model": "sonnet", "reportsTo": ""}},
+	}
+	code, raw := e.do(t, "POST", "/api/projects/setup", map[string]any{"proposal": proposal})
+	if code != 400 || !strings.Contains(string(raw), "is inside") {
+		t.Fatalf("%d %s", code, raw)
+	}
+}

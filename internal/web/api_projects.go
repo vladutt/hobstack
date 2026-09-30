@@ -75,6 +75,9 @@ func (in projectInput) folders(projectName, workspaces string) ([]store.Folder, 
 			return nil, badRequest("two folders with the path " + dir)
 		}
 		paths[dir] = true
+		if err := checkNotNested(out[:i], dir); err != nil {
+			return nil, err
+		}
 		if f.Name == "" {
 			f.Name = store.FolderName(dir)
 			if names[strings.ToLower(f.Name)] {
@@ -84,6 +87,22 @@ func (in projectInput) folders(projectName, workspaces string) ([]store.Folder, 
 		}
 	}
 	return out, nil
+}
+
+// checkNotNested refuza un folder aflat in interiorul altuia (sau invers):
+// un agent din folderul exterior ar putea scrie in cel interior. Caile sunt
+// deja rezolvate; folderele din `prev` sunt cele verificate inainte.
+func checkNotNested(prev []store.Folder, dir string) error {
+	sep := string(filepath.Separator)
+	for _, o := range prev {
+		if strings.HasPrefix(dir, o.Path+sep) {
+			return badRequest("folder " + dir + " is inside folder " + o.Path)
+		}
+		if strings.HasPrefix(o.Path, dir+sep) {
+			return badRequest("folder " + o.Path + " is inside folder " + dir)
+		}
+	}
+	return nil
 }
 
 // toProject valideaza input-ul. Limitele de lungime exista pentru ca aceste
@@ -311,6 +330,16 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		if f.ID != 0 && !known[f.ID] {
 			fail(w, badRequest("unknown folder; reload the page"))
 			return
+		}
+	}
+	// o cale goala pe un folder existent = pastreaza calea (nu se creeaza un folder nou)
+	oldPath := map[int64]string{}
+	for _, f := range existing.Folders {
+		oldPath[f.ID] = f.Path
+	}
+	for i, f := range in.Folders {
+		if f.ID != 0 && strings.TrimSpace(f.Path) == "" {
+			in.Folders[i].Path = oldPath[f.ID]
 		}
 	}
 	p, err := in.toProject(s.dirs.Workspaces)

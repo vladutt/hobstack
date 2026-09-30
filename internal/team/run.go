@@ -25,7 +25,11 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	// celelalte foldere ale proiectului: agentul le poate citi (scrie doar in al lui)
 	var extraArgs []string
 	for _, f := range p.Folders {
-		if f.ID != home.ID {
+		if f.ID == home.ID {
+			continue
+		}
+		// un folder sters de pe disc nu trebuie sa strice run-ul
+		if info, err := os.Stat(f.Path); err == nil && info.IsDir() {
 			extraArgs = append(extraArgs, "--add-dir", f.Path)
 		}
 	}

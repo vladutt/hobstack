@@ -138,6 +138,10 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		seen[dir] = true
+		if err := checkNotNested(p.Folders, dir); err != nil {
+			fail(w, err)
+			return
+		}
 		name := f.Name
 		if name == "" {
 			name = store.FolderName(dir)

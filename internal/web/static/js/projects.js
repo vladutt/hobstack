@@ -197,7 +197,9 @@ function foldersEditor(initial, canPick, agents) {
 
   function remove(r) {
     if (rows.length === 1) return;
-    const n = r.id ? agents.filter((a) => a.folderId === r.id).length : 0;
+    // agentii fara folderId sunt in primul folder: la stergerea lui trec pe urmatorul
+    const first = rows.indexOf(r) === 0;
+    const n = r.id ? agents.filter((a) => a.folderId === r.id || (first && a.folderId == null)).length : 0;
     const label = r.name.value.trim() || r.path.value.trim() || "this folder";
     if (n && !confirm(`${n === 1 ? "1 agent works" : n + " agents work"} in ${label}. They will move to the first folder. Remove it?`)) return;
     rows.splice(rows.indexOf(r), 1);

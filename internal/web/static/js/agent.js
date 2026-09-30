@@ -69,7 +69,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
     el("div", { class: "field" },
       el("span", { class: "label" }, "Tools"),
       tools.map((t) => el("label", { class: "check" }, t.box, t.label)),
-      el("span", { class: "hint" }, "Reading files is always allowed. git push, rm -rf, sudo and package installs are blocked as command prefixes; with Shell commands enabled, an agent can work around them.")),
+      el("span", { class: "hint" }, "Write files: only inside the agent's folder. Reading files is always allowed. git push, rm -rf, sudo and package installs are blocked as command prefixes; with Shell commands enabled, an agent can work around them.")),
     field("Background: who it is and what it knows", background),
     field("Instructions: how it works and what it never does", instructions),
     doneField,

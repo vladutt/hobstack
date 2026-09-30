@@ -229,6 +229,7 @@ export async function workspaceView(root, projectId, route) {
     const body = agentBody({
       name, role: "", model: "sonnet", background: "", instructions: "", doneDef: "",
       tools: ["write"], responsibilities: "", parentId, reviewerId: null, detached,
+      folderId: state.project.agents.find((x) => x.id === parentId)?.folderId ?? null, // ca seful lui
     });
     try {
       const a = await api(`/api/projects/${projectId}/agents`, { method: "POST", body });

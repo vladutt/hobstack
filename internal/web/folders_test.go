@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -134,4 +135,67 @@ func TestOpenChosenFolder(t *testing.T) {
 	if code, _ := e.do(t, "POST", path, map[string]any{"target": "folder", "folderId": 99999}); code != 400 {
 		t.Fatalf("folder necunoscut: %d", code)
 	}
+}
+
+// o cale goala pe un folder existent il pastreaza; nu se creeaza un folder nou
+func TestUpdateProjectEmptyPathKeepsFolder(t *testing.T) {
+	e := setup(t)
+	a, b := t.TempDir(), t.TempDir()
+	_, raw := e.do(t, "POST", "/api/projects", map[string]any{"name": "Probe", "folders": []map[string]any{
+		{"name": "A", "path": a}, {"name": "B", "path": b},
+	}})
+	var p store.Project
+	json.Unmarshal(raw, &p)
+	d := e.folders(t, p.ID)
+	code, raw := e.do(t, "PUT", "/api/projects/"+itoa(p.ID), map[string]any{"name": "Probe", "folders": []map[string]any{
+		{"id": d.Folders[0].ID, "name": "A", "path": a},
+		{"id": d.Folders[1].ID, "name": "B", "path": ""},
+	}})
+	if code != 200 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if d := e.folders(t, p.ID); len(d.Folders) != 2 || d.Folders[1].Path != b {
+		t.Fatalf("calea s-a schimbat: %+v", d.Folders)
+	}
+}
+
+// doar workdir pe un proiect cu 2 foldere: se schimba primul folder, al doilea ramane
+func TestUpdateProjectWorkdirOnlyChangesFirstFolder(t *testing.T) {
+	e := setup(t)
+	a, b, c := t.TempDir(), t.TempDir(), t.TempDir()
+	_, raw := e.do(t, "POST", "/api/projects", map[string]any{"name": "Probe", "folders": []map[string]any{
+		{"name": "A", "path": a}, {"name": "B", "path": b},
+	}})
+	var p store.Project
+	json.Unmarshal(raw, &p)
+	before := e.folders(t, p.ID)
+	if code, raw := e.do(t, "PUT", "/api/projects/"+itoa(p.ID), map[string]any{"name": "Probe", "workdir": c}); code != 200 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	d := e.folders(t, p.ID)
+	if len(d.Folders) != 2 || d.Workdir != c || d.Folders[0].Path != c || d.Folders[0].ID != before.Folders[0].ID || d.Folders[1].Path != b {
+		t.Fatalf("foldere: %+v workdir %q", d.Folders, d.Workdir)
+	}
+}
+
+// foldere imbricate: 400, ca un agent sa nu scrie in folderul altuia
+func TestNestedFoldersRejected(t *testing.T) {
+	e := setup(t)
+	outer := t.TempDir()
+	inner := filepath.Join(outer, "web")
+	code, raw := e.do(t, "POST", "/api/projects", map[string]any{"name": "X", "folders": []map[string]any{
+		{"name": "A", "path": outer}, {"name": "B", "path": inner},
+	}})
+	if code != 400 || !strings.Contains(string(raw), "is inside") {
+		t.Fatalf("createProject: %d %s", code, raw)
+	}
+	// prefix de nume, nu de director: acceptat
+	sibling := outer + "-web"
+	code, raw = e.do(t, "POST", "/api/projects", map[string]any{"name": "Y", "folders": []map[string]any{
+		{"name": "A", "path": outer}, {"name": "B", "path": sibling},
+	}})
+	if code != http.StatusCreated {
+		t.Fatalf("frati: %d %s", code, raw)
+	}
+	os.RemoveAll(sibling)
 }

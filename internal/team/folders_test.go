@@ -82,3 +82,18 @@ func TestRunFailsWhenFolderMissing(t *testing.T) {
 		t.Fatalf("nicio nota cu folderul lipsa; task %s, mesaje: %+v", task.Ref(), msgs)
 	}
 }
+
+// un alt folder sters nu strica run-ul; doar nu primeste --add-dir
+func TestRunSkipsMissingOtherFolder(t *testing.T) {
+	f := setup(t)
+	client, _ := withFolders(t, f)
+	os.RemoveAll(client.Path)
+	f.task(t, "Hero section", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	spec := f.fs.last(t, f.rook)
+	for i, a := range spec.Args {
+		if a == "--add-dir" && spec.Args[i+1] == client.Path {
+			t.Fatalf("--add-dir pentru un folder sters: %v", spec.Args)
+		}
+	}
+}
