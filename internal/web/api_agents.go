@@ -26,6 +26,7 @@ type agentInput struct {
 	ParentID         *int64   `json:"parentId"`   // null sau lipsa = radacina
 	ReviewerID       *int64   `json:"reviewerId"` // null sau lipsa = fara reviewer
 	Detached         bool     `json:"detached"`   // cu parentId null: nelegat, nici de utilizator
+	FolderID         *int64   `json:"folderId"`   // null sau lipsa = primul folder al proiectului
 }
 
 // apply valideaza input-ul si il copiaza in agent (fara proiect si pozitie; legaturile se valideaza in store).
@@ -52,6 +53,7 @@ func (in agentInput) apply(a *store.Agent) error {
 	a.DoneDef = strings.TrimSpace(in.DoneDef)
 	a.Responsibilities = strings.TrimSpace(in.Responsibilities)
 	a.ParentID, a.ReviewerID = in.ParentID, in.ReviewerID
+	a.FolderID = in.FolderID // un folder din alt proiect: LinkError din store, 400
 	a.Detached = in.Detached && in.ParentID == nil
 	for _, err := range []error{
 		maxLen("agent name", a.Name, 40),
@@ -266,6 +268,7 @@ func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 		Name         string `json:"name"`
 		Role         string `json:"role"`
 		ParentID     *int64 `json:"parentId"`
+		FolderID     *int64 `json:"folderId"`
 		Background   string `json:"background"`
 		Instructions string `json:"instructions"`
 		DoneDef      string `json:"doneDef"`
@@ -296,7 +299,7 @@ func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	a := store.Agent{
 		ID: in.AgentID, ProjectID: p.ID, Name: strings.TrimSpace(in.Name), Role: strings.TrimSpace(in.Role),
-		Background: in.Background, Instructions: in.Instructions, DoneDef: in.DoneDef, ParentID: in.ParentID,
+		Background: in.Background, Instructions: in.Instructions, DoneDef: in.DoneDef, ParentID: in.ParentID, FolderID: in.FolderID,
 	}
 	if a.Name == "" {
 		a.Name = "Agent"

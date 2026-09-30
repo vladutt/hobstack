@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"foreman/internal/opener"
+	"foreman/internal/store"
 )
 
 // Opener deschide folderul proiectului in Finder, in editor sau pagina lui
@@ -28,7 +29,7 @@ func (s *Server) editors() []opener.Editor {
 	return s.opener.Editors()
 }
 
-// openProject: POST /api/projects/{id}/open cu {target: folder|browser|editor, editor}.
+// openProject: POST /api/projects/{id}/open cu {target: folder|browser|editor, editor, folderId?}.
 func (s *Server) openProject(w http.ResponseWriter, r *http.Request) {
 	if s.opener == nil {
 		writeErr(w, http.StatusNotImplemented, "opening is not available on this system")
@@ -45,24 +46,31 @@ func (s *Server) openProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Target string `json:"target"`
-		Editor string `json:"editor"`
+		Target   string `json:"target"`
+		Editor   string `json:"editor"`
+		FolderID *int64 `json:"folderId"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
-	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
-		fail(w, badRequest("the working folder does not exist: "+p.Workdir))
+	folder := store.HomeFolder(store.Agent{FolderID: in.FolderID}, p.Folders)
+	if in.FolderID != nil && folder.ID != *in.FolderID {
+		fail(w, badRequest("unknown folder"))
+		return
+	}
+	dir := folder.Path
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		fail(w, badRequest("the folder does not exist: "+dir))
 		return
 	}
 
 	switch strings.TrimSpace(in.Target) {
 	case "folder":
-		err = s.opener.OpenFolder(p.Workdir)
+		err = s.opener.OpenFolder(dir)
 	case "browser":
 		var page string
-		page, err = opener.FindHTML(p.Workdir)
+		page, err = opener.FindHTML(dir)
 		if errors.Is(err, opener.ErrNoHTML) {
 			fail(w, badRequest(err.Error()))
 			return
@@ -71,7 +79,7 @@ func (s *Server) openProject(w http.ResponseWriter, r *http.Request) {
 			err = s.opener.OpenFile(page)
 		}
 	case "editor":
-		err = s.opener.OpenInEditor(in.Editor, p.Workdir)
+		err = s.opener.OpenInEditor(in.Editor, dir)
 		if errors.Is(err, opener.ErrUnknownEditor) {
 			fail(w, badRequest(err.Error()))
 			return

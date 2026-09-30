@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -11,13 +12,78 @@ import (
 	"foreman/internal/store"
 )
 
+type folderInput struct {
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Context string `json:"context"`
+}
+
+const maxFolders = 6
+
 type projectInput struct {
-	Name        string  `json:"name"`
-	Goal        string  `json:"goal"`
-	Context     string  `json:"context"`
-	Workdir     string  `json:"workdir"`
-	MaxParallel int     `json:"maxParallel"`
-	BudgetUSD   float64 `json:"budgetUsd"`
+	Name        string        `json:"name"`
+	Goal        string        `json:"goal"`
+	Context     string        `json:"context"`
+	Workdir     string        `json:"workdir"` // API-ul vechi: un singur folder
+	Folders     []folderInput `json:"folders"`
+	MaxParallel int           `json:"maxParallel"`
+	BudgetUSD   float64       `json:"budgetUsd"`
+}
+
+// folders valideaza folderele si le creeaza pe disc pe cele lipsa (ultimul
+// pas). Fara lista, un singur folder din Workdir, ca inainte.
+func (in projectInput) folders(projectName, workspaces string) ([]store.Folder, error) {
+	list := in.Folders
+	if len(list) == 0 {
+		list = []folderInput{{Path: in.Workdir}}
+	}
+	if len(list) > maxFolders {
+		return nil, badRequest(fmt.Sprintf("at most %d folders", maxFolders))
+	}
+	out := make([]store.Folder, 0, len(list))
+	names := map[string]bool{}
+	for _, f := range list {
+		name, ctx := strings.TrimSpace(f.Name), strings.TrimSpace(f.Context)
+		for _, err := range []error{maxLen("folder name", name, 40), maxLen("folder context", ctx, 20000)} {
+			if err != nil {
+				return nil, err
+			}
+		}
+		// numele date se verifica inainte sa cream ceva pe disc
+		if name != "" {
+			if names[strings.ToLower(name)] {
+				return nil, badRequest("two folders named " + name)
+			}
+			names[strings.ToLower(name)] = true
+		}
+		out = append(out, store.Folder{ID: f.ID, Name: name, Path: strings.TrimSpace(f.Path), Context: ctx})
+	}
+	paths := map[string]bool{}
+	for i := range out {
+		f := &out[i]
+		hint := projectName // un folder nou in ~/Foreman: slug din proiect (+ numele folderului)
+		if i > 0 {
+			hint += " " + f.Name
+		}
+		dir, err := resolveWorkdir(f.Path, hint, workspaces)
+		if err != nil {
+			return nil, err
+		}
+		f.Path = dir
+		if paths[dir] {
+			return nil, badRequest("two folders with the path " + dir)
+		}
+		paths[dir] = true
+		if f.Name == "" {
+			f.Name = store.FolderName(dir)
+			if names[strings.ToLower(f.Name)] {
+				return nil, badRequest("two folders named " + f.Name + "; give one of them another name")
+			}
+			names[strings.ToLower(f.Name)] = true
+		}
+	}
+	return out, nil
 }
 
 // toProject valideaza input-ul. Limitele de lungime exista pentru ca aceste
@@ -49,12 +115,12 @@ func (in projectInput) toProject(workspaces string) (store.Project, error) {
 	if p.BudgetUSD < 0 || (p.BudgetUSD > 0 && p.BudgetUSD < 0.05) || p.BudgetUSD > 100 {
 		return p, badRequest("budget per run: empty for no limit, or between 0.05 and 100 USD")
 	}
-	// ultimul pas: creeaza folderul doar dupa ce restul e valid
-	dir, err := resolveWorkdir(in.Workdir, p.Name, workspaces)
+	// ultimul pas: creeaza folderele doar dupa ce restul e valid
+	folders, err := in.folders(p.Name, workspaces)
 	if err != nil {
 		return p, err
 	}
-	p.Workdir = dir
+	p.Folders, p.Workdir = folders, folders[0].Path
 	return p, nil
 }
 
@@ -193,6 +259,9 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	for i := range in.Folders {
+		in.Folders[i].ID = 0 // proiect nou: toate folderele sunt noi
+	}
 	p, err := in.toProject(s.dirs.Workspaces)
 	if err != nil {
 		fail(w, err)
@@ -225,8 +294,24 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if strings.TrimSpace(in.Workdir) == "" {
-		in.Workdir = existing.Workdir // gol = pastreaza folderul de acum
+	if len(in.Folders) == 0 {
+		// API-ul vechi (doar workdir): folderele raman; un workdir nevid schimba primul folder
+		for _, f := range existing.Folders {
+			in.Folders = append(in.Folders, folderInput{ID: f.ID, Name: f.Name, Path: f.Path, Context: f.Context})
+		}
+		if w := strings.TrimSpace(in.Workdir); w != "" && len(in.Folders) > 0 {
+			in.Folders[0].Path = w
+		}
+	}
+	known := map[int64]bool{}
+	for _, f := range existing.Folders {
+		known[f.ID] = true
+	}
+	for _, f := range in.Folders {
+		if f.ID != 0 && !known[f.ID] {
+			fail(w, badRequest("unknown folder; reload the page"))
+			return
+		}
 	}
 	p, err := in.toProject(s.dirs.Workspaces)
 	if err != nil {
@@ -238,9 +323,14 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	saved, err := s.st.GetProject(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	s.hub.Publish(id, "project", map[string]int64{"id": id})
-	s.team.Kick(id) // poate a crescut numarul de workeri in paralel
-	writeJSON(w, http.StatusOK, p)
+	s.team.Kick(id)
+	writeJSON(w, http.StatusOK, saved)
 }
 
 func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
