@@ -44,7 +44,9 @@ with AI" si "Set up agents with AI" (modul folder).
 - Porneste un run al analistului: aceleasi argumente ca la analiza (doar citire, `--permission-mode dontAsk`,
   `--setting-sources user`, deny pe scriere, MCP doar cu `propose_setup`, acelasi system prompt, in modul folder si
   paragraful lui; aceleasi `--add-dir`), plus `--resume <claudeSession>`, un token MCP nou, cwd-ul analizei (primul
-  folder, folderul analizat, sau un folder temporar nou daca analiza nu a avut folder).
+  folder, folderul analizat, sau ACELASI folder temporar al analizei: Claude tine sesiunile pe cwd, deci `--resume`
+  dintr-un alt folder nu gaseste sesiunea). Folderul temporar nu se mai sterge la finalul analizei, ci la Dismiss si la
+  curatenia de 24h.
 - Mesajul turei (`chatTurn`):
   ```
   The user is reviewing your proposal and asks for a change.
@@ -69,7 +71,7 @@ with AI" si "Set up agents with AI" (modul folder).
 ### Finalul unui run de chat
 
 `finish` deosebeste run-ul de chat (`o.RunID == s.ChatRunID`) de analiza:
-- `Busy=false`, `ChatRunID=""`, token-ul MCP sters, folderul temporar sters (daca exista);
+- `Busy=false`, `ChatRunID=""`, token-ul MCP sters;
 - `claudeSession` = `o.SessionID` (daca nevid);
 - in `Chat`: `{role:"foreman", text: o.Result}` (sau, la esec, `{role:"event", text:"Foreman failed: <eroare>"}`;
   la stop, `{role:"event", text:"Stopped."}`);
