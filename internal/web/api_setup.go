@@ -164,3 +164,114 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusCreated, p)
 }
+
+// projectFolder incarca proiectul si folderul {fid} din el (404 daca lipsesc).
+func (s *Server) projectFolder(w http.ResponseWriter, r *http.Request, folderID int64) (store.Project, store.Folder, bool) {
+	pid, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return store.Project{}, store.Folder{}, false
+	}
+	p, err := s.st.GetProject(pid)
+	if err != nil {
+		fail(w, err)
+		return store.Project{}, store.Folder{}, false
+	}
+	for _, f := range p.Folders {
+		if f.ID == folderID {
+			return p, f, true
+		}
+	}
+	writeErr(w, http.StatusNotFound, "the folder is not in this project; reload the page")
+	return store.Project{}, store.Folder{}, false
+}
+
+// startFolderSetup: analistul propune agenti pentru un folder al unui proiect existent.
+func (s *Server) startFolderSetup(w http.ResponseWriter, r *http.Request) {
+	if s.wizard == nil {
+		writeErr(w, http.StatusNotImplemented, "the wizard is not available")
+		return
+	}
+	fid, err := strconv.ParseInt(r.PathValue("fid"), 10, 64)
+	if err != nil {
+		fail(w, badRequest("invalid folder id"))
+		return
+	}
+	p, folder, ok := s.projectFolder(w, r, fid)
+	if !ok {
+		return
+	}
+	var in struct {
+		Description string `json:"description"`
+		Model       string `json:"model"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	team, err := s.st.ListAgents(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	sess, err := s.wizard.StartFolder(wizard.FolderInput{Project: p, Folder: folder, Team: team}, in.Description, in.Model)
+	if err != nil {
+		setupFail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, sess)
+}
+
+// addAgentsFromSetup adauga agentii propusi (editati) in proiectul existent.
+func (s *Server) addAgentsFromSetup(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		SetupID       string          `json:"setupId"`
+		FolderID      int64           `json:"folderId"`
+		UpdateContext bool            `json:"updateContext"`
+		Proposal      wizard.Proposal `json:"proposal"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	p, folder, ok := s.projectFolder(w, r, in.FolderID)
+	if !ok {
+		return
+	}
+	team, err := s.st.ListAgents(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	names := make([]string, 0, len(team))
+	for _, a := range team {
+		names = append(names, a.Name)
+	}
+	// utilizatorul poate bifa si shell/web, deci fara strictTools
+	if err := wizard.ValidateProposal(&in.Proposal, false, names); err != nil {
+		setupFail(w, err)
+		return
+	}
+	var ctx *string
+	if in.UpdateContext {
+		c := ""
+		if len(in.Proposal.Folders) > 0 {
+			c = in.Proposal.Folders[0].Context
+		}
+		ctx = &c
+	}
+	agents, err := s.st.AddAgents(p.ID, folder.ID, in.Proposal.MembersIn(team), ctx)
+	if errors.Is(err, store.ErrConflict) {
+		writeErr(w, http.StatusConflict, "an agent with this name already exists in the project")
+		return
+	} else if err != nil {
+		fail(w, err)
+		return
+	}
+	if s.wizard != nil && in.SetupID != "" {
+		s.wizard.Dismiss(in.SetupID) // sesiunea poate sa fi expirat; nu conteaza
+	}
+	s.hub.Publish(p.ID, "agent", map[string]int64{"id": agents[0].ID})
+	s.hub.Publish(p.ID, "project", map[string]int64{"id": p.ID})
+	writeJSON(w, http.StatusCreated, agents)
+}

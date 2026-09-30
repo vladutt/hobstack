@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	wizard "foreman/internal/setup" // alias: in pachetul web, "setup" e deja helper-ul de test
+	"foreman/internal/store"
 )
 
 func withSetup(t *testing.T) *env {
@@ -206,5 +207,82 @@ func TestCreateProjectFromSetupNestedFolders(t *testing.T) {
 	code, raw := e.do(t, "POST", "/api/projects/setup", map[string]any{"proposal": proposal})
 	if code != 400 || !strings.Contains(string(raw), "is inside") {
 		t.Fatalf("%d %s", code, raw)
+	}
+}
+
+func TestFolderSetupFlow(t *testing.T) {
+	e := withSetup(t)
+	client, landing := t.TempDir(), t.TempDir()
+	_, raw := e.do(t, "POST", "/api/projects", map[string]any{"name": "Probe", "folders": []map[string]any{
+		{"name": "Client", "path": client}, {"name": "Landing", "path": landing},
+	}})
+	var p store.Project
+	json.Unmarshal(raw, &p)
+	d := e.folders(t, p.ID)
+	landingID, leadID := d.Folders[1].ID, d.Agents[0].ID
+
+	// pornire
+	code, raw := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/folders/"+itoa(landingID)+"/setup", map[string]any{"description": "pricing page", "model": "haiku"})
+	var s struct {
+		ID        string
+		ProjectID int64 `json:"projectId"`
+		FolderID  int64 `json:"folderId"`
+		Title     string
+	}
+	json.Unmarshal(raw, &s)
+	if code != 201 || s.ProjectID != p.ID || s.FolderID != landingID || s.Title != "Probe · Landing" {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if code, _ := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/folders/99999/setup", map[string]any{"model": "haiku"}); code != 404 {
+		t.Fatalf("folder necunoscut: %d", code)
+	}
+
+	// Add agents: Lia sub Lead-ul existent, Max sub Lia; contextul folderului actualizat
+	proposal := map[string]any{"name": "Probe", "folders": []map[string]any{{"path": landing, "name": "Landing", "context": "Hugo"}},
+		"agents": []map[string]any{
+			{"name": "Lia", "role": "Landing lead", "model": "sonnet", "reportsTo": "Lead"},
+			{"name": "Max", "role": "Web dev", "model": "haiku", "reportsTo": "Lia", "tools": []string{"write", "shell"}},
+		}}
+	path := "/api/projects/" + itoa(p.ID) + "/agents/setup"
+	code, raw = e.do(t, "POST", path, map[string]any{"setupId": s.ID, "folderId": landingID, "updateContext": true, "proposal": proposal})
+	if code != 201 {
+		t.Fatalf("add: %d %s", code, raw)
+	}
+	d = e.folders(t, p.ID)
+	if len(d.Agents) != 3 || d.Folders[1].Context != "Hugo" {
+		t.Fatalf("dupa add: %+v", d)
+	}
+	for _, a := range d.Agents[1:] {
+		if a.FolderID == nil || *a.FolderID != landingID {
+			t.Fatalf("agent nou in alt folder: %+v", a)
+		}
+	}
+	lead, _ := e.st.GetAgent(leadID)
+	lia, _ := e.st.FindAgentByName(p.ID, "Lia")
+	if lia.ParentID == nil || *lia.ParentID != lead.ID {
+		t.Fatalf("Lia sub Lead: %+v", lia.ParentID)
+	}
+	// sesiunea dispare din lista
+	_, raw = e.do(t, "GET", "/api/setup", nil)
+	if strings.Contains(string(raw), s.ID) {
+		t.Fatal("sesiunea trebuia ascunsa")
+	}
+
+	// a doua oara: numele sunt luate -> 400, nimic nou
+	code, _ = e.do(t, "POST", path, map[string]any{"folderId": landingID, "proposal": proposal})
+	if code != 400 {
+		t.Fatalf("nume luate: %d", code)
+	}
+	if d := e.folders(t, p.ID); len(d.Agents) != 3 {
+		t.Fatalf("s-au creat agenti: %d", len(d.Agents))
+	}
+	// fara updateContext: contextul ramane
+	proposal["agents"] = []map[string]any{{"name": "Zed", "role": "x", "model": "haiku", "reportsTo": "Lead"}}
+	proposal["folders"] = []map[string]any{{"path": landing, "context": "altceva"}}
+	if code, raw := e.do(t, "POST", path, map[string]any{"folderId": landingID, "proposal": proposal}); code != 201 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if d := e.folders(t, p.ID); d.Folders[1].Context != "Hugo" {
+		t.Fatal("contextul nu trebuia schimbat")
 	}
 }
