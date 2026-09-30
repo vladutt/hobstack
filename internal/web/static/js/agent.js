@@ -17,6 +17,16 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
   const parentSelect = el("select", { value: a.parentId ? String(a.parentId) : a.detached ? "none" : "" },
     el("option", { value: "none" }, "nobody (detached)"), agentOptions("You"));
   const reviewerSelect = el("select", { value: a.reviewerId ? String(a.reviewerId) : "" }, agentOptions("nobody"));
+  // folderul in care lucreaza agentul; apare doar cand proiectul are mai multe
+  const folders = project.folders || [];
+  const folderSelect = folders.length > 1 && el("select", { value: String(a.folderId ?? folders[0].id) },
+    folders.map((f) => el("option", { value: f.id }, f.name)));
+  // primul folder se salveaza ca null (= implicit), ca in store
+  const folderValue = () => {
+    if (!folderSelect) return a.folderId ?? null;
+    const id = Number(folderSelect.value);
+    return id === folders[0].id ? null : id;
+  };
   const idOf = (sel) => (sel.value && sel.value !== "none" ? Number(sel.value) : null);
 
   const name = el("input", { type: "text", value: a.name, placeholder: "e.g. Rook", required: true, maxlength: 40 });
@@ -55,6 +65,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
     field("Model", model, "\"Latest\" moves to new versions automatically. Fable: most capable; Opus: very capable; Sonnet: balanced; Haiku: fast and cheap."),
     field("Takes (responsibilities)", responsibilities),
     el("div", { class: "row" }, field("Reports to", parentSelect), field("Reviewed by", reviewerSelect)),
+    folderSelect && field("Folder", folderSelect, "The agent works and writes here; it can read the other folders."),
     el("div", { class: "field" },
       el("span", { class: "label" }, "Tools"),
       tools.map((t) => el("label", { class: "check" }, t.box, t.label)),
@@ -77,7 +88,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
         body: {
           projectId, name: name.value, role: role.value, agentId: a.id,
           background: background.value, instructions: instructions.value, doneDef: doneDef.value,
-          parentId: idOf(parentSelect),
+          parentId: idOf(parentSelect), folderId: folderValue(),
         },
       });
       preview.textContent = res.prompt;
@@ -95,6 +106,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
       responsibilities: responsibilities.value,
       parentId: idOf(parentSelect), reviewerId: idOf(reviewerSelect),
       detached: parentSelect.value === "none",
+      folderId: folderValue(),
     });
     saveBtn.disabled = true;
     try {

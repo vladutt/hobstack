@@ -2,7 +2,7 @@
 // (linie plina cu sageata) si review-uri (linie punctata amber).
 // Totul se construieste cu svg()/el(), niciodata cu innerHTML.
 import { api } from "./api.js";
-import { el, svg, kindOf, agentBody, toast } from "./ui.js";
+import { el, svg, kindOf, agentBody, folderOf, toast } from "./ui.js";
 
 const NODE_W = 184, NODE_H = 64, YOU_W = 64, YOU_H = 30, TOP = 16, LEVEL = 110;
 const DRAG_PX = 4; // sub pragul asta e click, nu mutare
@@ -211,7 +211,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
         svg("circle", { class: "avatar-c " + kindOf(a), cx: 24, cy: 32, r: 14 }),
         svg("text", { class: "avatar-t " + kindOf(a), x: 24, y: 37, "text-anchor": "middle" }, (a.name || "?").charAt(0).toUpperCase()),
         svg("text", { class: "name", x: 46, y: 24 }, shorten(a.name || "", 16)),
-        svg("text", { class: "sub", x: 46, y: 40 }, shorten(a.role || "")),
+        svg("text", { class: "sub", x: 46, y: 40 }, shorten([a.role, (project.folders || []).length > 1 ? folderOf(project, a)?.name : ""].filter(Boolean).join(" \u00b7 "))),
         svg("text", { class: "sub" + (a.detached ? " unlinked" : ""), x: 46, y: 54 },
           a.detached ? "detached" : a.responsibilities ? shorten("Takes: " + a.responsibilities) : ""),
         svg("circle", { class: dot, cx: NODE_W - 22, cy: 14, r: 4 })),

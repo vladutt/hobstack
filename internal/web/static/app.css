@@ -313,3 +313,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .task-form { margin-bottom: 12px; max-width: 640px; }
 .task-form .grow { flex: 1; }
 .assign-row { display: flex; gap: 8px; align-items: center; }
+
+/* foldere de proiect */
+.folder-rows { display: grid; gap: 12px; }
+.folder-row { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; background: var(--card-2); }
+.folder-chips { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -97,24 +97,20 @@ function projectCard(p) {
 export async function projectFormView(root, id) {
   const p = id
     ? await api(`/api/projects/${id}`)
-    : { name: "", goal: "", context: "", workdir: "", maxParallel: 0, budgetUsd: 0 };
+    : { name: "", goal: "", context: "", folders: [], maxParallel: 0, budgetUsd: 0 };
 
   const name = el("input", { type: "text", value: p.name, placeholder: "e.g. HoReCa QR", required: true, maxlength: 80 });
   const goal = el("textarea", { value: p.goal, placeholder: "An MVP and a clickable prototype for QR sign-ups." });
   const context = el("textarea", { value: p.context, rows: 7, placeholder: "Stack, conventions, what is already decided, what is off-limits." });
-  const workdir = el("input", { id: "f-workdir", type: "text", value: p.workdir, placeholder: "empty = ~/Foreman/<project name>" });
   // butonul "Alege..." apare doar daca serverul poate deschide dialogul nativ
   let canPick = false;
   try { canPick = (await api("/api/info")).canPickFolder; } catch { /* fara buton */ }
-  const pickBtn = canPick && el("button", { type: "button", class: "btn", onclick: pickFolder }, "Browse...");
+  // foldere: un proiect poate avea mai multe parti (ex. Client + Landing); primul e implicit
+  const folders = foldersEditor(p.folders?.length ? p.folders : [{ id: 0, name: "", path: "", context: "" }],
+    canPick, p.agents || []);
   // 0 = fara limita; in formular apare ca un camp gol
   const parallel = el("input", { type: "number", min: 1, max: 100, value: p.maxParallel || "", placeholder: "no limit" });
   const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd || "", placeholder: "no limit" });
-
-  // eticheta trebuie sa arate spre input, nu spre containerul cu buton
-  const folderField = field("Working folder", el("div", { class: "input-row" }, workdir, pickBtn),
-    "Optional. Leave it empty to create one automatically. A path that does not exist gets created.");
-  folderField.querySelector("label").setAttribute("for", "f-workdir");
 
   root.append(el("form", { class: "form", onsubmit: save },
     el("header", { class: "page-head" },
@@ -132,35 +128,26 @@ export async function projectFormView(root, id) {
         el("h2", {}, "Brief"),
         field("Name", name),
         field("Goal: what done looks like", goal),
-        field("Shared context: every agent reads it", context),
-        folderField),
+        field("Shared context: every agent reads it", context)),
       el("section", { class: "section" },
         el("h2", {}, "How the team works"),
         el("div", { class: "row" },
           field("Parallel workers", parallel),
           field("Budget per run (USD)", budget)),
         el("p", { class: "hint" }, "Both are optional: leave them empty for no limit. The budget only matters if you use an API key (with a subscription you do not pay per run); when set, a run stops once it reaches it. Agents that report directly to you do not count toward the limit."),
-        !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")))));
+        !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
+    el("section", { class: "section" },
+      el("div", { class: "section-head" },
+        el("h2", {}, "Folders"),
+        el("button", { type: "button", class: "btn small", onclick: () => folders.add() }, "+ Add folder")),
+      el("p", { class: "hint" }, "A folder can be a repo or a plain folder. Each agent works and writes in its own folder and can read the others. The first folder is the default."),
+      folders.el)));
   name.focus();
-
-  async function pickFolder() {
-    pickBtn.disabled = true;
-    pickBtn.textContent = "Opening...";
-    try {
-      const r = await api("/api/pick-folder", { method: "POST" });
-      if (r && r.path) workdir.value = r.path; // 204 = a renuntat
-    } catch (err) {
-      toast(err.message);
-    } finally {
-      pickBtn.disabled = false;
-      pickBtn.textContent = "Browse...";
-    }
-  }
 
   async function save(e) {
     e.preventDefault();
     const body = {
-      name: name.value, goal: goal.value, context: context.value, workdir: workdir.value,
+      name: name.value, goal: goal.value, context: context.value, folders: folders.values(),
       maxParallel: Number(parallel.value) || 0, budgetUsd: Number(budget.value) || 0,
     };
     try {
@@ -181,5 +168,67 @@ export async function projectFormView(root, id) {
     } catch (err) {
       toast(err.message);
     }
+  }
+}
+
+// foldersEditor: randurile Name / Path / Context din formularul proiectului.
+// agents: pentru avertismentul de la stergerea unui folder care are agenti.
+function foldersEditor(initial, canPick, agents) {
+  const box = el("div", { class: "folder-rows" });
+  const rows = [];
+
+  function add(f = { id: 0, name: "", path: "", context: "" }) {
+    const name = el("input", { type: "text", value: f.name, maxlength: 40, placeholder: "e.g. Client" });
+    const path = el("input", { type: "text", value: f.path,
+      placeholder: rows.length ? "e.g. ~/code/probe-landing" : "empty = ~/Foreman/<project name>" });
+    const context = el("textarea", { value: f.context, rows: 3, maxlength: 20000,
+      placeholder: "Stack, build/test commands, conventions for this folder." });
+    const pickBtn = canPick && el("button", { type: "button", class: "btn", onclick: () => pickInto(path, pickBtn) }, "Browse...");
+    const r = { id: f.id || 0, name, path, context };
+    r.removeBtn = el("button", { type: "button", class: "btn small danger", onclick: () => remove(r) }, "Remove folder");
+    r.el = el("div", { class: "folder-row" },
+      el("div", { class: "row" }, field("Name", name), field("Path", el("div", { class: "input-row" }, path, pickBtn))),
+      field("Context for this folder", context),
+      el("div", { class: "actions" }, el("span", { class: "grow" }), r.removeBtn));
+    rows.push(r);
+    draw();
+    return name;
+  }
+
+  function remove(r) {
+    if (rows.length === 1) return;
+    const n = r.id ? agents.filter((a) => a.folderId === r.id).length : 0;
+    const label = r.name.value.trim() || r.path.value.trim() || "this folder";
+    if (n && !confirm(`${n === 1 ? "1 agent works" : n + " agents work"} in ${label}. They will move to the first folder. Remove it?`)) return;
+    rows.splice(rows.indexOf(r), 1);
+    draw();
+  }
+
+  function draw() {
+    box.replaceChildren(...rows.map((r) => r.el));
+    for (const r of rows) r.removeBtn.hidden = rows.length === 1;
+  }
+
+  initial.forEach((f) => add(f));
+  return {
+    el: box,
+    // doar randurile adaugate din buton iau focusul (cele initiale nu)
+    add: () => add().focus(),
+    values: () => rows.map((r) => ({ id: r.id, name: r.name.value.trim(), path: r.path.value.trim(), context: r.context.value })),
+  };
+}
+
+// pickInto deschide dialogul nativ si pune calea aleasa in input.
+async function pickInto(input, btn) {
+  btn.disabled = true;
+  btn.textContent = "Opening...";
+  try {
+    const r = await api("/api/pick-folder", { method: "POST" });
+    if (r && r.path) input.value = r.path; // 204 = a renuntat
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Browse...";
   }
 }

@@ -1,5 +1,5 @@
 import { api, upload } from "./api.js";
-import { el, avatar, pill, toast, clock, kindOf, agentBody, field } from "./ui.js";
+import { el, avatar, pill, toast, clock, kindOf, agentBody, folderOf, field } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
@@ -44,6 +44,7 @@ export async function workspaceView(root, projectId, route) {
     selected: null,   // agentul selectat (chat si detalii)
     seen: new Set(),  // id-urile mesajelor afisate in thread
     open: new Set(),  // task-urile deschise pe board (raman deschise la redesenare)
+    folderFilter: null, // id-ul folderului filtrat pe board; null = toate
     liveRunId: null,
     liveStream: null,
     pending: [],      // fisiere alese pentru urmatorul mesaj
@@ -52,6 +53,7 @@ export async function workspaceView(root, projectId, route) {
   // butoanele "Deschide": create o singura data si mutate in header la fiecare
   // redesenare, ca selectia de editor sa nu se piarda
   const info = await api("/api/info").catch(() => ({ editors: [] }));
+  const openFolder = el("select", { class: "select-small", "aria-label": "Folder to open" });
   const openBar = buildOpenBar(info.editors || []);
   let disposed = false; // view-ul a fost inchis: nu mai deschidem stream-uri si nu mai desenam
   // view-ul e inchis daca s-a apelat curatarea sau daca #view a fost golit intre timp
@@ -79,6 +81,7 @@ export async function workspaceView(root, projectId, route) {
   const count = el("span", { class: "hint" });
   const boardTools = el("div", { class: "actions" }); // Coloane, + Task
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
+  const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter by folder" });
   let boardPanel = null; // "stages" | "task" | null
   const boardHint = el("p", { class: "hint board-hint" }, "Every project is different: set up your own columns (work stages) with the Columns button.");
   const filesList = el("div", { class: "files-list" });
@@ -130,7 +133,7 @@ export async function workspaceView(root, projectId, route) {
     "team": el("div", { class: "tab-body team-body" }, canvas.el),
     "tasks": el("section", { class: "section tab-body" },
       el("div", { class: "section-head" }, el("div", { class: "actions" }, el("h2", {}, "Tasks"), count), boardTools),
-      editorSlot, board, boardHint),
+      editorSlot, folderChips, board, boardHint),
     "files": el("div", { class: "tab-body" }, filesSection),
   };
   const ws = el("div", { class: "ws" },
@@ -286,6 +289,11 @@ export async function workspaceView(root, projectId, route) {
 
   function renderHeader() {
     const p = state.project;
+    const folders = p.folders || [];
+    const keep = openFolder.value;
+    openFolder.replaceChildren(...folders.map((f) => el("option", { value: f.id }, f.name)));
+    if (folders.some((f) => String(f.id) === keep)) openFolder.value = keep;
+    openFolder.hidden = folders.length < 2;
     header.replaceChildren(el("header", { class: "page-head" },
       el("div", {},
         el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / ", p.name),
@@ -313,6 +321,7 @@ export async function workspaceView(root, projectId, route) {
     }, editors.map((e) => el("option", { value: e.id }, e.name)));
     return el("div", { class: "actions open-bar" },
       el("span", { class: "hint" }, "Open in:"),
+      openFolder,
       el("button", { type: "button", class: "btn small", onclick: () => openIn("folder") }, "Folder"),
       el("button", { type: "button", class: "btn small", onclick: () => openIn("browser") }, "Browser"),
       editors.length > 0 && [select,
@@ -321,7 +330,7 @@ export async function workspaceView(root, projectId, route) {
 
   async function openIn(target, editor) {
     try {
-      await api(`/api/projects/${projectId}/open`, { method: "POST", body: { target, editor } });
+      await api(`/api/projects/${projectId}/open`, { method: "POST", body: { target, editor, folderId: openFolder.hidden ? null : Number(openFolder.value) } });
     } catch (err) {
       toast(err.message);
     }
@@ -336,6 +345,18 @@ export async function workspaceView(root, projectId, route) {
     const p = state.project;
     const byId = new Map(p.agents.map((a) => [a.id, a]));
     const stages = p.stages || [];
+    const folders = p.folders || [];
+    if (!folders.some((f) => f.id === state.folderFilter)) state.folderFilter = null;
+    folderChips.hidden = folders.length < 2;
+    const chip = (id, label) => el("button", {
+      type: "button", class: "btn small" + (state.folderFilter === id ? " active" : ""),
+      "aria-pressed": String(state.folderFilter === id),
+      onclick: () => { state.folderFilter = id; renderBoard(); },
+    }, label);
+    folderChips.replaceChildren(chip(null, "All"), ...folders.map((f) => chip(f.id, f.name)));
+    // task-urile fara agent apar mereu; celelalte dupa folderul agentului
+    const tasks = p.tasks.filter((t) => !state.folderFilter || !t.assigneeId ||
+      folderOf(p, byId.get(t.assigneeId))?.id === state.folderFilter);
     count.textContent = `${p.done} of ${p.total} done`;
     // replaceChildren nu ignora false (el() da): filtram noi
     // butoanele deschid si inchid panoul lor (editorul de coloane sau formularul de task)
@@ -346,20 +367,20 @@ export async function workspaceView(root, projectId, route) {
     boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("stages", "Columns", toggleStages));
     if (!stages.length) {
       board.className = "board";
-      board.replaceChildren(...COLUMNS.map((c) => column(c.title, p.tasks.filter((t) => c.statuses.includes(t.status)), byId)));
+      board.replaceChildren(...COLUMNS.map((c) => column(c.title, tasks.filter((t) => c.statuses.includes(t.status)), byId)));
       boardHint.hidden = false;
       return;
     }
     boardHint.hidden = true;
     board.className = "board stages-board";
-    const inStage = (s) => p.tasks.filter((t) => t.stageId === s.id && t.status !== "review" && t.status !== "done");
+    const inStage = (s) => tasks.filter((t) => t.stageId === s.id && t.status !== "review" && t.status !== "done");
     // task-uri fara etapa inca deschise (create inainte de coloane): altfel n-ar aparea nicaieri
-    const loose = p.tasks.filter((t) => !t.stageId && t.status !== "review" && t.status !== "done");
+    const loose = tasks.filter((t) => !t.stageId && t.status !== "review" && t.status !== "done");
     board.replaceChildren(
       ...(loose.length ? [column("No stage", loose, byId)] : []),
       ...stages.map((s) => column(s.name, inStage(s), byId, s)),
-      column("With lead", p.tasks.filter((t) => t.status === "review"), byId),
-      column("Done", p.tasks.filter((t) => t.status === "done"), byId));
+      column("With lead", tasks.filter((t) => t.status === "review"), byId),
+      column("Done", tasks.filter((t) => t.status === "done"), byId));
   }
 
   function column(title, items, byId, stage) {
