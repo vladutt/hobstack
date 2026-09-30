@@ -1,5 +1,5 @@
 import { api, upload } from "./api.js";
-import { el, avatar, pill, toast, clock, kindOf, agentBody } from "./ui.js";
+import { el, avatar, pill, toast, clock, kindOf, agentBody, field } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
@@ -76,6 +76,7 @@ export async function workspaceView(root, projectId, route) {
   const count = el("span", { class: "hint" });
   const boardTools = el("div", { class: "actions" }); // Coloane, + Task
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
+  let boardPanel = null; // "stages" | "task" | null
   const boardHint = el("p", { class: "hint board-hint" }, "Fiecare proiect e diferit: fa-ti propriile coloane (etape de lucru) din butonul Coloane.");
   const filesList = el("div", { class: "files-list" });
   const projectPicker = el("input", { type: "file", multiple: true, hidden: true });
@@ -334,10 +335,12 @@ export async function workspaceView(root, projectId, route) {
     const stages = p.stages || [];
     count.textContent = `${p.done} din ${p.total} gata`;
     // replaceChildren nu ignora false (el() da): filtram noi
-    boardTools.replaceChildren(...[
-      stages.length > 0 && el("button", { type: "button", class: "btn small", onclick: newTask }, "+ Task"),
-      el("button", { type: "button", class: "btn small", onclick: openStages }, "Coloane"),
-    ].filter(Boolean));
+    // butoanele deschid si inchid panoul lor (editorul de coloane sau formularul de task)
+    const toggle = (id, label, onclick) => el("button", {
+      type: "button", class: "btn small" + (boardPanel === id ? " active" : ""),
+      "aria-pressed": String(boardPanel === id), onclick,
+    }, label);
+    boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("stages", "Coloane", toggleStages));
     if (!stages.length) {
       board.className = "board";
       board.replaceChildren(...COLUMNS.map((c) => column(c.title, p.tasks.filter((t) => c.statuses.includes(t.status)), byId)));
@@ -367,22 +370,72 @@ export async function workspaceView(root, projectId, route) {
       items.map((t) => taskCard(t, byId.get(t.assigneeId), byId)));
   }
 
-  function openStages() {
-    editorSlot.replaceChildren(stagesEditor({
+  // boardPanel: ce e deschis deasupra board-ului: null, "stages" sau "task"
+  function showPanel(id, node) {
+    boardPanel = node ? id : null;
+    editorSlot.replaceChildren(...(node ? [node] : []));
+    renderBoard(); // starea butoanelor
+  }
+  const closePanel = () => showPanel(null, null);
+
+  function toggleStages() {
+    if (boardPanel === "stages") return closePanel();
+    showPanel("stages", stagesEditor({
       project: state.project,
-      onSaved: async () => { editorSlot.replaceChildren(); await reload(); },
-      onClose: () => editorSlot.replaceChildren(),
+      onSaved: async () => { closePanel(); await reload(); },
+      onClose: closePanel,
     }));
   }
 
-  async function newTask() {
-    const title = prompt("Titlul task-ului:");
-    if (!title || !title.trim()) return;
-    const description = prompt("Descriere (optional):") || "";
+  // agentii care pot lua un task: legati; intr-o etapa, doar cei din etapa
+  function assignable(stageId) {
+    const p = state.project;
+    const stage = stageId && (p.stages || []).find((s) => s.id === stageId);
+    return p.agents.filter((a) => !a.detached && (!stage || stage.agentIds.includes(a.id)));
+  }
+
+  function toggleTaskForm() {
+    if (boardPanel === "task") return closePanel();
+    const p = state.project;
+    const first = (p.stages || [])[0];
+    const title = el("input", { type: "text", maxlength: 200, placeholder: "ex. Pagina de login", required: true });
+    const description = el("textarea", { rows: 3, placeholder: "Ce trebuie facut, criterii de acceptare (optional)" });
+    const who = el("select", {},
+      first && el("option", { value: "" }, `Primul liber din ${first.name}`),
+      assignable(first?.id).map((a) => el("option", { value: a.id }, a.name + (a.role ? " \u00b7 " + a.role : ""))));
+    const addBtn = el("button", { type: "submit", class: "btn primary" }, "Adauga");
+    const form = el("form", { class: "section task-form", onsubmit: submit },
+      el("h2", {}, "Task nou"),
+      field("Titlu", title), field("Descriere", description),
+      field("Asignat", who, first ? "Task-ul intra in prima etapa; la final decizi tu." : "Agentul il preia automat; la final decizi tu."),
+      el("div", { class: "actions" }, el("span", { class: "grow" }),
+        el("button", { type: "button", class: "btn", onclick: closePanel }, "Renunta"), addBtn));
+    showPanel("task", form);
+    title.focus();
+
+    async function submit(e) {
+      e.preventDefault();
+      if (!title.value.trim()) return;
+      addBtn.disabled = true;
+      try {
+        await api(`/api/projects/${projectId}/tasks`, { method: "POST", body: {
+          title: title.value.trim(), description: description.value.trim(), assigneeId: Number(who.value) || 0,
+        } });
+        closePanel();
+        await reload();
+      } catch (err) {
+        toast(err.message);
+        addBtn.disabled = false;
+      }
+    }
+  }
+
+  // assign: utilizatorul muta un task in asteptare sau blocat la alt agent
+  async function assign(t, agentId) {
     try {
-      await api(`/api/projects/${projectId}/tasks`, { method: "POST", body: { title: title.trim(), description } });
+      await api(`/api/tasks/${t.id}/assign`, { method: "POST", body: { agentId } });
       await reload();
-    } catch (err) { toast(err.message); }
+    } catch (err) { toast(err.message); await reload(); }
   }
 
   // decide: utilizatorul decide un task creat de el, ajuns dupa ultima etapa
@@ -431,6 +484,13 @@ export async function workspaceView(root, projectId, route) {
         blocked && el("div", { class: "actions" },
           el("button", { type: "button", class: "btn small primary", onclick: () => taskAction(t, "accept") }, "Accepta"),
           el("button", { type: "button", class: "btn small", onclick: () => taskAction(t, "unblock") }, "Deblocheaza")),
+        (t.status === "queued" || t.status === "blocked") && el("label", { class: "assign-row" },
+          el("span", { class: "hint" }, "Asignat"),
+          el("select", {
+            class: "select-small", value: String(t.assigneeId), "aria-label": `Asignat pentru ${ref(t)}`,
+            onchange: (e) => assign(t, Number(e.target.value)),
+          }, assignable(t.stageId).map((a) => el("option", { value: a.id }, a.name)),
+            !assignable(t.stageId).some((a) => a.id === t.assigneeId) && el("option", { value: t.assigneeId }, who ? who.name : "?"))),
         mine && el("div", { class: "actions" },
           el("button", { type: "button", class: "btn small primary", onclick: () => decide(t, "accept") }, "Accepta"),
           el("button", { type: "button", class: "btn small", onclick: () => decide(t, "send_back") }, "Trimite inapoi"))));

@@ -298,3 +298,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .stage-agents { display: flex; flex-wrap: wrap; gap: 12px; }
 /* board-ul cu etape ramane pe scroll orizontal si pe ecrane inguste */
 @media (max-width: 1250px) { .board.stages-board { grid-template-columns: none; } }
+
+/* butoanele de board care deschid un panou: activ cat timp panoul e deschis */
+.btn.active { border-color: var(--amber); background: var(--amber-bg); }
+.task-form { margin-bottom: 12px; max-width: 640px; }
+.task-form .grow { flex: 1; }
+.assign-row { display: flex; gap: 8px; align-items: center; }
