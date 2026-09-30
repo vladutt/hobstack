@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"foreman/internal/mcp"
 	"foreman/internal/runner"
@@ -113,9 +114,60 @@ func TestManagerNoProposalFails(t *testing.T) {
 	if got.Status != StatusFailed || !strings.Contains(got.Error, "did not propose anything") {
 		t.Fatalf("%+v", got)
 	}
-	if _, err := os.Stat(spec.Dir); !os.IsNotExist(err) {
-		t.Fatal("folderul temporar trebuia sters")
+	// folderul temporar traieste cat sesiunea (--resume trebuie rulat in acelasi cwd)
+	if _, err := os.Stat(spec.Dir); err != nil {
+		t.Fatalf("folderul temporar trebuia sa existe inca: %v", err)
 	}
+	if err := m.Dismiss(s.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(spec.Dir); !os.IsNotExist(err) {
+		t.Fatal("folderul temporar trebuia sters la Dismiss")
+	}
+}
+
+// curatenia de 24h sterge si folderul temporar
+func TestCleanupRemovesTempDir(t *testing.T) {
+	m, f := newTest(t)
+	s, _ := m.Start(nil, "notes", "sonnet")
+	spec := f.specs[0]
+	f.done[spec.ID](runner.Outcome{RunID: spec.ID, Status: "done"})
+	m.mu.Lock()
+	m.sessions[s.ID].CreatedAt = time.Now().Add(-25 * time.Hour)
+	m.mu.Unlock()
+	m.cleanupOld()
+	if _, err := os.Stat(spec.Dir); !os.IsNotExist(err) {
+		t.Fatal("folderul temporar trebuia sters la curatenie")
+	}
+}
+
+// --add-dir: doar celelalte foldere, o singura data fiecare
+func TestAddDirs(t *testing.T) {
+	m, f := newTest(t)
+	a, b := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(a, "go.mod"), []byte("module a"), 0o644)
+	m.Start([]string{a, b}, "", "sonnet")
+	if n := countFlag(f.specs[0].Args, "--add-dir"); n != 1 || !hasArgPair(f.specs[0].Args, "--add-dir", b) {
+		t.Fatalf("start: %v", f.specs[0].Args)
+	}
+	in, client, _ := folderInput(t)
+	m.StartFolder(in, "", "sonnet")
+	if n := countFlag(f.specs[1].Args, "--add-dir"); n != 1 || !hasArgPair(f.specs[1].Args, "--add-dir", client) {
+		t.Fatalf("start folder: %v", f.specs[1].Args)
+	}
+	if argAfter(f.specs[1].Args, "-p") != f.specs[1].Prompt {
+		t.Fatal("-p trebuia sa fie tura")
+	}
+}
+
+func countFlag(args []string, flag string) int {
+	n := 0
+	for _, a := range args {
+		if a == flag {
+			n++
+		}
+	}
+	return n
 }
 
 func TestManagerStopAndValidation(t *testing.T) {

@@ -53,8 +53,10 @@ type Session struct {
 	CreatedAt   time.Time `json:"createdAt"`
 
 	token   string
-	tempDir string // folderul gol folosit cand nu exista folder de proiect
-	hidden  bool   // ascunsa din lista (Dismiss sau proiect creat din ea)
+	tempDir string   // folderul gol folosit cand nu exista folder de proiect; traieste cat sesiunea
+	cwd     string   // folderul in care ruleaza analistul (Claude tine sesiunile pe cwd, pentru --resume)
+	addDirs []string // celelalte foldere pe care analistul le poate citi (--add-dir)
+	hidden  bool     // ascunsa din lista (Dismiss sau proiect creat din ea)
 
 	existing    []string // modul folder: numele agentilor care exista deja
 	brief       string   // modul folder: proiectul si echipa, pentru mesajul analistului
@@ -127,15 +129,14 @@ func (m *Manager) Start(workdirs []string, description, model string) (Session, 
 	s := &Session{ID: randomHex(8), RunID: runner.NewID(), Title: titleFor(dirs, description),
 		Workdirs: dirs, Description: description, Model: model,
 		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16)}
-	cwd := ""
 	if len(dirs) > 0 {
-		cwd = dirs[0]
+		s.cwd, s.addDirs = dirs[0], dirs[1:]
 	} else {
 		s.tempDir = filepath.Join(m.tempRoot, s.ID)
 		if err := os.MkdirAll(s.tempDir, 0o755); err != nil {
 			return Session{}, err
 		}
-		cwd = s.tempDir
+		s.cwd = s.tempDir
 	}
 
 	m.mu.Lock()
@@ -144,8 +145,8 @@ func (m *Manager) Start(workdirs []string, description, model string) (Session, 
 	m.mu.Unlock()
 
 	spec := runner.Spec{
-		ID: s.RunID, Key: "setup-" + s.ID, Dir: cwd,
-		Args:   m.args(s, model),
+		ID: s.RunID, Key: "setup-" + s.ID, Dir: s.cwd,
+		Args:   m.args(s, model, turnPrompt(s)),
 		Prompt: turnPrompt(s),
 	}
 	if _, err := m.starter.Start(spec, func(o runner.Outcome) { m.finish(s.ID, o) }); err != nil {
@@ -185,19 +186,18 @@ func (m *Manager) StartFolder(in FolderInput, description, model string) (Sessio
 		Workdirs: []string{dir}, Description: description, Model: model,
 		ProjectID: in.Project.ID, FolderID: in.Folder.ID,
 		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16),
-		existing: existing, brief: folderBrief(in), projectName: in.Project.Name}
+		existing: existing, brief: folderBrief(in), projectName: in.Project.Name, cwd: dir}
+	for _, f := range in.Project.Folders {
+		if filepath.Clean(f.Path) != dir {
+			s.addDirs = append(s.addDirs, f.Path) // celelalte foldere: doar citire
+		}
+	}
 	m.mu.Lock()
 	m.sessions[s.ID] = s
 	m.tokens[s.token] = s.ID
 	m.mu.Unlock()
 
-	args := m.args(s, model)
-	for _, f := range in.Project.Folders {
-		if filepath.Clean(f.Path) != dir {
-			args = append(args, "--add-dir", f.Path) // celelalte foldere: doar citire
-		}
-	}
-	spec := runner.Spec{ID: s.RunID, Key: "setup-" + s.ID, Dir: dir, Args: args, Prompt: turnPrompt(s)}
+	spec := runner.Spec{ID: s.RunID, Key: "setup-" + s.ID, Dir: s.cwd, Args: m.args(s, model, turnPrompt(s)), Prompt: turnPrompt(s)}
 	if _, err := m.starter.Start(spec, func(o runner.Outcome) { m.finish(s.ID, o) }); err != nil {
 		m.finish(s.ID, runner.Outcome{RunID: s.RunID, Status: "failed", Error: err.Error()})
 		return Session{}, err
@@ -205,7 +205,8 @@ func (m *Manager) StartFolder(in FolderInput, description, model string) (Sessio
 	return m.snapshot(s), nil
 }
 
-func (m *Manager) args(s *Session, model string) []string {
+// args: argumentele analistului pentru o tura (analiza sau chat). turn e mesajul turei.
+func (m *Manager) args(s *Session, model, turn string) []string {
 	settings, _ := json.Marshal(map[string]any{"permissions": map[string]any{
 		"allow": []string{"Read", "Glob", "Grep", "LS", "mcp__team__propose_setup"},
 		"deny": []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "WebFetch", "WebSearch",
@@ -216,7 +217,7 @@ func (m *Manager) args(s *Session, model string) []string {
 		system += "\n\n" + folderSystemPrompt
 	}
 	out := []string{
-		"-p", turnPrompt(s),
+		"-p", turn,
 		"--output-format", "stream-json", "--verbose",
 		"--model", model,
 		"--append-system-prompt", system,
@@ -227,7 +228,7 @@ func (m *Manager) args(s *Session, model string) []string {
 		"--mcp-config", prompt.MCPConfig(m.baseURL + "/mcp/" + s.token),
 		"--strict-mcp-config",
 	}
-	for _, dir := range s.Workdirs[min(1, len(s.Workdirs)):] {
+	for _, dir := range s.addDirs {
 		out = append(out, "--add-dir", dir) // analistul citeste si celelalte foldere
 	}
 	return out
@@ -242,9 +243,7 @@ func (m *Manager) finish(id string, o runner.Outcome) {
 		return
 	}
 	delete(m.tokens, s.token)
-	if s.tempDir != "" {
-		os.RemoveAll(s.tempDir)
-	}
+	// folderul temporar ramane: un --resume ulterior trebuie rulat in acelasi cwd
 	switch {
 	case o.Status == "stopped":
 		s.Status = StatusStopped
@@ -306,10 +305,14 @@ func (m *Manager) Dismiss(id string) error {
 		return ErrNotFound
 	}
 	s.hidden = true
-	running, runID := s.Status == StatusRunning, s.RunID
+	running, runID, tempDir := s.Status == StatusRunning, s.RunID, s.tempDir
 	m.mu.Unlock()
 	if running {
+		// folderul temporar se sterge la curatenie, dupa ce run-ul s-a oprit
 		return m.starter.Stop(runID)
+	}
+	if tempDir != "" {
+		os.RemoveAll(tempDir)
 	}
 	return nil
 }
@@ -331,6 +334,9 @@ func (m *Manager) cleanupOld() {
 	for id, s := range m.sessions {
 		if s.Status != StatusRunning && time.Since(s.CreatedAt) > 24*time.Hour {
 			delete(m.sessions, id)
+			if s.tempDir != "" {
+				os.RemoveAll(s.tempDir)
+			}
 		}
 	}
 }
