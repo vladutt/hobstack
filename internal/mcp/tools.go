@@ -133,8 +133,21 @@ var proposeSetupTool = Tool{
 	}),
 }
 
+var askUserTool = Tool{
+	Name:        "ask_user",
+	Description: "Ask the user a question when you need a decision, a permission or information only they can give. After calling it, stop: the answer arrives later as a message. Do not call report_done while you wait.",
+	InputSchema: schema([]string{"question"}, map[string]any{
+		"question": str("The question, clear and self-contained (what you need and why)"),
+		"options": map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string"},
+			"description": "Optional: 2-4 short answers the user can pick with one click",
+		},
+	}),
+}
+
 // toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
-// Un agent radacina fara copii nu primeste niciun tool.
+// Orice agent al echipei primeste ask_user; analistul din wizard nu.
 func toolsFor(c Caller) []Tool {
 	if c.SetupID != "" {
 		return []Tool{proposeSetupTool} // analistul din wizard nu are tool-uri de echipa
@@ -167,6 +180,7 @@ func toolsFor(c Caller) []Tool {
 	if c.StageKind == "check" && !has("review_approve") {
 		out = append(out, reviewTools...)
 	}
+	out = append(out, askUserTool)
 	return out
 }
 

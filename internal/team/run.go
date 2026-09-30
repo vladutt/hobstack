@@ -239,6 +239,12 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		}
 		return t.note(ar.projectID, boss.ID, clip(fmt.Sprintf("%s's run on %s failed: %s", a.Name, task.Ref(), o.Error)), false)
 	default:
+		// a intrebat utilizatorul (ask_user): task-ul asteapta raspunsul, nu merge in review
+		if waiting, err := t.st.HasOpenQuestionForRun(o.RunID); err != nil {
+			return err
+		} else if waiting {
+			return t.note(ar.projectID, a.ID, task.Ref()+" is waiting for your answer.", true)
+		}
 		task.Result = strings.TrimSpace(o.Result)
 		_, err := t.toReview(&task, a, agents, fmt.Sprintf("%s finished %s without report_done", a.Name, task.Ref()))
 		return err

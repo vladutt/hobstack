@@ -52,6 +52,10 @@ type TurnContext struct {
 	Stages    string     // pentru lideri, intr-un proiect cu etape: etapele si agentii lor
 }
 
+const howAsk = `If you need a decision, a permission or information that only the user can give, call mcp__team__ask_user with a clear question (and short options if it is a choice), then stop. Do not guess, and do not just end your message with a question.`
+
+const howAskWait = `Do not call report_done while you wait for the answer.`
+
 const howLead = `You are a lead: you have a direct team, listed in the turn message. Break the work into small, clear, verifiable tasks ` +
 	`and create them with mcp__team__create_task, only for agents on your direct team, choosing by each one's "Takes" field. ` +
 	`Do not do their work yourself. When you receive results, check them (you can read the changed files) and call ` +
@@ -150,6 +154,10 @@ func System(p store.Project, a store.Agent, l Links) string {
 	}
 	if isRoot && !l.IsLead && !l.IsReviewer {
 		how = append(how, howSolo)
+	}
+	how = append(how, howAsk)
+	if !isRoot {
+		how = append(how, howAskWait)
 	}
 	section(&b, "How you work", strings.Join(how, "\n\n"))
 	return strings.TrimSpace(b.String())

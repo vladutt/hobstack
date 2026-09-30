@@ -36,7 +36,7 @@ func TestSystemRoles(t *testing.T) {
 			[]string{"create_task"}},
 		{"singur", Links{},
 			[]string{"You report to the user.", "You talk directly with the user"},
-			[]string{"mcp__team__"}},
+			[]string{"mcp__team__create_task", "report_done"}},
 	}
 	for _, c := range cases {
 		got := System(proj, a, c.links)
@@ -170,5 +170,18 @@ func TestMCPConfig(t *testing.T) {
 	want := `{"mcpServers":{"team":{"type":"http","url":"http://127.0.0.1:7777/mcp/abc"}}}`
 	if got := MCPConfig("http://127.0.0.1:7777/mcp/abc"); got != want {
 		t.Fatalf("MCPConfig = %s", got)
+	}
+}
+
+func TestSystemAskUser(t *testing.T) {
+	for _, l := range []Links{{}, {IsLead: true}, {BossName: "Atlas"}, {BossName: "Atlas", IsReviewer: true}} {
+		got := System(proj, store.Agent{Name: "A"}, l)
+		if !strings.Contains(got, "mcp__team__ask_user") {
+			t.Errorf("%+v: lipseste ask_user", l)
+		}
+		has := strings.Contains(got, "Do not call report_done while you wait for the answer")
+		if has != (l.BossName != "") {
+			t.Errorf("%+v: howAskWait=%v", l, has)
+		}
 	}
 }

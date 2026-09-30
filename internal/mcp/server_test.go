@@ -51,6 +51,11 @@ func (f *fakeBackend) ProposeSetup(c Caller, args json.RawMessage) (string, erro
 	return "Proposal received.", f.err
 }
 
+func (f *fakeBackend) AskUser(c Caller, question string, options []string) (string, error) {
+	f.calls = append(f.calls, "ask_user|"+question+"|"+strings.Join(options, ","))
+	return "ok", f.err
+}
+
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 	t.Helper()
 	fb := &fakeBackend{callers: map[string]Caller{
@@ -165,25 +170,20 @@ func TestToolsListByRole(t *testing.T) {
 		}
 		return out
 	}
-	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back" {
+	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,ask_user" {
 		t.Fatalf("lead: %s", got)
 	}
-	if got := strings.Join(names("worker"), ","); got != "report_done" {
+	if got := strings.Join(names("worker"), ","); got != "report_done,ask_user" {
 		t.Fatalf("worker: %s", got)
 	}
-	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done" {
+	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,ask_user" {
 		t.Fatalf("sublead: %s", got)
 	}
-	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject" {
+	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,ask_user" {
 		t.Fatalf("reviewer: %s", got)
 	}
-	if got := names("solo"); len(got) != 0 {
-		t.Fatalf("solo: %v", got)
-	}
-	// lista goala trebuie sa fie [], nu null
-	_, resp := rpc(t, ts, "solo", `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
-	if tools, ok := result(t, resp)["tools"].([]any); !ok || len(tools) != 0 {
-		t.Fatalf("solo tools: %v", result(t, resp)["tools"])
+	if got := strings.Join(names("solo"), ","); got != "ask_user" {
+		t.Fatalf("solo: %s", got)
 	}
 }
 
@@ -302,10 +302,10 @@ func TestStageTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("stagework"); got != "report_done" {
+	if got := names("stagework"); got != "report_done,ask_user" {
 		t.Fatalf("work: %s", got)
 	}
-	if got := names("stagecheck"); got != "report_done,review_approve,review_reject" {
+	if got := names("stagecheck"); got != "report_done,review_approve,review_reject,ask_user" {
 		t.Fatalf("check: %s", got)
 	}
 }
@@ -329,5 +329,29 @@ func TestCreateTaskSchemaWithStages(t *testing.T) {
 	}
 	if got := required("stagelead"); got != `["title"]` {
 		t.Fatalf("cu etape: %s", got)
+	}
+}
+
+func TestAskUserTool(t *testing.T) {
+	fb, ts := setup(t)
+	for _, token := range []string{"worker", "lead", "solo"} {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+		found := false
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			if tool.(map[string]any)["name"] == "ask_user" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%s: lipseste ask_user", token)
+		}
+	}
+	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ask_user","arguments":{"question":"Q?","options":["a","b",3]}}}`)
+	if _, isErr := toolText(t, resp); isErr || len(fb.calls) != 1 || fb.calls[0] != "ask_user|Q?|a,b" {
+		t.Fatalf("apel: %v %v", resp, fb.calls)
+	}
+	_, resp = rpc(t, ts, "setup", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ask_user","arguments":{"question":"Q?"}}}`)
+	if _, isErr := toolText(t, resp); !isErr {
+		t.Fatal("setup nu are voie la ask_user")
 	}
 }

@@ -37,6 +37,7 @@ type Backend interface {
 	ReviewApprove(c Caller, task, note string) (string, error)
 	ReviewReject(c Caller, task, feedback string) (string, error)
 	ProposeSetup(c Caller, args json.RawMessage) (string, error)
+	AskUser(c Caller, question string, options []string) (string, error)
 }
 
 type Server struct {
@@ -152,6 +153,8 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		text, err = s.backend.ReviewApprove(c, arg("task"), arg("note"))
 	case "review_reject":
 		text, err = s.backend.ReviewReject(c, arg("task"), arg("feedback"))
+	case "ask_user":
+		text, err = s.backend.AskUser(c, arg("question"), argList(p.Arguments, "options"))
 	case "propose_setup":
 		raw, _ := json.Marshal(p.Arguments)
 		text, err = s.backend.ProposeSetup(c, raw)
@@ -187,4 +190,16 @@ func argString(args map[string]any, key string) string {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+// argList citeste un argument lista de texte (ignora elementele care nu sunt text).
+func argList(args map[string]any, key string) []string {
+	raw, _ := args[key].([]any)
+	out := []string{}
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }

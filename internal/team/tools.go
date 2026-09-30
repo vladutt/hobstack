@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"foreman/internal/mcp"
 	"foreman/internal/store"
@@ -721,4 +722,43 @@ func (t *Team) findTask(projectID int64, ref string) (store.Task, error) {
 		return store.Task{}, fmt.Errorf("task T-%d does not exist", n)
 	}
 	return task, err
+}
+
+// AskUser salveaza o intrebare catre utilizator ("Needs you"). Agentul se opreste
+// dupa ea; raspunsul vine ca mesaj (AnswerQuestion).
+func (t *Team) AskUser(c mcp.Caller, question string, options []string) (string, error) {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return "", errors.New("question is required")
+	}
+	if utf8.RuneCountInString(question) > 2000 {
+		return "", errors.New("the question is too long: at most 2000 characters")
+	}
+	opts := []string{}
+	for _, o := range options {
+		if o = strings.TrimSpace(o); o != "" {
+			opts = append(opts, o)
+		}
+	}
+	if len(opts) > 4 {
+		return "", errors.New("at most 4 options")
+	}
+	for _, o := range opts {
+		if utf8.RuneCountInString(o) > 60 {
+			return "", errors.New("each option must be at most 60 characters")
+		}
+	}
+	t.work.Lock()
+	defer t.work.Unlock()
+	q := store.Question{ProjectID: c.ProjectID, AgentID: c.AgentID, RunID: c.RunID, Text: question, Options: opts}
+	if c.TaskID != 0 {
+		id := c.TaskID
+		q.TaskID = &id
+	}
+	if err := t.st.AddQuestion(&q); err != nil {
+		return "", err
+	}
+	t.note(c.ProjectID, c.AgentID, clip("Asked you: "+question), true)
+	t.emit(c.ProjectID, "question", q)
+	return "Question sent to the user. Stop now; the answer will arrive as a message.", nil
 }
