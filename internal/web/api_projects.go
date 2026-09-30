@@ -95,8 +95,9 @@ type agentView struct {
 
 type projectDetail struct {
 	projectCard
-	Agents []agentView  `json:"agents"`
-	Tasks  []store.Task `json:"tasks"`
+	Agents []agentView   `json:"agents"`
+	Tasks  []store.Task  `json:"tasks"`
+	Stages []store.Stage `json:"stages"` // coloanele proprii (etape); gol = board-ul implicit
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -166,7 +167,12 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks}
+	stages, err := s.st.ListStages(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages}
 	for _, a := range agents {
 		status, current := s.team.AgentStatus(a, tasks)
 		d.Agents = append(d.Agents, agentView{Agent: a, Roles: store.RolesOf(a, agents), Status: status, ActiveRunID: s.team.ActiveRunID(a.ID), CurrentTask: current})

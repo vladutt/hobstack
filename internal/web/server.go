@@ -90,6 +90,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/files/{id}", s.deleteFile)
 	mux.HandleFunc("POST /api/pick-folder", s.pickFolder)
 
+	mux.HandleFunc("PUT /api/projects/{id}/stages", s.saveStages)
+	mux.HandleFunc("POST /api/projects/{id}/tasks", s.createUserTask)
+	mux.HandleFunc("POST /api/tasks/{id}/decide", s.decideTask)
 	mux.HandleFunc("POST /api/tasks/{id}/accept", s.acceptTask)
 	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)
 
