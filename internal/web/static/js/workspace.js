@@ -191,7 +191,7 @@ export async function workspaceView(root, projectId, route) {
     needsBox.hidden = !questions.length;
     needsBox.replaceChildren(
       el("h2", {}, `Needs you (${questions.length})`),
-      questions.map(questionNode));
+      ...questions.map(questionNode)); // replaceChildren nativ nu aplatizeaza array-uri
   }
 
   // renderChatQuestion: intrebarea agentului selectat in chat; aceeasi regula:
