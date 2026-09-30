@@ -285,11 +285,16 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 	}
 	m.mu.Lock()
 	s, ok := m.sessions[id]
+	var running bool
+	var workdirs []string
+	if ok {
+		running, workdirs = s.Status == StatusRunning, s.Workdirs
+	}
 	m.mu.Unlock()
-	if !ok || s.Status != StatusRunning {
+	if !ok || !running {
 		return "", ErrNotFound
 	}
-	if err := CheckFolderPaths(&p, s.Workdirs); err != nil { // Workdirs nu se schimba dupa Start
+	if err := CheckFolderPaths(&p, workdirs); err != nil { // Workdirs nu se schimba dupa Start
 		return "", err
 	}
 	m.mu.Lock()

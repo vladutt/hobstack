@@ -166,3 +166,31 @@ func TestCreateProjectFromSetupWithFolders(t *testing.T) {
 		t.Fatalf("Lia trebuia in Landing: %+v", d.Agents)
 	}
 }
+
+func TestCreateProjectFromSetupSingleFolderNoPath(t *testing.T) {
+	e := withSetup(t)
+	dir := t.TempDir()
+	proposal := map[string]any{
+		"name": "Solo", "goal": "g", "context": "c",
+		"folders": []map[string]any{{"name": "Main"}},
+		"agents":  []map[string]any{{"name": "Ana", "role": "Lead", "model": "sonnet", "reportsTo": ""}},
+	}
+	code, raw := e.do(t, "POST", "/api/projects/setup", map[string]any{"proposal": proposal, "workdir": dir})
+	var p struct{ ID int64 }
+	json.Unmarshal(raw, &p)
+	if code != 201 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if d := e.folders(t, p.ID); len(d.Folders) != 1 || d.Folders[0].Path != dir {
+		t.Fatalf("foldere: %+v", d.Folders)
+	}
+	// fara workdir: folder nou in workspaces (comportamentul vechi)
+	code, raw = e.do(t, "POST", "/api/projects/setup", map[string]any{"proposal": proposal})
+	json.Unmarshal(raw, &p)
+	if code != 201 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if d := e.folders(t, p.ID); len(d.Folders) != 1 || d.Folders[0].Path == "" || d.Folders[0].Path == dir {
+		t.Fatalf("folder nou: %+v", d.Folders)
+	}
+}

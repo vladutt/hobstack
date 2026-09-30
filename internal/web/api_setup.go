@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 
 	wizard "foreman/internal/setup"
@@ -114,9 +115,11 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 		setupFail(w, err)
 		return
 	}
-	folders := in.Proposal.Folders
+	folders := slices.Clone(in.Proposal.Folders) // copie: nu modificam propunerea
 	if len(folders) == 0 {
 		folders = []wizard.ProposedFolder{{Path: in.Workdir}} // gol = folder nou in ~/Foreman
+	} else if len(folders) == 1 && folders[0].Path == "" {
+		folders[0].Path = in.Workdir // analistul a lasat calea goala: folderul ales de utilizator
 	}
 	p := store.Project{Name: in.Proposal.Name, Goal: in.Proposal.Goal, Context: in.Proposal.Context}
 	seen := map[string]bool{}
