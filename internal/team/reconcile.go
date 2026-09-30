@@ -160,7 +160,8 @@ func (t *Team) Reconcile(projectID int64) error {
 			found := false
 			for _, id := range ids {
 				cand, ok := byID[id]
-				if ok && slices.Contains(stages[i].AgentIDs, id) && !t.isActive(id) && !full(cand) {
+				// un agent nelegat nu lucreaza, chiar daca e bifat in etapa
+				if ok && !cand.Detached && slices.Contains(stages[i].AgentIDs, id) && !t.isActive(id) && !full(cand) {
 					a, found = cand, true
 					break
 				}

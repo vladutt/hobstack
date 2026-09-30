@@ -135,6 +135,10 @@ func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, ag
 	if task.SendBacks+1 < MaxSendBacks {
 		task.StageID = &st.ID
 		task.AssigneeID = placeholder(st, task.AssigneeID)
+	} else if task.StageID == nil {
+		// se blocheaza dupa decizia finala: il tinem in etapa tinta, ca sa ramana
+		// pe board (cu Accepta / Deblocheaza) si sa reia drumul prin etape
+		task.StageID = &st.ID
 	}
 	return t.rejectTask(task, feedback, agents, by)
 }
@@ -227,4 +231,10 @@ func stagesOverview(stages []store.Stage, agents []store.Agent) string {
 	}
 	fmt.Fprintf(&b, "\nTask-urile noi intra in %s; assignee e optional (il ia primul agent liber). Dupa ultima etapa decizi tu.", stages[0].Name)
 	return b.String()
+}
+
+// UserDecides: task-ul asteapta decizia utilizatorului (e la "La lider" si nu
+// are un agent care sa-l decida: creat din board, sau creatorul a disparut).
+func (t *Team) UserDecides(task store.Task, agents []store.Agent) bool {
+	return task.Status == store.StatusReview && task.ReviewStage == store.StageLead && decisionOwner(task, agents) == 0
 }

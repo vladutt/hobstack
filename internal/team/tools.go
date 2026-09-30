@@ -244,6 +244,9 @@ func noDeciderText(task store.Task, assignee store.Agent) string {
 // canDecide: accept_task si send_back sunt permise creatorului si oricarui
 // sef de-al lui. Fara creator (sters), oricarui sef al asignatului.
 func canDecide(callerID int64, task store.Task, agents []store.Agent) bool {
+	if task.ByUser {
+		return false // creat din board: decide doar utilizatorul
+	}
 	if task.CreatorID != nil {
 		return *task.CreatorID == callerID || store.IsAncestor(callerID, *task.CreatorID, agents)
 	}

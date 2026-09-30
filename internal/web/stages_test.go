@@ -60,3 +60,27 @@ func TestStagesAPI(t *testing.T) {
 		t.Fatalf("decide: %d", code)
 	}
 }
+
+// detaliul proiectului spune ce task-uri asteapta decizia utilizatorului
+func TestDetailListsUserDecisions(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
+	path := "/api/projects/" + itoa(p.ID)
+	e.do(t, "PUT", path+"/stages", map[string]any{"stages": []map[string]any{{"name": "Dev", "kind": "work", "agentIds": []int64{root.ID}}}})
+	_, raw := e.do(t, "POST", path+"/tasks", map[string]any{"title": "A"})
+	var task store.Task
+	json.Unmarshal(raw, &task)
+	task.StageID, task.Status, task.ReviewStage = nil, store.StatusReview, store.StageLead
+	if err := e.st.SaveTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	var d struct {
+		UserDecides []int64 `json:"userDecides"`
+	}
+	_, raw = e.do(t, "GET", path, nil)
+	json.Unmarshal(raw, &d)
+	if len(d.UserDecides) != 1 || d.UserDecides[0] != task.ID {
+		t.Fatalf("userDecides: %s", raw)
+	}
+}

@@ -263,3 +263,63 @@ func TestLeadTurnListsStages(t *testing.T) {
 		t.Fatal("HasStages lipseste")
 	}
 }
+
+// Critical din review: un task blocat dupa decizia finala ramane intr-o etapa
+// (altfel dispare de pe board si nu se mai poate debloca)
+func TestBlockedAfterFinalSendBackKeepsStage(t *testing.T) {
+	f, _, stages := stagesFixture(t)
+	f.tm.CreateTask(f.leadCaller(), "A", "", "")
+	task, _ := f.st.GetTaskByNumber(f.p.ID, 1)
+	task.StageID, task.Status, task.ReviewStage, task.SendBacks = nil, store.StatusReview, store.StageLead, MaxSendBacks-1
+	f.st.SaveTask(&task)
+	if _, err := f.tm.SendBack(f.leadCaller(), "T-1", "tot nu"); err != nil {
+		t.Fatal(err)
+	}
+	back := f.wantStatus(t, 1, store.StatusBlocked)
+	if back.StageID == nil || *back.StageID != stages[0].ID {
+		t.Fatalf("blocat fara etapa: %+v", back)
+	}
+}
+
+// Important din review: seful asignatului nu decide un task creat de utilizator
+func TestLeadCannotDecideUserTask(t *testing.T) {
+	f, _, _ := stagesFixture(t)
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "")
+	task.StageID, task.Status, task.ReviewStage, task.AssigneeID = nil, store.StatusReview, store.StageLead, f.vera.ID
+	f.st.SaveTask(&task)
+	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err == nil {
+		t.Fatal("liderul a acceptat un task al utilizatorului")
+	}
+	f.wantStatus(t, 1, store.StatusReview)
+}
+
+// un agent nelegat nu lucreaza, chiar daca e bifat intr-o etapa
+func TestDetachedStageAgentDoesNotWork(t *testing.T) {
+	f := setup(t)
+	solo := store.Agent{ProjectID: f.p.ID, Name: "Banca", Model: "haiku", Detached: true}
+	if err := f.st.CreateAgent(&solo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{solo.ID}}}); err != nil {
+		t.Fatal(err)
+	}
+	f.tm.CreateTask(f.leadCaller(), "A", "", "")
+	n := f.fs.count()
+	mustReconcile(t, f)
+	f.wantStatus(t, 1, store.StatusQueued)
+	if f.fs.count() != n {
+		t.Fatal("agentul nelegat a primit un run")
+	}
+}
+
+// Important din review: un task de etapa fara decident il decide utilizatorul
+func TestUserDecidesWhenNoDecider(t *testing.T) {
+	f, _, _ := stagesFixture(t)
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: f.lead.ID, Status: store.StatusReview, ReviewStage: store.StageLead}
+	f.st.CreateTask(&task)
+	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
+	f.st.SaveTask(&task)
+	if !f.tm.UserDecides(task, mustAgents(t, f)) {
+		t.Fatal("fara creator si cu asignat radacina, decide utilizatorul")
+	}
+}

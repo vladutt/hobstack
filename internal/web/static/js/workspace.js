@@ -347,7 +347,10 @@ export async function workspaceView(root, projectId, route) {
     boardHint.hidden = true;
     board.className = "board stages-board";
     const inStage = (s) => p.tasks.filter((t) => t.stageId === s.id && t.status !== "review" && t.status !== "done");
+    // task-uri fara etapa inca deschise (create inainte de coloane): altfel n-ar aparea nicaieri
+    const loose = p.tasks.filter((t) => !t.stageId && t.status !== "review" && t.status !== "done");
     board.replaceChildren(
+      ...(loose.length ? [column("Fara etapa", loose, byId)] : []),
       ...stages.map((s) => column(s.name, inStage(s), byId, s)),
       column("La lider", p.tasks.filter((t) => t.status === "review"), byId),
       column("Gata", p.tasks.filter((t) => t.status === "done"), byId));
@@ -408,7 +411,7 @@ export async function workspaceView(root, projectId, route) {
     const blocked = t.status === "blocked";
     const stage = t.status === "review" ? stageName(t, who, byId) : null;
     const waiting = t.stageId && t.status === "queued"; // in etapa, il ia primul agent liber
-    const mine = t.status === "review" && t.byUser;
+    const mine = t.status === "review" && (state.project.userDecides || []).includes(t.id);
     return el("details", {
       class: "task",
       open: state.open.has(t.id),
