@@ -167,3 +167,72 @@ func TestCreateProjectWithTeamFolders(t *testing.T) {
 		t.Fatalf("folder salvat: %+v", got.FolderID)
 	}
 }
+
+func TestAddAgentsToExistingProject(t *testing.T) {
+	s := newStore(t)
+	p := Project{Name: "Probe", Folders: []Folder{{Name: "Client", Path: "/c"}, {Name: "Landing", Path: "/l"}}}
+	lead, err := s.CreateProject(&p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	landing := p.Folders[1]
+	ctx := "Hugo site"
+	agents, err := s.AddAgents(p.ID, landing.ID, []NewMember{
+		{Agent: Agent{Name: "Lia", Model: "sonnet"}, Parent: -1, Reviewer: -1, ParentID: &lead.ID},
+		{Agent: Agent{Name: "Max", Model: "haiku", Tools: []string{"write"}}, Parent: 0, Reviewer: -1},
+	}, &ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lia, _ := s.GetAgent(agents[0].ID)
+	max, _ := s.GetAgent(agents[1].ID)
+	if lia.ParentID == nil || *lia.ParentID != lead.ID || max.ParentID == nil || *max.ParentID != lia.ID {
+		t.Fatalf("legaturi: lia=%v max=%v", lia.ParentID, max.ParentID)
+	}
+	if lia.FolderID == nil || *lia.FolderID != landing.ID || max.FolderID == nil || *max.FolderID != landing.ID {
+		t.Fatalf("foldere: %v %v", lia.FolderID, max.FolderID)
+	}
+	if got, _ := s.GetProject(p.ID); got.Folders[1].Context != "Hugo site" || got.Folders[0].Context != "" {
+		t.Fatalf("context: %+v", got.Folders)
+	}
+	if l, _ := s.GetAgent(lead.ID); l.Name != "Lead" || l.ParentID != nil {
+		t.Fatalf("lead-ul existent s-a schimbat: %+v", l)
+	}
+
+	// in primul folder: folder_id NULL; fara context: neschimbat
+	more, err := s.AddAgents(p.ID, p.Folders[0].ID, []NewMember{{Agent: Agent{Name: "Cleo", Model: "sonnet"}, Parent: -1, Reviewer: -1}}, nil)
+	if err != nil || more[0].FolderID != nil {
+		t.Fatalf("primul folder: %v %v", err, more[0].FolderID)
+	}
+	if got, _ := s.GetProject(p.ID); got.Folders[1].Context != "Hugo site" {
+		t.Fatal("contextul nu trebuia atins")
+	}
+}
+
+func TestAddAgentsRollsBack(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	before, _ := s.ListAgents(p.ID)
+	// al doilea nume e luat ("lead"): nu se creeaza nimic
+	_, err := s.AddAgents(p.ID, p.Folders[0].ID, []NewMember{
+		{Agent: Agent{Name: "Nou", Model: "sonnet"}, Parent: -1, Reviewer: -1, ParentID: &lead.ID},
+		{Agent: Agent{Name: "lead", Model: "sonnet"}, Parent: -1, Reviewer: -1},
+	}, nil)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("vreau ErrConflict, am %v", err)
+	}
+	if after, _ := s.ListAgents(p.ID); len(after) != len(before) {
+		t.Fatalf("s-au creat agenti: %d -> %d", len(before), len(after))
+	}
+
+	// sef din alt proiect sau folder din alt proiect: LinkError
+	p2 := Project{Name: "Altul", Workdir: "/tmp/altul"}
+	lead2, _ := s.CreateProject(&p2)
+	var le LinkError
+	if _, err := s.AddAgents(p.ID, p.Folders[0].ID, []NewMember{{Agent: Agent{Name: "X", Model: "sonnet"}, Parent: -1, Reviewer: -1, ParentID: &lead2.ID}}, nil); !errors.As(err, &le) {
+		t.Fatalf("sef strain: %v", err)
+	}
+	if _, err := s.AddAgents(p.ID, p2.Folders[0].ID, []NewMember{{Agent: Agent{Name: "Y", Model: "sonnet"}, Parent: -1, Reviewer: -1}}, nil); !errors.As(err, &le) {
+		t.Fatalf("folder strain: %v", err)
+	}
+}

@@ -268,3 +268,76 @@ func (s *Store) DeleteAgent(id int64) error {
 func (s *Store) SetSession(id int64, sessionID, promptHash string) error {
 	return mustAffect(s.db.Exec(`UPDATE agents SET session_id = ?, prompt_hash = ? WHERE id = ?`, sessionID, promptHash, id))
 }
+
+// AddAgents adauga o echipa noua intr-un proiect existent, toata in folderul
+// folderID, intr-o singura tranzactie (la orice eroare nu ramane nimic).
+// Legaturile: Parent/Reviewer = index in team; cu -1, ParentID/ReviewerID pot
+// numi un agent existent al proiectului. Agentii existenti nu se modifica.
+// folderContext != nil inlocuieste contextul folderului.
+// Validarea (nume, cicluri) o face apelantul; aici: ErrConflict pentru un nume
+// luat, LinkError pentru un folder sau un agent din alt proiect.
+func (s *Store) AddAgents(projectID, folderID int64, team []NewMember, folderContext *string) ([]Agent, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var position int
+	err = tx.QueryRow(`SELECT position FROM project_folders WHERE id = ? AND project_id = ?`, folderID, projectID).Scan(&position)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, LinkError("the chosen folder is not in this project")
+	}
+	if err != nil {
+		return nil, err
+	}
+	var folder *int64 // primul folder = NULL, ca peste tot
+	if position > 0 {
+		folder = &folderID
+	}
+
+	agents := make([]Agent, len(team))
+	for i, m := range team {
+		a := m.Agent
+		a.ID, a.ProjectID, a.ParentID, a.ReviewerID, a.Detached, a.FolderID = 0, projectID, nil, nil, false, folder
+		if err := insertAgent(tx, &a); err != nil {
+			return nil, err
+		}
+		agents[i] = a
+	}
+	// link: index in echipa noua, altfel agentul existent dat (verificat ca e din proiect)
+	link := func(i int, existing *int64) (*int64, error) {
+		if i >= 0 && i < len(agents) {
+			id := agents[i].ID
+			return &id, nil
+		}
+		if existing == nil {
+			return nil, nil
+		}
+		if !inProject(tx, *existing, projectID) {
+			return nil, LinkError("the chosen boss or reviewer is not in this project")
+		}
+		return existing, nil
+	}
+	for i, m := range team {
+		parent, err := link(m.Parent, m.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		reviewer, err := link(m.Reviewer, m.ReviewerID)
+		if err != nil {
+			return nil, err
+		}
+		agents[i].ParentID, agents[i].ReviewerID = parent, reviewer
+		if _, err := tx.Exec(`UPDATE agents SET parent_id = ?, reviewer_id = ? WHERE id = ?`,
+			nullPtr(parent), nullPtr(reviewer), agents[i].ID); err != nil {
+			return nil, err
+		}
+	}
+	if folderContext != nil {
+		if _, err := tx.Exec(`UPDATE project_folders SET context = ? WHERE id = ?`, *folderContext, folderID); err != nil {
+			return nil, err
+		}
+	}
+	return agents, tx.Commit()
+}
