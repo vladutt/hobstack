@@ -33,6 +33,8 @@ var ErrNotFound = errors.New("the setup session does not exist (maybe the server
 var (
 	ErrBusy     = errors.New("Foreman is still working; wait for the answer")
 	ErrNotReady = errors.New("the proposal is not ready yet")
+	// ErrNothingToUndo: istoricul de schimbari al sesiunii e gol
+	ErrNothingToUndo = errors.New("there is nothing to undo")
 )
 
 // ChatMessage: un mesaj din conversatia cu Foreman dupa analiza.
@@ -332,7 +334,8 @@ func (m *Manager) Chat(id, message string, current Proposal) (Session, error) {
 		m.mu.Unlock()
 		return Session{}, ErrBusy
 	}
-	if s.Status != StatusReady || s.claudeSession == "" {
+	// o sesiune ascunsa poate sa-si fi pierdut folderul temporar
+	if s.hidden || s.Status != StatusReady || s.claudeSession == "" {
 		m.mu.Unlock()
 		return Session{}, ErrNotReady
 	}
@@ -401,7 +404,7 @@ func (m *Manager) Undo(id string) (Session, error) {
 		return Session{}, ErrBusy
 	}
 	if len(s.history) == 0 {
-		return Session{}, ValidationError("there is nothing to undo")
+		return Session{}, ErrNothingToUndo
 	}
 	s.Proposal = s.history[len(s.history)-1]
 	s.history = s.history[:len(s.history)-1]

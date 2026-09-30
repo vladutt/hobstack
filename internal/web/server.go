@@ -76,6 +76,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/setup/{id}", s.dismissSetup)
 	mux.HandleFunc("GET /api/setup/{id}", s.getSetup)
 	mux.HandleFunc("POST /api/setup/{id}/stop", s.stopSetup)
+	mux.HandleFunc("POST /api/setup/{id}/chat", s.chatSetup)
+	mux.HandleFunc("POST /api/setup/{id}/undo", s.undoSetup)
 	mux.HandleFunc("POST /api/projects/{id}/folders/{fid}/setup", s.startFolderSetup)
 	mux.HandleFunc("POST /api/projects/{id}/agents/setup", s.addAgentsFromSetup)
 	mux.HandleFunc("POST /api/projects/setup", s.createProjectFromSetup)

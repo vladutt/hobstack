@@ -24,6 +24,10 @@ func setupFail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, err.Error())
 		return
 	}
+	if errors.Is(err, wizard.ErrBusy) || errors.Is(err, wizard.ErrNotReady) || errors.Is(err, wizard.ErrNothingToUndo) {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
 	fail(w, err)
 }
 
@@ -278,4 +282,40 @@ func (s *Server) addAgentsFromSetup(w http.ResponseWriter, r *http.Request) {
 	s.hub.Publish(p.ID, "agent", map[string]int64{"id": agents[0].ID})
 	s.hub.Publish(p.ID, "project", map[string]int64{"id": p.ID})
 	writeJSON(w, http.StatusCreated, agents)
+}
+
+// chatSetup trimite un mesaj lui Foreman, impreuna cu propunerea curenta (cu editarile utilizatorului).
+func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request) {
+	if s.wizard == nil {
+		writeErr(w, http.StatusNotFound, wizard.ErrNotFound.Error())
+		return
+	}
+	var in struct {
+		Message  string          `json:"message"`
+		Proposal wizard.Proposal `json:"proposal"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	sess, err := s.wizard.Chat(r.PathValue("id"), in.Message, in.Proposal)
+	if err != nil {
+		setupFail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, sess)
+}
+
+// undoSetup readuce propunerea de dinaintea ultimei schimbari a lui Foreman.
+func (s *Server) undoSetup(w http.ResponseWriter, r *http.Request) {
+	if s.wizard == nil {
+		writeErr(w, http.StatusNotFound, wizard.ErrNotFound.Error())
+		return
+	}
+	sess, err := s.wizard.Undo(r.PathValue("id"))
+	if err != nil {
+		setupFail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sess)
 }

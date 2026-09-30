@@ -95,7 +95,7 @@ func TestChatQuestionOnlyKeepsUndo(t *testing.T) {
 	m.Chat(s.ID, "why Bob?", *s.Proposal)
 	spec := f.specs[len(f.specs)-1]
 	f.done[spec.ID](runner.Outcome{RunID: spec.ID, Status: "done", Result: "Because."})
-	if _, err := m.Undo(s.ID); err == nil {
+	if _, err := m.Undo(s.ID); !errors.Is(err, ErrNothingToUndo) {
 		t.Fatal("nu exista nicio schimbare de anulat")
 	}
 	// un run de chat esuat: statusul ramane ready, eroarea apare in chat
@@ -218,5 +218,16 @@ func TestChatSameTempDir(t *testing.T) {
 	}
 	if _, err := os.Stat(f.specs[1].Dir); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// o sesiune ascunsa (dismissed) nu mai accepta chat
+func TestChatRefusesHiddenSession(t *testing.T) {
+	m, _, s := readySession(t)
+	if err := m.Dismiss(s.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Chat(s.ID, "hi", *s.Proposal); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("hidden: %v", err)
 	}
 }

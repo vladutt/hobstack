@@ -2,9 +2,12 @@ package web
 
 import (
 	"encoding/json"
+	"foreman/internal/mcp"
+	"foreman/internal/runner"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	wizard "foreman/internal/setup" // alias: in pachetul web, "setup" e deja helper-ul de test
@@ -284,5 +287,120 @@ func TestFolderSetupFlow(t *testing.T) {
 	}
 	if d := e.folders(t, p.ID); d.Folders[1].Context != "Hugo" {
 		t.Fatal("contextul nu trebuia schimbat")
+	}
+}
+
+// chatStarter retine onDone, ca sa putem termina manual run-urile wizard-ului.
+type chatStarter struct {
+	mu    sync.Mutex
+	specs []runner.Spec
+	done  map[string]func(runner.Outcome)
+}
+
+func (c *chatStarter) Start(s runner.Spec, d func(runner.Outcome)) (*runner.Run, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.specs = append(c.specs, s)
+	c.done[s.ID] = d
+	return nil, nil
+}
+func (c *chatStarter) Stop(string) error { return nil }
+
+type noInner struct{ mcp.Backend }
+
+func (noInner) Resolve(string) (mcp.Caller, bool) { return mcp.Caller{}, false }
+
+func mcpToken(t *testing.T, s runner.Spec) string {
+	t.Helper()
+	for i, a := range s.Args {
+		if a == "--mcp-config" {
+			var cfg struct {
+				MCPServers map[string]struct {
+					URL string `json:"url"`
+				} `json:"mcpServers"`
+			}
+			json.Unmarshal([]byte(s.Args[i+1]), &cfg)
+			u := cfg.MCPServers["team"].URL
+			return u[strings.LastIndex(u, "/")+1:]
+		}
+	}
+	t.Fatal("fara --mcp-config")
+	return ""
+}
+
+const chatProposal = `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Bob","role":"Dev","reportsTo":"Ana"}]}`
+
+func TestSetupChatAndUndo(t *testing.T) {
+	e := setup(t)
+	cs := &chatStarter{done: map[string]func(runner.Outcome){}}
+	m := wizard.New(cs, "http://127.0.0.1:0", t.TempDir())
+	e.srv.SetSetup(m)
+
+	dir := t.TempDir()
+	code, raw := e.do(t, "POST", "/api/setup", map[string]any{"workdirs": []string{dir}, "description": "a shop", "model": "sonnet"})
+	if code != http.StatusAccepted && code != http.StatusCreated && code != http.StatusOK {
+		t.Fatalf("start: %d %s", code, raw)
+	}
+	var s wizard.Session
+	json.Unmarshal(raw, &s)
+	var prop wizard.Proposal
+	json.Unmarshal([]byte(chatProposal), &prop)
+	chat := "/api/setup/" + s.ID + "/chat"
+
+	// inca ruleaza analiza: 409
+	if code, _ := e.do(t, "POST", chat, map[string]any{"message": "hi", "proposal": prop}); code != 409 {
+		t.Fatalf("not ready: %d", code)
+	}
+	// nimic de anulat: 409
+	if code, _ := e.do(t, "POST", "/api/setup/"+s.ID+"/undo", nil); code != 409 {
+		t.Fatalf("undo gol: %d", code)
+	}
+
+	// aducem sesiunea in ready
+	b := m.Wrap(noInner{})
+	c, _ := b.Resolve(mcpToken(t, cs.specs[0]))
+	if _, err := b.ProposeSetup(c, json.RawMessage(chatProposal)); err != nil {
+		t.Fatal(err)
+	}
+	cs.done[s.RunID](runner.Outcome{RunID: s.RunID, Status: "done", SessionID: "sid-1"})
+
+	if code, _ := e.do(t, "POST", chat, map[string]any{"message": "  ", "proposal": prop}); code != 400 {
+		t.Fatalf("mesaj gol: %d", code)
+	}
+	if code, _ := e.do(t, "POST", "/api/setup/nu-exista/chat", map[string]any{"message": "hi", "proposal": prop}); code != 404 {
+		t.Fatalf("404: %d", code)
+	}
+	code, raw = e.do(t, "POST", chat, map[string]any{"message": "rename", "proposal": prop})
+	if code != http.StatusAccepted {
+		t.Fatalf("chat: %d %s", code, raw)
+	}
+	// busy: 409 si la chat, si la undo
+	if code, _ := e.do(t, "POST", chat, map[string]any{"message": "again", "proposal": prop}); code != 409 {
+		t.Fatalf("busy chat: %d", code)
+	}
+	if code, _ := e.do(t, "POST", "/api/setup/"+s.ID+"/undo", nil); code != 409 {
+		t.Fatalf("busy undo: %d", code)
+	}
+
+	// Foreman propune o schimbare, apoi run-ul se termina
+	spec := cs.specs[len(cs.specs)-1]
+	c2, _ := b.Resolve(mcpToken(t, spec))
+	changed := strings.Replace(chatProposal, `"Shop"`, `"Shop 2"`, 1)
+	if _, err := b.ProposeSetup(c2, json.RawMessage(changed)); err != nil {
+		t.Fatal(err)
+	}
+	cs.done[spec.ID](runner.Outcome{RunID: spec.ID, Status: "done", SessionID: "sid-2", Result: "Renamed."})
+
+	code, raw = e.do(t, "POST", "/api/setup/"+s.ID+"/undo", nil)
+	if code != 200 {
+		t.Fatalf("undo: %d %s", code, raw)
+	}
+	var got wizard.Session
+	json.Unmarshal(raw, &got)
+	if got.Proposal == nil || got.Proposal.Name != "Shop" {
+		t.Fatalf("undo: %+v", got.Proposal)
+	}
+	if code, _ := e.do(t, "POST", "/api/setup/"+s.ID+"/undo", nil); code != 409 {
+		t.Fatalf("undo a doua oara: %d", code)
 	}
 }
