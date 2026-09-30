@@ -318,3 +318,4 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .folder-rows { display: grid; gap: 12px; }
 .folder-row { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; background: var(--card-2); }
 .folder-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.folder-chips[hidden], .folder-row .btn[hidden] { display: none; }
