@@ -135,7 +135,7 @@ export async function projectFormView(root, id) {
           field("Parallel workers", parallel),
           field("Budget per run (USD)", budget)),
         el("p", { class: "hint" }, "Both are optional: leave them empty for no limit. The budget only matters if you use an API key (with a subscription you do not pay per run); when set, a run stops once it reaches it. Agents that report directly to you do not count toward the limit."),
-        !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
+        !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page."))),
     el("section", { class: "section" },
       el("div", { class: "section-head" },
         el("h2", {}, "Folders"),
