@@ -168,6 +168,8 @@ type projectCard struct {
 	Team   []memberBrief `json:"team"`
 	Done   int           `json:"done"`
 	Total  int           `json:"total"`
+	// OpenQuestions: intrebari de la agenti la care utilizatorul nu a raspuns
+	OpenQuestions int `json:"openQuestions"`
 }
 
 type agentView struct {
@@ -185,6 +187,8 @@ type projectDetail struct {
 	Stages []store.Stage `json:"stages"` // coloanele proprii (etape); gol = board-ul implicit
 	// UserDecides: task-urile din "La lider" pe care le decide utilizatorul (butoane in board)
 	UserDecides []int64 `json:"userDecides"`
+	// Questions: intrebarile deschise ale agentilor catre utilizator
+	Questions []store.Question `json:"questions"`
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -198,6 +202,9 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 		return projectCard{}, nil, nil, err
 	}
 	c := projectCard{Project: p, Team: []memberBrief{}, Total: len(tasks), Status: "Idle"}
+	if c.OpenQuestions, err = s.st.CountOpenQuestions(p.ID); err != nil {
+		return projectCard{}, nil, nil, err
+	}
 	for _, a := range agents {
 		r := store.RolesOf(a, agents)
 		c.Team = append(c.Team, memberBrief{ID: a.ID, Name: a.Name, IsLead: r.IsLead, IsRoot: r.IsRoot})
@@ -259,7 +266,15 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}}
+	questions, err := s.st.ListOpenQuestions(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if questions == nil {
+		questions = []store.Question{}
+	}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, Questions: questions}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents) {
 			d.UserDecides = append(d.UserDecides, t.ID)

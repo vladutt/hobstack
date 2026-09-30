@@ -98,6 +98,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/projects/{id}/stages", s.saveStages)
 	mux.HandleFunc("POST /api/projects/{id}/tasks", s.createUserTask)
 	mux.HandleFunc("POST /api/tasks/{id}/decide", s.decideTask)
+	mux.HandleFunc("POST /api/questions/{id}/answer", s.answerQuestion)
+	mux.HandleFunc("POST /api/questions/{id}/dismiss", s.dismissQuestion)
 	mux.HandleFunc("POST /api/tasks/{id}/assign", s.assignTask)
 	mux.HandleFunc("POST /api/tasks/{id}/accept", s.acceptTask)
 	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)

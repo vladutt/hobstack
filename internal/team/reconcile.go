@@ -509,12 +509,23 @@ func (t *Team) Recover() error {
 // primeste la urmatorul run; pentru un agent cu sef, seful primeste o copie.
 func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (store.Message, error) {
 	t.work.Lock()
-	defer t.work.Unlock()
-
 	a, err := t.st.GetAgent(agentID)
+	if err != nil {
+		t.work.Unlock()
+		return store.Message{}, err
+	}
+	m, err := t.addUserMessage(a, text, attachmentIDs)
+	t.work.Unlock()
 	if err != nil {
 		return store.Message{}, err
 	}
+	t.Kick(a.ProjectID)
+	return m, nil
+}
+
+// addUserMessage salveaza mesajul utilizatorului si anunta seful agentului.
+// Apelantul tine t.work si face Kick dupa ce il elibereaza.
+func (t *Team) addUserMessage(a store.Agent, text string, attachmentIDs []int64) (store.Message, error) {
 	m := store.Message{ProjectID: a.ProjectID, AgentID: a.ID, Kind: store.KindMsg, Author: store.AuthorUser, Text: text, Delivered: false}
 	if err := t.st.AddMessage(&m); err != nil {
 		return store.Message{}, err
@@ -537,8 +548,65 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 		}
 		t.note(a.ProjectID, *a.ParentID, clip(note), false)
 	}
-	t.Kick(a.ProjectID)
 	return m, nil
+}
+
+// AnswerQuestion inchide intrebarea cu raspunsul utilizatorului, i-l trimite
+// agentului ca mesaj si, daca intrebarea era pe un task care asteapta, pune
+// task-ul inapoi in coada (acelasi agent): urmatorul run e pe task, cu raspunsul.
+func (t *Team) AnswerQuestion(id int64, text string) error {
+	return t.closeQuestion(id, store.QuestionAnswered, strings.TrimSpace(text))
+}
+
+// DismissQuestion inchide intrebarea fara raspuns; agentul afla asta.
+func (t *Team) DismissQuestion(id int64) error {
+	return t.closeQuestion(id, store.QuestionDismissed, "")
+}
+
+func (t *Team) closeQuestion(id int64, status, answer string) error {
+	t.work.Lock()
+	q, err := t.st.GetQuestion(id)
+	if err != nil {
+		t.work.Unlock()
+		return err
+	}
+	if err := t.st.CloseQuestion(id, status, answer); err != nil {
+		t.work.Unlock()
+		return err
+	}
+	a, err := t.st.GetAgent(q.AgentID)
+	if err != nil {
+		t.work.Unlock()
+		return err
+	}
+	short := q.Text
+	if r := []rune(short); len(r) > 200 {
+		short = string(r[:200]) + "..."
+	}
+	msg := fmt.Sprintf("Answer to your question %q: %s", short, answer)
+	if status == store.QuestionDismissed {
+		msg = fmt.Sprintf("The user dismissed your question %q without answering. Decide yourself or ask differently.", short)
+	}
+	// intai task-ul in coada, apoi mesajul: amandoua sub lock, inainte de Kick
+	if q.TaskID != nil && !t.isActive(a.ID) {
+		if task, err := t.st.GetTask(*q.TaskID); err == nil && task.Status == store.StatusInProgress && task.AssigneeID == a.ID {
+			task.Status = store.StatusQueued
+			if err := t.st.SaveTask(&task); err != nil {
+				t.work.Unlock()
+				return err
+			}
+			t.emit(q.ProjectID, "task", task)
+		}
+	}
+	if _, err := t.addUserMessage(a, clip(msg), nil); err != nil {
+		t.work.Unlock()
+		return err
+	}
+	q.Status, q.Answer = status, answer
+	t.emit(q.ProjectID, "question", q)
+	t.work.Unlock()
+	t.Kick(q.ProjectID)
+	return nil
 }
 
 func (t *Team) AcceptBlocked(taskID int64) error { return t.resolveBlocked(taskID, true) }
