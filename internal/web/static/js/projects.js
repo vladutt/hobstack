@@ -1,8 +1,21 @@
 import { api } from "./api.js";
-import { el, avatar, pill, field, toast, kindOf } from "./ui.js";
+import { el, avatar, pill, field, toast, kindOf, clock } from "./ui.js";
 
 export async function projectsView(root) {
-  const projects = await api("/api/projects");
+  const [projects, setups] = await Promise.all([api("/api/projects"), api("/api/setup").catch(() => [])]);
+  const grid = el("div", { class: "grid" });
+  // cardurile de proiect nu se schimba; doar cele de analiza se redeseneaza
+  const fixed = [
+    ...projects.map(projectCard),
+    el("a", { class: "card card-new", href: "#/setup" },
+      el("span", { class: "plus" }, "\u2728"),
+      el("strong", {}, "New project with AI"),
+      el("span", { class: "hint" }, "Pick a folder; the AI proposes the project and the team")),
+    el("a", { class: "card card-new", href: "#/new" },
+      el("span", { class: "plus" }, "+"),
+      el("strong", {}, "New project"),
+      el("span", { class: "hint" }, "Start with a lead, add the team later")),
+  ];
   root.append(
     el("header", { class: "page-head" },
       el("div", {},
@@ -11,16 +24,60 @@ export async function projectsView(root) {
       el("div", { class: "actions" },
         el("a", { class: "btn", href: "#/setup" }, "New project with AI"),
         el("a", { class: "btn primary", href: "#/new" }, "+ New project"))),
-    el("div", { class: "grid" },
-      projects.map(projectCard),
-      el("a", { class: "card card-new", href: "#/setup" },
-        el("span", { class: "plus" }, "\u2728"),
-        el("strong", {}, "New project with AI"),
-        el("span", { class: "hint" }, "Pick a folder; the AI proposes the project and the team")),
-      el("a", { class: "card card-new", href: "#/new" },
-        el("span", { class: "plus" }, "+"),
-        el("strong", {}, "New project"),
-        el("span", { class: "hint" }, "Start with a lead, add the team later"))));
+    grid);
+
+  // analizele din wizard ruleaza pe server; cat timp una ruleaza, verificam
+  // lista la cateva secunde ca sa vedem cand e gata
+  let timer = null;
+  let closed = false;
+  function draw(list) {
+    grid.replaceChildren(...list.map((s) => setupCard(s, refresh)), ...fixed);
+    clearTimeout(timer);
+    if (!closed && list.some((s) => s.status === "running")) timer = setTimeout(refresh, 3000);
+  }
+  async function refresh() {
+    if (closed) return;
+    try { draw(await api("/api/setup")); } catch (err) { toast(err.message); }
+  }
+  draw(setups);
+  return () => { closed = true; clearTimeout(timer); };
+}
+
+const SETUP_STATUS = {
+  running: "Analyzing\u2026", ready: "Ready to review", failed: "Failed", stopped: "Stopped",
+};
+
+// setupCard: o analiza "New project with AI", pornita sau terminata.
+function setupCard(s, refresh) {
+  const href = `#/setup/${s.id}`;
+  const act = (fn) => async (e) => {
+    e.target.disabled = true;
+    try { await fn(); } catch (err) { toast(err.message); }
+    refresh();
+  };
+  const stop = act(() => api(`/api/setup/${s.id}/stop`, { method: "POST" }));
+  const dismiss = act(() => api(`/api/setup/${s.id}`, { method: "DELETE" }));
+  const retry = act(async () => {
+    const next = await api("/api/setup", { method: "POST", body: { workdir: s.workdir, description: s.description, model: s.model } });
+    await api(`/api/setup/${s.id}`, { method: "DELETE" });
+    location.hash = `#/setup/${next.id}`;
+  });
+  const text = s.status === "failed" ? s.error
+    : s.proposal?.goal || s.description || s.workdir;
+  const buttons = {
+    running: [el("a", { class: "btn", href }, "Watch"), el("button", { type: "button", class: "btn", onclick: stop }, "Stop")],
+    ready: [el("a", { class: "btn primary", href }, "Review proposal"), el("button", { type: "button", class: "btn", onclick: dismiss }, "Dismiss")],
+  }[s.status] || [el("button", { type: "button", class: "btn primary", onclick: retry }, "Retry"),
+    el("button", { type: "button", class: "btn", onclick: dismiss }, "Dismiss")];
+  const agents = s.proposal?.agents?.length;
+  return el("div", { class: `card setup-card setup-${s.status}` },
+    el("div", { class: "card-top" },
+      el("a", { class: "card-title", href }, s.title || "New project"),
+      el("span", { class: `pill pill-setup-${s.status}` }, SETUP_STATUS[s.status] || s.status)),
+    el("p", { class: `clamp ${s.status === "failed" ? "err" : "muted"}` }, text),
+    el("span", { class: "hint" },
+      "New project with AI \u00b7 started " + clock(s.createdAt) + (agents ? ` \u00b7 ${agents} agents proposed` : "")),
+    el("div", { class: "card-actions" }, buttons));
 }
 
 function projectCard(p) {

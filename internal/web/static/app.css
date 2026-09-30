@@ -63,6 +63,15 @@ a.card:hover { border-color: var(--line-2); }
 .pill-running { background: rgba(108, 195, 180, .14); color: var(--teal); }
 .pill-idle { background: #262b29; color: var(--muted); }
 .pill-paused { background: rgba(229, 165, 75, .14); color: var(--amber); }
+.pill-setup-running { background: rgba(108, 195, 180, .14); color: var(--teal); animation: pulse 1.6s ease-in-out infinite; }
+.pill-setup-ready { background: rgba(229, 165, 75, .14); color: var(--amber); }
+.pill-setup-failed, .pill-setup-stopped { background: rgba(224, 115, 106, .14); color: var(--red); }
+@keyframes pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .pill-setup-running { animation: none; } }
+.setup-card { border-style: dashed; }
+.setup-card.setup-ready { border-color: var(--amber); border-style: solid; }
+.setup-card a.card-title { color: var(--text); text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-actions { display: flex; gap: 8px; margin-top: auto; }
 .avatar { --size: 32px; width: var(--size); height: var(--size); flex-shrink: 0; border-radius: 50%; display: inline-grid; place-items: center; font-weight: 600; font-size: calc(var(--size) * .42); }
 .avatar.lead { background: var(--amber); color: var(--amber-ink); }
 .avatar.worker { background: var(--teal); color: var(--teal-ink); }

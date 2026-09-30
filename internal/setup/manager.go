@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -32,12 +33,15 @@ type Starter interface {
 	Stop(runID string) error
 }
 
-// Session e o analiza din wizard. Traieste doar in memorie.
+// Session e o analiza din wizard. Traieste doar in memorie. Ruleaza pe server
+// si cand pagina wizard-ului e inchisa; pagina Proiecte o arata ca un card.
 type Session struct {
 	ID          string    `json:"id"`
 	RunID       string    `json:"runId"`
+	Title       string    `json:"title"` // pentru card: numele propus, altfel folderul sau descrierea
 	Workdir     string    `json:"workdir"`
 	Description string    `json:"description"`
+	Model       string    `json:"model"` // modelul analistului, pentru Retry
 	Status      string    `json:"status"`
 	Proposal    *Proposal `json:"proposal"`
 	Error       string    `json:"error"`
@@ -45,6 +49,7 @@ type Session struct {
 
 	token   string
 	tempDir string // folderul gol folosit cand nu exista folder de proiect
+	hidden  bool   // ascunsa din lista (Dismiss sau proiect creat din ea)
 }
 
 type Manager struct {
@@ -99,7 +104,8 @@ func (m *Manager) Start(workdir, description, model string) (Session, error) {
 	}
 
 	m.cleanupOld()
-	s := &Session{ID: randomHex(8), RunID: runner.NewID(), Workdir: workdir, Description: description,
+	s := &Session{ID: randomHex(8), RunID: runner.NewID(), Title: titleFor(workdir, description),
+		Workdir: workdir, Description: description, Model: model,
 		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16)}
 	cwd := workdir
 	if cwd == "" {
@@ -194,6 +200,38 @@ func (m *Manager) snapshot(s *Session) Session {
 	return *s
 }
 
+// List intoarce sesiunile vizibile, cele mai noi primele (pentru pagina Proiecte).
+func (m *Manager) List() []Session {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := []Session{}
+	for _, s := range m.sessions {
+		if !s.hidden {
+			out = append(out, *s)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+// Dismiss scoate sesiunea din lista; daca analiza inca ruleaza, o opreste.
+// Sesiunea ramane accesibila dupa id pana la curatenia de 24h.
+func (m *Manager) Dismiss(id string) error {
+	m.mu.Lock()
+	s, ok := m.sessions[id]
+	if !ok {
+		m.mu.Unlock()
+		return ErrNotFound
+	}
+	s.hidden = true
+	running, runID := s.Status == StatusRunning, s.RunID
+	m.mu.Unlock()
+	if running {
+		return m.starter.Stop(runID)
+	}
+	return nil
+}
+
 func (m *Manager) Stop(id string) error {
 	m.mu.Lock()
 	s, ok := m.sessions[id]
@@ -231,6 +269,7 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 		return "", ErrNotFound
 	}
 	s.Proposal = &p // o propunere noua o inlocuieste pe cea veche
+	s.Title = p.Name
 	return "Proposal received. You are done: do nothing else.", nil
 }
 
@@ -257,6 +296,20 @@ func (b *backend) ProposeSetup(c mcp.Caller, args json.RawMessage) (string, erro
 		return "", errors.New("propose_setup is only for the setup wizard")
 	}
 	return b.m.propose(c.SetupID, args)
+}
+
+// titleFor da un titlu pentru card pana vine propunerea: numele folderului,
+// altfel prima linie din descriere, scurtata.
+func titleFor(workdir, description string) string {
+	if workdir != "" {
+		return filepath.Base(workdir)
+	}
+	line, _, _ := strings.Cut(description, "\n")
+	line = strings.TrimSpace(line)
+	if r := []rune(line); len(r) > 60 {
+		line = strings.TrimSpace(string(r[:60])) + "…"
+	}
+	return line
 }
 
 // expandHome transforma ~/x in calea completa.

@@ -156,3 +156,63 @@ func TestManagerEmptyFolderNeedsDescription(t *testing.T) {
 		t.Fatalf("folder cu fisiere fara descriere e ok: %v", err)
 	}
 }
+
+// lista pentru pagina Proiecte: cele mai noi primele, fara cele ascunse
+func TestManagerListAndDismiss(t *testing.T) {
+	m, f := newTest(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
+	a, _ := m.Start(dir, "", "sonnet")
+	b, _ := m.Start("", "un blog despre motoare", "haiku")
+	if a.Title != filepath.Base(dir) || b.Title != "un blog despre motoare" || b.Model != "haiku" {
+		t.Fatalf("titluri: %q %q, model %q", a.Title, b.Title, b.Model)
+	}
+	list := m.List()
+	if len(list) != 2 || list[0].ID != b.ID {
+		t.Fatalf("lista: %+v", list)
+	}
+
+	// propunerea da titlul
+	c, _ := m.Wrap(innerBackend{}).Resolve(tokenOf(t, f.specs[0]))
+	if _, err := m.Wrap(innerBackend{}).ProposeSetup(c, json.RawMessage(good)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := m.Get(a.ID); got.Title != "Shop" {
+		t.Fatalf("titlu dupa propunere: %q", got.Title)
+	}
+
+	// ascunderea unei analize care ruleaza o si opreste
+	if err := m.Dismiss(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.stopped) != 1 || f.stopped[0] != b.RunID {
+		t.Fatalf("stop: %v", f.stopped)
+	}
+	if list := m.List(); len(list) != 1 || list[0].ID != a.ID {
+		t.Fatalf("dupa dismiss: %+v", list)
+	}
+	// o sesiune ascunsa se poate inca deschide dupa id
+	if _, ok := m.Get(b.ID); !ok {
+		t.Fatal("sesiunea ascunsa trebuia sa existe inca")
+	}
+
+	// o sesiune terminata se ascunde fara stop
+	f.done[a.RunID](runner.Outcome{RunID: a.RunID, Status: "done"})
+	if err := m.Dismiss(a.ID); err != nil || len(f.stopped) != 1 {
+		t.Fatalf("dismiss terminata: %v %v", err, f.stopped)
+	}
+	if len(m.List()) != 0 {
+		t.Fatal("lista trebuia goala")
+	}
+	if err := m.Dismiss("inexistent"); err != ErrNotFound {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestTitleFromLongDescription(t *testing.T) {
+	m, _ := newTest(t)
+	s, _ := m.Start("", strings.Repeat("abcde ", 30)+"\nlinia doi", "sonnet")
+	if len([]rune(s.Title)) > 61 || !strings.HasSuffix(s.Title, "…") {
+		t.Fatalf("titlu: %q", s.Title)
+	}
+}

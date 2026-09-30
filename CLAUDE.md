@@ -30,6 +30,7 @@ radacini si sub-lideri, reviewer per agent, editor canvas.
 Gata (wizard, spec in docs/superpowers/specs/2026-09-30-foreman-setup-wizard-design.md): "Proiect nou cu AI":
 un analist Claude (doar citire) citeste folderul si propune proiectul si echipa prin tool-ul MCP propose_setup;
 utilizatorul editeaza propunerea si creeaza totul intr-o tranzactie. Pachet: internal/setup.
+Analiza ruleaza in fundal (sesiuni doar in memorie): apare pe Proiecte ca un card (Analyzing / Ready / Failed), redeschis prin #/setup/<id>.
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.

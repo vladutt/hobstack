@@ -93,3 +93,44 @@ func (e *env) projects(t *testing.T) []json.RawMessage {
 	json.Unmarshal(raw, &out)
 	return out
 }
+
+func TestSetupListDismissAndCreate(t *testing.T) {
+	e := withSetup(t)
+	_, raw := e.do(t, "POST", "/api/setup", map[string]any{"description": "un blog", "model": "haiku"})
+	var s struct{ ID string }
+	json.Unmarshal(raw, &s)
+
+	list := func() []struct{ ID, Title, Status string } {
+		code, raw := e.do(t, "GET", "/api/setup", nil)
+		var out []struct{ ID, Title, Status string }
+		if code != 200 || json.Unmarshal(raw, &out) != nil {
+			t.Fatalf("list: %d %s", code, raw)
+		}
+		return out
+	}
+	if l := list(); len(l) != 1 || l[0].ID != s.ID || l[0].Title != "un blog" || l[0].Status != "running" {
+		t.Fatalf("%+v", l)
+	}
+
+	// crearea proiectului din sesiune o scoate din lista
+	proposal := map[string]any{"name": "Blog", "goal": "g", "context": "c",
+		"agents": []map[string]any{{"name": "Ana", "role": "Lead", "model": "sonnet", "reportsTo": ""}}}
+	if code, raw := e.do(t, "POST", "/api/projects/setup", map[string]any{"setupId": s.ID, "workdir": t.TempDir(), "proposal": proposal}); code != 201 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if l := list(); len(l) != 0 {
+		t.Fatalf("dupa creare: %+v", l)
+	}
+
+	_, raw = e.do(t, "POST", "/api/setup", map[string]any{"description": "altul", "model": "haiku"})
+	json.Unmarshal(raw, &s)
+	if code, _ := e.do(t, "DELETE", "/api/setup/"+s.ID, nil); code != http.StatusNoContent {
+		t.Fatalf("dismiss: %d", code)
+	}
+	if l := list(); len(l) != 0 {
+		t.Fatalf("dupa dismiss: %+v", l)
+	}
+	if code, _ := e.do(t, "DELETE", "/api/setup/inexistent", nil); code != 404 {
+		t.Fatalf("dismiss inexistent: %d", code)
+	}
+}

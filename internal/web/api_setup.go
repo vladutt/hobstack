@@ -61,6 +61,26 @@ func (s *Server) getSetup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sess)
 }
 
+func (s *Server) listSetups(w http.ResponseWriter, r *http.Request) {
+	if s.wizard == nil {
+		writeJSON(w, http.StatusOK, []wizard.Session{})
+		return
+	}
+	writeJSON(w, http.StatusOK, s.wizard.List())
+}
+
+func (s *Server) dismissSetup(w http.ResponseWriter, r *http.Request) {
+	if s.wizard == nil {
+		writeErr(w, http.StatusNotFound, wizard.ErrNotFound.Error())
+		return
+	}
+	if err := s.wizard.Dismiss(r.PathValue("id")); err != nil {
+		setupFail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) stopSetup(w http.ResponseWriter, r *http.Request) {
 	if s.wizard == nil {
 		writeErr(w, http.StatusNotFound, wizard.ErrNotFound.Error())
@@ -77,6 +97,7 @@ func (s *Server) stopSetup(w http.ResponseWriter, r *http.Request) {
 // din wizard, intr-o singura tranzactie.
 func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) {
 	var in struct {
+		SetupID  string          `json:"setupId"` // sesiunea din care vine; dispare din lista dupa creare
 		Workdir  string          `json:"workdir"`
 		Proposal wizard.Proposal `json:"proposal"`
 	}
@@ -105,6 +126,9 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 	// ca la createProject: un folder ramas de la un proiect vechi cu acelasi id
 	if err := os.RemoveAll(filepath.Join(s.dirs.Projects, strconv.FormatInt(p.ID, 10))); err != nil {
 		log.Printf("cleaning up old project folder %d: %v", p.ID, err)
+	}
+	if s.wizard != nil && in.SetupID != "" {
+		s.wizard.Dismiss(in.SetupID) // sesiunea poate sa fi expirat; nu conteaza
 	}
 	writeJSON(w, http.StatusCreated, p)
 }

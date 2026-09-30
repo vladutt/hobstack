@@ -4,7 +4,9 @@ import { liveRenderer } from "./live.js";
 
 // Wizard-ul "Proiect nou cu AI": 1) folder + descriere, 2) analiza live,
 // 3) propunerea editabila, apoi "Creeaza proiectul".
-export async function setupView(root) {
+// Analiza ruleaza pe server: pagina se poate inchide, iar #/setup/<id> o
+// redeschide la pasul la care a ajuns (cardul din Proiecte duce aici).
+export async function setupView(root, id) {
   const info = await api("/api/info");
   const form = { workdir: "", description: "", model: "sonnet" };
   let session = null;   // {id, runId}
@@ -48,8 +50,7 @@ export async function setupView(root) {
       Object.assign(form, { workdir: workdir.value.trim(), description: description.value.trim(), model: model.value });
       go.disabled = true;
       try {
-        session = await api("/api/setup", { method: "POST", body: form });
-        stepAnalyze();
+        await begin();
       } catch (err) {
         toast(err.message);
         go.disabled = false;
@@ -57,12 +58,28 @@ export async function setupView(root) {
     }
   }
 
+  // back: inapoi la pasul 1; sesiunea ramane in Proiecte pana o ascunzi
+  function back() {
+    history.replaceState(null, "", "#/setup");
+    stepChoose();
+  }
+
+  // begin porneste o analiza noua cu datele din form. Adresa devine
+  // #/setup/<id> (fara hashchange), ca un refresh sa nu piarda analiza.
+  async function begin() {
+    session = await api("/api/setup", { method: "POST", body: form });
+    history.replaceState(null, "", `#/setup/${session.id}`);
+    stepAnalyze();
+  }
+
   // ---------- pasul 2 ----------
   function stepAnalyze() {
     const box = el("div", { class: "live wizard-live" }, el("div", { class: "live-head" }, "The AI is reading the project..."));
     const stopBtn = el("button", { type: "button", class: "btn", onclick: () => api(`/api/setup/${session.id}/stop`, { method: "POST" }).catch((e) => toast(e.message)) }, "Stop");
     body.replaceChildren(el("section", { class: "section wizard-step" },
-      el("h2", {}, "2. Analysis"), box, el("div", { class: "actions" }, stopBtn)));
+      el("h2", {}, "2. Analysis"),
+      el("p", { class: "hint" }, "You can leave this page: the analysis keeps running and shows up in Projects when it is done."),
+      box, el("div", { class: "actions" }, stopBtn)));
     const render = liveRenderer(box);
     stream = new EventSource(`/api/runs/${session.runId}/events`);
     stream.onmessage = (msg) => {
@@ -84,13 +101,21 @@ export async function setupView(root) {
     try { s = await api(`/api/setup/${session.id}`); } catch (err) { toast(err.message); stepChoose(); return; }
     if (s.status === "running" && tries < 20) { setTimeout(() => checkResult(tries + 1), 250); return; }
     if (s.status === "ready") { stepReview(s.proposal); return; }
+    stepFailed(s);
+  }
+
+  function stepFailed(s) {
     body.replaceChildren(el("section", { class: "section wizard-step" },
       el("h2", {}, s.status === "stopped" ? "Analysis stopped" : "Analysis failed"),
       s.error && el("p", { class: "err" }, s.error),
       el("div", { class: "actions" },
-        el("button", { type: "button", class: "btn", onclick: stepChoose }, "Back"),
+        el("button", { type: "button", class: "btn", onclick: back }, "Back"),
         el("button", { type: "button", class: "btn primary", onclick: async () => {
-          try { session = await api("/api/setup", { method: "POST", body: form }); stepAnalyze(); } catch (err) { toast(err.message); }
+          const old = session.id;
+          try {
+            await begin();
+            api(`/api/setup/${old}`, { method: "DELETE" }).catch(() => {}); // cardul vechi nu mai trebuie
+          } catch (err) { toast(err.message); }
         } }, "Retry"))));
   }
 
@@ -200,7 +225,7 @@ export async function setupView(root) {
         el("div", { class: "section-head" }, el("h2", {}, "Team"), el("span", { class: "hint" }, "Uncheck what you do not want; you can also adjust the links on the canvas after creation.")),
         tree, rows.map((r) => r.el)),
       el("div", { class: "actions wizard-actions" },
-        el("button", { type: "button", class: "btn", onclick: stepChoose }, "Back"),
+        el("button", { type: "button", class: "btn", onclick: back }, "Back"),
         el("span", { class: "grow" }), createBtn)));
     sync();
 
@@ -214,7 +239,7 @@ export async function setupView(root) {
       createBtn.disabled = true;
       try {
         const proj = await api("/api/projects/setup", { method: "POST", body: {
-          workdir: form.workdir,
+          setupId: session?.id, workdir: form.workdir,
           proposal: { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "", agents },
         } });
         location.hash = `#/p/${proj.id}/team`;
@@ -225,6 +250,21 @@ export async function setupView(root) {
     }
   }
 
-  stepChoose();
+  if (id) {
+    try {
+      session = await api(`/api/setup/${id}`);
+    } catch (err) {
+      toast(err.message);
+      history.replaceState(null, "", "#/setup");
+      stepChoose();
+      return () => { closed = true; closeStream(); };
+    }
+    Object.assign(form, { workdir: session.workdir, description: session.description, model: session.model || form.model });
+    if (session.status === "running") stepAnalyze();
+    else if (session.status === "ready") stepReview(session.proposal);
+    else stepFailed(session);
+  } else {
+    stepChoose();
+  }
   return () => { closed = true; closeStream(); };
 }
