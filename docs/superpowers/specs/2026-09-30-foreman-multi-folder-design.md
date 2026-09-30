@@ -57,7 +57,7 @@ Functie ajutatoare: `HomeFolder(agent, folders) Folder` (folderul agentului sau 
   Limita cunoscuta ramane: cu `shell`, un agent poate ocoli regula (textul din UI spune deja asta).
 - System prompt, sectiunea `Project`, dupa `Goal`:
   - daca proiectul are mai multe foldere, lista:
-    `Folders:\n- Client: /Users/.../probe-client (your folder, you can write here)\n- Landing: /Users/.../probe-landing (read only)`;
+    `Folders:\n- Client: /Users/.../probe-client (your folder)\n- Landing: /Users/.../probe-landing (read only)`;
   - `Shared context:` ca azi;
   - contextul fiecarui folder nevid: `Context for Client:\n...`.
   Cu un singur folder, sectiunea arata ca azi, plus contextul folderului daca exista.
