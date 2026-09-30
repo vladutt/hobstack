@@ -128,6 +128,21 @@ func toolsFor(c Caller) []Tool {
 	if c.IsReviewer {
 		out = append(out, reviewTools...)
 	}
+	// un run pe un task dintr-o etapa primeste tool-urile etapei, fara dubluri
+	has := func(name string) bool {
+		for _, t := range out {
+			if t.Name == name {
+				return true
+			}
+		}
+		return false
+	}
+	if c.StageKind != "" && !has(reportTool.Name) {
+		out = append(out, reportTool)
+	}
+	if c.StageKind == "check" && !has("review_approve") {
+		out = append(out, reviewTools...)
+	}
 	return out
 }
 

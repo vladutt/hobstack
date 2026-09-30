@@ -54,12 +54,14 @@ func (f *fakeBackend) ProposeSetup(c Caller, args json.RawMessage) (string, erro
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 	t.Helper()
 	fb := &fakeBackend{callers: map[string]Caller{
-		"lead":     {ProjectID: 1, AgentID: 1, IsLead: true},
-		"worker":   {ProjectID: 1, AgentID: 2, TaskID: 5, HasParent: true},
-		"sublead":  {ProjectID: 1, AgentID: 3, IsLead: true, HasParent: true},
-		"reviewer": {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
-		"solo":     {ProjectID: 1, AgentID: 5},
-		"setup":    {SetupID: "s1"},
+		"lead":       {ProjectID: 1, AgentID: 1, IsLead: true},
+		"worker":     {ProjectID: 1, AgentID: 2, TaskID: 5, HasParent: true},
+		"sublead":    {ProjectID: 1, AgentID: 3, IsLead: true, HasParent: true},
+		"reviewer":   {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
+		"solo":       {ProjectID: 1, AgentID: 5},
+		"setup":      {SetupID: "s1"},
+		"stagework":  {ProjectID: 1, AgentID: 6, TaskID: 9, StageKind: "work"},
+		"stagecheck": {ProjectID: 1, AgentID: 7, TaskID: 9, StageKind: "check"},
 	}}
 	mux := http.NewServeMux()
 	srv := NewServer(fb)
@@ -286,5 +288,23 @@ func TestSetupCallerSeesOnlyProposeSetup(t *testing.T) {
 	_, resp = rpc(t, ts, "lead", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"propose_setup","arguments":{}}}`)
 	if _, isErr := toolText(t, resp); !isErr {
 		t.Fatal("lead-ul nu trebuia sa poata apela propose_setup")
+	}
+}
+
+func TestStageTools(t *testing.T) {
+	_, ts := setup(t)
+	names := func(token string) string {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+		var out []string
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			out = append(out, tool.(map[string]any)["name"].(string))
+		}
+		return strings.Join(out, ",")
+	}
+	if got := names("stagework"); got != "report_done" {
+		t.Fatalf("work: %s", got)
+	}
+	if got := names("stagecheck"); got != "report_done,review_approve,review_reject" {
+		t.Fatalf("check: %s", got)
 	}
 }
