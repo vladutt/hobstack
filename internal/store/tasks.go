@@ -39,19 +39,21 @@ type Task struct {
 	CreatorID    *int64 `json:"creatorId"`    // liderul care decide; nil la task-uri al caror creator a fost sters
 	ParentTaskID *int64 `json:"parentTaskId"` // task-ul din care a fost spart
 	ReviewStage  string `json:"reviewStage"`  // "", "reviewer", "lead"
+	StageID      *int64 `json:"stageId"`      // etapa curenta (coloana proprie); nil = fara etape sau dupa ultima
+	ByUser       bool   `json:"byUser"`       // creat de utilizator din board: la final decide el
 }
 
 // Ref e forma afisata a task-ului: T-3.
 func (t Task) Ref() string { return fmt.Sprintf("T-%d", t.Number) }
 
-const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage`
+const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user`
 
 func scanTask(sc scanner) (Task, error) {
 	var t Task
 	var created, updated string
 	err := sc.Scan(&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description, &t.AssigneeID,
 		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated,
-		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage)
+		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
 	}
@@ -76,9 +78,9 @@ func (s *Store) CreateTask(t *Task) error {
 	ts := now()
 	t.Status = StatusQueued
 	t.ReviewStage = StageNone
-	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, creator_id, parent_task_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status,
-		nullPtr(t.CreatorID), nullPtr(t.ParentTaskID), ts, ts)
+	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, creator_id, parent_task_id, stage_id, by_user, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status,
+		nullPtr(t.CreatorID), nullPtr(t.ParentTaskID), nullPtr(t.StageID), t.ByUser, ts, ts)
 	if err != nil {
 		return err
 	}
@@ -116,11 +118,12 @@ func (s *Store) ListTasks(projectID int64) ([]Task, error) {
 }
 
 // SaveTask salveaza starea unui task: status, rezultat, feedback, trimiteri
-// inapoi, etapa de review.
+// inapoi, etapa de review, asignatul si etapa de lucru (coloana).
 func (s *Store) SaveTask(t *Task) error {
 	ts := now()
-	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, review_stage = ?, updated_at = ?
-		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, ts, t.ID))
+	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, review_stage = ?,
+		assignee_id = ?, stage_id = ?, updated_at = ?
+		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), ts, t.ID))
 	if err != nil {
 		return err
 	}
