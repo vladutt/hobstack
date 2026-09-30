@@ -156,8 +156,9 @@ export async function setupView(root, id) {
         role: el("input", { type: "text", value: a.role, maxlength: 80 }),
         model: el("select", { value: a.model }, (info.models || []).map((m) => el("option", { value: m.id }, m.label))),
         resp: el("textarea", { value: a.responsibilities, rows: 2 }),
-        folder: many && el("select", { value: String(folderIndex(a.folder)) },
-          folders.map((f, i) => el("option", { value: i }, f.name.value))),
+        // null (nu false) cu un singur folder: r.folder?.x protejeaza doar null/undefined
+        folder: many ? el("select", { value: String(folderIndex(a.folder)) },
+          folders.map((f, i) => el("option", { value: i }, f.name.value))) : null,
         parent: el("select", {}), reviewer: el("select", {}),
         parentName: a.reportsTo || "", reviewerName: a.reviewedBy || "",
         oldName: a.name, // numele de dinainte de o redenumire (pentru legaturile celorlalti)
