@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -93,4 +94,18 @@ func turnPrompt(s *Session) string {
 		want = "What the user wants: " + s.Description
 	}
 	return folder + "\n" + want
+}
+
+// chatTurn: mesajul pentru un run de chat (propunerea curenta + cererea utilizatorului).
+func chatTurn(current Proposal, message string) (string, error) {
+	raw, err := json.MarshalIndent(current, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return "The user is reviewing your proposal and asks for a change.\n" +
+		"Current proposal (with the user's own edits; build on it, do not revert them):\n" + string(raw) + "\n\n" +
+		"User: " + message + "\n\n" +
+		"If this changes the proposal, call propose_setup once with the WHOLE updated proposal, then reply in one or two sentences with what you changed. " +
+		"If it is only a question, answer it without calling propose_setup. " +
+		"Do not add the shell or web tools yourself; keep the tools the user already chose.", nil
 }
