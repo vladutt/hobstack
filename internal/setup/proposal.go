@@ -68,7 +68,13 @@ func tooLong(label, v string, max int) error {
 
 // ValidateProposal verifica si normalizeaza propunerea pe loc. strictTools
 // limiteaza tool-urile la write si git (pentru propunerea venita de la AI).
-func ValidateProposal(p *Proposal, strictTools bool) error {
+// external: numele agentilor care exista deja in proiect (modul folder); nil
+// pentru un proiect nou.
+func ValidateProposal(p *Proposal, strictTools bool, external []string) error {
+	ext := map[string]bool{} // agenti existenti, litere mici
+	for _, n := range external {
+		ext[strings.ToLower(strings.TrimSpace(n))] = true
+	}
 	p.Name = strings.TrimSpace(p.Name)
 	p.Goal = strings.TrimSpace(p.Goal)
 	p.Context = strings.TrimSpace(p.Context)
@@ -138,6 +144,9 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 		if _, dup := index[key]; dup {
 			return ValidationError("there is already an agent named " + a.Name + " in the proposal")
 		}
+		if ext[key] {
+			return ValidationError("there is already an agent named " + a.Name + " in the project; choose another name")
+		}
 		index[key] = i
 		for _, err := range []error{
 			tooLong("name of agent "+a.Name, a.Name, 40),
@@ -173,14 +182,15 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 		a.Tools = tools
 	}
 
-	// legaturile: nume din propunere, fara auto-legaturi si fara cicluri
-	roots := 0
+	// legaturile: nume din propunere sau (in modul folder) agenti existenti,
+	// fara auto-legaturi si fara cicluri
+	roots := 0 // agenti noi legati de utilizator sau de un agent existent
 	for _, a := range p.Agents {
 		for _, ref := range []struct{ label, name string }{{"boss", a.ReportsTo}, {"reviewer", a.ReviewedBy}} {
 			if ref.name == "" {
 				continue
 			}
-			if _, ok := index[strings.ToLower(ref.name)]; !ok {
+			if _, ok := index[strings.ToLower(ref.name)]; !ok && !ext[strings.ToLower(ref.name)] {
 				return ValidationError(fmt.Sprintf("the %s of %s (%s) does not exist in the proposal", ref.label, a.Name, ref.name))
 			}
 		}
@@ -190,20 +200,27 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 		if strings.EqualFold(a.ReviewedBy, a.Name) {
 			return ValidationError(a.Name + " cannot be their own reviewer")
 		}
-		if a.ReportsTo == "" {
+		if a.ReportsTo == "" || ext[strings.ToLower(a.ReportsTo)] {
 			roots++
 		}
 	}
 	for i := range p.Agents {
 		cur, steps := i, 0
 		for p.Agents[cur].ReportsTo != "" {
-			cur = index[strings.ToLower(p.Agents[cur].ReportsTo)]
+			next, ok := index[strings.ToLower(p.Agents[cur].ReportsTo)]
+			if !ok {
+				break // sef existent: lantul iese din propunere, deci fara ciclu
+			}
+			cur = next
 			if steps++; cur == i || steps > len(p.Agents) {
 				return ValidationError("the link would create a cycle (" + p.Agents[i].Name + ")")
 			}
 		}
 	}
 	if roots == 0 {
+		if len(ext) > 0 {
+			return ValidationError("at least one new agent must report to the user (empty reportsTo) or to an existing agent")
+		}
 		return ValidationError("at least one agent must report to the user (empty reportsTo)")
 	}
 	return nil
@@ -266,6 +283,38 @@ func (p *Proposal) Members() []store.NewMember {
 			Parent: at(a.ReportsTo), Reviewer: at(a.ReviewedBy),
 			Folder: folderAt[strings.ToLower(a.Folder)], // lipsa sau gol = primul folder
 		}
+	}
+	return out
+}
+
+// CheckFolderProposal: in modul folder, folders lipseste sau contine exact
+// folderul analizat (folderPath, deja curatat).
+func CheckFolderProposal(p *Proposal, folderPath string) error {
+	if len(p.Folders) == 0 {
+		return nil
+	}
+	if len(p.Folders) > 1 || filepath.Clean(p.Folders[0].Path) != folderPath {
+		return ValidationError("put exactly this folder in folders: " + folderPath)
+	}
+	return nil
+}
+
+// MembersIn: ca Members, dar pentru un proiect existent. Un sef sau reviewer
+// care nu e in propunere e un agent din team (ParentID/ReviewerID).
+func (p *Proposal) MembersIn(team []store.Agent) []store.NewMember {
+	byName := map[string]int64{}
+	for _, a := range team {
+		byName[strings.ToLower(a.Name)] = a.ID
+	}
+	out := p.Members()
+	for i, a := range p.Agents {
+		if id, ok := byName[strings.ToLower(a.ReportsTo)]; ok && out[i].Parent == -1 && a.ReportsTo != "" {
+			out[i].ParentID = &id
+		}
+		if id, ok := byName[strings.ToLower(a.ReviewedBy)]; ok && out[i].Reviewer == -1 && a.ReviewedBy != "" {
+			out[i].ReviewerID = &id
+		}
+		out[i].Folder = 0 // in modul folder, folderul vine din AddAgents
 	}
 	return out
 }

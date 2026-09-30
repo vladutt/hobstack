@@ -111,7 +111,7 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// utilizatorul poate bifa si shell/web, deci fara strictTools
-	if err := wizard.ValidateProposal(&in.Proposal, false); err != nil {
+	if err := wizard.ValidateProposal(&in.Proposal, false, nil); err != nil {
 		setupFail(w, err)
 		return
 	}

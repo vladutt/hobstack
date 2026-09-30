@@ -73,9 +73,10 @@ func (s *Store) CreateProject(p *Project) (Agent, error) {
 // NewMember e un agent din echipa unui proiect nou. Parent si Reviewer sunt
 // indecsi in aceeasi lista (-1 = niciunul); id-urile nu exista inca.
 type NewMember struct {
-	Agent            Agent
-	Parent, Reviewer int
-	Folder           int // index in p.Folders; 0 = primul folder (salvat ca NULL)
+	Agent                Agent
+	Parent, Reviewer     int    // index in aceeasi lista; -1 = niciunul (sau agent existent, vezi mai jos)
+	Folder               int    // index in p.Folders; 0 = primul folder (salvat ca NULL)
+	ParentID, ReviewerID *int64 // agent existent in proiect, cand Parent/Reviewer = -1 (doar AddAgents)
 }
 
 // CreateProjectWithTeam creeaza proiectul si echipa data (fara Lead-ul

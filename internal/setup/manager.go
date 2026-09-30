@@ -280,7 +280,7 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return "", ValidationError("the proposal is not valid JSON: " + err.Error())
 	}
-	if err := ValidateProposal(&p, true); err != nil {
+	if err := ValidateProposal(&p, true, nil); err != nil {
 		return "", err
 	}
 	m.mu.Lock()

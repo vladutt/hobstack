@@ -3,6 +3,8 @@ package setup
 import (
 	"strings"
 	"testing"
+
+	"foreman/internal/store"
 )
 
 func valid() *Proposal {
@@ -17,7 +19,7 @@ func valid() *Proposal {
 
 func TestValidateProposalNormalizes(t *testing.T) {
 	p := valid()
-	if err := ValidateProposal(p, true); err != nil {
+	if err := ValidateProposal(p, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if p.Name != "Shop" || p.Agents[1].Model != "sonnet" || len(p.Agents[1].Tools) != 2 {
@@ -47,7 +49,7 @@ func TestValidateProposalErrors(t *testing.T) {
 	for want, mutate := range cases {
 		p := valid()
 		mutate(p)
-		err := ValidateProposal(p, true)
+		err := ValidateProposal(p, true, nil)
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: am %v", want, err)
 		}
@@ -55,7 +57,7 @@ func TestValidateProposalErrors(t *testing.T) {
 	// fara strictTools, shell e acceptat
 	p := valid()
 	p.Agents[1].Tools = []string{"shell", "web"}
-	if err := ValidateProposal(p, false); err != nil {
+	if err := ValidateProposal(p, false, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -63,7 +65,7 @@ func TestValidateProposalErrors(t *testing.T) {
 func TestValidateProposalSingleRoot(t *testing.T) {
 	p := valid()
 	p.Agents = []ProposedAgent{{Name: "Solo", Role: "Dev"}}
-	if err := ValidateProposal(p, true); err != nil {
+	if err := ValidateProposal(p, true, nil); err != nil {
 		t.Fatalf("un singur agent radacina e valid: %v", err)
 	}
 }
@@ -73,7 +75,7 @@ func TestValidateProposalSingleRoot(t *testing.T) {
 func TestValidateProposalGoalLimit(t *testing.T) {
 	p := valid()
 	p.Goal = strings.Repeat("x", 2001)
-	if err := ValidateProposal(p, true); err == nil || !strings.Contains(err.Error(), "goal") {
+	if err := ValidateProposal(p, true, nil); err == nil || !strings.Contains(err.Error(), "goal") {
 		t.Fatalf("am %v", err)
 	}
 }
@@ -82,7 +84,7 @@ func TestProposalFolders(t *testing.T) {
 	p := valid()
 	p.Folders = []ProposedFolder{{Path: "/c/client", Name: "Client", Context: "Go"}, {Path: "/c/landing/"}}
 	p.Agents[1].Folder = "landing" // numele implicit, fara diferenta de litere
-	if err := ValidateProposal(p, true); err != nil {
+	if err := ValidateProposal(p, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if p.Folders[1].Name != "landing" {
@@ -98,7 +100,7 @@ func TestProposalFolders(t *testing.T) {
 		q := valid()
 		q.Folders = []ProposedFolder{{Path: "/c/client", Name: "Client"}, {Path: "/c/landing", Name: "Landing"}}
 		mutate(q)
-		if err := ValidateProposal(q, true); err == nil || !strings.Contains(err.Error(), want) {
+		if err := ValidateProposal(q, true, nil); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: am %v", want, err)
 		}
 	}
@@ -129,5 +131,79 @@ func TestCheckFolderPaths(t *testing.T) {
 	}
 	if err := CheckFolderPaths(&Proposal{Folders: []ProposedFolder{{Name: "Main"}}}, nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// agenti noi pentru un folder, sub Lead-ul existent
+func folderProposal() *Proposal {
+	return &Proposal{Name: "Probe", Agents: []ProposedAgent{
+		{Name: "Lia", Role: "Landing lead", ReportsTo: "lead"}, // sef existent, alte litere
+		{Name: "Max", Role: "Web dev", ReportsTo: "Lia", ReviewedBy: "Vera"},
+	}}
+}
+
+func TestValidateProposalExternalBoss(t *testing.T) {
+	existing := []string{"Lead", "Vera"}
+	p := folderProposal()
+	if err := ValidateProposal(p, true, existing); err != nil {
+		t.Fatal(err)
+	}
+	// fara nume externe, "lead" nu exista in propunere
+	if err := ValidateProposal(folderProposal(), true, nil); err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("fara external: %v", err)
+	}
+	cases := map[string]func(p *Proposal){
+		// nume nou identic cu unul existent
+		"already an agent named LEAD": func(p *Proposal) { p.Agents[0].Name = "LEAD"; p.Agents[1].ReportsTo = "LEAD" },
+		// echipa noua nelegata (nimeni nu raporteaza tie sau unui agent existent) e mereu un ciclu
+		"the link would create a cycle": func(p *Proposal) { p.Agents[0].ReportsTo = "Max" },
+		// un lant nou -> sef extern -> nu se urmareste mai departe (fara ciclu fals)
+		"does not exist in the proposal": func(p *Proposal) { p.Agents[0].ReportsTo = "Zed" },
+	}
+	for want, mutate := range cases {
+		q := folderProposal()
+		mutate(q)
+		if err := ValidateProposal(q, true, existing); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: am %v", want, err)
+		}
+	}
+	// un agent nou poate raporta direct utilizatorului
+	q := folderProposal()
+	q.Agents[0].ReportsTo = ""
+	if err := ValidateProposal(q, true, existing); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckFolderProposal(t *testing.T) {
+	ok := []*Proposal{{}, {Folders: []ProposedFolder{{Path: "/c/landing/"}}}}
+	for _, p := range ok {
+		if err := CheckFolderProposal(p, "/c/landing"); err != nil {
+			t.Fatalf("%+v: %v", p.Folders, err)
+		}
+	}
+	bad := []*Proposal{
+		{Folders: []ProposedFolder{{Path: "/c/client"}}},
+		{Folders: []ProposedFolder{{Path: "/c/landing"}, {Path: "/c/client"}}},
+	}
+	for _, p := range bad {
+		if err := CheckFolderProposal(p, "/c/landing"); err == nil {
+			t.Fatalf("trebuia refuzat: %+v", p.Folders)
+		}
+	}
+}
+
+func TestMembersIn(t *testing.T) {
+	p := folderProposal()
+	if err := ValidateProposal(p, true, []string{"Lead", "Vera"}); err != nil {
+		t.Fatal(err)
+	}
+	team := []store.Agent{{ID: 7, Name: "Lead"}, {ID: 9, Name: "Vera"}}
+	m := p.MembersIn(team)
+	if m[0].Parent != -1 || m[0].ParentID == nil || *m[0].ParentID != 7 {
+		t.Fatalf("Lia: %+v", m[0])
+	}
+	if m[1].Parent != 0 || m[1].ParentID != nil || m[1].Reviewer != -1 || m[1].ReviewerID == nil || *m[1].ReviewerID != 9 {
+		t.Fatalf("Max: %+v", m[1])
 	}
 }
