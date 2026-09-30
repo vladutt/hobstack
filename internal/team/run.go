@@ -74,7 +74,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	isLead := roles.IsLead || (len(stages) > 0 && roles.IsRoot)
 	t.mu.Lock()
 	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
-		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind}
+		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0}
 	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
 	t.mu.Unlock()
 
@@ -177,8 +177,10 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	if err != nil {
 		return err
 	}
-	if task.Status != store.StatusInProgress {
-		return nil // a apelat report_done sau Stop team l-a pus inapoi in Queued
+	// a apelat report_done, Stop team l-a pus inapoi in Queued, sau (in etape)
+	// task-ul a trecut deja la alt agent, care lucreaza acum la el
+	if task.Status != store.StatusInProgress || task.AssigneeID != agentID {
+		return nil
 	}
 	agents, err := t.st.ListAgents(ar.projectID)
 	if err != nil {

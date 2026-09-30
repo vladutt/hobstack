@@ -22,6 +22,7 @@ type Caller struct {
 	IsReviewer bool   // verifica munca cuiva
 	SetupID    string // != "" = analistul din wizard; vede doar propose_setup
 	StageKind  string // etapa task-ului curent: "work", "check" sau "" (fara etape)
+	HasStages  bool   // proiectul are etape: la create_task assignee e optional
 }
 
 // Backend face munca propriu-zisa. Erorile intoarse ajung la agent ca

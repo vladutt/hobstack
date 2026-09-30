@@ -199,3 +199,32 @@ func (t *Team) stageCheckTarget(c mcp.Caller, task store.Task) ([]store.Stage, [
 	agents, err := t.st.ListAgents(c.ProjectID)
 	return stages, agents, err
 }
+
+// stagesOverview descrie etapele pentru tura unui lider: ordinea, tipul si
+// agentii fiecareia, plus regula de creare a task-urilor.
+func stagesOverview(stages []store.Stage, agents []store.Agent) string {
+	if len(stages) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Etapele board-ului (fiecare task trece prin ele in ordine):")
+	for _, st := range stages {
+		kind := "lucru"
+		if st.Kind == store.KindCheck {
+			kind = "verificare"
+		}
+		var names []string
+		for _, id := range st.AgentIDs {
+			if a, ok := store.FindAgent(agents, id); ok {
+				names = append(names, a.Name)
+			}
+		}
+		who := strings.Join(names, ", ")
+		if who == "" {
+			who = "fara agenti"
+		}
+		fmt.Fprintf(&b, "\n- %s (%s): %s", st.Name, kind, who)
+	}
+	fmt.Fprintf(&b, "\nTask-urile noi intra in %s; assignee e optional (il ia primul agent liber). Dupa ultima etapa decizi tu.", stages[0].Name)
+	return b.String()
+}

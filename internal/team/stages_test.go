@@ -226,3 +226,40 @@ func mustAgents(t *testing.T, f *fixture) []store.Agent {
 	}
 	return agents
 }
+
+// Cursa din e2e: Dev raporteaza, task-ul trece in QA si Vera il preia inainte
+// ca procesul lui Rook sa se termine. Finalul run-ului lui Rook nu are voie
+// sa ia task-ul de la Vera.
+func TestStageOldRunEndDoesNotStealTask(t *testing.T) {
+	f, _, stages := stagesFixture(t)
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook")
+	mustReconcile(t, f)
+	rook1 := f.fs.last(t, f.rook)
+	if _, err := f.tm.ReportDone(f.caller(t, rook1), "", "gata"); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f) // Vera preia T-1 in QA
+	vera1 := f.fs.last(t, f.vera)
+	f.fs.finish(rook1.ID, runner.Outcome{Status: "done", Result: "mesajul final al lui Rook"})
+	task := f.wantStatus(t, 1, store.StatusInProgress)
+	if task.AssigneeID != f.vera.ID || *task.StageID != stages[1].ID {
+		t.Fatalf("task-ul trebuia sa ramana la Vera in QA: %+v", task)
+	}
+	if _, err := f.tm.ReviewApprove(f.caller(t, vera1), "T-1", ""); err != nil {
+		t.Fatalf("aprobarea Verei: %v", err)
+	}
+}
+
+// liderul unui proiect cu etape vede etapele si cine lucreaza in ele
+func TestLeadTurnListsStages(t *testing.T) {
+	f, _, _ := stagesFixture(t)
+	f.tm.UserMessage(f.lead.ID, "fa ceva", nil)
+	mustReconcile(t, f)
+	lead := f.fs.last(t, f.lead)
+	if !strings.Contains(turn(lead), "Etapele board-ului") || !strings.Contains(turn(lead), "QA (verificare): Vera") {
+		t.Fatalf("tura liderului: %q", turn(lead))
+	}
+	if c := f.caller(t, lead); !c.HasStages {
+		t.Fatal("HasStages lipseste")
+	}
+}

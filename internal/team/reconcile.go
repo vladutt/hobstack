@@ -94,6 +94,14 @@ func (t *Team) Reconcile(projectID int64) error {
 		}
 	}
 	notify := agents[0] // prima radacina: aici apar erorile de pornire
+	// ctxFor: contextul turei; liderii si radacinile unui proiect cu etape vad si etapele
+	ctxFor := func(a store.Agent, currentTaskID int64) prompt.TurnContext {
+		c := t.turnContext(a, agents, tasks, currentTaskID)
+		if r := store.RolesOf(a, agents); r.IsLead || r.IsRoot {
+			c.Stages = stagesOverview(stages, agents)
+		}
+		return c
+	}
 
 	// failed devine true daca un run nu a pornit: proiectul e pe pauza si ne oprim
 	failed := false
@@ -105,7 +113,7 @@ func (t *Team) Reconcile(projectID int64) error {
 		if err != nil || len(notes) == 0 {
 			return err
 		}
-		turn := prompt.NotifyTurn(t.turnContext(a, agents, tasks, 0), t.texts(p.ID, notes))
+		turn := prompt.NotifyTurn(ctxFor(a, 0), t.texts(p.ID, notes))
 		if err := t.startRun(p, a, agents, 0, turn); err != nil {
 			failed = true
 			return t.startFailed(p, notify, a, err)
@@ -178,7 +186,7 @@ func (t *Team) Reconcile(projectID int64) error {
 		if err := t.st.SaveTask(task); err != nil {
 			return err
 		}
-		ctx := t.turnContext(a, agents, tasks, task.ID)
+		ctx := ctxFor(a, task.ID)
 		ctx.Stage = stageLine(stages, *task)
 		turn := prompt.TaskTurn(ctx, *task, subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs))
 		if err := t.startRun(p, a, agents, task.ID, turn); err != nil {

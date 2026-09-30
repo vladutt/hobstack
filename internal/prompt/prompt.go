@@ -49,6 +49,7 @@ type TurnContext struct {
 	Reviewees []string   // numele agentilor pe care ii verifica
 	OpenTasks []OpenTask // task-urile primite de lider, in lucru (fara cel curent)
 	Stage     string     // linia etapei pentru un run pe un task dintr-o etapa (coloane proprii)
+	Stages    string     // pentru lideri, intr-un proiect cu etape: etapele si agentii lor
 }
 
 const howLead = `Esti lider: ai o echipa directa, listata in mesajul turei. Sparge munca in task-uri mici, clare si verificabile ` +
@@ -184,6 +185,9 @@ func Context(c TurnContext) string {
 	}
 	if t := Team(c.Direct); t != "" {
 		parts = append(parts, t)
+	}
+	if c.Stages != "" {
+		parts = append(parts, c.Stages)
 	}
 	if len(c.Reviewees) > 0 {
 		parts = append(parts, "Revizuiesti munca lui: "+strings.Join(c.Reviewees, ", "))

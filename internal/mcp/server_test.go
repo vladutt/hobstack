@@ -61,6 +61,7 @@ func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 		"solo":       {ProjectID: 1, AgentID: 5},
 		"setup":      {SetupID: "s1"},
 		"stagework":  {ProjectID: 1, AgentID: 6, TaskID: 9, StageKind: "work"},
+		"stagelead":  {ProjectID: 1, AgentID: 8, IsLead: true, HasStages: true},
 		"stagecheck": {ProjectID: 1, AgentID: 7, TaskID: 9, StageKind: "check"},
 	}}
 	mux := http.NewServeMux()
@@ -306,5 +307,27 @@ func TestStageTools(t *testing.T) {
 	}
 	if got := names("stagecheck"); got != "report_done,review_approve,review_reject" {
 		t.Fatalf("check: %s", got)
+	}
+}
+
+// intr-un proiect cu etape, assignee e optional la create_task
+func TestCreateTaskSchemaWithStages(t *testing.T) {
+	_, ts := setup(t)
+	required := func(token string) string {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			m := tool.(map[string]any)
+			if m["name"] == "create_task" {
+				b, _ := json.Marshal(m["inputSchema"].(map[string]any)["required"])
+				return string(b)
+			}
+		}
+		return ""
+	}
+	if got := required("lead"); got != `["title","assignee"]` {
+		t.Fatalf("fara etape: %s", got)
+	}
+	if got := required("stagelead"); got != `["title"]` {
+		t.Fatalf("cu etape: %s", got)
 	}
 }

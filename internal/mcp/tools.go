@@ -54,6 +54,17 @@ var leadTools = []Tool{
 	},
 }
 
+// createTaskInStages: create_task intr-un proiect cu etape (coloane proprii).
+var createTaskInStages = Tool{
+	Name:        "create_task",
+	Description: "Creeaza un task nou. Intra in prima etapa a board-ului si il ia primul agent liber din acea etapa; dupa ultima etapa decizi tu (accept_task / send_back).",
+	InputSchema: schema([]string{"title"}, map[string]any{
+		"title":       str("Titlu scurt si clar"),
+		"description": str("Ce trebuie facut, criterii de acceptare, fisiere relevante"),
+		"assignee":    str("Optional: un agent din prima etapa care sa-l ia primul; gol = primul agent liber"),
+	}),
+}
+
 var reportTool = Tool{
 	Name:        "report_done",
 	Description: "Raporteaza sefului ca ai terminat un task (sau ca esti blocat). Task-ul trece in Review, la reviewer-ul tau daca ai unul.",
@@ -121,6 +132,9 @@ func toolsFor(c Caller) []Tool {
 	out := []Tool{}
 	if c.IsLead {
 		out = append(out, leadTools...)
+		if c.HasStages {
+			out[0] = createTaskInStages
+		}
 	}
 	if c.HasParent {
 		out = append(out, reportTool)
