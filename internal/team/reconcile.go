@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"foreman/internal/prompt"
@@ -67,6 +68,10 @@ func (t *Team) Reconcile(projectID int64) error {
 		return err
 	}
 	tasks, err := t.st.ListTasks(projectID)
+	if err != nil {
+		return err
+	}
+	stages, err := t.st.ListStages(projectID)
 	if err != nil {
 		return err
 	}
@@ -135,11 +140,36 @@ func (t *Team) Reconcile(projectID int64) error {
 		if task.Status != store.StatusQueued {
 			continue
 		}
-		hasQueued[task.AssigneeID] = true
-		a, ok := byID[task.AssigneeID]
-		if !ok || t.isActive(a.ID) || full(a) {
-			continue
+		var a store.Agent
+		if task.StageID != nil {
+			i := stageIndex(stages, task.StageID)
+			if i < 0 {
+				continue // etapa a disparut (nu se poate: stergerea e refuzata)
+			}
+			// primul agent liber din etapa; asignatul de acum are prioritate
+			// (a fost ales la create_task sau il continua dupa o respingere)
+			ids := append([]int64{task.AssigneeID}, stages[i].AgentIDs...)
+			found := false
+			for _, id := range ids {
+				cand, ok := byID[id]
+				if ok && slices.Contains(stages[i].AgentIDs, id) && !t.isActive(id) && !full(cand) {
+					a, found = cand, true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+			task.AssigneeID = a.ID
+		} else {
+			hasQueued[task.AssigneeID] = true
+			var ok bool
+			a, ok = byID[task.AssigneeID]
+			if !ok || t.isActive(a.ID) || full(a) {
+				continue
+			}
 		}
+		hasQueued[a.ID] = true
 		msgs, err := t.st.Undelivered(a.ID)
 		if err != nil {
 			return err
@@ -148,8 +178,9 @@ func (t *Team) Reconcile(projectID int64) error {
 		if err := t.st.SaveTask(task); err != nil {
 			return err
 		}
-		turn := prompt.TaskTurn(t.turnContext(a, agents, tasks, task.ID), *task,
-			subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs))
+		ctx := t.turnContext(a, agents, tasks, task.ID)
+		ctx.Stage = stageLine(stages, *task)
+		turn := prompt.TaskTurn(ctx, *task, subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs))
 		if err := t.startRun(p, a, agents, task.ID, turn); err != nil {
 			task.Status = store.StatusQueued
 			if err := t.st.SaveTask(task); err != nil {

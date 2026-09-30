@@ -58,9 +58,23 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	}
 
 	roles := store.RolesOf(a, agents)
+	stageKind := ""
+	stages, err := t.st.ListStages(p.ID)
+	if err != nil {
+		return err
+	}
+	if taskID != 0 {
+		if task, err := t.st.GetTask(taskID); err == nil {
+			if i := stageIndex(stages, task.StageID); i >= 0 {
+				stageKind = stages[i].Kind
+			}
+		}
+	}
+	// intr-un proiect cu etape, radacinile creeaza task-uri chiar fara copii
+	isLead := roles.IsLead || (len(stages) > 0 && roles.IsRoot)
 	t.mu.Lock()
 	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
-		IsLead: roles.IsLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer}
+		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind}
 	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
 	t.mu.Unlock()
 

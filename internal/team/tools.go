@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -24,6 +25,13 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 	agents, err := t.st.ListAgents(c.ProjectID)
 	if err != nil {
 		return "", err
+	}
+	stages, err := t.st.ListStages(c.ProjectID)
+	if err != nil {
+		return "", err
+	}
+	if len(stages) > 0 {
+		return t.createStageTask(c, agents, stages, title, description, assignee)
 	}
 	children := store.Children(c.AgentID, agents)
 	if len(children) == 0 {
@@ -67,6 +75,46 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 		reply += " Creat fara task parinte: ai mai multe task-uri in lucru."
 	}
 	return reply, nil
+}
+
+// createStageTask: intr-un proiect cu etape task-ul intra in prima etapa;
+// assignee e optional si trebuie sa fie din acea etapa. Poate crea orice lider
+// sau radacina (etapele decid cine lucreaza). Se apeleaza cu t.work blocat.
+func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []store.Stage, title, description, assignee string) (string, error) {
+	lead, ok := store.FindAgent(agents, c.AgentID)
+	if !ok {
+		return "", errors.New("agentul tau nu mai exista")
+	}
+	roles := store.RolesOf(lead, agents)
+	if !roles.IsLead && !roles.IsRoot {
+		return "", errors.New("doar un lider sau un agent care raporteaza utilizatorului poate crea task-uri")
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "", errors.New("title e obligatoriu")
+	}
+	first := stages[0]
+	who := placeholder(first, lead.ID)
+	if name := strings.TrimSpace(assignee); name != "" {
+		w, err := t.st.FindAgentByName(c.ProjectID, name)
+		if err != nil || !slices.Contains(first.AgentIDs, w.ID) {
+			return "", fmt.Errorf("%q nu e in etapa %s (prima etapa); lasa assignee gol ca sa-l ia primul liber", name, first.Name)
+		}
+		who = w.ID
+	}
+	parentID, _, err := t.parentTaskFor(c)
+	if err != nil {
+		return "", err
+	}
+	task := store.Task{ProjectID: c.ProjectID, Title: title, Description: strings.TrimSpace(description),
+		AssigneeID: who, CreatorID: &lead.ID, ParentTaskID: parentID, StageID: &first.ID}
+	if err := t.st.CreateTask(&task); err != nil {
+		return "", err
+	}
+	t.note(c.ProjectID, lead.ID, fmt.Sprintf("A creat %s in etapa %s: %s", task.Ref(), first.Name, title), true)
+	t.emit(c.ProjectID, "task", task)
+	t.Kick(c.ProjectID)
+	return fmt.Sprintf("Creat %s in etapa %s. Il ia primul agent liber din etapa.", task.Ref(), first.Name), nil
 }
 
 func isChild(children []store.Agent, id int64) bool {
