@@ -3,7 +3,9 @@ package team
 import (
 	"errors"
 	"fmt"
+	"strings"
 
+	"foreman/internal/mcp"
 	"foreman/internal/store"
 )
 
@@ -95,4 +97,105 @@ func (t *Team) UserCreateTask(projectID int64, title, description string) (store
 	t.emit(projectID, "task", task)
 	t.Kick(projectID)
 	return task, nil
+}
+
+var ErrNotUserDecision = errors.New("task-ul nu asteapta decizia ta")
+
+// advance muta un task (cu Result pus) in etapa urmatoare, sau la lider dupa
+// ultima etapa. Se apeleaza cu t.work blocat. Intoarce textul pentru apelant.
+func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Agent, byName string) (string, error) {
+	task.Feedback, task.ReviewStage = "", store.StageNone
+	if next, ok := nextStage(stages, task.StageID); ok {
+		task.StageID = &next.ID
+		task.Status = store.StatusQueued
+		task.AssigneeID = placeholder(next, task.AssigneeID)
+		if err := t.st.SaveTask(task); err != nil {
+			return "", err
+		}
+		t.emit(task.ProjectID, "task", *task)
+		t.Kick(task.ProjectID)
+		return fmt.Sprintf("%s a trecut in etapa %s.", task.Ref(), next.Name), nil
+	}
+	task.StageID = nil
+	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
+	if err := t.st.SaveTask(task); err != nil {
+		return "", err
+	}
+	t.emit(task.ProjectID, "task", *task)
+	if boss, ok := decider(*task, agents); ok {
+		t.note(task.ProjectID, boss.ID, clip(fmt.Sprintf("%s a trecut prin toate etapele (ultimul: %s). Decide cu accept_task sau send_back: %s", task.Ref(), byName, task.Result)), false)
+	}
+	t.Kick(task.ProjectID)
+	return fmt.Sprintf("%s a trecut prin toate etapele si asteapta decizia liderului.", task.Ref()), nil
+}
+
+// sendToStage pune un task inapoi, Queued, in etapa st, cu feedback (numara
+// trimiterea; la MaxSendBacks se blocheaza in etapa curenta). Se apeleaza cu t.work blocat.
+func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, agents []store.Agent, by int64) (bool, error) {
+	if task.SendBacks+1 < MaxSendBacks {
+		task.StageID = &st.ID
+		task.AssigneeID = placeholder(st, task.AssigneeID)
+	}
+	return t.rejectTask(task, feedback, agents, by)
+}
+
+// UserDecide: utilizatorul decide un task al lui (creat din board) ajuns la final.
+func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
+	t.work.Lock()
+	defer t.work.Unlock()
+	task, err := t.st.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+	agents, err := t.st.ListAgents(task.ProjectID)
+	if err != nil {
+		return err
+	}
+	if task.Status != store.StatusReview || task.ReviewStage != store.StageLead || decisionOwner(task, agents) != 0 {
+		return ErrNotUserDecision
+	}
+	if accept {
+		task.Status, task.ReviewStage, task.StageID = store.StatusDone, store.StageNone, nil
+		if err := t.st.SaveTask(&task); err != nil {
+			return err
+		}
+		t.emit(task.ProjectID, "task", task)
+		t.Kick(task.ProjectID)
+		return nil
+	}
+	feedback = strings.TrimSpace(feedback)
+	if feedback == "" {
+		return errors.New("scrie ce trebuie schimbat")
+	}
+	stages, err := t.st.ListStages(task.ProjectID)
+	if err != nil || len(stages) == 0 {
+		return ErrNoStages
+	}
+	target := stages[0]
+	if i := stageIndex(stages, task.StageID); i >= 0 {
+		target = stages[i]
+	}
+	if _, err := t.sendToStage(&task, target, feedback, agents, 0); err != nil {
+		return err
+	}
+	t.Kick(task.ProjectID)
+	return nil
+}
+
+// stageCheckTarget valideaza un review_approve/review_reject pe un task dintr-o
+// etapa de verificare: apelantul lucreaza chiar acum la el. Se apeleaza cu t.work blocat.
+func (t *Team) stageCheckTarget(c mcp.Caller, task store.Task) ([]store.Stage, []store.Agent, error) {
+	stages, err := t.st.ListStages(c.ProjectID)
+	if err != nil {
+		return nil, nil, err
+	}
+	i := stageIndex(stages, task.StageID)
+	if i < 0 || stages[i].Kind != store.KindCheck {
+		return nil, nil, fmt.Errorf("%s nu e intr-o etapa de verificare", task.Ref())
+	}
+	if task.AssigneeID != c.AgentID || task.Status != store.StatusInProgress {
+		return nil, nil, fmt.Errorf("%s nu e la tine in verificare acum", task.Ref())
+	}
+	agents, err := t.st.ListAgents(c.ProjectID)
+	return stages, agents, err
 }

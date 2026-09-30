@@ -211,7 +211,8 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		task.ReviewStage = store.StageLead
 		task.Result = "run esuat: " + o.Error
 		boss, hasBoss := decider(task, agents)
-		if !hasBoss { // nimeni nu poate decide: decide utilizatorul
+		// nimeni nu poate decide: decide utilizatorul (blocat; cele din etape raman la "La lider")
+		if !hasBoss && task.StageID == nil && !task.ByUser {
 			task.Status, task.ReviewStage = store.StatusBlocked, store.StageNone
 		}
 		if err := t.st.SaveTask(&task); err != nil {

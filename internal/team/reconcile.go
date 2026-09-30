@@ -551,6 +551,7 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	if accept {
 		task.Status = store.StatusDone
 		task.ReviewStage = store.StageNone
+		task.StageID = nil
 	} else {
 		task.Status = store.StatusQueued
 		task.SendBacks = 0
