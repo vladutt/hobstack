@@ -191,7 +191,11 @@ func ValidateProposal(p *Proposal, strictTools bool, external []string) error {
 				continue
 			}
 			if _, ok := index[strings.ToLower(ref.name)]; !ok && !ext[strings.ToLower(ref.name)] {
-				return ValidationError(fmt.Sprintf("the %s of %s (%s) does not exist in the proposal", ref.label, a.Name, ref.name))
+				where := "the proposal"
+				if len(ext) > 0 {
+					where = "the proposal or the project"
+				}
+				return ValidationError(fmt.Sprintf("the %s of %s (%s) does not exist in %s", ref.label, a.Name, ref.name, where))
 			}
 		}
 		if strings.EqualFold(a.ReportsTo, a.Name) {

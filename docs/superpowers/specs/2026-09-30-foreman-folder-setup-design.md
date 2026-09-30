@@ -97,7 +97,7 @@ Rute noi:
 ## UI
 
 - **Project instructions:** fiecare rand de folder cu `id` (salvat) primeste butonul **"Set up agents with AI"** ->
-  `#/setup/new-folder/<projectId>/<folderId>`. Randurile nesalvate nu il au (hint: "Save first").
+  `#/setup/folder/<projectId>/<folderId>`. Randurile nesalvate nu il au (hint: "Save first").
 - **Pasul 1 (mod folder):** titlu "Set up agents for <Folder>", "What should these agents do?" (optional), modelul,
   **Analyze**. Fara lista de foldere.
 - **Pasul 3 (mod folder):**

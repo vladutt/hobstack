@@ -390,6 +390,8 @@ export async function setupView(root, id, target = null) {
     const hasCtx = Boolean((folder.context || "").trim());
     // un folder fara context il primeste implicit; unul cu context il pastreaza
     const updateCtx = el("input", { type: "checkbox", checked: !hasCtx });
+    // editarea contextului bifeaza singura optiunea, altfel modificarile s-ar pierde
+    ctxArea.addEventListener("input", () => { updateCtx.checked = true; }, { once: true });
     const sections = [
       p.rationale ? el("section", { class: "section" },
         el("h2", {}, "3. Proposal"),

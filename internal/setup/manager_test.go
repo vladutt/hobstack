@@ -313,6 +313,11 @@ func TestStartFolder(t *testing.T) {
 	if got, _ := m.Get(s.ID); got.Proposal.Name != "Probe" {
 		t.Fatalf("name: %q", got.Proposal.Name)
 	}
+	// "agents[].folder" se ignora in modul folder, chiar daca nu exista in "folders"
+	withFolder := `{"agents":[{"name":"Zoe","role":"x","folder":"Landing","reportsTo":"Lead"}]}`
+	if _, err := bk.ProposeSetup(c, json.RawMessage(withFolder)); err != nil {
+		t.Fatalf("agents[].folder trebuia ignorat: %v", err)
+	}
 }
 
 func TestStartFolderValidation(t *testing.T) {

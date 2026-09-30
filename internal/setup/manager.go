@@ -358,6 +358,12 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 	if folderMode && strings.TrimSpace(p.Name) == "" {
 		p.Name = projectName // analistul poate omite numele; folosim cel al proiectului
 	}
+	if folderMode {
+		// in modul folder "agents[].folder" se ignora (toti agentii merg in folderul analizat)
+		for i := range p.Agents {
+			p.Agents[i].Folder = ""
+		}
+	}
 	if err := ValidateProposal(&p, true, existing); err != nil {
 		return "", err
 	}

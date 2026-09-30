@@ -182,7 +182,7 @@ func (s *Server) projectFolder(w http.ResponseWriter, r *http.Request, folderID 
 			return p, f, true
 		}
 	}
-	writeErr(w, http.StatusNotFound, "the folder is not in this project; reload the page")
+	writeErr(w, http.StatusNotFound, "the folder no longer exists in this project")
 	return store.Project{}, store.Folder{}, false
 }
 
@@ -246,6 +246,10 @@ func (s *Server) addAgentsFromSetup(w http.ResponseWriter, r *http.Request) {
 	names := make([]string, 0, len(team))
 	for _, a := range team {
 		names = append(names, a.Name)
+	}
+	// in modul folder "agents[].folder" se ignora
+	for i := range in.Proposal.Agents {
+		in.Proposal.Agents[i].Folder = ""
 	}
 	// utilizatorul poate bifa si shell/web, deci fara strictTools
 	if err := wizard.ValidateProposal(&in.Proposal, false, names); err != nil {
