@@ -41,6 +41,8 @@ adaugati cu store.AddAgents.
 Gata ("Needs you", spec in docs/superpowers/specs/2026-09-30-foreman-needs-you-design.md): tool-ul MCP ask_user;
 intrebarile deschise apar pe proiect, pe card, in chat si pe agent; raspunsul trezeste agentul si pune task-ul inapoi in
 coada (un task care asteapta raspuns nu e re-pus in coada la Stop team / restart).
+Gata (chat in wizard, spec in docs/superpowers/specs/2026-09-30-foreman-wizard-chat-design.md): la pasul 3, panoul
+"Foreman" reia sesiunea analistului (--resume) si schimba propunerea la cerere, cu Undo.
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.
