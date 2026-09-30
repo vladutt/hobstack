@@ -38,6 +38,9 @@ NULL = primul), citeste restul prin --add-dir. Wizard-ul propune echipe si conte
 Gata (wizard pe folder, spec in docs/superpowers/specs/2026-09-30-foreman-folder-setup-design.md): "Set up agents with AI"
 pe un folder al unui proiect existent; analistul propune contextul folderului si agenti noi sub un agent existent,
 adaugati cu store.AddAgents.
+Gata ("Needs you", spec in docs/superpowers/specs/2026-09-30-foreman-needs-you-design.md): tool-ul MCP ask_user;
+intrebarile deschise apar pe proiect, pe card, in chat si pe agent; raspunsul trezeste agentul si pune task-ul inapoi in
+coada (un task care asteapta raspuns nu e re-pus in coada la Stop team / restart).
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.
