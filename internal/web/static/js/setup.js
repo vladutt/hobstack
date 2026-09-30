@@ -6,24 +6,57 @@ import { liveRenderer } from "./live.js";
 // 3) propunerea editabila, apoi "Creeaza proiectul".
 // Analiza ruleaza pe server: pagina se poate inchide, iar #/setup/<id> o
 // redeschide la pasul la care a ajuns (cardul din Proiecte duce aici).
-export async function setupView(root, id) {
+//
+// Modul folder: target = { projectId, folderId } (ruta #/setup/folder/<p>/<f>,
+// sau o sesiune care are projectId). AI-ul citeste un folder dintr-un proiect
+// existent si propune agenti noi; echipa existenta nu se schimba.
+export async function setupView(root, id, target = null) {
   const info = await api("/api/info");
   const form = { workdirs: [""], description: "", model: "sonnet" };
   let session = null;   // {id, runId}
   let stream = null;    // EventSource-ul analizei
   let closed = false;
+  const cleanup = () => { closed = true; closeStream(); };
+
+  // sesiunea se incarca inainte de header: din ea aflam daca e modul folder
+  let loadErr = null;
+  if (id) {
+    try { session = await api(`/api/setup/${id}`); } catch (err) { loadErr = err; }
+    if (session?.projectId) target = { projectId: session.projectId, folderId: session.folderId };
+  }
+
+  // modul folder: proiectul (pentru echipa existenta) si folderul analizat
+  let project = null, folder = null;
+  if (target) {
+    try { project = await api(`/api/projects/${target.projectId}`); } catch { /* tratat mai jos */ }
+    folder = (project?.folders || []).find((f) => f.id === target.folderId) || null;
+    if (!folder) {
+      toast("The folder no longer exists.");
+      location.hash = "#/";
+      return cleanup;
+    }
+  }
 
   const body = el("div", { class: "wizard" });
+  const title = target ? `Set up agents for ${folder.name}` : "New project with AI";
   root.append(
     el("header", { class: "page-head" },
       el("div", {},
-        el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / New project with AI"),
-        el("h1", {}, "New project with AI"),
-        el("p", { class: "muted" }, "Pick a folder (or describe the project); an AI reads it and proposes the project and the team. You decide what to keep."))),
+        el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / ",
+          target ? [el("a", { href: `#/p/${project.id}/edit` }, project.name), " / "] : null, title),
+        el("h1", {}, title),
+        el("p", { class: "muted" }, target
+          ? "An AI reads this folder and proposes agents for it. Your existing team is not changed."
+          : "Pick a folder (or describe the project); an AI reads it and proposes the project and the team. You decide what to keep."))),
     body);
+
+  // modelSelect: modelele recomandate pentru analiza
+  const modelSelect = () => el("select", { value: form.model },
+    (info.models || []).filter((m) => m.group === "latest").map((m) => el("option", { value: m.id }, m.label)));
 
   // ---------- pasul 1 ----------
   function stepChoose() {
+    if (target) { stepChooseFolder(); return; }
     // lista de foldere: un rand cu input, "Browse..." si buton de stergere
     const folderBox = el("div", { class: "folder-rows" });
     const inputs = [];
@@ -46,8 +79,7 @@ export async function setupView(root, id) {
     (form.workdirs.length ? form.workdirs : [""]).forEach((v) => addFolder(v));
     const description = el("textarea", { value: form.description, rows: 5, maxlength: 4000,
       placeholder: "What do you want to do? e.g. refactor checkout and add payment tests. Required if you do not pick a folder." });
-    const model = el("select", { value: form.model },
-      (info.models || []).filter((m) => m.group === "latest").map((m) => el("option", { value: m.id }, m.label)));
+    const model = modelSelect();
     const go = el("button", { type: "submit", class: "btn primary" }, "Analyze");
     body.replaceChildren(el("form", { class: "section wizard-step", onsubmit: start },
       el("h2", {}, "1. What to analyze"),
@@ -73,16 +105,43 @@ export async function setupView(root, id) {
     }
   }
 
+  // pasul 1 in modul folder: folderul e deja ales, raman descrierea si modelul
+  function stepChooseFolder() {
+    const description = el("textarea", { value: form.description, rows: 5, maxlength: 4000,
+      placeholder: "e.g. build and maintain the landing page. Optional." });
+    const model = modelSelect();
+    const go = el("button", { type: "submit", class: "btn primary" }, "Analyze");
+    body.replaceChildren(el("form", { class: "section wizard-step", onsubmit: start },
+      el("h2", {}, "1. What to analyze"),
+      field("What should these agents do?", description),
+      field("Model for the analysis", model, "Sonnet is a good balance; Haiku is faster."),
+      el("div", { class: "actions" }, go)));
+
+    async function start(e) {
+      e.preventDefault();
+      Object.assign(form, { description: description.value.trim(), model: model.value });
+      go.disabled = true;
+      try {
+        await begin();
+      } catch (err) {
+        toast(err.message);
+        go.disabled = false;
+      }
+    }
+  }
+
   // back: inapoi la pasul 1; sesiunea ramane in Proiecte pana o ascunzi
   function back() {
-    history.replaceState(null, "", "#/setup");
+    history.replaceState(null, "", target ? `#/setup/folder/${target.projectId}/${target.folderId}` : "#/setup");
     stepChoose();
   }
 
   // begin porneste o analiza noua cu datele din form. Adresa devine
   // #/setup/<id> (fara hashchange), ca un refresh sa nu piarda analiza.
   async function begin() {
-    session = await api("/api/setup", { method: "POST", body: form });
+    session = target
+      ? await api(`/api/projects/${target.projectId}/folders/${target.folderId}/setup`, { method: "POST", body: { description: form.description, model: form.model } })
+      : await api("/api/setup", { method: "POST", body: form });
     history.replaceState(null, "", `#/setup/${session.id}`);
     stepAnalyze();
   }
@@ -140,8 +199,13 @@ export async function setupView(root, id) {
     const goal = el("textarea", { value: p.goal, rows: 3 });
     const context = el("textarea", { value: p.context, rows: 8 });
     const tree = el("pre", { class: "wizard-tree" });
-    // foldere: campurile editabile ale fiecarui folder propus
-    const folders = (p.folders || []).map((f) => ({
+    // modul folder: sectiunile proprii (folderul, contextul lui) si echipa existenta
+    const fm = target ? reviewFolderSection(p) : null;
+    // numele agentilor existenti (lowercase -> numele scris), sefi/revieweri posibili
+    const existing = new Map(target ? (project.agents || []).map((a) => [a.name.toLowerCase(), a.name]) : []);
+    // foldere: campurile editabile ale fiecarui folder propus (in modul folder nu
+    // exista: agentii noi lucreaza toti in folderul analizat)
+    const folders = target ? [] : (p.folders || []).map((f) => ({
       path: f.path,
       name: el("input", { type: "text", value: f.name, maxlength: 40 }),
       context: el("textarea", { value: f.context || "", rows: 3 }),
@@ -191,13 +255,24 @@ export async function setupView(root, id) {
       const byName = new Map(rows.map((r) => [r.name.value.trim().toLowerCase(), r]));
       for (const r of rows) {
         r.el.classList.toggle("excluded", !r.include.checked);
-        let boss = byName.get(r.parentName.toLowerCase());
-        for (let i = 0; boss && !boss.include.checked && i < rows.length; i++) boss = byName.get(boss.parentName.toLowerCase());
+        // urcam peste agentii noi debifati; want = numele la care am ajuns. Daca nu e
+        // un agent nou, poate fi unul din echipa existenta (modul folder).
+        let want = r.parentName;
+        let boss = byName.get(want.toLowerCase());
+        for (let i = 0; boss && !boss.include.checked && i < rows.length; i++) {
+          want = boss.parentName;
+          boss = byName.get(want.toLowerCase());
+        }
         const rev = byName.get(r.reviewerName.toLowerCase());
-        r.effParent = boss && boss !== r && boss.include.checked ? boss.name.value.trim() : "";
-        r.effReviewer = rev && rev !== r && rev.include.checked ? rev.name.value.trim() : "";
+        r.effParent = boss ? (boss !== r && boss.include.checked ? boss.name.value.trim() : "")
+          : existing.get(want.toLowerCase()) || "";
+        r.effReviewer = rev ? (rev !== r && rev.include.checked ? rev.name.value.trim() : "")
+          : existing.get(r.reviewerName.toLowerCase()) || "";
+        // optiunile: agentii noi inclusi, apoi (modul folder) grupul "Existing team"
         const opts = (first) => [el("option", { value: "" }, first),
-          ...included.filter((o) => o !== r).map((o) => el("option", { value: o.name.value.trim() }, o.name.value.trim()))];
+          ...included.filter((o) => o !== r).map((o) => el("option", { value: o.name.value.trim() }, o.name.value.trim())),
+          ...(existing.size ? [el("optgroup", { label: "Existing team" },
+            [...existing.values()].map((n) => el("option", { value: n }, n)))] : [])];
         r.parent.replaceChildren(...opts("You"));
         r.parent.value = r.effParent;
         r.reviewer.replaceChildren(...opts("nobody"));
@@ -220,6 +295,12 @@ export async function setupView(root, id) {
         }
       };
       walk("", 1);
+      // modul folder: agentii noi care raporteaza unui agent existent, sub el
+      const bosses = new Set(included.map((r) => r.effParent).filter((n) => existing.has(n.toLowerCase())));
+      for (const b of bosses) {
+        lines.push("  \u2514 " + b + "  (existing)");
+        walk(b, 2);
+      }
       tree.textContent = lines.join("\n");
     }
     for (const r of rows) {
@@ -249,9 +330,10 @@ export async function setupView(root, id) {
       drawTree(rows.filter((x) => x.include.checked));
     }));
 
-    const createBtn = el("button", { type: "button", class: "btn primary", onclick: create }, "Create project");
+    const createBtn = el("button", { type: "button", class: "btn primary", onclick: create }, target ? "Add agents" : "Create project");
     body.replaceChildren(el("div", { class: "wizard-review" },
-      el("section", { class: "section" },
+      fm ? fm.sections : null,
+      fm ? null : el("section", { class: "section" },
         el("h2", {}, "3. Proposal"),
         field("Name", name), field("Goal", goal), field("Shared context", context),
         p.rationale && el("div", { class: "field" }, el("span", { class: "label" }, "Why this team"), el("p", { class: "muted" }, p.rationale))),
@@ -287,6 +369,7 @@ export async function setupView(root, id) {
       }));
       createBtn.disabled = true;
       try {
+        if (fm) { await createInFolder(p, agents, fm); return; }
         const proj = await api("/api/projects/setup", { method: "POST", body: {
           setupId: session?.id, workdir: form.workdirs[0] || "",
           proposal: { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "",
@@ -300,14 +383,46 @@ export async function setupView(root, id) {
     }
   }
 
+  // reviewFolderSection: in modul folder, sectiunile de deasupra echipei:
+  // motivatia (daca exista) si folderul analizat, cu contextul propus.
+  function reviewFolderSection(p) {
+    const ctxArea = el("textarea", { value: p.folders?.[0]?.context || "", rows: 6 });
+    const hasCtx = Boolean((folder.context || "").trim());
+    // un folder fara context il primeste implicit; unul cu context il pastreaza
+    const updateCtx = el("input", { type: "checkbox", checked: !hasCtx });
+    const sections = [
+      p.rationale ? el("section", { class: "section" },
+        el("h2", {}, "3. Proposal"),
+        el("div", { class: "field" }, el("span", { class: "label" }, "Why these agents"), el("p", { class: "muted" }, p.rationale))) : null,
+      el("section", { class: "section" },
+        el("h2", {}, "Folder"),
+        el("div", { class: "folder-row" },
+          el("div", { class: "row" },
+            el("div", { class: "field" }, el("span", { class: "label" }, "Name"), el("strong", {}, folder.name)),
+            el("div", { class: "field" }, el("span", { class: "label" }, "Path"), el("code", {}, folder.path))),
+          field("Context for this folder", ctxArea),
+          el("label", { class: "check" }, updateCtx, "Update folder context"),
+          hasCtx ? el("span", { class: "hint" }, "Current context is kept unless you tick this.") : null)),
+    ];
+    return { sections, ctxArea, updateCtx };
+  }
+
+  // createInFolder: adauga agentii noi in proiectul existent, in folderul analizat
+  async function createInFolder(p, agents, fm) {
+    await api(`/api/projects/${project.id}/agents/setup`, { method: "POST", body: {
+      setupId: session?.id, folderId: folder.id, updateContext: fm.updateCtx.checked,
+      proposal: { name: project.name, goal: "", context: "", rationale: p.rationale || "",
+        folders: [{ path: folder.path, name: folder.name, context: fm.ctxArea.value }], agents },
+    } });
+    location.hash = `#/p/${project.id}/team`;
+  }
+
   if (id) {
-    try {
-      session = await api(`/api/setup/${id}`);
-    } catch (err) {
-      toast(err.message);
+    if (loadErr) {
+      toast(loadErr.message);
       history.replaceState(null, "", "#/setup");
       stepChoose();
-      return () => { closed = true; closeStream(); };
+      return cleanup;
     }
     Object.assign(form, { workdirs: session.workdirs || [], description: session.description, model: session.model || form.model });
     if (session.status === "running") stepAnalyze();
@@ -316,5 +431,5 @@ export async function setupView(root, id) {
   } else {
     stepChoose();
   }
-  return () => { closed = true; closeStream(); };
+  return cleanup;
 }

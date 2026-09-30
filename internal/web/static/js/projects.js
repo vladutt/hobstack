@@ -47,7 +47,8 @@ const SETUP_STATUS = {
   running: "Analyzing\u2026", ready: "Ready to review", failed: "Failed", stopped: "Stopped",
 };
 
-// setupCard: o analiza "New project with AI", pornita sau terminata.
+// setupCard: o analiza "New project with AI" (sau pentru un folder existent,
+// cand s.projectId e setat), pornita sau terminata.
 function setupCard(s, refresh) {
   const href = `#/setup/${s.id}`;
   const act = (fn) => async (e) => {
@@ -57,8 +58,11 @@ function setupCard(s, refresh) {
   };
   const stop = act(() => api(`/api/setup/${s.id}/stop`, { method: "POST" }));
   const dismiss = act(() => api(`/api/setup/${s.id}`, { method: "DELETE" }));
+  // Retry porneste o analiza noua de acelasi fel: pentru un folder existent sau proiect nou
   const retry = act(async () => {
-    const next = await api("/api/setup", { method: "POST", body: { workdirs: s.workdirs, description: s.description, model: s.model } });
+    const next = s.projectId
+      ? await api(`/api/projects/${s.projectId}/folders/${s.folderId}/setup`, { method: "POST", body: { description: s.description, model: s.model } })
+      : await api("/api/setup", { method: "POST", body: { workdirs: s.workdirs, description: s.description, model: s.model } });
     await api(`/api/setup/${s.id}`, { method: "DELETE" });
     location.hash = `#/setup/${next.id}`;
   });
@@ -76,7 +80,7 @@ function setupCard(s, refresh) {
       el("span", { class: `pill pill-setup-${s.status}` }, SETUP_STATUS[s.status] || s.status)),
     el("p", { class: `clamp ${s.status === "failed" ? "err" : "muted"}` }, text),
     el("span", { class: "hint" },
-      "New project with AI \u00b7 started " + clock(s.createdAt) + (agents ? ` \u00b7 ${agents} agents proposed` : "")),
+      (s.projectId ? "Agents with AI" : "New project with AI") + " \u00b7 started " + clock(s.createdAt) + (agents ? ` \u00b7 ${agents} agents proposed` : "")),
     el("div", { class: "card-actions" }, buttons));
 }
 
@@ -107,7 +111,7 @@ export async function projectFormView(root, id) {
   try { canPick = (await api("/api/info")).canPickFolder; } catch { /* fara buton */ }
   // foldere: un proiect poate avea mai multe parti (ex. Client + Landing); primul e implicit
   const folders = foldersEditor(p.folders?.length ? p.folders : [{ id: 0, name: "", path: "", context: "" }],
-    canPick, p.agents || []);
+    canPick, p.agents || [], id);
   // 0 = fara limita; in formular apare ca un camp gol
   const parallel = el("input", { type: "number", min: 1, max: 100, value: p.maxParallel || "", placeholder: "no limit" });
   const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd || "", placeholder: "no limit" });
@@ -173,7 +177,8 @@ export async function projectFormView(root, id) {
 
 // foldersEditor: randurile Name / Path / Context din formularul proiectului.
 // agents: pentru avertismentul de la stergerea unui folder care are agenti.
-function foldersEditor(initial, canPick, agents) {
+// projectId: la un proiect salvat, fiecare folder salvat are "Set up agents with AI".
+function foldersEditor(initial, canPick, agents, projectId) {
   const box = el("div", { class: "folder-rows" });
   const rows = [];
 
@@ -218,10 +223,13 @@ function foldersEditor(initial, canPick, agents) {
     ctxField.insertBefore(el("div", { class: "field-head" }, ctxField.querySelector("label"), loadBtn), context);
     ctxField.append(ctxHint);
     r.removeBtn = el("button", { type: "button", class: "btn small danger", onclick: () => remove(r) }, "Remove folder");
+    // doar pentru folderele deja salvate: wizard-ul lucreaza pe folderul din baza de date
+    const aiBtn = f.id && projectId ? el("a", { class: "btn small", href: `#/setup/folder/${projectId}/${f.id}`,
+      title: "An AI reads this folder and proposes agents for it. Save your changes first." }, "Set up agents with AI") : null;
     r.el = el("div", { class: "folder-row" },
       el("div", { class: "row" }, field("Name", name), field("Path", el("div", { class: "input-row" }, path, pickBtn))),
       ctxField,
-      el("div", { class: "actions" }, el("span", { class: "grow" }), r.removeBtn));
+      el("div", { class: "actions" }, aiBtn, el("span", { class: "grow" }), r.removeBtn));
     rows.push(r);
     draw();
     return name;

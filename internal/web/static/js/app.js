@@ -4,7 +4,7 @@ import { projectsView, projectFormView } from "./projects.js";
 import { workspaceView, parseWorkspaceRoute } from "./workspace.js";
 import { setupView } from "./setup.js";
 
-// Rute in hash: #/, #/new, #/setup, #/setup/<id>, #/p/3/edit si pagina proiectului cu tab-uri:
+// Rute in hash: #/, #/new, #/setup, #/setup/<id>, #/setup/folder/<proiect>/<folder>, #/p/3/edit si pagina proiectului cu tab-uri:
 // #/p/3/tasks, #/p/3/team, #/p/3/team/7, #/p/3/files.
 // Fiecare view primeste elementul in care deseneaza si poate intoarce o
 // functie de curatare (inchide stream-uri, opreste timere) sau un obiect
@@ -12,6 +12,7 @@ import { setupView } from "./setup.js";
 // apelam update in loc sa redesenam tot: chat-ul si stream-urile raman deschise.
 const routes = [
   { pattern: /^#\/?$/, view: (root) => projectsView(root) },
+  { pattern: /^#\/setup\/folder\/(\d+)\/(\d+)$/, view: (root, m) => setupView(root, null, { projectId: Number(m[1]), folderId: Number(m[2]) }) },
   { pattern: /^#\/setup(?:\/([0-9a-f]+))?$/, view: (root, m) => setupView(root, m[1] || null) },
   { pattern: /^#\/new$/, view: (root) => projectFormView(root, null) },
   { pattern: /^#\/p\/(\d+)\/edit$/, view: (root, m) => projectFormView(root, Number(m[1])) },
