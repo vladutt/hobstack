@@ -91,11 +91,12 @@ func TestProjectDetailShape(t *testing.T) {
 			t.Errorf("lipseste %s", want)
 		}
 	}
-	if strings.Contains(body, `"position"`) {
+	if strings.Contains(body, `"position":"`) { // folderele au position numeric; agentii aveau text
 		t.Error("position nu mai trebuie sa apara")
 	}
 	_, raw = e.do(t, "GET", "/api/projects", nil)
-	if strings.Contains(string(raw), `"position"`) || !strings.Contains(string(raw), `"isRoot":true`) {
+	// folderele au "position"; agentii (cu "position" vechi) nu
+	if strings.Contains(string(raw), `"position":"`) || !strings.Contains(string(raw), `"isRoot":true`) {
 		t.Errorf("lista proiecte: %s", raw)
 	}
 }

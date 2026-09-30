@@ -233,6 +233,7 @@ func TestWorkdirChangeStartsNewSession(t *testing.T) {
 	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: "done", SessionID: "s-rook", Result: "ok"})
 
 	f.p.Workdir = t.TempDir()
+	f.p.Folders[0].Path = f.p.Workdir // workdir urmeaza primul folder
 	if err := f.st.UpdateProject(f.p); err != nil {
 		t.Fatal(err)
 	}
