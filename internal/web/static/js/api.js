@@ -8,8 +8,9 @@ export async function api(path, { method = "GET", body } = {}) {
     headers: method === "GET" ? {} : { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (res.status === 204 || res.status === 202) return null;
-  const data = await res.json().catch(() => ({}));
+  if (res.status === 204) return null;
+  // 202 poate veni cu corp (ex. sesiunea la /chat) sau fara (ex. /stop): fara corp -> null
+  const data = await res.json().catch(() => (res.status === 202 ? null : {}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }

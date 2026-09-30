@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { el, field, toast, TOOLS } from "./ui.js";
 import { liveRenderer } from "./live.js";
+import { foremanChat } from "./foreman-chat.js";
 
 // Wizard-ul "Proiect nou cu AI": 1) folder + descriere, 2) analiza live,
 // 3) propunerea editabila, apoi "Creeaza proiectul".
@@ -16,7 +17,13 @@ export async function setupView(root, id, target = null) {
   let session = null;   // {id, runId}
   let stream = null;    // EventSource-ul analizei
   let closed = false;
-  const cleanup = () => { closed = true; closeStream(); };
+  // pasul 3: panoul Foreman traieste peste reconstruirile formularului
+  let chat = null;           // instanta foremanChat (null in afara pasului 3)
+  let collectCurrent = null; // collectProposal() al formularului afisat acum
+  let reviewMain = null;     // coloana principala a pasului 3 (blocata cat lucreaza Foreman)
+  let reviewFm = null;       // sectiunea folderului (modul folder) a formularului afisat
+  let formBusy = false;
+  const cleanup = () => { closed = true; closeStream(); dropChat(); };
 
   // sesiunea se incarca inainte de header: din ea aflam daca e modul folder
   let loadErr = null;
@@ -132,6 +139,7 @@ export async function setupView(root, id, target = null) {
 
   // back: inapoi la pasul 1; sesiunea ramane in Proiecte pana o ascunzi
   function back() {
+    dropChat();
     history.replaceState(null, "", target ? `#/setup/folder/${target.projectId}/${target.folderId}` : "#/setup");
     stepChoose();
   }
@@ -139,6 +147,7 @@ export async function setupView(root, id, target = null) {
   // begin porneste o analiza noua cu datele din form. Adresa devine
   // #/setup/<id> (fara hashchange), ca un refresh sa nu piarda analiza.
   async function begin() {
+    dropChat(); // sesiune noua: conversatie noua
     session = target
       ? await api(`/api/projects/${target.projectId}/folders/${target.folderId}/setup`, { method: "POST", body: { description: form.description, model: form.model } })
       : await api("/api/setup", { method: "POST", body: form });
@@ -174,7 +183,7 @@ export async function setupView(root, id, target = null) {
     let s;
     try { s = await api(`/api/setup/${session.id}`); } catch (err) { toast(err.message); stepChoose(); return; }
     if (s.status === "running" && tries < 20) { setTimeout(() => checkResult(tries + 1), 250); return; }
-    if (s.status === "ready") { stepReview(s.proposal); return; }
+    if (s.status === "ready") { session = s; stepReview(s.proposal); return; }
     stepFailed(s);
   }
 
@@ -331,7 +340,11 @@ export async function setupView(root, id, target = null) {
     }));
 
     const createBtn = el("button", { type: "button", class: "btn primary", onclick: create }, target ? "Add agents" : "Create project");
-    body.replaceChildren(el("div", { class: "wizard-review" },
+    const folderEls = folders.map((f) => el("div", { class: "folder-row" },
+      el("div", { class: "row" }, field("Name", f.name), el("div", { class: "field" }, el("span", { class: "label" }, "Path"), el("code", {}, f.path || "new folder"))),
+      field("Context for this folder", f.context)));
+    // doua coloane: propunerea (cu butoanele finale) si panoul Foreman
+    const main = el("div", { class: "wizard-review wizard-main" },
       fm ? fm.sections : null,
       fm ? null : el("section", { class: "section" },
         el("h2", {}, "3. Proposal"),
@@ -339,16 +352,27 @@ export async function setupView(root, id, target = null) {
         p.rationale && el("div", { class: "field" }, el("span", { class: "label" }, "Why this team"), el("p", { class: "muted" }, p.rationale))),
       folders.length > 0 && el("section", { class: "section" },
         el("h2", {}, many ? "Folders" : "Folder"),
-        folders.map((f) => el("div", { class: "folder-row" },
-          el("div", { class: "row" }, field("Name", f.name), el("div", { class: "field" }, el("span", { class: "label" }, "Path"), el("code", {}, f.path || "new folder"))),
-          field("Context for this folder", f.context)))),
+        folderEls),
       el("section", { class: "section" },
         el("div", { class: "section-head" }, el("h2", {}, "Team"), el("span", { class: "hint" }, "Uncheck what you do not want; you can also adjust the links on the canvas after creation.")),
         tree, rows.map((r) => r.el)),
       el("div", { class: "actions wizard-actions" },
         el("button", { type: "button", class: "btn", onclick: back }, "Back"),
-        el("span", { class: "grow" }), createBtn)));
+        el("span", { class: "grow" }), createBtn));
+    const side = el("aside", { class: "wizard-side" });
+    body.replaceChildren(el("div", { class: "wizard-review-cols" }, main, side));
     sync();
+
+    collectCurrent = collectProposal;
+    reviewMain = main;
+    reviewFm = fm;
+    main.inert = formBusy;
+    // panoul se creeaza o singura data; la reconstruire doar se muta in noua coloana
+    if (!chat) {
+      chat = foremanChat({ session, appName: info.name, folderMode: Boolean(target),
+        collect: () => collectCurrent(), onChanged: rebuild, onBusy: setFormBusy });
+    }
+    side.append(chat.el);
 
     // numele efectiv al folderului, ca in backend: numele scris, altfel ultimul
     // segment al caii, altfel "Main". Acelasi nume merge la folder si la agenti.
@@ -359,7 +383,9 @@ export async function setupView(root, id, target = null) {
       return last || "Main";
     }
 
-    async function create() {
+    // collectProposal: propunerea curenta din formular. O folosesc Create / Add agents
+    // si chat-ul cu Foreman (care primeste si editarile manuale).
+    function collectProposal() {
       const agents = rows.filter((r) => r.include.checked).map((r) => ({
         name: r.name.value.trim(), role: r.role.value.trim(), model: r.model.value,
         responsibilities: r.resp.value, reportsTo: r.effParent, reviewedBy: r.effReviewer,
@@ -367,13 +393,22 @@ export async function setupView(root, id, target = null) {
         tools: r.tools.filter((t) => t.box.checked).map((t) => t.id),
         folder: r.folder ? folderName(folders[Number(r.folder.value)]) : "",
       }));
+      if (fm) {
+        // modul folder: proiectul existent, doar folderul analizat, cu contextul din formular
+        return { name: project.name, goal: "", context: "", rationale: p.rationale || "",
+          folders: [{ path: folder.path, name: folder.name, context: fm.ctxArea.value }], agents };
+      }
+      return { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "",
+        folders: folders.map((f) => ({ path: f.path, name: folderName(f), context: f.context.value })), agents };
+    }
+
+    async function create() {
+      const proposal = collectProposal();
       createBtn.disabled = true;
       try {
-        if (fm) { await createInFolder(p, agents, fm); return; }
+        if (fm) { await createInFolder(proposal, fm); return; }
         const proj = await api("/api/projects/setup", { method: "POST", body: {
-          setupId: session?.id, workdir: form.workdirs[0] || "",
-          proposal: { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "",
-            folders: folders.map((f) => ({ path: f.path, name: folderName(f), context: f.context.value })), agents },
+          setupId: session?.id, workdir: form.workdirs[0] || "", proposal,
         } });
         location.hash = `#/p/${proj.id}/team`;
       } catch (err) {
@@ -381,6 +416,9 @@ export async function setupView(root, id, target = null) {
         createBtn.disabled = false;
       }
     }
+
+    // pentru evidentierea schimbarilor dupa o reconstruire (vezi rebuild)
+    return { rows, folderEls: fm ? [fm.row] : folderEls, fm };
   }
 
   // reviewFolderSection: in modul folder, sectiunile de deasupra echipei:
@@ -392,29 +430,77 @@ export async function setupView(root, id, target = null) {
     const updateCtx = el("input", { type: "checkbox", checked: !hasCtx });
     // editarea contextului bifeaza singura optiunea, altfel modificarile s-ar pierde
     ctxArea.addEventListener("input", () => { updateCtx.checked = true; }, { once: true });
+    const row = el("div", { class: "folder-row" },
+      el("div", { class: "row" },
+        el("div", { class: "field" }, el("span", { class: "label" }, "Name"), el("strong", {}, folder.name)),
+        el("div", { class: "field" }, el("span", { class: "label" }, "Path"), el("code", {}, folder.path))),
+      field("Context for this folder", ctxArea),
+      el("label", { class: "check" }, updateCtx, "Update folder context"),
+      hasCtx ? el("span", { class: "hint" }, "Current context is kept unless you tick this.") : null);
     const sections = [
       p.rationale ? el("section", { class: "section" },
         el("h2", {}, "3. Proposal"),
         el("div", { class: "field" }, el("span", { class: "label" }, "Why these agents"), el("p", { class: "muted" }, p.rationale))) : null,
       el("section", { class: "section" },
         el("h2", {}, "Folder"),
-        el("div", { class: "folder-row" },
-          el("div", { class: "row" },
-            el("div", { class: "field" }, el("span", { class: "label" }, "Name"), el("strong", {}, folder.name)),
-            el("div", { class: "field" }, el("span", { class: "label" }, "Path"), el("code", {}, folder.path))),
-          field("Context for this folder", ctxArea),
-          el("label", { class: "check" }, updateCtx, "Update folder context"),
-          hasCtx ? el("span", { class: "hint" }, "Current context is kept unless you tick this.") : null)),
+        row),
     ];
-    return { sections, ctxArea, updateCtx };
+    return { sections, ctxArea, updateCtx, row };
+  }
+
+  // setFormBusy blocheaza coloana principala cat lucreaza Foreman (inert: fara click,
+  // fara focus, fara tastare), ca editarile sa nu se piarda la reconstruire.
+  function setFormBusy(on) {
+    formBusy = on;
+    if (reviewMain) reviewMain.inert = on;
+  }
+
+  // dropChat inchide panoul Foreman (iesirea din pasul 3 sau sesiune noua)
+  function dropChat() {
+    chat?.destroy();
+    chat = null;
+    collectCurrent = null;
+    reviewMain = null;
+    reviewFm = null;
+    formBusy = false;
+  }
+
+  // rebuild reface formularul din propunerea noua (Foreman a schimbat-o sau Undo),
+  // pastrand panoul de chat, si evidentiaza agentii noi sau schimbati cateva secunde.
+  function rebuild(s) {
+    const before = collectCurrent ? collectCurrent() : null;
+    const prevUpdateCtx = reviewFm ? reviewFm.updateCtx.checked : false;
+    session = s;
+    const view = stepReview(s.proposal);
+    if (!before) return;
+    const after = collectCurrent();
+    // agentii dupa nume (lowercase) -> campurile serializate. Ambele parti trec prin
+    // collectProposal, deci legaturile si folderele sunt normalizate la fel.
+    const old = new Map(before.agents.map((a) => [a.name.toLowerCase(), agentKey(a)]));
+    const changed = [];
+    // dupa reconstruire toti agentii sunt bifati: after.agents[i] corespunde lui rows[i]
+    after.agents.forEach((a, i) => {
+      if (old.get(a.name.toLowerCase()) !== agentKey(a)) changed.push(view.rows[i].el);
+    });
+    after.folders.forEach((f, i) => {
+      const b = before.folders[i];
+      if (view.folderEls[i] && (!b || b.name !== f.name || b.context !== f.context)) changed.push(view.folderEls[i]);
+    });
+    if (view.fm) {
+      // contextul schimbat de Foreman (la cerere) se aplica; bifa utilizatorului ramane
+      const ctxChanged = (before.folders[0]?.context || "") !== (after.folders[0]?.context || "");
+      view.fm.updateCtx.checked = view.fm.updateCtx.checked || Boolean(prevUpdateCtx) || ctxChanged;
+    }
+    if (!changed.length) return;
+    changed.forEach((e) => e.classList.add("changed"));
+    setTimeout(() => changed.forEach((e) => e.classList.remove("changed")), 4000);
+    changed[0].scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   // createInFolder: adauga agentii noi in proiectul existent, in folderul analizat
-  async function createInFolder(p, agents, fm) {
+  async function createInFolder(proposal, fm) {
     await api(`/api/projects/${project.id}/agents/setup`, { method: "POST", body: {
-      setupId: session?.id, folderId: folder.id, updateContext: fm.updateCtx.checked,
-      proposal: { name: project.name, goal: "", context: "", rationale: p.rationale || "",
-        folders: [{ path: folder.path, name: folder.name, context: fm.ctxArea.value }], agents },
+      setupId: session?.id, folderId: folder.id, updateContext: fm.updateCtx.checked, proposal,
     } });
     location.hash = `#/p/${project.id}/team`;
   }
@@ -434,4 +520,11 @@ export async function setupView(root, id, target = null) {
     stepChoose();
   }
   return cleanup;
+}
+
+// agentKey: campurile unui agent din propunere, serializate pentru comparare
+function agentKey(a) {
+  return JSON.stringify([a.role, a.model, a.responsibilities, (a.reportsTo || "").toLowerCase(),
+    (a.reviewedBy || "").toLowerCase(), a.background, a.instructions, a.doneDef,
+    [...(a.tools || [])].sort(), (a.folder || "").toLowerCase()]);
 }

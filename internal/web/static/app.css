@@ -292,6 +292,28 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .wizard-actions { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0; border-top: 1px solid var(--line); }
 .wizard-actions .grow { flex: 1; }
 
+/* chat cu Foreman in wizard */
+.wizard:has(.wizard-review-cols) { max-width: 1440px; }
+.wizard-review-cols { display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 400px); gap: 18px; align-items: start; }
+.wizard-main { min-width: 0; }
+.wizard-main[inert] { opacity: .6; }
+.wizard-side { position: sticky; top: 16px; min-width: 0; }
+/* inaltimea lasa loc titlului paginii, ca la deschidere campul de scris sa se vada fara scroll */
+.foreman-chat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; height: calc(100vh - 170px); min-height: 360px; }
+.foreman-chat .fc-head { padding: 12px 14px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.foreman-chat .fc-thread { flex: 1; overflow: auto; padding: 12px 14px; display: grid; gap: 10px; align-content: start; }
+.fc-msg { max-width: 90%; padding: 8px 10px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.fc-msg.user { justify-self: end; background: var(--amber-bg); border: 1px solid var(--line-2); }
+.fc-msg.foreman { justify-self: start; background: var(--card-2); }
+.fc-msg.event { justify-self: center; color: var(--muted); font-size: 12px; }
+.fc-undo { margin-top: 6px; white-space: normal; }
+.fc-live { min-width: 0; }
+.fc-live .live-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.foreman-chat form { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.foreman-chat textarea { flex: 1; min-width: 0; resize: vertical; }
+.wizard-agent.changed, .folder-row.changed { outline: 2px solid var(--amber); outline-offset: 2px; transition: outline-color .6s; }
+@media (max-width: 1000px) { .wizard-review-cols { grid-template-columns: minmax(0, 1fr); } .wizard-side { position: static; } .foreman-chat { height: 480px; } }
+
 /* ---------- etape (coloane proprii) ---------- */
 .board.stages-board { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); overflow-x: auto; padding-bottom: 6px; }
 .col-agents { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 4px; }
