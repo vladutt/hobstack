@@ -32,15 +32,19 @@ func (s *Server) startSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Workdir     string `json:"workdir"`
-		Description string `json:"description"`
-		Model       string `json:"model"`
+		Workdir     string   `json:"workdir"` // vechi: un singur folder
+		Workdirs    []string `json:"workdirs"`
+		Description string   `json:"description"`
+		Model       string   `json:"model"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
-	sess, err := s.wizard.Start(in.Workdir, in.Description, in.Model)
+	if len(in.Workdirs) == 0 && in.Workdir != "" {
+		in.Workdirs = []string{in.Workdir} // API-ul vechi: un singur folder
+	}
+	sess, err := s.wizard.Start(in.Workdirs, in.Description, in.Model)
 	if err != nil {
 		setupFail(w, err)
 		return
@@ -110,12 +114,33 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 		setupFail(w, err)
 		return
 	}
-	dir, err := resolveWorkdir(in.Workdir, in.Proposal.Name, s.dirs.Workspaces)
-	if err != nil {
-		fail(w, err)
-		return
+	folders := in.Proposal.Folders
+	if len(folders) == 0 {
+		folders = []wizard.ProposedFolder{{Path: in.Workdir}} // gol = folder nou in ~/Foreman
 	}
-	p := store.Project{Name: in.Proposal.Name, Goal: in.Proposal.Goal, Context: in.Proposal.Context, Workdir: dir}
+	p := store.Project{Name: in.Proposal.Name, Goal: in.Proposal.Goal, Context: in.Proposal.Context}
+	seen := map[string]bool{}
+	for i, f := range folders {
+		hint := in.Proposal.Name
+		if i > 0 {
+			hint += " " + f.Name
+		}
+		dir, err := resolveWorkdir(f.Path, hint, s.dirs.Workspaces)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if seen[dir] {
+			fail(w, badRequest("two folders with the path "+dir))
+			return
+		}
+		seen[dir] = true
+		name := f.Name
+		if name == "" {
+			name = store.FolderName(dir)
+		}
+		p.Folders = append(p.Folders, store.Folder{Name: name, Path: dir, Context: f.Context})
+	}
 	if _, err := s.st.CreateProjectWithTeam(&p, in.Proposal.Members()); errors.Is(err, store.ErrConflict) {
 		writeErr(w, http.StatusBadRequest, "an agent with this name already exists in the project")
 		return

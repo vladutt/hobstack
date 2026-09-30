@@ -101,6 +101,15 @@ var proposeSetupTool = Tool{
 		"goal":      str("The goal: what done looks like"),
 		"context":   str("Shared context for all agents: stack, build/test/run commands, conventions, structure"),
 		"rationale": str("Briefly: why this team"),
+		"folders": map[string]any{
+			"type":        "array",
+			"description": "Only with several folders: exactly the given folders, each with a short name and its own context. With one folder you may omit it.",
+			"items": schema([]string{"path", "name"}, map[string]any{
+				"path":    str("The folder path, exactly as given"),
+				"name":    str("Short name, e.g. Client or Landing"),
+				"context": str("Context for this folder: stack, build/test/run commands, conventions"),
+			}),
+		},
 		"agents": map[string]any{
 			"type":        "array",
 			"description": "2-6 agents (at most 12). At least one with an empty reportsTo (reports to the user).",
@@ -114,6 +123,7 @@ var proposeSetupTool = Tool{
 				"background":       str("What it knows about this project"),
 				"instructions":     str("How it works and what it never does"),
 				"doneDef":          str("What it hands over when it finishes"),
+				"folder":           str("The agent's folder (a name from folders); empty = the first folder"),
 				"tools": map[string]any{
 					"type":  "array",
 					"items": map[string]any{"type": "string", "enum": []string{"write", "git"}},

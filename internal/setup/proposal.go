@@ -4,6 +4,7 @@ package setup
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -14,12 +15,20 @@ import (
 )
 
 // Proposal e propunerea analistului (si, dupa editare, cea trimisa la creare).
+// ProposedFolder: un folder al proiectului, cu numele si contextul propuse.
+type ProposedFolder struct {
+	Path    string `json:"path"`
+	Name    string `json:"name"`
+	Context string `json:"context"`
+}
+
 type Proposal struct {
-	Name      string          `json:"name"`
-	Goal      string          `json:"goal"`
-	Context   string          `json:"context"`
-	Rationale string          `json:"rationale"`
-	Agents    []ProposedAgent `json:"agents"`
+	Name      string           `json:"name"`
+	Goal      string           `json:"goal"`
+	Context   string           `json:"context"`
+	Rationale string           `json:"rationale"`
+	Folders   []ProposedFolder `json:"folders"`
+	Agents    []ProposedAgent  `json:"agents"`
 }
 
 type ProposedAgent struct {
@@ -33,6 +42,7 @@ type ProposedAgent struct {
 	Instructions     string   `json:"instructions"`
 	DoneDef          string   `json:"doneDef"`
 	Tools            []string `json:"tools"`
+	Folder           string   `json:"folder"` // numele folderului; "" = primul
 }
 
 // ValidationError: propunerea nu e valida; mesajul ajunge ca atare la analist
@@ -41,7 +51,10 @@ type ValidationError string
 
 func (e ValidationError) Error() string { return string(e) }
 
-const maxAgents = 12
+const (
+	maxAgents  = 12
+	maxFolders = 6
+)
 
 // safeTools: ce poate propune analistul singur; restul le bifeaza utilizatorul.
 var safeTools = []string{"write", "git"}
@@ -73,6 +86,29 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 			return err
 		}
 	}
+	if len(p.Folders) > maxFolders {
+		return ValidationError(fmt.Sprintf("at most %d folders", maxFolders))
+	}
+	folderNames := map[string]bool{}
+	for i := range p.Folders {
+		f := &p.Folders[i]
+		f.Path, f.Name, f.Context = strings.TrimSpace(f.Path), strings.TrimSpace(f.Name), strings.TrimSpace(f.Context)
+		if f.Path != "" {
+			f.Path = filepath.Clean(f.Path)
+		}
+		if f.Name == "" {
+			f.Name = store.FolderName(f.Path) // fara cale: "Main"
+		}
+		for _, err := range []error{tooLong("folder name", f.Name, 40), tooLong("context of folder "+f.Name, f.Context, 20000)} {
+			if err != nil {
+				return err
+			}
+		}
+		if folderNames[strings.ToLower(f.Name)] {
+			return ValidationError("two folders named " + f.Name)
+		}
+		folderNames[strings.ToLower(f.Name)] = true
+	}
 	if len(p.Agents) == 0 {
 		return ValidationError("the proposal must have at least one agent")
 	}
@@ -91,6 +127,10 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 		a.Background = strings.TrimSpace(a.Background)
 		a.Instructions = strings.TrimSpace(a.Instructions)
 		a.DoneDef = strings.TrimSpace(a.DoneDef)
+		a.Folder = strings.TrimSpace(a.Folder)
+		if a.Folder != "" && !folderNames[strings.ToLower(a.Folder)] {
+			return ValidationError(fmt.Sprintf("the folder of %s (%s) does not exist in the proposal", a.Name, a.Folder))
+		}
 		if a.Name == "" {
 			return ValidationError("every agent must have a name")
 		}
@@ -169,6 +209,37 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 	return nil
 }
 
+// CheckFolderPaths: folderele propuse de analist sunt exact cele alese de
+// utilizator (workdirs, deja curatate). Cu un folder sau niciunul, folders
+// poate lipsi sau avea un singur element, cu calea aleasa sau fara cale.
+func CheckFolderPaths(p *Proposal, workdirs []string) error {
+	if len(workdirs) <= 1 {
+		if len(p.Folders) > 1 {
+			return ValidationError("there is only one folder: put at most one entry in folders")
+		}
+		if len(p.Folders) == 1 && p.Folders[0].Path != "" && (len(workdirs) == 0 || filepath.Clean(p.Folders[0].Path) != workdirs[0]) {
+			return ValidationError("the folder path must be " + strings.Join(workdirs, "") + " (or empty)")
+		}
+		return nil
+	}
+	list := strings.Join(workdirs, ", ")
+	if len(p.Folders) != len(workdirs) {
+		return ValidationError(fmt.Sprintf("put exactly these %d folders in folders: %s", len(workdirs), list))
+	}
+	want := map[string]bool{}
+	for _, w := range workdirs {
+		want[w] = true
+	}
+	for _, f := range p.Folders {
+		path := filepath.Clean(f.Path)
+		if !want[path] {
+			return ValidationError("unknown or repeated folder path " + f.Path + "; use exactly: " + list)
+		}
+		delete(want, path) // a doua aparitie a aceleiasi cai e refuzata
+	}
+	return nil
+}
+
 // Members transforma propunerea (deja validata) in agenti pentru store.
 func (p *Proposal) Members() []store.NewMember {
 	index := map[string]int{}
@@ -181,6 +252,10 @@ func (p *Proposal) Members() []store.NewMember {
 		}
 		return -1
 	}
+	folderAt := map[string]int{}
+	for i, f := range p.Folders {
+		folderAt[strings.ToLower(f.Name)] = i
+	}
 	out := make([]store.NewMember, len(p.Agents))
 	for i, a := range p.Agents {
 		out[i] = store.NewMember{
@@ -189,6 +264,7 @@ func (p *Proposal) Members() []store.NewMember {
 				Background: a.Background, Instructions: a.Instructions, DoneDef: a.DoneDef, Tools: a.Tools,
 			},
 			Parent: at(a.ReportsTo), Reviewer: at(a.ReviewedBy),
+			Folder: folderAt[strings.ToLower(a.Folder)], // lipsa sau gol = primul folder
 		}
 	}
 	return out

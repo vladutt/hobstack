@@ -134,3 +134,35 @@ func TestSetupListDismissAndCreate(t *testing.T) {
 		t.Fatalf("dismiss inexistent: %d", code)
 	}
 }
+
+func TestCreateProjectFromSetupWithFolders(t *testing.T) {
+	e := withSetup(t)
+	client, landing := t.TempDir(), t.TempDir()
+	proposal := map[string]any{
+		"name": "Probe", "goal": "g", "context": "c",
+		"folders": []map[string]any{{"path": client, "name": "Client", "context": "Go"}, {"path": landing, "name": "Landing"}},
+		"agents": []map[string]any{
+			{"name": "Ana", "role": "Lead", "model": "sonnet", "reportsTo": ""},
+			{"name": "Lia", "role": "Web", "model": "haiku", "reportsTo": "Ana", "folder": "Landing"},
+		},
+	}
+	code, raw := e.do(t, "POST", "/api/projects/setup", map[string]any{"proposal": proposal})
+	var p struct{ ID int64 }
+	json.Unmarshal(raw, &p)
+	if code != 201 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	d := e.folders(t, p.ID)
+	if len(d.Folders) != 2 || d.Folders[1].Path != landing || d.Folders[0].Context != "Go" {
+		t.Fatalf("foldere: %+v", d.Folders)
+	}
+	var lia *int64
+	for _, a := range d.Agents {
+		if a.FolderID != nil {
+			lia = a.FolderID
+		}
+	}
+	if lia == nil || *lia != d.Folders[1].ID {
+		t.Fatalf("Lia trebuia in Landing: %+v", d.Agents)
+	}
+}

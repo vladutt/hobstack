@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -39,7 +41,7 @@ type Session struct {
 	ID          string    `json:"id"`
 	RunID       string    `json:"runId"`
 	Title       string    `json:"title"` // pentru card: numele propus, altfel folderul sau descrierea
-	Workdir     string    `json:"workdir"`
+	Workdirs    []string  `json:"workdirs"`
 	Description string    `json:"description"`
 	Model       string    `json:"model"` // modelul analistului, pentru Retry
 	Status      string    `json:"status"`
@@ -74,41 +76,54 @@ func randomHex(n int) string {
 }
 
 // Start valideaza cererea si porneste analistul.
-func (m *Manager) Start(workdir, description, model string) (Session, error) {
-	workdir, description = strings.TrimSpace(workdir), strings.TrimSpace(description)
-	if workdir == "" && description == "" {
-		return Session{}, ValidationError("choose a folder or describe what you want to do")
-	}
+func (m *Manager) Start(workdirs []string, description, model string) (Session, error) {
+	description = strings.TrimSpace(description)
 	if err := tooLong("description", description, 4000); err != nil {
 		return Session{}, err
 	}
 	if !models.Valid(model) {
 		return Session{}, ValidationError("unknown model: " + model)
 	}
-	if workdir != "" {
-		dir, err := expandHome(workdir)
+	dirs := []string{}
+	for _, w := range workdirs {
+		if w = strings.TrimSpace(w); w == "" {
+			continue
+		}
+		dir, err := expandHome(w)
 		if err != nil {
 			return Session{}, err
 		}
 		if !filepath.IsAbs(dir) {
-			return Session{}, ValidationError("the folder must be an absolute path")
+			return Session{}, ValidationError("the folder must be an absolute path: " + w)
 		}
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			return Session{}, ValidationError("the folder does not exist: " + dir)
 		}
-		// un folder gol nu spune nimic despre proiect: fara descriere n-avem ce analiza
-		if entries, _ := os.ReadDir(dir); len(entries) == 0 && description == "" {
+		if dir = filepath.Clean(dir); !slices.Contains(dirs, dir) {
+			dirs = append(dirs, dir)
+		}
+	}
+	if len(dirs) > maxFolders {
+		return Session{}, ValidationError(fmt.Sprintf("at most %d folders", maxFolders))
+	}
+	if len(dirs) == 0 && description == "" {
+		return Session{}, ValidationError("choose a folder or describe what you want to do")
+	}
+	// un singur folder gol nu spune nimic despre proiect: fara descriere n-avem ce analiza
+	if len(dirs) == 1 && description == "" {
+		if entries, _ := os.ReadDir(dirs[0]); len(entries) == 0 {
 			return Session{}, ValidationError("the folder is empty: describe what you want to do")
 		}
-		workdir = filepath.Clean(dir)
 	}
 
 	m.cleanupOld()
-	s := &Session{ID: randomHex(8), RunID: runner.NewID(), Title: titleFor(workdir, description),
-		Workdir: workdir, Description: description, Model: model,
+	s := &Session{ID: randomHex(8), RunID: runner.NewID(), Title: titleFor(dirs, description),
+		Workdirs: dirs, Description: description, Model: model,
 		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16)}
-	cwd := workdir
-	if cwd == "" {
+	cwd := ""
+	if len(dirs) > 0 {
+		cwd = dirs[0]
+	} else {
 		s.tempDir = filepath.Join(m.tempRoot, s.ID)
 		if err := os.MkdirAll(s.tempDir, 0o755); err != nil {
 			return Session{}, err
@@ -139,7 +154,7 @@ func (m *Manager) args(s *Session, model string) []string {
 		"deny": []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "WebFetch", "WebSearch",
 			"Agent", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite"},
 	}})
-	return []string{
+	out := []string{
 		"-p", turnPrompt(s),
 		"--output-format", "stream-json", "--verbose",
 		"--model", model,
@@ -151,6 +166,10 @@ func (m *Manager) args(s *Session, model string) []string {
 		"--mcp-config", prompt.MCPConfig(m.baseURL + "/mcp/" + s.token),
 		"--strict-mcp-config",
 	}
+	for _, dir := range s.Workdirs[min(1, len(s.Workdirs)):] {
+		out = append(out, "--add-dir", dir) // analistul citeste si celelalte foldere
+	}
+	return out
 }
 
 // finish e apelata de runner cand analistul s-a oprit.
@@ -265,9 +284,17 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 		return "", err
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	s, ok := m.sessions[id]
+	m.mu.Unlock()
 	if !ok || s.Status != StatusRunning {
+		return "", ErrNotFound
+	}
+	if err := CheckFolderPaths(&p, s.Workdirs); err != nil { // Workdirs nu se schimba dupa Start
+		return "", err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s.Status != StatusRunning {
 		return "", ErrNotFound
 	}
 	s.Proposal = &p // o propunere noua o inlocuieste pe cea veche
@@ -302,9 +329,9 @@ func (b *backend) ProposeSetup(c mcp.Caller, args json.RawMessage) (string, erro
 
 // titleFor da un titlu pentru card pana vine propunerea: numele folderului,
 // altfel prima linie din descriere, scurtata.
-func titleFor(workdir, description string) string {
-	if workdir != "" {
-		return filepath.Base(workdir)
+func titleFor(workdirs []string, description string) string {
+	if len(workdirs) > 0 {
+		return filepath.Base(workdirs[0])
 	}
 	line, _, _ := strings.Cut(description, "\n")
 	line = strings.TrimSpace(line)

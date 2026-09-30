@@ -77,3 +77,57 @@ func TestValidateProposalGoalLimit(t *testing.T) {
 		t.Fatalf("am %v", err)
 	}
 }
+
+func TestProposalFolders(t *testing.T) {
+	p := valid()
+	p.Folders = []ProposedFolder{{Path: "/c/client", Name: "Client", Context: "Go"}, {Path: "/c/landing/"}}
+	p.Agents[1].Folder = "landing" // numele implicit, fara diferenta de litere
+	if err := ValidateProposal(p, true); err != nil {
+		t.Fatal(err)
+	}
+	if p.Folders[1].Name != "landing" {
+		t.Fatalf("nume implicit: %+v", p.Folders[1])
+	}
+	if m := p.Members(); m[0].Folder != 0 || m[1].Folder != 1 {
+		t.Fatalf("members: %+v", m)
+	}
+	for want, mutate := range map[string]func(p *Proposal){
+		"two folders named":              func(p *Proposal) { p.Folders[1].Name = "CLIENT" },
+		"does not exist in the proposal": func(p *Proposal) { p.Agents[1].Folder = "Zed" },
+	} {
+		q := valid()
+		q.Folders = []ProposedFolder{{Path: "/c/client", Name: "Client"}, {Path: "/c/landing", Name: "Landing"}}
+		mutate(q)
+		if err := ValidateProposal(q, true); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: am %v", want, err)
+		}
+	}
+}
+
+func TestCheckFolderPaths(t *testing.T) {
+	two := []string{"/c/client", "/c/landing"}
+	ok := &Proposal{Folders: []ProposedFolder{{Path: "/c/landing/"}, {Path: "/c/client"}}}
+	if err := CheckFolderPaths(ok, two); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []*Proposal{
+		{},
+		{Folders: []ProposedFolder{{Path: "/c/client"}}},
+		{Folders: []ProposedFolder{{Path: "/c/client"}, {Path: "/c/other"}}},
+		{Folders: []ProposedFolder{{Path: "/c/client"}, {Path: "/c/client"}}},
+	} {
+		if err := CheckFolderPaths(bad, two); err == nil {
+			t.Errorf("trebuia refuzat: %+v", bad.Folders)
+		}
+	}
+	// un singur folder: folders poate lipsi sau avea calea lui
+	if err := CheckFolderPaths(&Proposal{}, []string{"/c/a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckFolderPaths(&Proposal{Folders: []ProposedFolder{{Path: "/c/b"}}}, []string{"/c/a"}); err == nil {
+		t.Fatal("calea gresita trebuia refuzata")
+	}
+	if err := CheckFolderPaths(&Proposal{Folders: []ProposedFolder{{Name: "Main"}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+}

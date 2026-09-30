@@ -67,7 +67,7 @@ const good = `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","r
 func TestManagerHappyPath(t *testing.T) {
 	m, f := newTest(t)
 	dir := t.TempDir()
-	s, err := m.Start(dir, "un magazin", "haiku")
+	s, err := m.Start([]string{dir}, "un magazin", "haiku")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestManagerHappyPath(t *testing.T) {
 
 func TestManagerNoProposalFails(t *testing.T) {
 	m, f := newTest(t)
-	s, _ := m.Start("", "o aplicatie de notite", "sonnet")
+	s, _ := m.Start(nil, "o aplicatie de notite", "sonnet")
 	spec := f.specs[0]
 	if _, err := os.Stat(spec.Dir); err != nil || !strings.HasPrefix(spec.Dir, m.tempRoot) {
 		t.Fatalf("fara folder trebuia un folder temporar: %s %v", spec.Dir, err)
@@ -119,16 +119,16 @@ func TestManagerNoProposalFails(t *testing.T) {
 
 func TestManagerStopAndValidation(t *testing.T) {
 	m, f := newTest(t)
-	if _, err := m.Start("", "  ", "sonnet"); err == nil {
+	if _, err := m.Start(nil, "  ", "sonnet"); err == nil {
 		t.Fatal("folder si descriere goale: trebuia eroare")
 	}
-	if _, err := m.Start(filepath.Join(t.TempDir(), "nu-exista"), "", "sonnet"); err == nil {
+	if _, err := m.Start([]string{filepath.Join(t.TempDir(), "nu-exista")}, "", "sonnet"); err == nil {
 		t.Fatal("folder inexistent: trebuia eroare")
 	}
-	if _, err := m.Start("", "x", "gpt-5"); err == nil {
+	if _, err := m.Start(nil, "x", "gpt-5"); err == nil {
 		t.Fatal("model invalid: trebuia eroare")
 	}
-	s, _ := m.Start("", "x", "sonnet")
+	s, _ := m.Start(nil, "x", "sonnet")
 	if err := m.Stop(s.ID); err != nil || len(f.stopped) != 1 {
 		t.Fatalf("stop: %v %v", err, f.stopped)
 	}
@@ -144,7 +144,7 @@ func TestManagerStopAndValidation(t *testing.T) {
 // un folder gol fara descriere nu are ce analiza
 func TestManagerEmptyFolderNeedsDescription(t *testing.T) {
 	m, f := newTest(t)
-	if _, err := m.Start(t.TempDir(), "", "sonnet"); err == nil || !strings.Contains(err.Error(), "the folder is empty") {
+	if _, err := m.Start([]string{t.TempDir()}, "", "sonnet"); err == nil || !strings.Contains(err.Error(), "the folder is empty") {
 		t.Fatalf("am %v", err)
 	}
 	if len(f.specs) != 0 {
@@ -152,7 +152,7 @@ func TestManagerEmptyFolderNeedsDescription(t *testing.T) {
 	}
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
-	if _, err := m.Start(dir, "", "sonnet"); err != nil {
+	if _, err := m.Start([]string{dir}, "", "sonnet"); err != nil {
 		t.Fatalf("folder cu fisiere fara descriere e ok: %v", err)
 	}
 }
@@ -162,8 +162,8 @@ func TestManagerListAndDismiss(t *testing.T) {
 	m, f := newTest(t)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
-	a, _ := m.Start(dir, "", "sonnet")
-	b, _ := m.Start("", "un blog despre motoare", "haiku")
+	a, _ := m.Start([]string{dir}, "", "sonnet")
+	b, _ := m.Start(nil, "un blog despre motoare", "haiku")
 	if a.Title != filepath.Base(dir) || b.Title != "un blog despre motoare" || b.Model != "haiku" {
 		t.Fatalf("titluri: %q %q, model %q", a.Title, b.Title, b.Model)
 	}
@@ -211,8 +211,44 @@ func TestManagerListAndDismiss(t *testing.T) {
 
 func TestTitleFromLongDescription(t *testing.T) {
 	m, _ := newTest(t)
-	s, _ := m.Start("", strings.Repeat("abcde ", 30)+"\nlinia doi", "sonnet")
+	s, _ := m.Start(nil, strings.Repeat("abcde ", 30)+"\nlinia doi", "sonnet")
 	if len([]rune(s.Title)) > 61 || !strings.HasSuffix(s.Title, "…") {
 		t.Fatalf("titlu: %q", s.Title)
 	}
+}
+
+func TestManagerSeveralFolders(t *testing.T) {
+	m, f := newTest(t)
+	a, b := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(a, "go.mod"), []byte("module a"), 0o644)
+	s, err := m.Start([]string{a, " ", b, a}, "", "sonnet") // gol si dublura ignorate
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := f.specs[0]
+	if spec.Dir != a || !hasArgPair(spec.Args, "--add-dir", b) || len(s.Workdirs) != 2 || s.Title != filepath.Base(a) {
+		t.Fatalf("spec: dir=%s args=%v session=%+v", spec.Dir, spec.Args, s)
+	}
+	if !strings.Contains(spec.Prompt, "- "+a) || !strings.Contains(spec.Prompt, "- "+b) {
+		t.Fatalf("turn prompt:\n%s", spec.Prompt)
+	}
+	// analistul trebuie sa propuna exact folderele alese
+	bk := m.Wrap(innerBackend{})
+	c, _ := bk.Resolve(tokenOf(t, spec))
+	if _, err := bk.ProposeSetup(c, json.RawMessage(good)); err == nil || !strings.Contains(err.Error(), "folders") {
+		t.Fatalf("fara folders trebuia refuzat: %v", err)
+	}
+	withFolders := strings.Replace(good, `"agents"`, `"folders":[{"path":"`+a+`","name":"Client"},{"path":"`+b+`","name":"Landing"}],"agents"`, 1)
+	if _, err := bk.ProposeSetup(c, json.RawMessage(withFolders)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func hasArgPair(args []string, flag, value string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag && args[i+1] == value {
+			return true
+		}
+	}
+	return false
 }
