@@ -31,7 +31,7 @@ func TestStageCreateAndFirstFree(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := f.tm.CreateTask(lc, "C", "", "Vera"); err == nil || !strings.Contains(err.Error(), "nu e in etapa Dev") {
+	if _, err := f.tm.CreateTask(lc, "C", "", "Vera"); err == nil || !strings.Contains(err.Error(), "is not in stage Dev") {
 		t.Fatalf("assignee din alta etapa: %v", err)
 	}
 	mustReconcile(t, f)
@@ -39,7 +39,7 @@ func TestStageCreateAndFirstFree(t *testing.T) {
 	if !strings.Contains(turn(rook1), "Task T-1: A") || !strings.Contains(turn(wes1), "Task T-2: B") {
 		t.Fatalf("primul liber: %q / %q", turn(rook1), turn(wes1))
 	}
-	if !strings.Contains(turn(rook1), "Etapa: Dev (lucru)") || !strings.Contains(turn(rook1), "merge la QA") {
+	if !strings.Contains(turn(rook1), "Stage: Dev (work)") || !strings.Contains(turn(rook1), "goes to QA") {
 		t.Fatalf("linia etapei: %q", turn(rook1))
 	}
 	if c := f.caller(t, rook1); c.StageKind != store.KindWork {
@@ -116,7 +116,7 @@ func TestStageFullFlow(t *testing.T) {
 	mustReconcile(t, f)
 	vera1 := f.fs.last(t, f.vera)
 	vc := f.caller(t, vera1)
-	if vc.StageKind != store.KindCheck || !strings.Contains(turn(vera1), "Etapa: QA (verificare)") {
+	if vc.StageKind != store.KindCheck || !strings.Contains(turn(vera1), "Stage: QA (check)") {
 		t.Fatalf("QA: %+v %q", vc, turn(vera1))
 	}
 	// respinge -> inapoi in Dev, cu feedback
@@ -257,7 +257,7 @@ func TestLeadTurnListsStages(t *testing.T) {
 	f.tm.UserMessage(f.lead.ID, "fa ceva", nil)
 	mustReconcile(t, f)
 	lead := f.fs.last(t, f.lead)
-	if !strings.Contains(turn(lead), "Etapele board-ului") || !strings.Contains(turn(lead), "QA (verificare): Vera") {
+	if !strings.Contains(turn(lead), "Board stages") || !strings.Contains(turn(lead), "QA (check): Vera") {
 		t.Fatalf("tura liderului: %q", turn(lead))
 	}
 	if c := f.caller(t, lead); !c.HasStages {

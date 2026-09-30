@@ -18,38 +18,38 @@ func str(desc string) map[string]any {
 var leadTools = []Tool{
 	{
 		Name:        "create_task",
-		Description: "Creeaza un task nou in Queued si il asigneaza unui worker din echipa. Worker-ul il primeste automat.",
+		Description: "Creates a new task in Queued and assigns it to a worker on your team. The worker receives it automatically.",
 		InputSchema: schema([]string{"title", "assignee"}, map[string]any{
-			"title":       str("Titlu scurt si clar"),
-			"description": str("Ce trebuie facut, criterii de acceptare, fisiere relevante"),
-			"assignee":    str("Numele worker-ului, exact ca in lista echipei"),
+			"title":       str("Short, clear title"),
+			"description": str("What needs to be done, acceptance criteria, relevant files"),
+			"assignee":    str("The worker's name, exactly as in the team list"),
 		}),
 	},
 	{
 		Name:        "list_tasks",
-		Description: "Lista task-urilor proiectului, cu status, worker si rezultat.",
+		Description: "Lists the project's tasks, with status, worker and result.",
 		InputSchema: schema([]string{}, map[string]any{
 			"status": map[string]any{
 				"type":        "string",
 				"enum":        []string{"queued", "in_progress", "review", "done", "blocked"},
-				"description": "Optional: doar task-urile cu acest status",
+				"description": "Optional: only tasks with this status",
 			},
 		}),
 	},
 	{
 		Name:        "accept_task",
-		Description: "Accepta un task din Review (sau blocat) si il muta in Done.",
+		Description: "Accepts a task in Review (or blocked) and moves it to Done.",
 		InputSchema: schema([]string{"task"}, map[string]any{
-			"task": str("Task-ul, ex. T-3"),
-			"note": str("Optional: o nota pentru istoric"),
+			"task": str("The task, e.g. T-3"),
+			"note": str("Optional: a note for the history"),
 		}),
 	},
 	{
 		Name:        "send_back",
-		Description: "Trimite un task din Review inapoi worker-ului, cu feedback concret. Dupa 3 trimiteri task-ul se blocheaza si decide utilizatorul.",
+		Description: "Sends a task in Review back to the worker, with concrete feedback. After 3 send-backs the task becomes blocked and the user decides.",
 		InputSchema: schema([]string{"task", "feedback"}, map[string]any{
-			"task":     str("Task-ul, ex. T-3"),
-			"feedback": str("Ce trebuie schimbat, concret"),
+			"task":     str("The task, e.g. T-3"),
+			"feedback": str("What needs to change, concretely"),
 		}),
 	},
 }
@@ -57,63 +57,63 @@ var leadTools = []Tool{
 // createTaskInStages: create_task intr-un proiect cu etape (coloane proprii).
 var createTaskInStages = Tool{
 	Name:        "create_task",
-	Description: "Creeaza un task nou. Intra in prima etapa a board-ului si il ia primul agent liber din acea etapa; dupa ultima etapa decizi tu (accept_task / send_back).",
+	Description: "Creates a new task. It enters the first stage of the board and the first free agent in that stage takes it; after the last stage you decide (accept_task / send_back).",
 	InputSchema: schema([]string{"title"}, map[string]any{
-		"title":       str("Titlu scurt si clar"),
-		"description": str("Ce trebuie facut, criterii de acceptare, fisiere relevante"),
-		"assignee":    str("Optional: un agent din prima etapa care sa-l ia primul; gol = primul agent liber"),
+		"title":       str("Short, clear title"),
+		"description": str("What needs to be done, acceptance criteria, relevant files"),
+		"assignee":    str("Optional: an agent from the first stage to take it first; empty = the first free agent"),
 	}),
 }
 
 var reportTool = Tool{
 	Name:        "report_done",
-	Description: "Raporteaza sefului ca ai terminat un task (sau ca esti blocat). Task-ul trece in Review, la reviewer-ul tau daca ai unul.",
+	Description: "Reports to your boss that you finished a task (or that you are blocked). The task moves to Review, to your reviewer if you have one.",
 	InputSchema: schema([]string{"summary"}, map[string]any{
-		"task":    str("Task-ul raportat, ex. T-3. Intr-un run pe task e implicit task-ul curent; altfel e obligatoriu."),
-		"summary": str("Rezumatul cerut in definition of done, sau problema care te blocheaza"),
+		"task":    str("The task being reported, e.g. T-3. In a task run it defaults to the current task; otherwise it is required."),
+		"summary": str("The summary required by the definition of done, or the problem blocking you"),
 	}),
 }
 
 var reviewTools = []Tool{
 	{
 		Name:        "review_approve",
-		Description: "Aproba munca unui agent pe care il verifici. Task-ul trece la liderul care l-a creat, pentru decizia finala.",
+		Description: "Approves the work of an agent you review. The task goes to the lead who created it, for the final decision.",
 		InputSchema: schema([]string{"task"}, map[string]any{
-			"task": str("Task-ul verificat, ex. T-3"),
-			"note": str("Optional: o nota pentru lider"),
+			"task": str("The reviewed task, e.g. T-3"),
+			"note": str("Optional: a note for the lead"),
 		}),
 	},
 	{
 		Name:        "review_reject",
-		Description: "Respinge munca unui agent pe care il verifici, cu feedback concret. Task-ul revine agentului. Dupa 3 respingeri sau trimiteri inapoi, task-ul se blocheaza si decide utilizatorul.",
+		Description: "Rejects the work of an agent you review, with concrete feedback. The task goes back to the agent. After 3 rejections or send-backs, the task becomes blocked and the user decides.",
 		InputSchema: schema([]string{"task", "feedback"}, map[string]any{
-			"task":     str("Task-ul verificat, ex. T-3"),
-			"feedback": str("Ce e gresit si ce trebuie schimbat, concret"),
+			"task":     str("The reviewed task, e.g. T-3"),
+			"feedback": str("What is wrong and what needs to change, concretely"),
 		}),
 	},
 }
 
 var proposeSetupTool = Tool{
 	Name:        "propose_setup",
-	Description: "Trimite propunerea de proiect si echipa. Apeleaza-l o singura data, la final. Daca primesti o eroare, corecteaza propunerea si apeleaza din nou.",
+	Description: "Submits the project and team proposal. Call it once, at the end. If you get an error, fix the proposal and call it again.",
 	InputSchema: schema([]string{"name", "goal", "context", "agents"}, map[string]any{
-		"name":      str("Numele proiectului, scurt"),
-		"goal":      str("Obiectivul: cum arata gata"),
-		"context":   str("Context comun pentru toti agentii: stack, comenzi de build/test/rulare, conventii, structura"),
-		"rationale": str("Pe scurt: de ce aceasta echipa"),
+		"name":      str("The project name, short"),
+		"goal":      str("The goal: what done looks like"),
+		"context":   str("Shared context for all agents: stack, build/test/run commands, conventions, structure"),
+		"rationale": str("Briefly: why this team"),
 		"agents": map[string]any{
 			"type":        "array",
-			"description": "2-6 agenti (maxim 12). Cel putin unul cu reportsTo gol (raporteaza utilizatorului).",
+			"description": "2-6 agents (at most 12). At least one with an empty reportsTo (reports to the user).",
 			"items": schema([]string{"name", "role", "responsibilities", "reportsTo"}, map[string]any{
-				"name":             str("Nume scurt, unic, ex. Rook"),
-				"role":             str("Rolul, ex. Backend Developer"),
-				"model":            map[string]any{"type": "string", "enum": []string{"opus", "sonnet", "haiku"}, "description": "Modelul Claude"},
-				"responsibilities": str("Ce ia: tipurile de task-uri pe care le primeste"),
-				"reportsTo":        str("Numele sefului din aceasta propunere; gol = raporteaza utilizatorului"),
-				"reviewedBy":       str("Optional: numele celui care ii verifica munca"),
-				"background":       str("Ce stie despre acest proiect"),
-				"instructions":     str("Cum lucreaza si ce nu face niciodata"),
-				"doneDef":          str("Ce preda cand termina"),
+				"name":             str("Short, unique name, e.g. Rook"),
+				"role":             str("The role, e.g. Backend Developer"),
+				"model":            map[string]any{"type": "string", "enum": []string{"opus", "sonnet", "haiku"}, "description": "The Claude model"},
+				"responsibilities": str("Takes: the kinds of tasks it receives"),
+				"reportsTo":        str("The name of the boss in this proposal; empty = reports to the user"),
+				"reviewedBy":       str("Optional: the name of the agent who reviews its work"),
+				"background":       str("What it knows about this project"),
+				"instructions":     str("How it works and what it never does"),
+				"doneDef":          str("What it hands over when it finishes"),
 				"tools": map[string]any{
 					"type":  "array",
 					"items": map[string]any{"type": "string", "enum": []string{"write", "git"}},

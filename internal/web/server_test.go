@@ -272,7 +272,7 @@ func TestPromptPreview(t *testing.T) {
 	code, raw := e.do(t, "POST", "/api/prompt-preview", map[string]any{
 		"projectId": p.ID, "name": "Nova", "role": "Frontend Developer", "parentId": root.ID, "background": "Vue 3",
 	})
-	if code != 200 || !strings.Contains(string(raw), "Esti Nova, Frontend Developer, in proiectul ApiUnit. Raportezi lui Lead.") {
+	if code != 200 || !strings.Contains(string(raw), "You are Nova, Frontend Developer, in the project ApiUnit. You report to Lead.") {
 		t.Fatalf("%d %s", code, raw)
 	}
 }
@@ -292,7 +292,7 @@ func TestPostMessageToWorker(t *testing.T) {
 	_, raw = e.do(t, "GET", "/api/agents/"+itoa(lead.ID)+"/messages", nil)
 	var msgs []store.Message
 	json.Unmarshal(raw, &msgs)
-	if len(msgs) != 1 || msgs[0].Text != "Utilizatorul -> Rook: salut" || msgs[0].Delivered {
+	if len(msgs) != 1 || msgs[0].Text != "User -> Rook: salut" || msgs[0].Delivered {
 		t.Fatalf("copia pentru lead lipseste: %s", raw)
 	}
 }

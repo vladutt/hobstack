@@ -18,7 +18,7 @@ import (
 // (lead sau mesaj direct). Se apeleaza cu t.work blocat.
 func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, taskID int64, turn string) error {
 	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
-		return fmt.Errorf("folderul de lucru %s nu exista", p.Workdir)
+		return fmt.Errorf("the working folder %s does not exist", p.Workdir)
 	}
 
 	// fisierele proiectului: agentul are voie sa citeasca folderul si le vede in tura
@@ -48,7 +48,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	// (agent sau proiect editat), --resume l-ar ignora, deci pornim sesiune noua.
 	resume := a.SessionID != "" && a.PromptHash == hash
 	if a.SessionID != "" && !resume {
-		t.note(p.ID, a.ID, "Instructiunile sau folderul de lucru s-au schimbat, pornesc o sesiune noua.", true)
+		t.note(p.ID, a.ID, "The instructions or the working folder changed; starting a new session.", true)
 	}
 
 	runID := runner.NewID()
@@ -135,12 +135,12 @@ func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
 	}
 	t.mu.Unlock()
 	if !ok || ar.runID != o.RunID {
-		log.Printf("run %s terminat, dar nu era activ", o.RunID)
+		log.Printf("run %s finished, but it was not active", o.RunID)
 		return
 	}
 
 	if err := t.recordOutcome(ar, agentID, hash, o); err != nil {
-		log.Printf("finalul run-ului %s: %v", o.RunID, err)
+		log.Printf("finishing run %s: %v", o.RunID, err)
 	}
 	t.emit(ar.projectID, "agent", map[string]int64{"id": agentID})
 	t.Kick(ar.projectID)
@@ -167,7 +167,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		t.emit(ar.projectID, "message", m)
 	}
 	if o.Status == store.RunFailed {
-		t.note(ar.projectID, a.ID, "Run esuat: "+o.Error, true)
+		t.note(ar.projectID, a.ID, "Run failed: "+o.Error, true)
 	}
 	if ar.taskID == 0 {
 		return nil
@@ -203,7 +203,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		if o.Status == store.RunStopped {
 			return nil
 		}
-		return t.note(ar.projectID, a.ID, fmt.Sprintf("%s asteapta sub-task-urile: %s.", task.Ref(), strings.Join(open, ", ")), true)
+		return t.note(ar.projectID, a.ID, fmt.Sprintf("%s is waiting for its subtasks: %s.", task.Ref(), strings.Join(open, ", ")), true)
 	}
 	switch o.Status {
 	case store.RunStopped:
@@ -211,7 +211,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	case store.RunFailed:
 		task.Status = store.StatusReview
 		task.ReviewStage = store.StageLead
-		task.Result = "run esuat: " + o.Error
+		task.Result = "run failed: " + o.Error
 		boss, hasBoss := decider(task, agents)
 		// nimeni nu poate decide: decide utilizatorul (blocat; cele din etape raman la "La lider")
 		if !hasBoss && task.StageID == nil && !task.ByUser {
@@ -224,10 +224,10 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		if !hasBoss {
 			return nil
 		}
-		return t.note(ar.projectID, boss.ID, clip(fmt.Sprintf("Run-ul lui %s pe %s a esuat: %s", a.Name, task.Ref(), o.Error)), false)
+		return t.note(ar.projectID, boss.ID, clip(fmt.Sprintf("%s's run on %s failed: %s", a.Name, task.Ref(), o.Error)), false)
 	default:
 		task.Result = strings.TrimSpace(o.Result)
-		_, err := t.toReview(&task, a, agents, fmt.Sprintf("%s a terminat %s fara report_done", a.Name, task.Ref()))
+		_, err := t.toReview(&task, a, agents, fmt.Sprintf("%s finished %s without report_done", a.Name, task.Ref()))
 		return err
 	}
 	if err := t.st.SaveTask(&task); err != nil {

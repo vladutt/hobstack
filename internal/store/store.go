@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("nu exista")
+	ErrNotFound = errors.New("not found")
 	ErrConflict = errors.New("conflict")
 )
 
@@ -40,7 +40,7 @@ func Open(path string) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("migrare baza de date: %w", err)
+		return nil, fmt.Errorf("database migration: %w", err)
 	}
 	return s, nil
 }

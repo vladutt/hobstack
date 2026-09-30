@@ -15,26 +15,26 @@ export async function setupView(root) {
   root.append(
     el("header", { class: "page-head" },
       el("div", {},
-        el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Proiecte"), " / Proiect nou cu AI"),
-        el("h1", {}, "Proiect nou cu AI"),
-        el("p", { class: "muted" }, "Alegi un folder (sau descrii proiectul), un AI il citeste si propune proiectul si echipa. Tu decizi ce pastrezi."))),
+        el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / New project with AI"),
+        el("h1", {}, "New project with AI"),
+        el("p", { class: "muted" }, "Pick a folder (or describe the project); an AI reads it and proposes the project and the team. You decide what to keep."))),
     body);
 
   // ---------- pasul 1 ----------
   function stepChoose() {
-    const workdir = el("input", { type: "text", value: form.workdir, placeholder: "ex. ~/code/shop (optional)" });
-    const pickBtn = info.canPickFolder && el("button", { type: "button", class: "btn", onclick: pick }, "Alege...");
+    const workdir = el("input", { type: "text", value: form.workdir, placeholder: "e.g. ~/code/shop (optional)" });
+    const pickBtn = info.canPickFolder && el("button", { type: "button", class: "btn", onclick: pick }, "Browse...");
     const description = el("textarea", { value: form.description, rows: 5, maxlength: 4000,
-      placeholder: "Ce vrei sa faci? ex. refactor la checkout si teste pentru plati. Obligatoriu daca nu alegi folder." });
+      placeholder: "What do you want to do? e.g. refactor checkout and add payment tests. Required if you do not pick a folder." });
     const model = el("select", { value: form.model },
       (info.models || []).filter((m) => m.group === "latest").map((m) => el("option", { value: m.id }, m.label)));
-    const go = el("button", { type: "submit", class: "btn primary" }, "Analizeaza");
+    const go = el("button", { type: "submit", class: "btn primary" }, "Analyze");
     body.replaceChildren(el("form", { class: "section wizard-step", onsubmit: start },
-      el("h2", {}, "1. Ce analizam"),
-      field("Folder de proiect", el("div", { class: "input-row" }, workdir, pickBtn),
-        "Folderul nu se modifica: AI-ul doar citeste. Gol = proiect nou, folderul se creeaza la final."),
-      field("Ce vrei sa faci?", description),
-      field("Model pentru analiza", model, "Sonnet e un echilibru bun; Haiku e mai rapid."),
+      el("h2", {}, "1. What to analyze"),
+      field("Project folder", el("div", { class: "input-row" }, workdir, pickBtn),
+        "The folder is not modified: the AI only reads. Empty = new project; the folder is created at the end."),
+      field("What do you want to do?", description),
+      field("Model for the analysis", model, "Sonnet is a good balance; Haiku is faster."),
       el("div", { class: "actions" }, go)));
 
     async function pick() {
@@ -59,10 +59,10 @@ export async function setupView(root) {
 
   // ---------- pasul 2 ----------
   function stepAnalyze() {
-    const box = el("div", { class: "live wizard-live" }, el("div", { class: "live-head" }, "AI-ul citeste proiectul..."));
-    const stopBtn = el("button", { type: "button", class: "btn", onclick: () => api(`/api/setup/${session.id}/stop`, { method: "POST" }).catch((e) => toast(e.message)) }, "Opreste");
+    const box = el("div", { class: "live wizard-live" }, el("div", { class: "live-head" }, "The AI is reading the project..."));
+    const stopBtn = el("button", { type: "button", class: "btn", onclick: () => api(`/api/setup/${session.id}/stop`, { method: "POST" }).catch((e) => toast(e.message)) }, "Stop");
     body.replaceChildren(el("section", { class: "section wizard-step" },
-      el("h2", {}, "2. Analiza"), box, el("div", { class: "actions" }, stopBtn)));
+      el("h2", {}, "2. Analysis"), box, el("div", { class: "actions" }, stopBtn)));
     const render = liveRenderer(box);
     stream = new EventSource(`/api/runs/${session.runId}/events`);
     stream.onmessage = (msg) => {
@@ -85,13 +85,13 @@ export async function setupView(root) {
     if (s.status === "running" && tries < 20) { setTimeout(() => checkResult(tries + 1), 250); return; }
     if (s.status === "ready") { stepReview(s.proposal); return; }
     body.replaceChildren(el("section", { class: "section wizard-step" },
-      el("h2", {}, s.status === "stopped" ? "Analiza oprita" : "Analiza nu a mers"),
+      el("h2", {}, s.status === "stopped" ? "Analysis stopped" : "Analysis failed"),
       s.error && el("p", { class: "err" }, s.error),
       el("div", { class: "actions" },
-        el("button", { type: "button", class: "btn", onclick: stepChoose }, "Inapoi"),
+        el("button", { type: "button", class: "btn", onclick: stepChoose }, "Back"),
         el("button", { type: "button", class: "btn primary", onclick: async () => {
           try { session = await api("/api/setup", { method: "POST", body: form }); stepAnalyze(); } catch (err) { toast(err.message); }
-        } }, "Reincearca"))));
+        } }, "Retry"))));
   }
 
   // ---------- pasul 3 ----------
@@ -118,13 +118,13 @@ export async function setupView(root) {
       };
       r.el = el("div", { class: "wizard-agent" },
         el("label", { class: "check wizard-include" }, r.include, el("strong", {}, "Include")),
-        el("div", { class: "row" }, field("Nume", r.name), field("Rol", r.role)),
-        el("div", { class: "row" }, field("Model", r.model), field("Ce ia", r.resp)),
-        el("div", { class: "row" }, field("Raporteaza lui", r.parent), field("Verificat de", r.reviewer)),
-        el("div", { class: "field" }, el("span", { class: "label" }, "Tool-uri"),
+        el("div", { class: "row" }, field("Name", r.name), field("Role", r.role)),
+        el("div", { class: "row" }, field("Model", r.model), field("Takes", r.resp)),
+        el("div", { class: "row" }, field("Reports to", r.parent), field("Reviewed by", r.reviewer)),
+        el("div", { class: "field" }, el("span", { class: "label" }, "Tools"),
           el("div", { class: "wizard-tools" }, r.tools.map((t) => el("label", { class: "check" }, t.box, t.label)))),
         el("details", {}, el("summary", {}, "Prompt"),
-          field("Background", r.background), field("Instructiuni", r.instructions), field("Definition of done", r.doneDef)));
+          field("Background", r.background), field("Instructions", r.instructions), field("Definition of done", r.doneDef)));
       return r;
     });
 
@@ -146,15 +146,15 @@ export async function setupView(root) {
         r.effReviewer = rev && rev !== r && rev.include.checked ? rev.name.value.trim() : "";
         const opts = (first) => [el("option", { value: "" }, first),
           ...included.filter((o) => o !== r).map((o) => el("option", { value: o.name.value.trim() }, o.name.value.trim()))];
-        r.parent.replaceChildren(...opts("Tu"));
+        r.parent.replaceChildren(...opts("You"));
         r.parent.value = r.effParent;
-        r.reviewer.replaceChildren(...opts("nimeni"));
+        r.reviewer.replaceChildren(...opts("nobody"));
         r.reviewer.value = r.effReviewer;
       }
       drawTree(included);
     }
     function drawTree(included) {
-      const lines = ["Tu"];
+      const lines = ["You"];
       const seen = new Set(); // protectie: doi agenti cu acelasi nume ar face bucla
       // copiii lui parent: agentii inclusi cu acel sef efectiv ("" = radacinile, sub Tu)
       const walk = (parent, depth) => {
@@ -162,7 +162,7 @@ export async function setupView(root) {
           if (seen.has(r)) continue;
           seen.add(r);
           lines.push("  ".repeat(depth) + "\u2514 " + r.name.value.trim() + (r.role.value ? " \u00b7 " + r.role.value : "") +
-            (r.effReviewer ? "  (verificat de " + r.effReviewer + ")" : ""));
+            (r.effReviewer ? "  (reviewed by " + r.effReviewer + ")" : ""));
           walk(r.name.value.trim(), depth + 1);
         }
       };
@@ -190,17 +190,17 @@ export async function setupView(root) {
       r.role.addEventListener("input", () => drawTree(rows.filter((x) => x.include.checked)));
     }
 
-    const createBtn = el("button", { type: "button", class: "btn primary", onclick: create }, "Creeaza proiectul");
+    const createBtn = el("button", { type: "button", class: "btn primary", onclick: create }, "Create project");
     body.replaceChildren(el("div", { class: "wizard-review" },
       el("section", { class: "section" },
-        el("h2", {}, "3. Propunerea"),
-        field("Nume", name), field("Obiectiv", goal), field("Context comun", context),
-        p.rationale && el("div", { class: "field" }, el("span", { class: "label" }, "De ce aceasta echipa"), el("p", { class: "muted" }, p.rationale))),
+        el("h2", {}, "3. Proposal"),
+        field("Name", name), field("Goal", goal), field("Shared context", context),
+        p.rationale && el("div", { class: "field" }, el("span", { class: "label" }, "Why this team"), el("p", { class: "muted" }, p.rationale))),
       el("section", { class: "section" },
-        el("div", { class: "section-head" }, el("h2", {}, "Echipa"), el("span", { class: "hint" }, "Debifeaza ce nu vrei; ajustezi legaturile si pe canvas dupa creare.")),
+        el("div", { class: "section-head" }, el("h2", {}, "Team"), el("span", { class: "hint" }, "Uncheck what you do not want; you can also adjust the links on the canvas after creation.")),
         tree, rows.map((r) => r.el)),
       el("div", { class: "actions wizard-actions" },
-        el("button", { type: "button", class: "btn", onclick: stepChoose }, "Inapoi"),
+        el("button", { type: "button", class: "btn", onclick: stepChoose }, "Back"),
         el("span", { class: "grow" }), createBtn)));
     sync();
 
@@ -217,7 +217,7 @@ export async function setupView(root) {
           workdir: form.workdir,
           proposal: { name: name.value, goal: goal.value, context: context.value, rationale: p.rationale || "", agents },
         } });
-        location.hash = `#/p/${proj.id}/echipa`;
+        location.hash = `#/p/${proj.id}/team`;
       } catch (err) {
         toast(err.message);
         createBtn.disabled = false;

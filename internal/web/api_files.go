@@ -27,12 +27,12 @@ const (
 func (s *Server) readUploads(w http.ResponseWriter, r *http.Request) ([]*multipart.FileHeader, error) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestSize)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		return nil, badRequest("cererea nu poate fi citita (maxim 200 MB): " + err.Error())
+		return nil, badRequest("cannot read the request (max 200 MB): " + err.Error())
 	}
 	files := r.MultipartForm.File["files"]
 	for _, fh := range files {
 		if fh.Size > maxFileSize {
-			return nil, badRequest(fmt.Sprintf("fisierul %s depaseste 50 MB", store.CleanFileName(fh.Filename)))
+			return nil, badRequest(fmt.Sprintf("file %s exceeds 50 MB", store.CleanFileName(fh.Filename)))
 		}
 	}
 	return files, nil
@@ -107,7 +107,7 @@ func normalizeMime(m string) string {
 func (s *Server) discardUploads(list []store.Attachment) {
 	for _, a := range list {
 		if err := s.removeFile(a); err != nil {
-			log.Printf("curatare atasament %d: %v", a.ID, err)
+			log.Printf("cleaning up attachment %d: %v", a.ID, err)
 		}
 	}
 }
@@ -116,7 +116,7 @@ func (s *Server) discardUploads(list []store.Attachment) {
 func (s *Server) removeFile(a store.Attachment) error {
 	path := filepath.Join(config.ProjectFilesDir(s.dirs.Projects, a.ProjectID), a.Stored)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		log.Printf("nu pot sterge %s: %v", path, err)
+		log.Printf("cannot delete %s: %v", path, err)
 	}
 	return s.st.DeleteAttachment(a.ID)
 }
@@ -155,7 +155,7 @@ func (s *Server) uploadFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(files) == 0 {
-		fail(w, badRequest("niciun fisier"))
+		fail(w, badRequest("no file"))
 		return
 	}
 	saved, err := s.saveUploads(id, store.KindProjectFile, files)
@@ -187,7 +187,7 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Open(filepath.Join(config.ProjectFilesDir(s.dirs.Projects, a.ProjectID), a.Stored))
 	if err != nil {
 		if os.IsNotExist(err) {
-			writeErr(w, http.StatusNotFound, "fisierul lipseste de pe disc")
+			writeErr(w, http.StatusNotFound, "the file is missing from disk")
 			return
 		}
 		fail(w, err)
@@ -231,7 +231,7 @@ func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) pickFolder(w http.ResponseWriter, r *http.Request) {
 	if !s.canPick || s.pick == nil {
-		writeErr(w, http.StatusNotImplemented, "dialogul de ales folder nu e disponibil pe acest sistem")
+		writeErr(w, http.StatusNotImplemented, "the folder picker is not available on this system")
 		return
 	}
 	path, err := s.pick(r.Context())

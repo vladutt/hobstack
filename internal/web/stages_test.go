@@ -97,7 +97,7 @@ func TestUserTaskAndAssignAPI(t *testing.T) {
 	if code != 201 {
 		t.Fatalf("agent: %d %s", code, raw)
 	}
-	if code, raw := e.do(t, "POST", path+"/tasks", map[string]any{"title": "A"}); code != 400 || !strings.Contains(string(raw), "alege agentul") {
+	if code, raw := e.do(t, "POST", path+"/tasks", map[string]any{"title": "A"}); code != 400 || !strings.Contains(string(raw), "agent") {
 		t.Fatalf("fara agent: %d %s", code, raw)
 	}
 	code, raw = e.do(t, "POST", path+"/tasks", map[string]any{"title": "A", "assigneeId": root.ID})

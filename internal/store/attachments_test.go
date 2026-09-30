@@ -13,8 +13,8 @@ func TestCleanFileName(t *testing.T) {
 		"../../etc/passwd": "passwd",
 		`C:\\tmp\\a.txt`:   "a.txt",
 		"a/b.png":          "b.png",
-		"":                 "fisier",
-		"..":               "fisier",
+		"":                 "file",
+		"..":               "file",
 		"ra:u*?.txt":       "ra_u__.txt",
 		"linie\nnoua.txt":  "linie_noua.txt",
 	}
@@ -31,7 +31,7 @@ func TestCleanFileName(t *testing.T) {
 	if !utf8.ValidString(ro) || !strings.HasSuffix(ro, ".pdf") || len(ro) > 200 {
 		t.Errorf("nume utf-8: valid=%v bytes=%d", utf8.ValidString(ro), len(ro))
 	}
-	if got := CleanFileName(".png"); got != "fisier.png" {
+	if got := CleanFileName(".png"); got != "file.png" {
 		t.Errorf(".png -> %q", got)
 	}
 	a, b := StoredName("x.png"), StoredName("x.png")

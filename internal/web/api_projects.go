@@ -31,12 +31,12 @@ func (in projectInput) toProject(workspaces string) (store.Project, error) {
 		BudgetUSD:   in.BudgetUSD,
 	}
 	if p.Name == "" {
-		return p, badRequest("numele proiectului e obligatoriu")
+		return p, badRequest("project name is required")
 	}
 	for _, err := range []error{
-		maxLen("numele proiectului", p.Name, 80),
-		maxLen("obiectivul", p.Goal, 2000),
-		maxLen("contextul comun", p.Context, 20000),
+		maxLen("project name", p.Name, 80),
+		maxLen("goal", p.Goal, 2000),
+		maxLen("shared context", p.Context, 20000),
 	} {
 		if err != nil {
 			return p, err
@@ -44,10 +44,10 @@ func (in projectInput) toProject(workspaces string) (store.Project, error) {
 	}
 	// 0 (sau camp gol in UI) inseamna fara limita, la ambele.
 	if p.MaxParallel < 0 || p.MaxParallel > 100 {
-		return p, badRequest("workeri in paralel: gol pentru fara limita, sau intre 1 si 100")
+		return p, badRequest("parallel workers: empty for no limit, or between 1 and 100")
 	}
 	if p.BudgetUSD < 0 || (p.BudgetUSD > 0 && p.BudgetUSD < 0.05) || p.BudgetUSD > 100 {
-		return p, badRequest("bugetul per run: gol pentru fara limita, sau intre 0.05 si 100 USD")
+		return p, badRequest("budget per run: empty for no limit, or between 0.05 and 100 USD")
 	}
 	// ultimul pas: creeaza folderul doar dupa ce restul e valid
 	dir, err := resolveWorkdir(in.Workdir, p.Name, workspaces)
@@ -204,7 +204,7 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	// id-urile pot fi refolosite: un folder ramas de la un proiect vechi nu are ce cauta aici
 	if err := os.RemoveAll(filepath.Join(s.dirs.Projects, strconv.FormatInt(p.ID, 10))); err != nil {
-		log.Printf("curatare folder vechi proiect %d: %v", p.ID, err)
+		log.Printf("cleaning up old project folder %d: %v", p.ID, err)
 	}
 	writeJSON(w, http.StatusCreated, p)
 }
@@ -250,7 +250,7 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.team.ProjectActive(id) {
-		writeErr(w, http.StatusConflict, "echipa lucreaza acum; opreste echipa inainte sa stergi proiectul")
+		writeErr(w, http.StatusConflict, "the team is working now; stop the team before deleting the project")
 		return
 	}
 	if err := s.st.DeleteProject(id); err != nil {
@@ -259,7 +259,7 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	// fisierele proiectului; folderul de lucru nu se atinge niciodata
 	if err := os.RemoveAll(filepath.Join(s.dirs.Projects, strconv.FormatInt(id, 10))); err != nil {
-		log.Printf("nu pot sterge fisierele proiectului %d: %v", id, err)
+		log.Printf("cannot delete files of project %d: %v", id, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -43,7 +43,7 @@ func CleanFileName(name string) string {
 		return r
 	}, name)
 	if name == "" || name == "." || name == ".." {
-		return "fisier"
+		return "file"
 	}
 	const maxBytes = 200
 	stem, ext := name, filepath.Ext(name)
@@ -58,7 +58,7 @@ func CleanFileName(name string) string {
 		stem = stem[:len(stem)-size]
 	}
 	if stem == "" {
-		stem = "fisier"
+		stem = "file"
 	}
 	return stem + ext
 }

@@ -19,23 +19,23 @@ func TestSystemRoles(t *testing.T) {
 		want, not []string
 	}{
 		{"worker", Links{BossName: "Atlas"},
-			[]string{"# Rol\nEsti Sub, Tech Lead, in proiectul ApiUnit. Raportezi lui Atlas.",
-				"# Cand termini un task\nApeleaza mcp__team__report_done cu: rezumat si fisiere schimbate",
-				"# Cum lucrezi\nLucreaza doar pe task-ul primit", "# Background\nStie Laravel."},
+			[]string{"# Role\nYou are Sub, Tech Lead, in the project ApiUnit. You report to Atlas.",
+				"# When you finish a task\nCall mcp__team__report_done with: rezumat si fisiere schimbate",
+				"# How you work\nWork only on the task you received", "# Background\nStie Laravel."},
 			[]string{"create_task", "review_approve"}},
 		{"sub-lider", Links{BossName: "Atlas", IsLead: true},
-			[]string{"mcp__team__create_task", "opreste-te fara report_done", `"Ce ia"`},
-			[]string{"Lucreaza doar pe task-ul primit", "review_approve"}},
+			[]string{"mcp__team__create_task", "stop without calling report_done", `"Takes"`},
+			[]string{"Work only on the task you received", "review_approve"}},
 		{"radacina lider", Links{IsLead: true},
-			[]string{"Raportezi utilizatorului.", "mcp__team__create_task",
-				"# Cand termini\nCand obiectivul e atins, scrie utilizatorului un rezumat. Rezumatul contine: rezumat si fisiere schimbate"},
+			[]string{"You report to the user.", "mcp__team__create_task",
+				"# When you finish\nWhen the goal is reached, write the user a summary. The summary includes: rezumat si fisiere schimbate"},
 			[]string{"report_done"}},
 		{"reviewer", Links{BossName: "Atlas", IsReviewer: true},
-			[]string{"mcp__team__review_approve", "mcp__team__review_reject", "Lucreaza doar pe task-ul primit",
-				"Citeste fisierele modificate ca sa verifici munca, nu te baza doar pe rezumat."},
+			[]string{"mcp__team__review_approve", "mcp__team__review_reject", "Work only on the task you received",
+				"Read the changed files to check the work; do not rely only on the summary."},
 			[]string{"create_task"}},
 		{"singur", Links{},
-			[]string{"Raportezi utilizatorului.", "Vorbesti direct cu utilizatorul"},
+			[]string{"You report to the user.", "You talk directly with the user"},
 			[]string{"mcp__team__"}},
 	}
 	for _, c := range cases {
@@ -51,11 +51,11 @@ func TestSystemRoles(t *testing.T) {
 			}
 		}
 	}
-	if got := System(store.Project{Name: "X"}, store.Agent{Name: "A"}, Links{}); !strings.Contains(got, "Esti A, agent, in proiectul X.") {
+	if got := System(store.Project{Name: "X"}, store.Agent{Name: "A"}, Links{}); !strings.Contains(got, "You are A, agent, in the project X.") {
 		t.Errorf("rol gol: %s", got)
 	}
 	// radacina lider: propozitia despre rezumat apare o singura data
-	if got := System(proj, a, Links{IsLead: true}); strings.Count(got, "scrie utilizatorului un rezumat") != 1 {
+	if got := System(proj, a, Links{IsLead: true}); strings.Count(got, "write the user a summary") != 1 {
 		t.Errorf("propozitia se repeta:\n%s", got)
 	}
 }
@@ -84,7 +84,7 @@ func TestLinksFor(t *testing.T) {
 
 func TestTeamBlock(t *testing.T) {
 	got := Team([]Member{{Name: "Rook", Role: "Backend Dev", Responsibilities: "API si baze de date", Status: "Idle"}, {Name: "Vera"}})
-	if got != "Echipa ta directa:\n- Rook: Backend Dev, Idle\n  Ce ia: API si baze de date\n- Vera" {
+	if got != "Your direct team:\n- Rook: Backend Dev, Idle\n  Takes: API si baze de date\n- Vera" {
 		t.Fatalf("Team = %q", got)
 	}
 	if Team(nil) != "" {
@@ -98,9 +98,9 @@ func TestContextAndTurns(t *testing.T) {
 		Reviewees: []string{"Ana", "Ion"},
 		OpenTasks: []OpenTask{{Ref: "T-1", Title: "Import", Done: 1, Total: 2}, {Ref: "T-4", Title: "Export"}},
 	}
-	ctx := "Echipa ta directa:\n- Wes: Dev, Idle" +
-		"\n\nRevizuiesti munca lui: Ana, Ion" +
-		"\n\nTask-urile tale deschise:\n- T-1: Import (sub-task-uri gata: 1 din 2)\n- T-4: Export (fara sub-task-uri inca)"
+	ctx := "Your direct team:\n- Wes: Dev, Idle" +
+		"\n\nYou review the work of: Ana, Ion" +
+		"\n\nYour open tasks:\n- T-1: Import (subtasks done: 1 of 2)\n- T-4: Export (no subtasks yet)"
 	if got := Context(c); got != ctx {
 		t.Fatalf("Context =\n%s", got)
 	}
@@ -108,21 +108,21 @@ func TestContextAndTurns(t *testing.T) {
 		t.Fatal("context gol")
 	}
 	task := store.Task{Number: 3, Title: "Parser", Description: "Doar local.", Feedback: "Lipsesc testele."}
-	got := TaskTurn(c, task, []string{"T-5 [done] Lexer -> Wes"}, []string{"Utilizatorul: grabeste-te"})
+	got := TaskTurn(c, task, []string{"T-5 [done] Lexer -> Wes"}, []string{"User: hurry up"})
 	want := ctx + "\n\nTask T-3: Parser\nDoar local." +
-		"\n\nSub-task-uri deja create pentru acest task (nu le crea din nou):\n- T-5 [done] Lexer -> Wes" +
-		"\n\nFeedback la incercarea anterioara:\nLipsesc testele." +
-		"\n\nNotificari:\n- Utilizatorul: grabeste-te"
+		"\n\nSubtasks already created for this task (do not create them again):\n- T-5 [done] Lexer -> Wes" +
+		"\n\nFeedback on the previous attempt:\nLipsesc testele." +
+		"\n\nNotifications:\n- User: hurry up"
 	if got != want {
 		t.Fatalf("TaskTurn =\n%s\nvreau\n%s", got, want)
 	}
 	if got := TaskTurn(TurnContext{}, store.Task{Number: 1, Title: "A"}, nil, nil); got != "Task T-1: A" {
 		t.Fatalf("simplu: %q", got)
 	}
-	if got := NotifyTurn(TurnContext{}, []string{"salut"}); got != "Notificari:\n- salut" {
+	if got := NotifyTurn(TurnContext{}, []string{"salut"}); got != "Notifications:\n- salut" {
 		t.Fatalf("NotifyTurn gol: %q", got)
 	}
-	if got := NotifyTurn(c, []string{"x"}); got != ctx+"\n\nNotificari:\n- x" {
+	if got := NotifyTurn(c, []string{"x"}); got != ctx+"\n\nNotifications:\n- x" {
 		t.Fatalf("NotifyTurn: %q", got)
 	}
 }

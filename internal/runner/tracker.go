@@ -60,13 +60,13 @@ func (t *tracker) outcome(runID string, waitErr error, stopped bool) Outcome {
 	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost}
 	switch {
 	case stopped:
-		o.Status, o.Error = "stopped", "oprit"
+		o.Status, o.Error = "stopped", "stopped"
 	case t.isError:
 		o.Status, o.Error = "failed", t.errText
 	case waitErr != nil:
 		o.Status, o.Error = "failed", waitErr.Error()
 	case !t.hasResult:
-		o.Status, o.Error = "failed", "claude s-a oprit fara rezultat"
+		o.Status, o.Error = "failed", "claude exited without a result"
 	}
 	return o
 }

@@ -8,7 +8,7 @@ export function liveRenderer(box) {
     switch (ev.type) {
       case "app_start":
         box.append(el("details", {},
-          el("summary", {}, "Mesajul primit de agent"),
+          el("summary", {}, "Message received by the agent"),
           el("pre", {}, ev.prompt || "")));
         break;
       case "assistant":
@@ -35,9 +35,9 @@ export function liveRenderer(box) {
         break;
       case "result":
         if (ev.is_error) {
-          box.append(el("div", { class: "err" }, "Eroare: " + ((ev.errors || []).join("; ") || ev.result || ev.subtype)));
+          box.append(el("div", { class: "err" }, "Error: " + ((ev.errors || []).join("; ") || ev.result || ev.subtype)));
         } else if (ev.total_cost_usd != null) {
-          box.append(el("div", { class: "hint" }, `Gata, $${ev.total_cost_usd.toFixed(4)}`));
+          box.append(el("div", { class: "hint" }, `Done, $${ev.total_cost_usd.toFixed(4)}`));
         }
         break;
       case "app_stderr":
@@ -48,7 +48,7 @@ export function liveRenderer(box) {
 }
 
 function toolName(name) {
-  return name.replace(/^mcp__team__/, "echipa: ");
+  return name.replace(/^mcp__team__/, "team: ");
 }
 
 // un indiciu scurt langa numele tool-ului: fisierul, comanda, titlul task-ului

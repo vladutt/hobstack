@@ -52,26 +52,26 @@ type TurnContext struct {
 	Stages    string     // pentru lideri, intr-un proiect cu etape: etapele si agentii lor
 }
 
-const howLead = `Esti lider: ai o echipa directa, listata in mesajul turei. Sparge munca in task-uri mici, clare si verificabile ` +
-	`si creeaza-le cu mcp__team__create_task, doar pentru agentii din echipa ta directa, alegand dupa campul "Ce ia" al fiecaruia. ` +
-	`Nu face tu munca lor. Cand primesti rezultate, verifica-le (poti citi fisierele modificate) si apeleaza ` +
-	`mcp__team__accept_task sau mcp__team__send_back cu feedback concret. Foloseste mcp__team__list_tasks ca sa vezi starea. ` +
-	`Nu folosi alte liste de task-uri in afara de tool-urile mcp__team__.`
+const howLead = `You are a lead: you have a direct team, listed in the turn message. Break the work into small, clear, verifiable tasks ` +
+	`and create them with mcp__team__create_task, only for agents on your direct team, choosing by each one's "Takes" field. ` +
+	`Do not do their work yourself. When you receive results, check them (you can read the changed files) and call ` +
+	`mcp__team__accept_task or mcp__team__send_back with concrete feedback. Use mcp__team__list_tasks to see the status. ` +
+	`Do not use any task lists other than the mcp__team__ tools.`
 
-const howSubLead = `Cand primesti un task de la seful tau, sparge-l in sub-task-uri pentru echipa ta si opreste-te fara report_done. ` +
-	`Cand task-ul revine la tine cu toate sub-task-urile gata, verifica rezultatul si apeleaza mcp__team__report_done ` +
-	`cu rezumatul.`
+const howSubLead = `When you receive a task from your boss, break it into subtasks for your team and stop without calling report_done. ` +
+	`When the task comes back to you with all subtasks done, check the result and call mcp__team__report_done ` +
+	`with the summary.`
 
-const howWorker = `Lucreaza doar pe task-ul primit si nu modifica lucruri din afara lui. ` +
-	`Cand termini, apeleaza mcp__team__report_done cu rezumatul cerut. ` +
-	`Daca ceva e neclar sau blocat, apeleaza mcp__team__report_done explicand problema, in loc sa ghicesti.`
+const howWorker = `Work only on the task you received and do not change anything outside it. ` +
+	`When you finish, call mcp__team__report_done with the requested summary. ` +
+	`If something is unclear or blocked, call mcp__team__report_done explaining the problem instead of guessing.`
 
-const howReviewer = `Verifici munca agentilor din "Revizuiesti munca lui" (din mesajul turei). Cand primesti un task de verificat, ` +
-	`citeste rezultatul si fisierele schimbate, apoi apeleaza mcp__team__review_approve daca e bun, sau ` +
-	`mcp__team__review_reject cu feedback concret: ce e gresit si ce trebuie schimbat. ` +
-	`Citeste fisierele modificate ca sa verifici munca, nu te baza doar pe rezumat.`
+const howReviewer = `You check the work of the agents listed under "You review the work of" (in the turn message). When you receive a task to check, ` +
+	`read the result and the changed files, then call mcp__team__review_approve if it is good, or ` +
+	`mcp__team__review_reject with concrete feedback: what is wrong and what needs to change. ` +
+	`Read the changed files to check the work; do not rely only on the summary.`
 
-const howSolo = `Vorbesti direct cu utilizatorul si nu ai echipa. Raspunde la mesajele lui si fa munca ceruta.`
+const howSolo = `You talk directly with the user and have no team. Reply to their messages and do the requested work.`
 
 // System compileaza system prompt-ul agentului. Contine doar date stabile:
 // Claude Code il inregistreaza la prima cerere a sesiunii si il retrimite
@@ -85,37 +85,37 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if role == "" {
 		role = "agent"
 	}
-	reports := "Raportezi utilizatorului."
+	reports := "You report to the user."
 	if !isRoot {
-		reports = fmt.Sprintf("Raportezi lui %s.", l.BossName)
+		reports = fmt.Sprintf("You report to %s.", l.BossName)
 	}
-	section(&b, "Rol", fmt.Sprintf("Esti %s, %s, in proiectul %s. %s", a.Name, role, p.Name, reports))
+	section(&b, "Role", fmt.Sprintf("You are %s, %s, in the project %s. %s", a.Name, role, p.Name, reports))
 	section(&b, "Background", a.Background)
-	section(&b, "Instructiuni", a.Instructions)
+	section(&b, "Instructions", a.Instructions)
 
 	done := strings.TrimSpace(a.DoneDef)
 	if isRoot {
-		text := "Cand obiectivul e atins, scrie utilizatorului un rezumat."
+		text := "When the goal is reached, write the user a summary."
 		if done != "" {
-			text += " Rezumatul contine: " + done
+			text += " The summary includes: " + done
 		}
-		section(&b, "Cand termini", text)
+		section(&b, "When you finish", text)
 	} else {
-		text := "Apeleaza mcp__team__report_done cu un rezumat al muncii."
+		text := "Call mcp__team__report_done with a summary of the work."
 		if done != "" {
-			text = "Apeleaza mcp__team__report_done cu: " + done
+			text = "Call mcp__team__report_done with: " + done
 		}
-		section(&b, "Cand termini un task", text)
+		section(&b, "When you finish a task", text)
 	}
 
 	var proj []string
 	if g := strings.TrimSpace(p.Goal); g != "" {
-		proj = append(proj, "Obiectiv: "+g)
+		proj = append(proj, "Goal: "+g)
 	}
 	if c := strings.TrimSpace(p.Context); c != "" {
-		proj = append(proj, "Context comun:\n"+c)
+		proj = append(proj, "Shared context:\n"+c)
 	}
-	section(&b, "Proiect", strings.Join(proj, "\n\n"))
+	section(&b, "Project", strings.Join(proj, "\n\n"))
 
 	// "Cum lucrezi" se compune din blocurile care se aplica agentului
 	var how []string
@@ -133,7 +133,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if isRoot && !l.IsLead && !l.IsReviewer {
 		how = append(how, howSolo)
 	}
-	section(&b, "Cum lucrezi", strings.Join(how, "\n\n"))
+	section(&b, "How you work", strings.Join(how, "\n\n"))
 	return strings.TrimSpace(b.String())
 }
 
@@ -158,7 +158,7 @@ func Team(members []Member) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Echipa ta directa:")
+	b.WriteString("Your direct team:")
 	for _, m := range members {
 		b.WriteString("\n- " + m.Name)
 		var parts []string
@@ -171,7 +171,7 @@ func Team(members []Member) string {
 			b.WriteString(": " + strings.Join(parts, ", "))
 		}
 		if m.Responsibilities != "" {
-			b.WriteString("\n  Ce ia: " + m.Responsibilities)
+			b.WriteString("\n  Takes: " + m.Responsibilities)
 		}
 	}
 	return b.String()
@@ -190,15 +190,15 @@ func Context(c TurnContext) string {
 		parts = append(parts, c.Stages)
 	}
 	if len(c.Reviewees) > 0 {
-		parts = append(parts, "Revizuiesti munca lui: "+strings.Join(c.Reviewees, ", "))
+		parts = append(parts, "You review the work of: "+strings.Join(c.Reviewees, ", "))
 	}
 	if len(c.OpenTasks) > 0 {
 		var b strings.Builder
-		b.WriteString("Task-urile tale deschise:")
+		b.WriteString("Your open tasks:")
 		for _, o := range c.OpenTasks {
-			progress := "fara sub-task-uri inca"
+			progress := "no subtasks yet"
 			if o.Total > 0 {
-				progress = fmt.Sprintf("sub-task-uri gata: %d din %d", o.Done, o.Total)
+				progress = fmt.Sprintf("subtasks done: %d of %d", o.Done, o.Total)
 			}
 			fmt.Fprintf(&b, "\n- %s: %s (%s)", o.Ref, o.Title, progress)
 		}
@@ -219,13 +219,13 @@ func TaskTurn(c TurnContext, t store.Task, subtasks, notes []string) string {
 	}
 	parts = append(parts, task)
 	if len(subtasks) > 0 {
-		parts = append(parts, bullets("Sub-task-uri deja create pentru acest task (nu le crea din nou):", subtasks))
+		parts = append(parts, bullets("Subtasks already created for this task (do not create them again):", subtasks))
 	}
 	if f := strings.TrimSpace(t.Feedback); f != "" {
-		parts = append(parts, "Feedback la incercarea anterioara:\n"+f)
+		parts = append(parts, "Feedback on the previous attempt:\n"+f)
 	}
 	if len(notes) > 0 {
-		parts = append(parts, bullets("Notificari:", notes))
+		parts = append(parts, bullets("Notifications:", notes))
 	}
 	return strings.Join(parts, "\n\n")
 }
@@ -236,7 +236,7 @@ func NotifyTurn(c TurnContext, notes []string) string {
 	if ctx := Context(c); ctx != "" {
 		parts = append(parts, ctx)
 	}
-	parts = append(parts, bullets("Notificari:", notes))
+	parts = append(parts, bullets("Notifications:", notes))
 	return strings.Join(parts, "\n\n")
 }
 

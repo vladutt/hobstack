@@ -16,7 +16,7 @@ func Pick(ctx context.Context) (string, error) {
 	cmd := exec.CommandContext(ctx, "osascript",
 		"-e", `tell application "System Events"`,
 		"-e", `activate`,
-		"-e", `set f to POSIX path of (choose folder with prompt "Alege folderul proiectului")`,
+		"-e", `set f to POSIX path of (choose folder with prompt "Choose the project folder")`,
 		"-e", `end tell`,
 		"-e", `return f`,
 	)

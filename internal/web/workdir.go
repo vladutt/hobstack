@@ -29,7 +29,7 @@ func slugify(name string) string {
 		slug = strings.Trim(slug[:60], "-")
 	}
 	if slug == "" {
-		return "proiect"
+		return "project"
 	}
 	return slug
 }
@@ -40,7 +40,7 @@ func resolveWorkdir(input, projectName, workspaces string) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		if err := os.MkdirAll(workspaces, 0o755); err != nil {
-			return "", fmt.Errorf("nu pot crea %s: %w", workspaces, err)
+			return "", fmt.Errorf("cannot create %s: %w", workspaces, err)
 		}
 		base := filepath.Join(workspaces, slugify(projectName))
 		// Mkdir esueaza atomic daca exista deja, deci nu avem cursa check-then-create.
@@ -54,27 +54,27 @@ func resolveWorkdir(input, projectName, workspaces string) (string, error) {
 				return dir, nil
 			}
 			if !errors.Is(err, fs.ErrExist) {
-				return "", fmt.Errorf("nu pot crea folderul de lucru: %w", err)
+				return "", fmt.Errorf("cannot create the working folder: %w", err)
 			}
 		}
-		return "", fmt.Errorf("nu gasesc un nume liber pentru folderul de lucru in %s", workspaces)
+		return "", fmt.Errorf("cannot find a free name for the working folder in %s", workspaces)
 	}
 	dir, err := expandHome(input)
 	if err != nil {
 		return "", err
 	}
 	if !filepath.IsAbs(dir) {
-		return "", badRequest("folderul de lucru trebuie sa fie o cale absoluta, ex. /Users/tu/proiect sau ~/proiect")
+		return "", badRequest("the working folder must be an absolute path, e.g. /Users/you/project or ~/project")
 	}
 	dir = filepath.Clean(dir)
 	if info, err := os.Stat(dir); err == nil {
 		if !info.IsDir() {
-			return "", badRequest("exista deja un fisier cu acest nume: " + dir)
+			return "", badRequest("a file with this name already exists: " + dir)
 		}
 		return dir, nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", badRequest("nu pot crea folderul de lucru " + dir + ": " + err.Error())
+		return "", badRequest("cannot create the working folder " + dir + ": " + err.Error())
 	}
 	return dir, nil
 }

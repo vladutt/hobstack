@@ -21,7 +21,7 @@ func TestFilesDirAndBlockInTurn(t *testing.T) {
 	if argValue(spec.Args, "--add-dir") != dir {
 		t.Fatalf("--add-dir = %q, vreau %q", argValue(spec.Args, "--add-dir"), dir)
 	}
-	want := "Fisiere proiect (le poti citi cu Read):\n- " + filepath.Join(dir, "aa-spec.pdf") + " (spec.pdf)"
+	want := "Project files (you can read them with Read):\n- " + filepath.Join(dir, "aa-spec.pdf") + " (spec.pdf)"
 	if !strings.Contains(turn(spec), want) {
 		t.Fatalf("tura nu contine blocul de fisiere:\n%s", turn(spec))
 	}
@@ -41,7 +41,7 @@ func TestMessageAttachmentsInTurn(t *testing.T) {
 		t.Fatalf("mesajul intors trebuie sa aiba atasamentul: %+v", m)
 	}
 	mustReconcile(t, f)
-	want := "Utilizatorul: Vezi bug-ul\nAtasat: " + filepath.Join(root, "1", "files", "bb-bug.png") + " (bug.png)"
+	want := "User: Vezi bug-ul\nAttached: " + filepath.Join(root, "1", "files", "bb-bug.png") + " (bug.png)"
 	if got := turn(f.fs.last(t, f.lead)); !strings.Contains(got, want) {
 		t.Fatalf("tura lead-ului:\n%s", got)
 	}
@@ -67,7 +67,7 @@ func TestWorkerMessageAttachmentsReachLead(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	got := turn(f.fs.last(t, f.lead))
-	want := "Utilizatorul -> Rook: vezi\nAtasat: " + filepath.Join(root, "1", "files", "bb-bug.png") + " (bug.png)"
+	want := "User -> Rook: vezi\nAttached: " + filepath.Join(root, "1", "files", "bb-bug.png") + " (bug.png)"
 	if !strings.Contains(got, want) {
 		t.Fatalf("tura lead-ului:\n%s", got)
 	}

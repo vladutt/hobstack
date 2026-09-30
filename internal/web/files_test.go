@@ -239,7 +239,7 @@ func TestSlugify(t *testing.T) {
 	for in, want := range map[string]string{
 		"HoReCa QR": "horeca-qr",
 		"Țara mea!": "tara-mea",
-		"   ":       "proiect",
+		"   ":       "project",
 		"a--b__c":   "a-b-c",
 	} {
 		if got := slugify(in); got != want {

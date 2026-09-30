@@ -48,7 +48,7 @@ var safeTools = []string{"write", "git"}
 
 func tooLong(label, v string, max int) error {
 	if utf8.RuneCountInString(v) > max {
-		return ValidationError(fmt.Sprintf("%s: maxim %d de caractere", label, max))
+		return ValidationError(fmt.Sprintf("%s: at most %d characters", label, max))
 	}
 	return nil
 }
@@ -61,23 +61,23 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 	p.Context = strings.TrimSpace(p.Context)
 	p.Rationale = strings.TrimSpace(p.Rationale)
 	if p.Name == "" {
-		return ValidationError("numele proiectului e obligatoriu")
+		return ValidationError("the project name is required")
 	}
 	for _, err := range []error{
-		tooLong("numele proiectului", p.Name, 80),
-		tooLong("obiectivul", p.Goal, 2000), // aceleasi limite ca formularul de proiect
-		tooLong("contextul", p.Context, 20000),
-		tooLong("explicatia", p.Rationale, 4000),
+		tooLong("project name", p.Name, 80),
+		tooLong("goal", p.Goal, 2000), // aceleasi limite ca formularul de proiect
+		tooLong("context", p.Context, 20000),
+		tooLong("rationale", p.Rationale, 4000),
 	} {
 		if err != nil {
 			return err
 		}
 	}
 	if len(p.Agents) == 0 {
-		return ValidationError("propunerea trebuie sa aiba cel putin un agent")
+		return ValidationError("the proposal must have at least one agent")
 	}
 	if len(p.Agents) > maxAgents {
-		return ValidationError(fmt.Sprintf("maxim %d agenti", maxAgents))
+		return ValidationError(fmt.Sprintf("at most %d agents", maxAgents))
 	}
 
 	index := map[string]int{} // nume (litere mici) -> pozitie
@@ -92,20 +92,20 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 		a.Instructions = strings.TrimSpace(a.Instructions)
 		a.DoneDef = strings.TrimSpace(a.DoneDef)
 		if a.Name == "" {
-			return ValidationError("fiecare agent trebuie sa aiba nume")
+			return ValidationError("every agent must have a name")
 		}
 		key := strings.ToLower(a.Name)
 		if _, dup := index[key]; dup {
-			return ValidationError("exista deja un agent cu numele " + a.Name + " in propunere")
+			return ValidationError("there is already an agent named " + a.Name + " in the proposal")
 		}
 		index[key] = i
 		for _, err := range []error{
-			tooLong("numele agentului "+a.Name, a.Name, 40),
-			tooLong("rolul lui "+a.Name, a.Role, 80),
-			tooLong("responsabilitatile lui "+a.Name, a.Responsibilities, 2000),
-			tooLong("background-ul lui "+a.Name, a.Background, 10000),
-			tooLong("instructiunile lui "+a.Name, a.Instructions, 10000),
-			tooLong("definition of done pentru "+a.Name, a.DoneDef, 4000),
+			tooLong("name of agent "+a.Name, a.Name, 40),
+			tooLong("role of "+a.Name, a.Role, 80),
+			tooLong("responsibilities of "+a.Name, a.Responsibilities, 2000),
+			tooLong("background of "+a.Name, a.Background, 10000),
+			tooLong("instructions of "+a.Name, a.Instructions, 10000),
+			tooLong("definition of done of "+a.Name, a.DoneDef, 4000),
 		} {
 			if err != nil {
 				return err
@@ -122,9 +122,9 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 			}
 			if !slices.Contains(allowed, t) {
 				if strictTools {
-					return ValidationError("poti propune doar tool-urile write si git (" + a.Name + ": " + t + ")")
+					return ValidationError("you may propose only the write and git tools (" + a.Name + ": " + t + ")")
 				}
-				return ValidationError("tool necunoscut: " + t)
+				return ValidationError("unknown tool: " + t)
 			}
 			if !slices.Contains(tools, t) {
 				tools = append(tools, t)
@@ -136,19 +136,19 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 	// legaturile: nume din propunere, fara auto-legaturi si fara cicluri
 	roots := 0
 	for _, a := range p.Agents {
-		for _, ref := range []struct{ label, name string }{{"seful", a.ReportsTo}, {"reviewer-ul", a.ReviewedBy}} {
+		for _, ref := range []struct{ label, name string }{{"boss", a.ReportsTo}, {"reviewer", a.ReviewedBy}} {
 			if ref.name == "" {
 				continue
 			}
 			if _, ok := index[strings.ToLower(ref.name)]; !ok {
-				return ValidationError(fmt.Sprintf("%s lui %s (%s) nu exista in propunere", ref.label, a.Name, ref.name))
+				return ValidationError(fmt.Sprintf("the %s of %s (%s) does not exist in the proposal", ref.label, a.Name, ref.name))
 			}
 		}
 		if strings.EqualFold(a.ReportsTo, a.Name) {
-			return ValidationError(a.Name + " nu poate fi propriul sef")
+			return ValidationError(a.Name + " cannot be their own boss")
 		}
 		if strings.EqualFold(a.ReviewedBy, a.Name) {
-			return ValidationError(a.Name + " nu poate fi propriul reviewer")
+			return ValidationError(a.Name + " cannot be their own reviewer")
 		}
 		if a.ReportsTo == "" {
 			roots++
@@ -159,12 +159,12 @@ func ValidateProposal(p *Proposal, strictTools bool) error {
 		for p.Agents[cur].ReportsTo != "" {
 			cur = index[strings.ToLower(p.Agents[cur].ReportsTo)]
 			if steps++; cur == i || steps > len(p.Agents) {
-				return ValidationError("legatura ar crea un ciclu (" + p.Agents[i].Name + ")")
+				return ValidationError("the link would create a cycle (" + p.Agents[i].Name + ")")
 			}
 		}
 	}
 	if roots == 0 {
-		return ValidationError("cel putin un agent trebuie sa raporteze utilizatorului (reportsTo gol)")
+		return ValidationError("at least one agent must report to the user (empty reportsTo)")
 	}
 	return nil
 }

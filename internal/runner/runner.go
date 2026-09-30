@@ -20,8 +20,8 @@ import (
 )
 
 var (
-	ErrBusy     = errors.New("agentul are deja un run activ")
-	ErrNotFound = errors.New("run inexistent")
+	ErrBusy     = errors.New("the agent already has an active run")
+	ErrNotFound = errors.New("run not found")
 )
 
 // Spec descrie un run: ce argumente primeste claude si unde ruleaza.
@@ -216,7 +216,7 @@ func (m *Manager) Start(spec Spec, onDone func(Outcome)) (*Run, error) {
 		logFile.Close()
 		cancel()
 		release()
-		return nil, fmt.Errorf("nu pot porni claude: %w", err)
+		return nil, fmt.Errorf("cannot start claude: %w", err)
 	}
 
 	m.mu.Lock()

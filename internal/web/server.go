@@ -117,7 +117,7 @@ func guard(next http.Handler) http.Handler {
 			host = h
 		}
 		if host != "127.0.0.1" && host != "localhost" {
-			writeErr(w, http.StatusForbidden, "host nepermis")
+			writeErr(w, http.StatusForbidden, "host not allowed")
 			return
 		}
 		// Content-Type: cererile care schimba starea trebuie sa fie JSON, chiar
@@ -128,7 +128,7 @@ func guard(next http.Handler) http.Handler {
 			ok := strings.HasPrefix(ct, "application/json") ||
 				(strings.HasPrefix(ct, "multipart/form-data") && r.Header.Get("X-Foreman") == "1")
 			if !ok {
-				writeErr(w, http.StatusUnsupportedMediaType, "Content-Type trebuie sa fie application/json (sau multipart cu X-Foreman: 1)")
+				writeErr(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json (or multipart with X-Foreman: 1)")
 				return
 			}
 		}
@@ -147,7 +147,7 @@ func (e badRequest) Error() string { return string(e) }
 
 func maxLen(label, value string, max int) error {
 	if utf8.RuneCountInString(value) > max {
-		return badRequest(fmt.Sprintf("%s: maxim %d de caractere", label, max))
+		return badRequest(fmt.Sprintf("%s: at most %d characters", label, max))
 	}
 	return nil
 }
@@ -162,28 +162,28 @@ func fail(w http.ResponseWriter, err error) {
 	case errors.As(err, &le):
 		writeErr(w, http.StatusBadRequest, le.Error())
 	case errors.Is(err, store.ErrNotFound):
-		writeErr(w, http.StatusNotFound, "nu exista")
+		writeErr(w, http.StatusNotFound, "not found")
 	case errors.Is(err, team.ErrNotBlocked):
 		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, store.ErrConflict):
-		writeErr(w, http.StatusConflict, "conflict cu starea curenta")
+		writeErr(w, http.StatusConflict, "conflict with the current state")
 	default:
-		log.Printf("eroare API: %v", err)
-		writeErr(w, http.StatusInternalServerError, "eroare interna, vezi logul serverului")
+		log.Printf("API error: %v", err)
+		writeErr(w, http.StatusInternalServerError, "internal error, see the server log")
 	}
 }
 
 func pathID(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		return 0, badRequest("id invalid")
+		return 0, badRequest("invalid id")
 	}
 	return id, nil
 }
 
 func decode(r *http.Request, v any) error {
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(v); err != nil {
-		return badRequest("JSON invalid")
+		return badRequest("invalid JSON")
 	}
 	return nil
 }

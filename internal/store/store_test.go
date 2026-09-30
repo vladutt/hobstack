@@ -260,12 +260,12 @@ func TestLinksInvariants(t *testing.T) {
 		edit func() Agent
 		want string
 	}{
-		{"propriul sef", func() Agent { x := a; x.ParentID = &a.ID; return x }, "un agent nu poate fi propriul sef"},
-		{"ciclu", func() Agent { x := lead; x.ParentID = &b.ID; return x }, "legatura ar crea un ciclu"},
-		{"sef din alt proiect", func() Agent { x := a; x.ParentID = &otherLead.ID; return x }, "seful ales nu e in acest proiect"},
-		{"sef inexistent", func() Agent { x := a; x.ParentID = ptr(9999); return x }, "seful ales nu e in acest proiect"},
-		{"propriul reviewer", func() Agent { x := a; x.ReviewerID = &a.ID; return x }, "un agent nu poate fi propriul reviewer"},
-		{"reviewer din alt proiect", func() Agent { x := a; x.ReviewerID = &otherLead.ID; return x }, "reviewer-ul ales nu e in acest proiect"},
+		{"propriul sef", func() Agent { x := a; x.ParentID = &a.ID; return x }, "an agent cannot be its own boss"},
+		{"ciclu", func() Agent { x := lead; x.ParentID = &b.ID; return x }, "the link would create a cycle"},
+		{"sef din alt proiect", func() Agent { x := a; x.ParentID = &otherLead.ID; return x }, "the chosen boss is not in this project"},
+		{"sef inexistent", func() Agent { x := a; x.ParentID = ptr(9999); return x }, "the chosen boss is not in this project"},
+		{"propriul reviewer", func() Agent { x := a; x.ReviewerID = &a.ID; return x }, "an agent cannot be its own reviewer"},
+		{"reviewer din alt proiect", func() Agent { x := a; x.ReviewerID = &otherLead.ID; return x }, "the chosen reviewer is not in this project"},
 	}
 	for _, c := range cases {
 		err := s.UpdateAgent(c.edit())

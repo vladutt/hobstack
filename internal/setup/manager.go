@@ -24,7 +24,7 @@ const (
 	StatusStopped = "stopped"
 )
 
-var ErrNotFound = errors.New("sesiunea de setup nu exista (poate serverul a fost repornit)")
+var ErrNotFound = errors.New("the setup session does not exist (maybe the server was restarted)")
 
 // Starter e partea din runner.Manager de care avem nevoie (inlocuita in teste).
 type Starter interface {
@@ -72,13 +72,13 @@ func randomHex(n int) string {
 func (m *Manager) Start(workdir, description, model string) (Session, error) {
 	workdir, description = strings.TrimSpace(workdir), strings.TrimSpace(description)
 	if workdir == "" && description == "" {
-		return Session{}, ValidationError("alege un folder sau descrie ce vrei sa faci")
+		return Session{}, ValidationError("choose a folder or describe what you want to do")
 	}
-	if err := tooLong("descrierea", description, 4000); err != nil {
+	if err := tooLong("description", description, 4000); err != nil {
 		return Session{}, err
 	}
 	if !models.Valid(model) {
-		return Session{}, ValidationError("model necunoscut: " + model)
+		return Session{}, ValidationError("unknown model: " + model)
 	}
 	if workdir != "" {
 		dir, err := expandHome(workdir)
@@ -86,14 +86,14 @@ func (m *Manager) Start(workdir, description, model string) (Session, error) {
 			return Session{}, err
 		}
 		if !filepath.IsAbs(dir) {
-			return Session{}, ValidationError("folderul trebuie sa fie o cale absoluta")
+			return Session{}, ValidationError("the folder must be an absolute path")
 		}
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			return Session{}, ValidationError("folderul nu exista: " + dir)
+			return Session{}, ValidationError("the folder does not exist: " + dir)
 		}
 		// un folder gol nu spune nimic despre proiect: fara descriere n-avem ce analiza
 		if entries, _ := os.ReadDir(dir); len(entries) == 0 && description == "" {
-			return Session{}, ValidationError("folderul e gol: descrie ce vrei sa faci")
+			return Session{}, ValidationError("the folder is empty: describe what you want to do")
 		}
 		workdir = filepath.Clean(dir)
 	}
@@ -163,9 +163,9 @@ func (m *Manager) finish(id string, o runner.Outcome) {
 	case s.Proposal != nil:
 		s.Status = StatusReady // chiar daca run-ul a esuat dupa ce a propus
 	case o.Status == "failed":
-		s.Status, s.Error = StatusFailed, firstNonEmpty(o.Error, o.Result, "analiza a esuat")
+		s.Status, s.Error = StatusFailed, firstNonEmpty(o.Error, o.Result, "the analysis failed")
 	default:
-		s.Status, s.Error = StatusFailed, "AI-ul nu a propus nimic. Reincearca."
+		s.Status, s.Error = StatusFailed, "The AI did not propose anything. Try again."
 	}
 }
 
@@ -219,7 +219,7 @@ func (m *Manager) cleanupOld() {
 func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 	var p Proposal
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return "", ValidationError("propunerea nu e JSON valid: " + err.Error())
+		return "", ValidationError("the proposal is not valid JSON: " + err.Error())
 	}
 	if err := ValidateProposal(&p, true); err != nil {
 		return "", err
@@ -231,7 +231,7 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 		return "", ErrNotFound
 	}
 	s.Proposal = &p // o propunere noua o inlocuieste pe cea veche
-	return "Propunere primita. Ai terminat: nu mai face nimic.", nil
+	return "Proposal received. You are done: do nothing else.", nil
 }
 
 // Wrap pune token-urile wizard-ului in fata backend-ului echipei.
@@ -254,7 +254,7 @@ func (b *backend) Resolve(token string) (mcp.Caller, bool) {
 
 func (b *backend) ProposeSetup(c mcp.Caller, args json.RawMessage) (string, error) {
 	if c.SetupID == "" {
-		return "", errors.New("propose_setup e doar pentru wizard")
+		return "", errors.New("propose_setup is only for the setup wizard")
 	}
 	return b.m.propose(c.SetupID, args)
 }

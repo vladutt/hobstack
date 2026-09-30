@@ -45,20 +45,20 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
   let nodeEls = new Map();   // id -> g.node
   let menu = null;
 
-  const svgEl = svg("svg", { class: "team-canvas", preserveAspectRatio: "xMidYMin meet", role: "img", "aria-label": "Graful echipei" });
-  const deleteBtn = el("button", { type: "button", class: "btn small canvas-delete", disabled: true, onclick: () => deleteLink() }, "Sterge legatura");
-  const fullBtn = el("button", { type: "button", class: "btn small canvas-full-toggle", onclick: () => setFull(!wrap.classList.contains("full")) }, "Ecran mare");
+  const svgEl = svg("svg", { class: "team-canvas", preserveAspectRatio: "xMidYMin meet", role: "img", "aria-label": "Team graph" });
+  const deleteBtn = el("button", { type: "button", class: "btn small canvas-delete", disabled: true, onclick: () => deleteLink() }, "Delete link");
+  const fullBtn = el("button", { type: "button", class: "btn small canvas-full-toggle", onclick: () => setFull(!wrap.classList.contains("full")) }, "Full screen");
   const legend = (cls, label) => el("span", { class: "legend-item" },
     svg("svg", { width: 28, height: 8, "aria-hidden": "true" }, svg("line", { x1: 1, y1: 4, x2: 27, y2: 4, class: "edge " + cls })), label);
   const addBtn = el("button", { type: "button", class: "btn small primary", onclick: () => onCreate(null, UNLINKED) }, "+ Agent");
-  const bar = el("div", { class: "canvas-bar" }, legend("delegate", "Delegare"), legend("review", "Review"),
+  const bar = el("div", { class: "canvas-bar" }, legend("delegate", "Delegation"), legend("review", "Review"),
     el("span", { class: "grow" }), deleteBtn, fullBtn, addBtn);
-  const tip = el("span", { class: "canvas-tip" }, "Trage de \u25CF pe un agent ca sa legi, sau in gol ca sa faci un agent nou sub el \u00b7 dublu-click pe gol = agent nelegat \u00b7 x pe linie o sterge");
+  const tip = el("span", { class: "canvas-tip" }, "Drag \u25CF onto an agent to link it, or onto empty space to create a new agent under it \u00b7 double-click empty space = detached agent \u00b7 x on a line deletes it");
   const wrap = el("div", { class: "canvas-wrap", tabindex: "0" }, bar, svgEl, tip);
 
   function setFull(on) {
     wrap.classList.toggle("full", on);
-    fullBtn.textContent = on ? "Inchide" : "Ecran mare";
+    fullBtn.textContent = on ? "Close" : "Full screen";
     closeMenu();
     // cat timp e ecran mare, Escape iese si fara focus pe canvas (focusul se pierde
     // cand un buton se dezactiveaza sau meniul se inchide)
@@ -169,7 +169,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
         class: "edge-hit", "data-link": link,
         onclick: (e) => { e.stopPropagation(); selectedLink = link; syncLinkSelection(); wrap.focus(); },
       });
-      const x = svg("g", { class: "edge-x", role: "button", "aria-label": "Sterge legatura" },
+      const x = svg("g", { class: "edge-x", role: "button", "aria-label": "Delete link" },
         svg("circle", { r: 9 }), svg("path", { d: "M -3.5 -3.5 L 3.5 3.5 M 3.5 -3.5 L -3.5 3.5" }));
       x.addEventListener("pointerdown", (e) => e.stopPropagation());
       x.addEventListener("click", (e) => { e.stopPropagation(); selectedLink = link; deleteLink(); });
@@ -194,14 +194,14 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
   function youNode() {
     return svg("g", { class: "node-you", transform: `translate(${youPos.x} ${youPos.y})` },
       svg("rect", { class: "card", width: YOU_W, height: YOU_H, rx: 8 }),
-      svg("text", { class: "you-label", x: YOU_W / 2, y: YOU_H / 2 + 4, "text-anchor": "middle" }, "Tu"),
+      svg("text", { class: "you-label", x: YOU_W / 2, y: YOU_H / 2 + 4, "text-anchor": "middle" }, "You"),
       handle(YOU_W / 2, YOU_H, "you"));
   }
 
   function agentNode(a) {
     const p = pos.get(a.id);
     const dot = "status-dot " + (a.status || "idle").toLowerCase();
-    const del = svg("g", { class: "node-x", role: "button", "aria-label": "Sterge agentul " + a.name, transform: `translate(${NODE_W - 2} 2)` },
+    const del = svg("g", { class: "node-x", role: "button", "aria-label": "Delete agent " + a.name, transform: `translate(${NODE_W - 2} 2)` },
       svg("circle", { r: 9 }), svg("path", { d: "M -3.5 -3.5 L 3.5 3.5 M 3.5 -3.5 L -3.5 3.5" }));
     del.addEventListener("pointerdown", (e) => e.stopPropagation()); // nu porneste mutarea nodului
     del.addEventListener("click", (e) => { e.stopPropagation(); onDelete(a.id); });
@@ -213,7 +213,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
         svg("text", { class: "name", x: 46, y: 24 }, shorten(a.name || "", 16)),
         svg("text", { class: "sub", x: 46, y: 40 }, shorten(a.role || "")),
         svg("text", { class: "sub" + (a.detached ? " unlinked" : ""), x: 46, y: 54 },
-          a.detached ? "nelegat" : a.responsibilities ? shorten("Ce ia: " + a.responsibilities) : ""),
+          a.detached ? "detached" : a.responsibilities ? shorten("Takes: " + a.responsibilities) : ""),
         svg("circle", { class: dot, cx: NODE_W - 22, cy: 14, r: 4 })),
       handle(NODE_W / 2, NODE_H, a.id), del);
     g.addEventListener("pointerdown", (e) => startMove(e, a.id, g));
@@ -337,9 +337,9 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
     if (!target) return;
     const w = wrap.getBoundingClientRect();
     menu = el("div", { class: "link-menu", style: `left:${Math.round(e.clientX - w.left)}px; top:${Math.round(e.clientY - w.top)}px` },
-      el("button", { type: "button", "data-kind": "delegate", onclick: () => choose({ parentId: sourceId === "you" ? null : sourceId, detached: false }) }, "Delegheaza catre " + target.name),
-      sourceId !== "you" && el("button", { type: "button", "data-kind": "review", onclick: () => choose({ reviewerId: sourceId }) }, "Verifica munca lui " + target.name),
-      el("button", { type: "button", "data-kind": "cancel", onclick: closeMenu }, "Renunta"));
+      el("button", { type: "button", "data-kind": "delegate", onclick: () => choose({ parentId: sourceId === "you" ? null : sourceId, detached: false }) }, "Delegate to " + target.name),
+      sourceId !== "you" && el("button", { type: "button", "data-kind": "review", onclick: () => choose({ reviewerId: sourceId }) }, "Review work of " + target.name),
+      el("button", { type: "button", "data-kind": "cancel", onclick: closeMenu }, "Cancel"));
     wrap.append(menu);
     // in limitele canvas-ului (dupa ce are dimensiuni)
     const left = Math.max(0, Math.min(e.clientX - w.left, w.width - menu.offsetWidth - 4));

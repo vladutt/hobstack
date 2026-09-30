@@ -31,7 +31,7 @@ func (s *Server) editors() []opener.Editor {
 // openProject: POST /api/projects/{id}/open cu {target: folder|browser|editor, editor}.
 func (s *Server) openProject(w http.ResponseWriter, r *http.Request) {
 	if s.opener == nil {
-		writeErr(w, http.StatusNotImplemented, "deschiderea nu e disponibila pe acest sistem")
+		writeErr(w, http.StatusNotImplemented, "opening is not available on this system")
 		return
 	}
 	id, err := pathID(r)
@@ -53,7 +53,7 @@ func (s *Server) openProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if info, err := os.Stat(p.Workdir); err != nil || !info.IsDir() {
-		fail(w, badRequest("folderul de lucru nu exista: "+p.Workdir))
+		fail(w, badRequest("the working folder does not exist: "+p.Workdir))
 		return
 	}
 
@@ -77,7 +77,7 @@ func (s *Server) openProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	default:
-		fail(w, badRequest("target necunoscut; foloseste folder, browser sau editor"))
+		fail(w, badRequest("unknown target; use folder, browser or editor"))
 		return
 	}
 	if err != nil {

@@ -109,7 +109,7 @@ func TestManagerNoProposalFails(t *testing.T) {
 	}
 	f.done[spec.ID](runner.Outcome{RunID: spec.ID, Status: "done"})
 	got, _ := m.Get(s.ID)
-	if got.Status != StatusFailed || !strings.Contains(got.Error, "nu a propus nimic") {
+	if got.Status != StatusFailed || !strings.Contains(got.Error, "did not propose anything") {
 		t.Fatalf("%+v", got)
 	}
 	if _, err := os.Stat(spec.Dir); !os.IsNotExist(err) {
@@ -144,7 +144,7 @@ func TestManagerStopAndValidation(t *testing.T) {
 // un folder gol fara descriere nu are ce analiza
 func TestManagerEmptyFolderNeedsDescription(t *testing.T) {
 	m, f := newTest(t)
-	if _, err := m.Start(t.TempDir(), "", "sonnet"); err == nil || !strings.Contains(err.Error(), "folderul e gol") {
+	if _, err := m.Start(t.TempDir(), "", "sonnet"); err == nil || !strings.Contains(err.Error(), "the folder is empty") {
 		t.Fatalf("am %v", err)
 	}
 	if len(f.specs) != 0 {

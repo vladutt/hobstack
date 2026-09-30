@@ -20,10 +20,10 @@ func FilesBlock(files []FileRef) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Fisiere proiect (le poti citi cu Read):")
+	b.WriteString("Project files (you can read them with Read):")
 	for i, f := range files {
 		if i == maxFiles {
-			fmt.Fprintf(&b, "\n- ... si inca %d fisiere", len(files)-maxFiles)
+			fmt.Fprintf(&b, "\n- ... and %d more files", len(files)-maxFiles)
 			break
 		}
 		fmt.Fprintf(&b, "\n- %s (%s)", f.Path, f.Name)

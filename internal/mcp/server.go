@@ -69,19 +69,19 @@ type rpcError struct {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	caller, ok := s.backend.Resolve(r.PathValue("token"))
 	if !ok {
-		http.Error(w, "token necunoscut", http.StatusNotFound)
+		http.Error(w, "unknown token", http.StatusNotFound)
 		return
 	}
 	// Claude deschide si un GET pentru mesaje server -> client; nu avem asa ceva.
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		http.Error(w, "doar POST", http.StatusMethodNotAllowed)
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req request
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
-		writeJSON(w, response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{-32700, "JSON invalid"}})
+		writeJSON(w, response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{-32700, "invalid JSON"}})
 		return
 	}
 	// notificare (fara id): nu se asteapta raspuns
@@ -101,7 +101,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "tools/call":
 		resp.Result = s.call(caller, req.Params)
 	default:
-		resp.Error = &rpcError{-32601, "metoda necunoscuta: " + req.Method}
+		resp.Error = &rpcError{-32601, "unknown method: " + req.Method}
 	}
 	writeJSON(w, resp)
 }
@@ -128,10 +128,10 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		Arguments map[string]any `json:"arguments"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
-		return toolResult("parametri invalizi", true)
+		return toolResult("invalid parameters", true)
 	}
 	if !allowed(c, p.Name) {
-		return toolResult("tool-ul "+p.Name+" nu e disponibil pentru rolul tau", true)
+		return toolResult("the tool "+p.Name+" is not available for your role", true)
 	}
 	arg := func(key string) string { return argString(p.Arguments, key) }
 

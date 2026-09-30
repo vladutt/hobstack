@@ -22,7 +22,7 @@ type Stage struct {
 type StageInUseError string
 
 func (e StageInUseError) Error() string {
-	return "etapa " + string(e) + " are task-uri: termina-le sau muta-le intai"
+	return "stage " + string(e) + " has tasks: finish or move them first"
 }
 
 // ListStages intoarce etapele proiectului in ordinea de pe board.

@@ -21,7 +21,7 @@ func (s *Server) streamRun(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeErr(w, http.StatusInternalServerError, "streaming nesuportat")
+		writeErr(w, http.StatusInternalServerError, "streaming not supported")
 		return
 	}
 	sseHeaders(w)
@@ -69,13 +69,13 @@ func (s *Server) projectEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeErr(w, http.StatusInternalServerError, "streaming nesuportat")
+		writeErr(w, http.StatusInternalServerError, "streaming not supported")
 		return
 	}
 	sseHeaders(w)
 	ch, cancel := s.hub.Subscribe(id)
 	defer cancel()
-	fmt.Fprint(w, ": conectat\n\n")
+	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
 
 	ping := time.NewTicker(15 * time.Second)

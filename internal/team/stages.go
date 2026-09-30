@@ -10,7 +10,6 @@ import (
 	"foreman/internal/store"
 )
 
-
 // stageIndex intoarce pozitia etapei id in lista (-1 daca nu exista).
 func stageIndex(stages []store.Stage, id *int64) int {
 	if id == nil {
@@ -61,15 +60,15 @@ func stageLine(stages []store.Stage, task store.Task) string {
 		return ""
 	}
 	st := stages[i]
-	next := "liderul, care decide"
+	next := "the lead, who decides"
 	if n, ok := nextStage(stages, task.StageID); ok {
 		next = n.Name
 	}
 	if st.Kind == store.KindCheck {
-		return fmt.Sprintf("Etapa: %s (verificare). Verifica munca (citeste fisierele, nu doar rezumatul) si apeleaza "+
-			"mcp__team__review_approve daca e buna (merge la %s) sau mcp__team__review_reject cu feedback concret.", st.Name, next)
+		return fmt.Sprintf("Stage: %s (check). Check the work (read the files, not just the summary) and call "+
+			"mcp__team__review_approve if it is good (it goes to %s) or mcp__team__review_reject with concrete feedback.", st.Name, next)
 	}
-	return fmt.Sprintf("Etapa: %s (lucru). Cand termini, apeleaza mcp__team__report_done cu rezumatul; task-ul merge la %s.", st.Name, next)
+	return fmt.Sprintf("Stage: %s (work). When you finish, call mcp__team__report_done with the summary; the task goes to %s.", st.Name, next)
 }
 
 // AssignError: agentul ales nu poate lua task-ul (mesajul ajunge in UI, 400).
@@ -78,20 +77,20 @@ type AssignError string
 func (e AssignError) Error() string { return string(e) }
 
 // ErrTaskBusy: task-ul e in lucru; nu il mutam de sub agentul care lucreaza.
-var ErrTaskBusy = errors.New("task-ul e in lucru: asteapta sa termine sau opreste echipa")
+var ErrTaskBusy = errors.New("the task is in progress: wait for it to finish or stop the team")
 
 // checkAssignee verifica un agent ales de utilizator pentru un task: din
 // proiect, legat, si (in etape) din etapa data.
 func checkAssignee(agents []store.Agent, agentID int64, stage *store.Stage) (store.Agent, error) {
 	a, ok := store.FindAgent(agents, agentID)
 	if !ok {
-		return a, AssignError("agentul ales nu e in acest proiect")
+		return a, AssignError("the chosen agent is not in this project")
 	}
 	if a.Detached {
-		return a, AssignError(a.Name + " e nelegat: leaga-l pe canvas ca sa poata lucra")
+		return a, AssignError(a.Name + " is detached: link it on the canvas so it can work")
 	}
 	if stage != nil && !slices.Contains(stage.AgentIDs, a.ID) {
-		return a, AssignError(fmt.Sprintf("%s nu e in etapa %s", a.Name, stage.Name))
+		return a, AssignError(fmt.Sprintf("%s is not in stage %s", a.Name, stage.Name))
 	}
 	return a, nil
 }
@@ -111,7 +110,7 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 		return store.Task{}, err
 	}
 	if len(agents) == 0 {
-		return store.Task{}, AssignError("proiectul nu are agenti")
+		return store.Task{}, AssignError("the project has no agents")
 	}
 	task := store.Task{ProjectID: projectID, Title: title, Description: description, ByUser: true}
 	if len(stages) > 0 {
@@ -126,7 +125,7 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 		}
 	} else {
 		if agentID == 0 {
-			return store.Task{}, AssignError("alege agentul care face task-ul")
+			return store.Task{}, AssignError("choose the agent who does the task")
 		}
 		if _, err := checkAssignee(agents, agentID, nil); err != nil {
 			return store.Task{}, err
@@ -137,7 +136,7 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 		return store.Task{}, err
 	}
 	if a, ok := store.FindAgent(agents, task.AssigneeID); ok && task.StageID == nil {
-		t.note(projectID, a.ID, fmt.Sprintf("%s asignat de utilizator: %s", task.Ref(), title), true)
+		t.note(projectID, a.ID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), title), true)
 	}
 	t.emit(projectID, "task", task)
 	t.Kick(projectID)
@@ -157,7 +156,7 @@ func (t *Team) AssignTask(taskID, agentID int64) error {
 		return ErrTaskBusy
 	}
 	if task.Status != store.StatusQueued && task.Status != store.StatusBlocked {
-		return AssignError(fmt.Sprintf("%s e %s; se pot muta doar task-uri in asteptare sau blocate", task.Ref(), task.Status))
+		return AssignError(fmt.Sprintf("%s is %s; only queued or blocked tasks can be moved", task.Ref(), task.Status))
 	}
 	agents, err := t.st.ListAgents(task.ProjectID)
 	if err != nil {
@@ -185,15 +184,15 @@ func (t *Team) AssignTask(taskID, agentID int64) error {
 		return err
 	}
 	if boss, ok := decider(task, agents); ok {
-		t.note(task.ProjectID, boss.ID, fmt.Sprintf("Utilizatorul a mutat %s la %s.", task.Ref(), a.Name), true)
+		t.note(task.ProjectID, boss.ID, fmt.Sprintf("The user moved %s to %s.", task.Ref(), a.Name), true)
 	}
-	t.note(task.ProjectID, a.ID, fmt.Sprintf("%s asignat de utilizator: %s", task.Ref(), task.Title), true)
+	t.note(task.ProjectID, a.ID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), task.Title), true)
 	t.emit(task.ProjectID, "task", task)
 	t.Kick(task.ProjectID)
 	return nil
 }
 
-var ErrNotUserDecision = errors.New("task-ul nu asteapta decizia ta")
+var ErrNotUserDecision = errors.New("the task is not waiting for your decision")
 
 // advance muta un task (cu Result pus) in etapa urmatoare, sau la lider dupa
 // ultima etapa. Se apeleaza cu t.work blocat. Intoarce textul pentru apelant.
@@ -208,7 +207,7 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 		}
 		t.emit(task.ProjectID, "task", *task)
 		t.Kick(task.ProjectID)
-		return fmt.Sprintf("%s a trecut in etapa %s.", task.Ref(), next.Name), nil
+		return fmt.Sprintf("%s moved to stage %s.", task.Ref(), next.Name), nil
 	}
 	task.StageID = nil
 	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
@@ -217,10 +216,10 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 	}
 	t.emit(task.ProjectID, "task", *task)
 	if boss, ok := decider(*task, agents); ok {
-		t.note(task.ProjectID, boss.ID, clip(fmt.Sprintf("%s a trecut prin toate etapele (ultimul: %s). Decide cu accept_task sau send_back: %s", task.Ref(), byName, task.Result)), false)
+		t.note(task.ProjectID, boss.ID, clip(fmt.Sprintf("%s went through all stages (last: %s). Decide with accept_task or send_back: %s", task.Ref(), byName, task.Result)), false)
 	}
 	t.Kick(task.ProjectID)
-	return fmt.Sprintf("%s a trecut prin toate etapele si asteapta decizia liderului.", task.Ref()), nil
+	return fmt.Sprintf("%s went through all stages and is waiting for the lead's decision.", task.Ref()), nil
 }
 
 // sendToStage pune un task inapoi, Queued, in etapa st, cu feedback (numara
@@ -263,7 +262,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	}
 	feedback = strings.TrimSpace(feedback)
 	if feedback == "" {
-		return errors.New("scrie ce trebuie schimbat")
+		return errors.New("write what needs to change")
 	}
 	stages, err := t.st.ListStages(task.ProjectID)
 	if err != nil {
@@ -297,10 +296,10 @@ func (t *Team) stageCheckTarget(c mcp.Caller, task store.Task) ([]store.Stage, [
 	}
 	i := stageIndex(stages, task.StageID)
 	if i < 0 || stages[i].Kind != store.KindCheck {
-		return nil, nil, fmt.Errorf("%s nu e intr-o etapa de verificare", task.Ref())
+		return nil, nil, fmt.Errorf("%s is not in a check stage", task.Ref())
 	}
 	if task.AssigneeID != c.AgentID || task.Status != store.StatusInProgress {
-		return nil, nil, fmt.Errorf("%s nu e la tine in verificare acum", task.Ref())
+		return nil, nil, fmt.Errorf("%s is not with you for checking right now", task.Ref())
 	}
 	agents, err := t.st.ListAgents(c.ProjectID)
 	return stages, agents, err
@@ -313,11 +312,11 @@ func stagesOverview(stages []store.Stage, agents []store.Agent) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Etapele board-ului (fiecare task trece prin ele in ordine):")
+	b.WriteString("Board stages (every task goes through them in order):")
 	for _, st := range stages {
-		kind := "lucru"
+		kind := "work"
 		if st.Kind == store.KindCheck {
-			kind = "verificare"
+			kind = "check"
 		}
 		var names []string
 		for _, id := range st.AgentIDs {
@@ -327,11 +326,11 @@ func stagesOverview(stages []store.Stage, agents []store.Agent) string {
 		}
 		who := strings.Join(names, ", ")
 		if who == "" {
-			who = "fara agenti"
+			who = "no agents"
 		}
 		fmt.Fprintf(&b, "\n- %s (%s): %s", st.Name, kind, who)
 	}
-	fmt.Fprintf(&b, "\nTask-urile noi intra in %s; assignee e optional (il ia primul agent liber). Dupa ultima etapa decizi tu.", stages[0].Name)
+	fmt.Fprintf(&b, "\nNew tasks enter %s; assignee is optional (the first free agent takes it). After the last stage you decide.", stages[0].Name)
 	return b.String()
 }
 

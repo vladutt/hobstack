@@ -23,7 +23,7 @@ func (f *fakeBackend) CreateTask(c Caller, title, desc, assignee string) (string
 }
 func (f *fakeBackend) ListTasks(c Caller, status string) (string, error) {
 	f.calls = append(f.calls, "list_tasks|"+status)
-	return "Nu exista task-uri.", f.err
+	return "No tasks.", f.err
 }
 func (f *fakeBackend) AcceptTask(c Caller, task, note string) (string, error) {
 	f.calls = append(f.calls, "accept_task|"+task+"|"+note)
@@ -48,7 +48,7 @@ func (f *fakeBackend) ReviewReject(c Caller, task, feedback string) (string, err
 
 func (f *fakeBackend) ProposeSetup(c Caller, args json.RawMessage) (string, error) {
 	f.calls = append(f.calls, "propose_setup|"+c.SetupID+"|"+string(args))
-	return "Propunere primita.", f.err
+	return "Proposal received.", f.err
 }
 
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
@@ -207,7 +207,7 @@ func TestCallReviewTools(t *testing.T) {
 func TestWorkerCannotReview(t *testing.T) {
 	fb, ts := setup(t)
 	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"review_approve","arguments":{"task":"T-3"}}}`)
-	if text, isErr := toolText(t, resp); !isErr || !strings.Contains(text, "nu e disponibil") {
+	if text, isErr := toolText(t, resp); !isErr || !strings.Contains(text, "is not available") {
 		t.Fatalf("%q %v", text, isErr)
 	}
 	if len(fb.calls) != 0 {
@@ -230,7 +230,7 @@ func TestCallCreateTask(t *testing.T) {
 func TestWorkerCannotCallLeadTool(t *testing.T) {
 	fb, ts := setup(t)
 	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"create_task","arguments":{"title":"x","assignee":"Rook"}}}`)
-	if text, isErr := toolText(t, resp); !isErr || !strings.Contains(text, "nu e disponibil") {
+	if text, isErr := toolText(t, resp); !isErr || !strings.Contains(text, "is not available") {
 		t.Fatalf("%q %v", text, isErr)
 	}
 	if len(fb.calls) != 0 {
@@ -240,9 +240,9 @@ func TestWorkerCannotCallLeadTool(t *testing.T) {
 
 func TestBackendErrorBecomesToolError(t *testing.T) {
 	fb, ts := setup(t)
-	fb.err = errors.New("nu exista task-ul T-9")
+	fb.err = errors.New("task T-9 does not exist")
 	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"report_done","arguments":{"summary":"gata"}}}`)
-	if text, isErr := toolText(t, resp); !isErr || text != "nu exista task-ul T-9" {
+	if text, isErr := toolText(t, resp); !isErr || text != "task T-9 does not exist" {
 		t.Fatalf("%q %v", text, isErr)
 	}
 }

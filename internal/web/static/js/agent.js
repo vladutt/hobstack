@@ -11,27 +11,27 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
     others.map((x) => el("option", { value: x.id }, x.name)),
   ];
   const responsibilities = el("textarea", {
-    value: a.responsibilities || "", rows: 2, maxlength: 2000, placeholder: "ex. Endpoint-uri API si migrari",
+    value: a.responsibilities || "", rows: 2, maxlength: 2000, placeholder: "e.g. API endpoints and migrations",
   });
   // "" = Tu (radacina), "none" = nelegat, altfel id-ul sefului
   const parentSelect = el("select", { value: a.parentId ? String(a.parentId) : a.detached ? "none" : "" },
-    el("option", { value: "none" }, "nimeni (nelegat)"), agentOptions("Tu"));
-  const reviewerSelect = el("select", { value: a.reviewerId ? String(a.reviewerId) : "" }, agentOptions("nimeni"));
+    el("option", { value: "none" }, "nobody (detached)"), agentOptions("You"));
+  const reviewerSelect = el("select", { value: a.reviewerId ? String(a.reviewerId) : "" }, agentOptions("nobody"));
   const idOf = (sel) => (sel.value && sel.value !== "none" ? Number(sel.value) : null);
 
-  const name = el("input", { type: "text", value: a.name, placeholder: "ex. Rook", required: true, maxlength: 40 });
-  const role = el("input", { type: "text", value: a.role, placeholder: "ex. Backend Developer", maxlength: 80 });
+  const name = el("input", { type: "text", value: a.name, placeholder: "e.g. Rook", required: true, maxlength: 40 });
+  const role = el("input", { type: "text", value: a.role, placeholder: "e.g. Backend Developer", maxlength: 80 });
   const model = el("select", { value: a.model }, modelOptions(info.models || [], a.model));
-  const background = el("textarea", { value: a.background, rows: 4, placeholder: "Cine e agentul si ce stie." });
-  const instructions = el("textarea", { value: a.instructions, rows: 4, placeholder: "Cum lucreaza si ce nu are voie sa faca." });
+  const background = el("textarea", { value: a.background, rows: 4, placeholder: "Who the agent is and what it knows." });
+  const instructions = el("textarea", { value: a.instructions, rows: 4, placeholder: "How it works and what it must never do." });
   const doneDef = el("textarea", { value: a.doneDef, rows: 3 });
   const doneField = field("", doneDef);
   const doneLabel = doneField.querySelector("label");
   // radacina raporteaza utilizatorului, ceilalti predau sefului
   const syncRoot = () => {
     const isRoot = !parentSelect.value;
-    doneLabel.textContent = isRoot ? "Rezumatul final: ce iti raporteaza" : "Definition of done: ce ii preda sefului";
-    doneDef.placeholder = isRoot ? "Ce contine rezumatul final pentru tine." : "Rezumat, fisiere schimbate, cum se verifica.";
+    doneLabel.textContent = isRoot ? "Final summary: what it reports to you" : "Definition of done: what it hands to its boss";
+    doneDef.placeholder = isRoot ? "What the final summary for you contains." : "Summary, changed files, how to verify.";
   };
   syncRoot();
   const tools = TOOLS.map((t) => ({ ...t, box: el("input", { type: "checkbox", checked: a.tools.includes(t.id) }) }));
@@ -39,7 +39,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
   // preview-ul prompt-ului se incarca doar cand e deschis
   const preview = el("pre", { class: "preview" }, "...");
   const previewBox = el("details", { class: "preview-box", ontoggle: () => previewBox.open && updatePreview() },
-    el("summary", {}, "Prompt compilat"), preview);
+    el("summary", {}, "Compiled prompt"), preview);
   let timer;
   const refresh = () => {
     clearTimeout(timer);
@@ -48,23 +48,23 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
 
   // dirty: utilizatorul a schimbat ceva de la ultima incarcare
   let dirty = false;
-  const saveBtn = el("button", { type: "submit", class: "btn primary" }, "Salveaza");
+  const saveBtn = el("button", { type: "submit", class: "btn primary" }, "Save");
   const form = el("form", { class: "agent-editor", onsubmit: save },
-    field("Nume", name, "Liderul asigneaza task-uri dupa acest nume."),
-    field("Rol", role),
-    field("Model", model, "\"Cel mai nou\" trece automat pe versiunile noi. Fable: cel mai capabil; Opus: foarte capabil; Sonnet: echilibrat; Haiku: rapid si ieftin."),
-    field("Ce ia (responsabilitati)", responsibilities),
-    el("div", { class: "row" }, field("Raporteaza lui", parentSelect), field("Verificat de", reviewerSelect)),
+    field("Name", name, "The lead assigns tasks by this name."),
+    field("Role", role),
+    field("Model", model, "\"Latest\" moves to new versions automatically. Fable: most capable; Opus: very capable; Sonnet: balanced; Haiku: fast and cheap."),
+    field("Takes (responsibilities)", responsibilities),
+    el("div", { class: "row" }, field("Reports to", parentSelect), field("Reviewed by", reviewerSelect)),
     el("div", { class: "field" },
-      el("span", { class: "label" }, "Tool-uri"),
+      el("span", { class: "label" }, "Tools"),
       tools.map((t) => el("label", { class: "check" }, t.box, t.label)),
-      el("span", { class: "hint" }, "Citirea fisierelor e mereu permisa. git push, rm -rf, sudo si instalarile de pachete sunt blocate ca prefix de comanda; cu Comenzi shell activ, un agent le poate ocoli.")),
-    field("Background: cine e si ce stie", background),
-    field("Instructiuni: cum lucreaza si ce nu face niciodata", instructions),
+      el("span", { class: "hint" }, "Reading files is always allowed. git push, rm -rf, sudo and package installs are blocked as command prefixes; with Shell commands enabled, an agent can work around them.")),
+    field("Background: who it is and what it knows", background),
+    field("Instructions: how it works and what it never does", instructions),
     doneField,
     previewBox,
     el("div", { class: "editor-actions" },
-      el("button", { type: "button", class: "btn danger", onclick: remove }, "Sterge"),
+      el("button", { type: "button", class: "btn danger", onclick: remove }, "Delete"),
       el("span", { class: "grow" }),
       saveBtn));
   form.addEventListener("input", () => { dirty = true; refresh(); });
@@ -100,7 +100,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
     try {
       await api(`/api/agents/${a.id}`, { method: "PUT", body });
       dirty = false;
-      toast("Salvat.", "ok");
+      toast("Saved.", "ok");
       await onSaved();
     } catch (err) {
       toast(err.message);
@@ -110,7 +110,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
   }
 
   async function remove() {
-    if (!confirm(`Stergi agentul ${a.name}?`)) return;
+    if (!confirm(`Delete agent ${a.name}?`)) return;
     try {
       await api(`/api/agents/${a.id}`, { method: "DELETE" });
       dirty = false;
@@ -141,8 +141,8 @@ function modelOptions(list, current) {
     list.filter((m) => m.group === id).map((m) => el("option", { value: m.id }, m.label)));
   const known = list.some((m) => m.id === current);
   return [
-    !known && current && el("option", { value: current }, current + " (nu mai e in lista)"),
-    group("Mereu cel mai nou", "latest"),
-    group("Versiune fixa", "pinned"),
+    !known && current && el("option", { value: current }, current + " (no longer listed)"),
+    group("Always latest", "latest"),
+    group("Pinned version", "pinned"),
   ];
 }

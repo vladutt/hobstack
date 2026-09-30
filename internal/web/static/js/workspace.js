@@ -6,30 +6,33 @@ import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
 
 const COLUMNS = [
-  { title: "In asteptare", statuses: ["queued"] },
-  { title: "In lucru", statuses: ["in_progress"] },
+  { title: "Queued", statuses: ["queued"] },
+  { title: "In progress", statuses: ["in_progress"] },
   { title: "Review", statuses: ["review", "blocked"] },
-  { title: "Gata", statuses: ["done"] },
+  { title: "Done", statuses: ["done"] },
 ];
 
 const ref = (t) => `T-${t.number}`;
 
 // Tab-urile paginii de proiect; primul e cel implicit.
 const TABS = [
-  { id: "task-uri", label: "Task-uri" },
-  { id: "echipa", label: "Echipa" },
-  { id: "fisiere", label: "Fisiere" },
+  { id: "tasks", label: "Tasks" },
+  { id: "team", label: "Team" },
+  { id: "files", label: "Files" },
 ];
 
 // parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId }.
 // Link-urile vechi #/p/3/agent/7 duc in tab-ul Echipa, cu agentul 7 selectat.
 export function parseWorkspaceRoute(rest) {
   const parts = (rest || "").split("/").filter(Boolean);
+  // adresele vechi (in romana) duc in tab-urile noi
+  const legacy = { "task-uri": "tasks", "echipa": "team", "fisiere": "files" };
+  if (parts[0] in legacy) parts[0] = legacy[parts[0]];
   if (parts[0] === "agent") {
-    return { tab: "echipa", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null };
+    return { tab: "team", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null };
   }
   const tab = TABS.some((t) => t.id === parts[0]) ? parts[0] : TABS[0].id;
-  const agentId = tab === "echipa" && /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null;
+  const agentId = tab === "team" && /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null;
   return { tab, agentId };
 }
 
@@ -37,7 +40,7 @@ export async function workspaceView(root, projectId, route) {
   const state = {
     project: await api(`/api/projects/${projectId}`),
     tab: route.tab,
-    panel: route.tab === "echipa" ? "details" : "chat", // panoul din dreapta: "details" sau "chat"
+    panel: route.tab === "team" ? "details" : "chat", // panoul din dreapta: "details" sau "chat"
     selected: null,   // agentul selectat (chat si detalii)
     seen: new Set(),  // id-urile mesajelor afisate in thread
     open: new Set(),  // task-urile deschise pe board (raman deschise la redesenare)
@@ -62,7 +65,7 @@ export async function workspaceView(root, projectId, route) {
   // titlul proiectului sta in coloana din stanga, ca chat-ul sa inceapa din
   // varful paginii si sa incapa intreg pe ecran (inclusiv campul de scris)
   const header = el("div", { class: "ws-head" });
-  const tabsNav = el("nav", { class: "tabs", "aria-label": "Sectiuni proiect" });
+  const tabsNav = el("nav", { class: "tabs", "aria-label": "Project sections" });
   const canvas = teamCanvas({
     onSelect: (id) => select(id),
     onEdit: (id) => select(id, "details"),
@@ -71,36 +74,36 @@ export async function workspaceView(root, projectId, route) {
     onDelete: (id) => deleteAgent(id),
   });
   // pe Task-uri si Fisiere alegi cu cine vorbesti din banda cu echipa
-  const strip = el("div", { class: "team-strip", "aria-label": "Echipa" });
+  const strip = el("div", { class: "team-strip", "aria-label": "Team" });
   const board = el("div", { class: "board" });
   const count = el("span", { class: "hint" });
   const boardTools = el("div", { class: "actions" }); // Coloane, + Task
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
   let boardPanel = null; // "stages" | "task" | null
-  const boardHint = el("p", { class: "hint board-hint" }, "Fiecare proiect e diferit: fa-ti propriile coloane (etape de lucru) din butonul Coloane.");
+  const boardHint = el("p", { class: "hint board-hint" }, "Every project is different: set up your own columns (work stages) with the Columns button.");
   const filesList = el("div", { class: "files-list" });
   const projectPicker = el("input", { type: "file", multiple: true, hidden: true });
   projectPicker.addEventListener("change", () => { uploadProjectFiles(projectPicker.files); projectPicker.value = ""; });
   const filesSection = el("section", { class: "section" },
     el("div", { class: "section-head" },
-      el("h2", {}, "Fisiere"),
-      el("button", { type: "button", class: "btn small", onclick: () => projectPicker.click() }, "Incarca"),
+      el("h2", {}, "Files"),
+      el("button", { type: "button", class: "btn small", onclick: () => projectPicker.click() }, "Upload"),
       projectPicker),
     filesList);
   setupDrop(filesSection, uploadProjectFiles);
   const consoleHead = el("div", { class: "console-head" });
   const thread = el("div", { class: "thread", "aria-live": "polite" });
-  const input = el("textarea", { rows: 1, "aria-label": "Mesaj" });
+  const input = el("textarea", { rows: 1, "aria-label": "Message" });
   const note = el("span", { class: "hint" });
   const chips = el("div", { class: "chips" });
   const chatPicker = el("input", { type: "file", multiple: true, hidden: true });
   chatPicker.addEventListener("change", () => { addPending(chatPicker.files); chatPicker.value = ""; });
   const clip = el("button", {
-    type: "button", class: "clip", "aria-label": "Ataseaza fisiere", title: "Ataseaza fisiere",
+    type: "button", class: "clip", "aria-label": "Attach files", title: "Attach files",
     onclick: () => chatPicker.click(),
   }, "\u{1F4CE}");
   let sending = false; // trimitere in curs: blocheaza dublul submit
-  const sendBtn = el("button", { type: "submit", class: "btn primary" }, "Trimite");
+  const sendBtn = el("button", { type: "submit", class: "btn primary" }, "Send");
   const composer = el("form", { onsubmit: send }, clip, chatPicker, input, sendBtn);
   input.addEventListener("paste", (e) => {
     const files = e.clipboardData?.files;
@@ -124,11 +127,11 @@ export async function workspaceView(root, projectId, route) {
   setupDrop(chatBox, addPending);
 
   const bodies = {
-    "echipa": el("div", { class: "tab-body team-body" }, canvas.el),
-    "task-uri": el("section", { class: "section tab-body" },
-      el("div", { class: "section-head" }, el("div", { class: "actions" }, el("h2", {}, "Task-uri"), count), boardTools),
+    "team": el("div", { class: "tab-body team-body" }, canvas.el),
+    "tasks": el("section", { class: "section tab-body" },
+      el("div", { class: "section-head" }, el("div", { class: "actions" }, el("h2", {}, "Tasks"), count), boardTools),
       editorSlot, board, boardHint),
-    "fisiere": el("div", { class: "tab-body" }, filesSection),
+    "files": el("div", { class: "tab-body" }, filesSection),
   };
   const ws = el("div", { class: "ws" },
     el("div", { class: "ws-main" }, header, strip, Object.values(bodies)),
@@ -154,11 +157,11 @@ export async function workspaceView(root, projectId, route) {
       "aria-current": t.id === state.tab ? "page" : null,
     }, t.label)));
     for (const [id, body] of Object.entries(bodies)) body.hidden = id !== state.tab;
-    strip.hidden = state.tab === "echipa";
-    const team = state.tab === "echipa";
+    strip.hidden = state.tab === "team";
+    const team = state.tab === "team";
     const panel = team ? state.panel : "chat";
     panelTabs.hidden = !team;
-    panelTabs.replaceChildren(...[["details", "Detalii"], ["chat", "Chat"]].map(([id, label]) =>
+    panelTabs.replaceChildren(...[["details", "Details"], ["chat", "Chat"]].map(([id, label]) =>
       el("button", {
         type: "button", role: "tab", class: "panel-tab", "aria-selected": String(panel === id),
         onclick: () => { state.panel = id; renderTabs(); if (id === "chat") scrollDown(true); },
@@ -187,7 +190,7 @@ export async function workspaceView(root, projectId, route) {
       editor?.destroy();
       editor = null;
       editorKey = "";
-      detailsBox.replaceChildren(el("p", { class: "empty" }, "Alege un agent pe canvas sau fa unul nou cu dublu-click pe gol."));
+      detailsBox.replaceChildren(el("p", { class: "empty" }, "Pick an agent on the canvas, or double-click empty space to create one."));
       return null;
     }
     const key = a.id + ":" + editableKey(a, state.project.agents);
@@ -207,7 +210,7 @@ export async function workspaceView(root, projectId, route) {
   // nesalvate sau utilizatorul a confirmat ca renunta la ele)
   function leaveEditor() {
     if (!editor || !editor.isDirty()) return true;
-    if (!confirm("Ai modificari nesalvate la " + (selectedAgent()?.name || "agent") + ". Renunti la ele?")) return false;
+    if (!confirm("You have unsaved changes to " + (selectedAgent()?.name || "agent") + ". Discard them?")) return false;
     editor.destroy();
     editor = null;
     return true;
@@ -218,8 +221,8 @@ export async function workspaceView(root, projectId, route) {
   async function createAgent(pos, { parentId, detached }) {
     if (!leaveEditor()) return;
     const names = new Set(state.project.agents.map((a) => a.name.toLowerCase()));
-    let name = "Agent nou";
-    for (let i = 2; names.has(name.toLowerCase()); i++) name = `Agent nou ${i}`;
+    let name = "New agent";
+    for (let i = 2; names.has(name.toLowerCase()); i++) name = `New agent ${i}`;
     const body = agentBody({
       name, role: "", model: "sonnet", background: "", instructions: "", doneDef: "",
       tools: ["write"], responsibilities: "", parentId, reviewerId: null, detached,
@@ -242,7 +245,7 @@ export async function workspaceView(root, projectId, route) {
   // deleteAgent: butonul x de pe nod
   async function deleteAgent(id) {
     const a = state.project.agents.find((x) => x.id === id);
-    if (!a || !confirm(`Stergi agentul ${a.name}?`)) return;
+    if (!a || !confirm(`Delete agent ${a.name}?`)) return;
     try {
       await api(`/api/agents/${id}`, { method: "DELETE" });
     } catch (err) {
@@ -261,16 +264,16 @@ export async function workspaceView(root, projectId, route) {
   // syncHash: pe Echipa, adresa contine agentul selectat (refresh-ul il pastreaza).
   // replaceState nu declanseaza hashchange, deci nu trece prin router.
   function syncHash() {
-    if (state.tab !== "echipa" || !state.selected) return;
-    const want = `#/p/${projectId}/echipa/${state.selected}`;
+    if (state.tab !== "team" || !state.selected) return;
+    const want = `#/p/${projectId}/team/${state.selected}`;
     if (location.hash !== want) history.replaceState(null, "", want);
   }
 
   // update: ruta s-a schimbat in acelasi proiect (alt tab sau alt agent)
   async function update(r) {
-    if (r.tab === "echipa" && state.tab !== "echipa") state.panel = "details"; // intrarea pe Echipa arata Detaliile
+    if (r.tab === "team" && state.tab !== "team") state.panel = "details"; // intrarea pe Echipa arata Detaliile
     state.tab = r.tab;
-    if (r.tab === "echipa" && r.agentId && r.agentId !== state.selected) {
+    if (r.tab === "team" && r.agentId && r.agentId !== state.selected) {
       if (!state.project.agents.some((a) => a.id === r.agentId)) { renderTabs(); return; }
       state.panel = "details";
       await select(r.agentId);
@@ -285,16 +288,16 @@ export async function workspaceView(root, projectId, route) {
     const p = state.project;
     header.replaceChildren(el("header", { class: "page-head" },
       el("div", {},
-        el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Proiecte"), " / ", p.name),
+        el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / ", p.name),
         el("div", { class: "actions" }, el("h1", {}, p.name), pill(p.status)),
-        p.goal && el("p", { class: "muted clamp" }, "Obiectiv: " + p.goal),
-        p.paused && el("p", { class: "hint" }, "Echipa e pe pauza. Mesajele raman in asteptare pana o pornesti.")),
+        p.goal && el("p", { class: "muted clamp" }, "Goal: " + p.goal),
+        p.paused && el("p", { class: "hint" }, "The team is paused. Messages stay queued until you start it.")),
       el("div", { class: "head-actions" },
         el("div", { class: "actions" },
-          el("a", { class: "btn", href: `#/p/${projectId}/edit` }, "Instructiuni proiect"),
+          el("a", { class: "btn", href: `#/p/${projectId}/edit` }, "Project instructions"),
           p.paused
-            ? el("button", { class: "btn primary", onclick: () => projectAction("resume") }, "Porneste echipa")
-            : el("button", { class: "btn", onclick: () => projectAction("stop") }, "Opreste echipa")),
+            ? el("button", { class: "btn primary", onclick: () => projectAction("resume") }, "Start team")
+            : el("button", { class: "btn", onclick: () => projectAction("stop") }, "Stop team")),
         openBar)),
       tabsNav);
   }
@@ -309,7 +312,7 @@ export async function workspaceView(root, projectId, route) {
       onchange: () => { try { localStorage.setItem("foreman-editor", select.value); } catch {} },
     }, editors.map((e) => el("option", { value: e.id }, e.name)));
     return el("div", { class: "actions open-bar" },
-      el("span", { class: "hint" }, "Deschide:"),
+      el("span", { class: "hint" }, "Open in:"),
       el("button", { type: "button", class: "btn small", onclick: () => openIn("folder") }, "Folder"),
       el("button", { type: "button", class: "btn small", onclick: () => openIn("browser") }, "Browser"),
       editors.length > 0 && [select,
@@ -333,14 +336,14 @@ export async function workspaceView(root, projectId, route) {
     const p = state.project;
     const byId = new Map(p.agents.map((a) => [a.id, a]));
     const stages = p.stages || [];
-    count.textContent = `${p.done} din ${p.total} gata`;
+    count.textContent = `${p.done} of ${p.total} done`;
     // replaceChildren nu ignora false (el() da): filtram noi
     // butoanele deschid si inchid panoul lor (editorul de coloane sau formularul de task)
     const toggle = (id, label, onclick) => el("button", {
       type: "button", class: "btn small" + (boardPanel === id ? " active" : ""),
       "aria-pressed": String(boardPanel === id), onclick,
     }, label);
-    boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("stages", "Coloane", toggleStages));
+    boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("stages", "Columns", toggleStages));
     if (!stages.length) {
       board.className = "board";
       board.replaceChildren(...COLUMNS.map((c) => column(c.title, p.tasks.filter((t) => c.statuses.includes(t.status)), byId)));
@@ -353,20 +356,20 @@ export async function workspaceView(root, projectId, route) {
     // task-uri fara etapa inca deschise (create inainte de coloane): altfel n-ar aparea nicaieri
     const loose = p.tasks.filter((t) => !t.stageId && t.status !== "review" && t.status !== "done");
     board.replaceChildren(
-      ...(loose.length ? [column("Fara etapa", loose, byId)] : []),
+      ...(loose.length ? [column("No stage", loose, byId)] : []),
       ...stages.map((s) => column(s.name, inStage(s), byId, s)),
-      column("La lider", p.tasks.filter((t) => t.status === "review"), byId),
-      column("Gata", p.tasks.filter((t) => t.status === "done"), byId));
+      column("With lead", p.tasks.filter((t) => t.status === "review"), byId),
+      column("Done", p.tasks.filter((t) => t.status === "done"), byId));
   }
 
   function column(title, items, byId, stage) {
     const agents = stage ? stage.agentIds.map((id) => byId.get(id)).filter(Boolean) : [];
     return el("div", { class: "col" },
       el("div", { class: "col-head" },
-        el("span", {}, title, stage?.kind === "check" && el("span", { class: "tag col-kind" }, "verificare")),
+        el("span", {}, title, stage?.kind === "check" && el("span", { class: "tag col-kind" }, "check")),
         el("span", {}, items.length)),
       stage && el("div", { class: "col-agents" },
-        agents.length ? agents.map((a) => avatar(a.name, kindOf(a), 18)) : el("span", { class: "badge-blocked" }, "fara agenti")),
+        agents.length ? agents.map((a) => avatar(a.name, kindOf(a), 18)) : el("span", { class: "badge-blocked" }, "no agents")),
       items.map((t) => taskCard(t, byId.get(t.assigneeId), byId)));
   }
 
@@ -398,18 +401,18 @@ export async function workspaceView(root, projectId, route) {
     if (boardPanel === "task") return closePanel();
     const p = state.project;
     const first = (p.stages || [])[0];
-    const title = el("input", { type: "text", maxlength: 200, placeholder: "ex. Pagina de login", required: true });
-    const description = el("textarea", { rows: 3, placeholder: "Ce trebuie facut, criterii de acceptare (optional)" });
+    const title = el("input", { type: "text", maxlength: 200, placeholder: "e.g. Login page", required: true });
+    const description = el("textarea", { rows: 3, placeholder: "What needs to be done, acceptance criteria (optional)" });
     const who = el("select", {},
-      first && el("option", { value: "" }, `Primul liber din ${first.name}`),
+      first && el("option", { value: "" }, `First free agent in ${first.name}`),
       assignable(first?.id).map((a) => el("option", { value: a.id }, a.name + (a.role ? " \u00b7 " + a.role : ""))));
-    const addBtn = el("button", { type: "submit", class: "btn primary" }, "Adauga");
+    const addBtn = el("button", { type: "submit", class: "btn primary" }, "Add");
     const form = el("form", { class: "section task-form", onsubmit: submit },
-      el("h2", {}, "Task nou"),
-      field("Titlu", title), field("Descriere", description),
-      field("Asignat", who, first ? "Task-ul intra in prima etapa; la final decizi tu." : "Agentul il preia automat; la final decizi tu."),
+      el("h2", {}, "New task"),
+      field("Title", title), field("Description", description),
+      field("Assignee", who, first ? "The task enters the first stage; you decide at the end." : "The agent picks it up automatically; you decide at the end."),
       el("div", { class: "actions" }, el("span", { class: "grow" }),
-        el("button", { type: "button", class: "btn", onclick: closePanel }, "Renunta"), addBtn));
+        el("button", { type: "button", class: "btn", onclick: closePanel }, "Cancel"), addBtn));
     showPanel("task", form);
     title.focus();
 
@@ -442,7 +445,7 @@ export async function workspaceView(root, projectId, route) {
   async function decide(t, action) {
     let feedback = "";
     if (action === "send_back") {
-      feedback = prompt(`Ce trebuie schimbat la ${ref(t)}?`) || "";
+      feedback = prompt(`What needs to change in ${ref(t)}?`) || "";
       if (!feedback.trim()) return;
     }
     try {
@@ -453,7 +456,7 @@ export async function workspaceView(root, projectId, route) {
 
   // stageName: la cine asteapta un task din review (reviewer-ul asignatului, altfel creatorul, altfel seful)
   function stageName(t, who, byId) {
-    if (t.byUser) return "tine";
+    if (t.byUser) return "you";
     const target = t.reviewStage === "reviewer"
       ? byId.get(who?.reviewerId)
       : byId.get(t.creatorId) || byId.get(who?.parentId);
@@ -473,27 +476,27 @@ export async function workspaceView(root, projectId, route) {
       el("summary", {},
         el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)), t.title),
         el("span", { class: "task-who" },
-          waiting ? el("span", { class: "hint" }, "in asteptare") : [who && avatar(who.name, kindOf(who), 20), who ? who.name : "?"],
-          blocked && el("span", { class: "badge-blocked" }, "Blocat"),
-          stage && el("span", { class: "task-stage" }, `la ${stage}`))),
+          waiting ? el("span", { class: "hint" }, "queued") : [who && avatar(who.name, kindOf(who), 20), who ? who.name : "?"],
+          blocked && el("span", { class: "badge-blocked" }, "Blocked"),
+          stage && el("span", { class: "task-stage" }, `with ${stage}`))),
       el("div", { class: "task-detail" },
         t.description && el("div", {}, t.description),
         t.feedback && el("div", {}, el("strong", {}, "Feedback: "), t.feedback),
-        t.result && el("div", {}, el("strong", {}, "Rezultat: "), t.result),
-        !t.description && !t.feedback && !t.result && el("div", { class: "hint" }, "Fara detalii inca."),
+        t.result && el("div", {}, el("strong", {}, "Result: "), t.result),
+        !t.description && !t.feedback && !t.result && el("div", { class: "hint" }, "No details yet."),
         blocked && el("div", { class: "actions" },
-          el("button", { type: "button", class: "btn small primary", onclick: () => taskAction(t, "accept") }, "Accepta"),
-          el("button", { type: "button", class: "btn small", onclick: () => taskAction(t, "unblock") }, "Deblocheaza")),
+          el("button", { type: "button", class: "btn small primary", onclick: () => taskAction(t, "accept") }, "Accept"),
+          el("button", { type: "button", class: "btn small", onclick: () => taskAction(t, "unblock") }, "Unblock")),
         (t.status === "queued" || t.status === "blocked") && el("label", { class: "assign-row" },
-          el("span", { class: "hint" }, "Asignat"),
+          el("span", { class: "hint" }, "Assignee"),
           el("select", {
-            class: "select-small", value: String(t.assigneeId), "aria-label": `Asignat pentru ${ref(t)}`,
+            class: "select-small", value: String(t.assigneeId), "aria-label": `Assignee for ${ref(t)}`,
             onchange: (e) => assign(t, Number(e.target.value)),
           }, assignable(t.stageId).map((a) => el("option", { value: a.id }, a.name)),
             !assignable(t.stageId).some((a) => a.id === t.assigneeId) && el("option", { value: t.assigneeId }, who ? who.name : "?"))),
         mine && el("div", { class: "actions" },
-          el("button", { type: "button", class: "btn small primary", onclick: () => decide(t, "accept") }, "Accepta"),
-          el("button", { type: "button", class: "btn small", onclick: () => decide(t, "send_back") }, "Trimite inapoi"))));
+          el("button", { type: "button", class: "btn small primary", onclick: () => decide(t, "accept") }, "Accept"),
+          el("button", { type: "button", class: "btn small", onclick: () => decide(t, "send_back") }, "Send back"))));
   }
 
   function firstRootId() {
@@ -514,13 +517,13 @@ export async function workspaceView(root, projectId, route) {
       el("div", {},
         el("div", { class: "member-name" }, a.name, a.role && el("span", { class: "hint" }, "· " + a.role)),
         el("div", { class: "hint thread-hint" }, a.detached
-          ? "Nelegat: nu lucreaza. Leaga-l pe canvas de Tu sau de un lider."
+          ? "Detached: not working. Link it on the canvas to You or to a lead."
           : !boss
-            ? "Thread direct. Ii dai obiective aici, iar el delegheaza echipei lui."
-            : `Thread direct. ${boss.name} primeste in copie ce ii scrii.`)));
-    input.placeholder = a.detached ? "Leaga agentul ca sa-i poti scrie" : isLead ? `Scrie-i lui ${a.name}...` : `Mesaj pentru ${a.name}`;
+            ? "Direct thread. Give it goals here and it delegates to its team."
+            : `Direct thread. ${boss.name} is copied on what you write.`)));
+    input.placeholder = a.detached ? "Link the agent to message it" : isLead ? `Write to ${a.name}...` : `Message ${a.name}`;
     input.disabled = sendBtn.disabled = clip.disabled = !!a.detached;
-    note.textContent = state.project.paused ? "Echipa e pe pauza: mesajul asteapta pana o pornesti." : "";
+    note.textContent = state.project.paused ? "The team is paused: the message waits until you start it." : "";
   }
 
   // ---------- thread ----------
@@ -553,7 +556,7 @@ export async function workspaceView(root, projectId, route) {
     stopLive();
     state.seen = new Set();
     thread.replaceChildren();
-    if (!messages.length) thread.append(el("div", { class: "empty" }, "Niciun mesaj inca."));
+    if (!messages.length) thread.append(el("div", { class: "empty" }, "No messages yet."));
     messages.forEach(addMessage);
     scrollDown(true);
   }
@@ -577,10 +580,10 @@ export async function workspaceView(root, projectId, route) {
     if (m.kind === "event") return el("div", { class: "event", "data-id": m.id }, m.text);
     const mine = m.author === "user";
     return el("div", { class: "msg" + (mine ? " me" : ""), "data-id": m.id },
-      el("span", { class: "msg-meta" }, `${mine ? "Tu" : m.author} · ${clock(m.createdAt)}`),
+      el("span", { class: "msg-meta" }, `${mine ? "You" : m.author} · ${clock(m.createdAt)}`),
       m.text ? el("div", { class: "bubble" }, m.text) : null,
       m.attachments && m.attachments.length > 0 && el("div", { class: "attachments" }, m.attachments.map(attachmentNode)),
-      mine && !m.delivered && el("span", { class: "pending" }, "in asteptare"));
+      mine && !m.delivered && el("span", { class: "pending" }, "queued"));
   }
 
   function scrollDown(force) {
@@ -643,7 +646,7 @@ export async function workspaceView(root, projectId, route) {
     chips.replaceChildren(...state.pending.map((f, i) =>
       el("span", { class: "chip" }, f.name,
         el("button", {
-          type: "button", "aria-label": `Scoate ${f.name}`,
+          type: "button", "aria-label": `Remove ${f.name}`,
           onclick: () => { state.pending.splice(i, 1); renderChips(); },
         }, "\u00d7"))));
   }
@@ -674,7 +677,7 @@ export async function workspaceView(root, projectId, route) {
     }
     if (gone()) return;
     if (!files.length) {
-      filesList.replaceChildren(el("p", { class: "hint" }, "Niciun fisier. Trage fisiere aici sau apasa Incarca."));
+      filesList.replaceChildren(el("p", { class: "hint" }, "No files. Drag files here or click Upload."));
       return;
     }
     filesList.replaceChildren(...files.map((f) =>
@@ -682,7 +685,7 @@ export async function workspaceView(root, projectId, route) {
         el("a", { href: `/api/files/${f.id}`, target: "_blank", rel: "noopener" }, f.name),
         el("span", { class: "hint" }, fmtSize(f.size)),
         el("button", {
-          type: "button", class: "btn small", "aria-label": `Sterge ${f.name}`,
+          type: "button", class: "btn small", "aria-label": `Delete ${f.name}`,
           onclick: () => removeFile(f),
         }, "x"))));
   }
@@ -701,7 +704,7 @@ export async function workspaceView(root, projectId, route) {
   }
 
   async function removeFile(f) {
-    if (!confirm(`Stergi fisierul ${f.name}?`)) return;
+    if (!confirm(`Delete file ${f.name}?`)) return;
     try {
       await api(`/api/files/${f.id}`, { method: "DELETE" });
     } catch (err) {
@@ -747,7 +750,7 @@ export async function workspaceView(root, projectId, route) {
     stopLive();
     if (!runId) return;
     state.liveRunId = runId;
-    const box = el("div", { class: "live" }, el("div", { class: "live-head" }, `${a.name} lucreaza acum`));
+    const box = el("div", { class: "live" }, el("div", { class: "live-head" }, `${a.name} is working now`));
     thread.append(box);
     scrollDown();
     const render = liveRenderer(box);

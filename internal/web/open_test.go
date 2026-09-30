@@ -43,7 +43,7 @@ func TestOpenProject(t *testing.T) {
 		t.Fatalf("folder: %d", code)
 	}
 	code, raw := e.do(t, "POST", path, map[string]any{"target": "browser"})
-	if code != http.StatusBadRequest || !strings.Contains(string(raw), "niciun fisier .html") {
+	if code != http.StatusBadRequest || !strings.Contains(string(raw), "no .html file") {
 		t.Fatalf("browser fara html: %d %s", code, raw)
 	}
 	os.WriteFile(filepath.Join(workdir, "index.html"), []byte("<p>x</p>"), 0o644)

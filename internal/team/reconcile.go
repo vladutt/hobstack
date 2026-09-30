@@ -13,7 +13,7 @@ import (
 	"foreman/internal/store"
 )
 
-var ErrNotBlocked = errors.New("task-ul nu e blocat")
+var ErrNotBlocked = errors.New("the task is not blocked")
 
 // Run proceseaza cererile Kick pana cand ctx e anulat. Porneste din main.
 func (t *Team) Run(ctx context.Context) {
@@ -33,7 +33,7 @@ func (t *Team) Run(ctx context.Context) {
 
 		for _, id := range ids {
 			if err := t.Reconcile(id); err != nil {
-				log.Printf("proiectul %d: %v", id, err)
+				log.Printf("project %d: %v", id, err)
 			}
 		}
 	}
@@ -265,7 +265,7 @@ func subtaskLines(taskID int64, tasks []store.Task, byID map[int64]store.Agent) 
 
 // attachedLine e formatul unic al liniei de atasament din tura unui agent.
 func (t *Team) attachedLine(dir string, a store.Attachment) string {
-	return fmt.Sprintf("\nAtasat: %s (%s)", filepath.Join(dir, a.Stored), a.Name)
+	return fmt.Sprintf("\nAttached: %s (%s)", filepath.Join(dir, a.Stored), a.Name)
 }
 
 // texts extrage textele mesajelor; ce a scris utilizatorul e marcat mereu.
@@ -276,7 +276,7 @@ func (t *Team) texts(projectID int64, msgs []store.Message) []string {
 	for _, m := range msgs {
 		text := m.Text
 		if m.Author == store.AuthorUser {
-			text = "Utilizatorul: " + text
+			text = "User: " + text
 		}
 		for _, a := range m.Attachments {
 			text += t.attachedLine(dir, a)
@@ -308,7 +308,7 @@ func (t *Team) startFailed(p store.Project, notify, a store.Agent, cause error) 
 	if err := t.st.SetPaused(p.ID, true); err != nil {
 		return err
 	}
-	t.note(p.ID, notify.ID, fmt.Sprintf("Nu pot porni %s: %v. Proiectul e pe pauza.", a.Name, cause), true)
+	t.note(p.ID, notify.ID, fmt.Sprintf("Cannot start %s: %v. The project is paused.", a.Name, cause), true)
 	t.emit(p.ID, "project", map[string]int64{"id": p.ID})
 	return nil
 }
@@ -332,7 +332,7 @@ func (t *Team) Stop(projectID int64) error {
 	t.mu.Unlock()
 	for _, id := range ids {
 		if err := t.runs.Stop(id); err != nil {
-			log.Printf("oprire run %s: %v", id, err)
+			log.Printf("stopping run %s: %v", id, err)
 		}
 	}
 	if err := t.st.RequeueInProgress(projectID); err != nil {
@@ -391,7 +391,7 @@ func (t *Team) wakeForDecisions(projectID int64) error {
 			return err
 		}
 		if len(pending) == 0 {
-			t.note(projectID, a.ID, "Echipa a fost repornita. Asteapta decizia ta: "+strings.Join(refs, ", ")+".", false)
+			t.note(projectID, a.ID, "The team was restarted. Waiting for your decision: "+strings.Join(refs, ", ")+".", false)
 		}
 	}
 	return nil
@@ -440,7 +440,7 @@ func (t *Team) relinkReviews(projectID int64) error {
 		assignee, _ := store.FindAgent(agents, task.AssigneeID)
 		if r, ok := reviewerOf(*task, agents); ok {
 			if !hasPending[r.ID] {
-				text := fmt.Sprintf("%s a terminat %s si asteapta review-ul tau. Verifica-l cu review_approve sau review_reject: %s", assignee.Name, task.Ref(), task.Result)
+				text := fmt.Sprintf("%s finished %s and is waiting for your review. Check it with review_approve or review_reject: %s", assignee.Name, task.Ref(), task.Result)
 				if err := t.note(projectID, r.ID, clip(text), false); err != nil {
 					return err
 				}
@@ -463,7 +463,7 @@ func (t *Team) relinkReviews(projectID int64) error {
 			}
 			continue
 		}
-		text := fmt.Sprintf("%s a terminat %s; nu mai are reviewer, decizi tu (review): %s", assignee.Name, task.Ref(), task.Result)
+		text := fmt.Sprintf("%s finished %s; there is no reviewer anymore, so you decide (review): %s", assignee.Name, task.Ref(), task.Result)
 		if err := t.note(projectID, boss.ID, clip(text), false); err != nil {
 			return err
 		}
@@ -526,7 +526,7 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 	}
 	t.emit(a.ProjectID, "message", m)
 	if a.ParentID != nil {
-		note := fmt.Sprintf("Utilizatorul -> %s: %s", a.Name, text)
+		note := fmt.Sprintf("User -> %s: %s", a.Name, text)
 		dir := t.filesDir(a.ProjectID)
 		for _, att := range m.Attachments {
 			note += t.attachedLine(dir, att)
@@ -556,7 +556,7 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	if err != nil {
 		return err
 	}
-	text := "Utilizatorul a acceptat " + task.Ref() + "."
+	text := "The user accepted " + task.Ref() + "."
 	if accept {
 		task.Status = store.StatusDone
 		task.ReviewStage = store.StageNone
@@ -564,7 +564,7 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	} else {
 		task.Status = store.StatusQueued
 		task.SendBacks = 0
-		text = "Utilizatorul a deblocat " + task.Ref() + "; asignatul il reia cu ultimul feedback."
+		text = "The user unblocked " + task.Ref() + "; the assignee resumes it with the latest feedback."
 	}
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
@@ -575,7 +575,7 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	t.emit(task.ProjectID, "task", task)
 	if accept {
 		if err := t.afterDone(task); err != nil {
-			log.Printf("dupa accept %s: %v", task.Ref(), err)
+			log.Printf("after accept %s: %v", task.Ref(), err)
 		}
 	}
 	t.Kick(task.ProjectID)

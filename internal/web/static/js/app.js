@@ -5,7 +5,7 @@ import { workspaceView, parseWorkspaceRoute } from "./workspace.js";
 import { setupView } from "./setup.js";
 
 // Rute in hash: #/, #/new, #/p/3/edit si pagina proiectului cu tab-uri:
-// #/p/3/task-uri, #/p/3/echipa, #/p/3/echipa/7, #/p/3/fisiere.
+// #/p/3/tasks, #/p/3/team, #/p/3/team/7, #/p/3/files.
 // Fiecare view primeste elementul in care deseneaza si poate intoarce o
 // functie de curatare (inchide stream-uri, opreste timere) sau un obiect
 // { cleanup, update }. Cand ruta noua are aceeasi cheie (acelasi proiect),

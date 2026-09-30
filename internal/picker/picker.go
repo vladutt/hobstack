@@ -10,13 +10,13 @@ import (
 
 var (
 	// ErrCanceled: utilizatorul a inchis dialogul fara sa aleaga nimic.
-	ErrCanceled = errors.New("anulat")
+	ErrCanceled = errors.New("canceled")
 	// ErrUnsupported: pe acest sistem nu exista un dialog disponibil.
-	ErrUnsupported = errors.New("dialogul de ales folder nu e disponibil pe acest sistem")
+	ErrUnsupported = errors.New("the folder picker is not available on this system")
 )
 
 // errAutomationDenied: userul a refuzat permisiunea de Automatizare pe macOS.
-var errAutomationDenied = errors.New("macOS a refuzat accesul la dialog; permite Terminal/foreman in Setari > Confidentialitate > Automatizare")
+var errAutomationDenied = errors.New("macOS denied access to the dialog; allow Terminal/foreman in System Settings > Privacy & Security > Automation")
 
 // parseResult transforma iesirea unei comenzi de dialog intr-o cale sau o eroare.
 // Pur (nu ruleaza nimic), deci se poate testa pe orice OS.
@@ -30,7 +30,7 @@ func parseResult(stdout, stderr string, err error) (string, error) {
 		if strings.Contains(stderr, "-1743") {
 			return "", errAutomationDenied
 		}
-		return "", fmt.Errorf("dialog folder: %w: %s", err, strings.TrimSpace(stderr))
+		return "", fmt.Errorf("folder dialog: %w: %s", err, strings.TrimSpace(stderr))
 	}
 	path := strings.TrimSpace(stdout)
 	if path == "" {

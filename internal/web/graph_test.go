@@ -23,16 +23,16 @@ func TestAgentLinksValidation(t *testing.T) {
 		t.Fatalf("creare Sub: %d %s", code, raw)
 	}
 	cycle := map[string]any{"name": "Lead", "model": "sonnet", "parentId": sub.ID}
-	if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(root.ID), cycle); code != 400 || !strings.Contains(string(raw), "legatura ar crea un ciclu") {
+	if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(root.ID), cycle); code != 400 || !strings.Contains(string(raw), "the link would create a cycle") {
 		t.Fatalf("ciclu: %d %s", code, raw)
 	}
 	other := e.createProject(t, t.TempDir())
 	foreign := map[string]any{"name": "X", "model": "haiku", "parentId": e.root(t, other.ID).ID}
-	if code, raw := e.do(t, "POST", path, foreign); code != 400 || !strings.Contains(string(raw), "seful ales nu e in acest proiect") {
+	if code, raw := e.do(t, "POST", path, foreign); code != 400 || !strings.Contains(string(raw), "the chosen boss is not in this project") {
 		t.Fatalf("sef strain: %d %s", code, raw)
 	}
 	self := map[string]any{"name": "Sub", "model": "haiku", "parentId": root.ID, "reviewerId": sub.ID}
-	if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(sub.ID), self); code != 400 || !strings.Contains(string(raw), "propriul reviewer") {
+	if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(sub.ID), self); code != 400 || !strings.Contains(string(raw), "its own reviewer") {
 		t.Fatalf("propriul reviewer: %d %s", code, raw)
 	}
 	long := map[string]any{"name": "Y", "model": "haiku", "responsibilities": strings.Repeat("x", 2001)}
@@ -64,7 +64,7 @@ func TestUpdateAgentIgnoresForeignProjectID(t *testing.T) {
 	e.st.SetAgentPosition(w.ID, 5, 6)
 
 	body := map[string]any{"name": "Rook", "model": "sonnet", "parentId": otherRoot.ID, "projectId": other.ID, "posX": 900, "posY": 900}
-	if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(w.ID), body); code != 400 || !strings.Contains(string(raw), "seful ales nu e in acest proiect") {
+	if code, raw := e.do(t, "PUT", "/api/agents/"+itoa(w.ID), body); code != 400 || !strings.Contains(string(raw), "the chosen boss is not in this project") {
 		t.Fatalf("sef strain cu projectId fals: %d %s", code, raw)
 	}
 	body["parentId"] = root.ID
@@ -111,7 +111,7 @@ func TestAgentPositionEndpoint(t *testing.T) {
 	if a, _ := e.st.GetAgent(root.ID); a.PosX == nil || *a.PosX != 120.5 || *a.PosY != 80 {
 		t.Fatalf("pozitie: %+v", a)
 	}
-	if code, raw := e.do(t, "PUT", path, map[string]any{"x": 1e7, "y": 0}); code != 400 || !strings.Contains(string(raw), "pozitie invalida") {
+	if code, raw := e.do(t, "PUT", path, map[string]any{"x": 1e7, "y": 0}); code != 400 || !strings.Contains(string(raw), "invalid position") {
 		t.Fatalf("pozitie mare: %d %s", code, raw)
 	}
 	if code, _ := e.do(t, "PUT", "/api/agents/9999/position", map[string]any{"x": 1, "y": 1}); code != 404 {
@@ -139,20 +139,20 @@ func TestPromptPreviewUsesLinks(t *testing.T) {
 		code, raw := e.do(t, "POST", "/api/prompt-preview", body)
 		return code, string(raw)
 	}
-	if code, got := preview(map[string]any{"parentId": root.ID}); code != 200 || !strings.Contains(got, "Raportezi lui Lead.") {
+	if code, got := preview(map[string]any{"parentId": root.ID}); code != 200 || !strings.Contains(got, "You report to Lead.") {
 		t.Errorf("agent nou sub Lead: %d %s", code, got)
 	}
-	if code, got := preview(map[string]any{"parentId": rook.ID}); code != 200 || !strings.Contains(got, "Raportezi lui Rook.") {
+	if code, got := preview(map[string]any{"parentId": rook.ID}); code != 200 || !strings.Contains(got, "You report to Rook.") {
 		t.Errorf("agent nou sub Rook: %d %s", code, got)
 	}
-	if code, got := preview(map[string]any{"parentId": nil}); code != 200 || !strings.Contains(got, "Raportezi utilizatorului.") {
+	if code, got := preview(map[string]any{"parentId": nil}); code != 200 || !strings.Contains(got, "You report to the user.") {
 		t.Errorf("agent nou radacina: %d %s", code, got)
 	}
 	if code, got := preview(map[string]any{"agentId": root.ID, "parentId": nil}); code != 200 || !strings.Contains(got, "mcp__team__create_task") {
 		t.Errorf("Lead are echipa: %d %s", code, got)
 	}
 	other := e.createProject(t, t.TempDir())
-	if code, got := preview(map[string]any{"parentId": e.root(t, other.ID).ID}); code != 400 || !strings.Contains(got, "seful ales nu e in acest proiect") {
+	if code, got := preview(map[string]any{"parentId": e.root(t, other.ID).ID}); code != 400 || !strings.Contains(got, "the chosen boss is not in this project") {
 		t.Errorf("sef din alt proiect: %d %s", code, got)
 	}
 	if code, got := preview(map[string]any{"parentId": 99999}); code != 400 {
@@ -205,7 +205,7 @@ func TestReviewerLossMovesTaskToLead(t *testing.T) {
 				t.Fatalf("task: %s/%s", got.Status, got.ReviewStage)
 			}
 			pending, _ := e.st.Undelivered(root.ID)
-			if len(pending) != 1 || !strings.Contains(pending[0].Text, "Rook a terminat T-1") {
+			if len(pending) != 1 || !strings.Contains(pending[0].Text, "Rook finished T-1") {
 				t.Fatalf("Lead: %+v", pending)
 			}
 			if _, err := e.tm.AcceptTask(mcp.Caller{ProjectID: p.ID, AgentID: root.ID, IsLead: true}, "T-1", ""); err != nil {
@@ -235,7 +235,7 @@ func TestNewReviewerGetsPendingReview(t *testing.T) {
 		t.Fatalf("PUT: %d %s", code, raw)
 	}
 	pending, _ := e.st.Undelivered(bea.ID)
-	if len(pending) != 1 || !strings.Contains(pending[0].Text, "asteapta review-ul tau") {
+	if len(pending) != 1 || !strings.Contains(pending[0].Text, "is waiting for your review") {
 		t.Fatalf("Bea: %+v", pending)
 	}
 	if _, err := e.tm.ReviewApprove(mcp.Caller{ProjectID: p.ID, AgentID: bea.ID, HasParent: true, IsReviewer: true}, "T-1", ""); err != nil {
@@ -261,7 +261,7 @@ func TestDetachedAgent(t *testing.T) {
 			t.Fatal("un agent nelegat nu e radacina")
 		}
 	}
-	if code, raw := e.do(t, "POST", "/api/agents/"+itoa(banca.ID)+"/messages", map[string]any{"text": "salut"}); code != 400 || !strings.Contains(string(raw), "nu e legat") {
+	if code, raw := e.do(t, "POST", "/api/agents/"+itoa(banca.ID)+"/messages", map[string]any{"text": "salut"}); code != 400 || !strings.Contains(string(raw), "is not linked") {
 		t.Fatalf("mesaj catre nelegat: %d %s", code, raw)
 	}
 

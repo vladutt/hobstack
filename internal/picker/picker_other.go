@@ -21,7 +21,7 @@ func Pick(ctx context.Context) (string, error) {
 		return "", ErrUnsupported
 	}
 	cmd := exec.CommandContext(ctx, "zenity", "--file-selection", "--directory",
-		"--title=Alege folderul proiectului")
+		"--title=Choose the project folder")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

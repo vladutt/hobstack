@@ -19,10 +19,10 @@ type Model struct {
 // All e lista afisata in UI, in ordinea asta. Cand apare un model nou, il
 // adaugi aici (ID-ul exact, fara sufix de data).
 var All = []Model{
-	{ID: "opus", Label: "Opus (cel mai nou)", Group: GroupLatest},
-	{ID: "sonnet", Label: "Sonnet (cel mai nou)", Group: GroupLatest},
-	{ID: "haiku", Label: "Haiku (cel mai nou)", Group: GroupLatest},
-	{ID: "fable", Label: "Fable (cel mai nou)", Group: GroupLatest},
+	{ID: "opus", Label: "Opus (latest)", Group: GroupLatest},
+	{ID: "sonnet", Label: "Sonnet (latest)", Group: GroupLatest},
+	{ID: "haiku", Label: "Haiku (latest)", Group: GroupLatest},
+	{ID: "fable", Label: "Fable (latest)", Group: GroupLatest},
 
 	{ID: "claude-fable-5-1", Label: "Fable 5.1", Group: GroupPinned},
 	{ID: "claude-fable-5", Label: "Fable 5", Group: GroupPinned},

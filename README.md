@@ -1,73 +1,73 @@
 # Foreman
 
-Echipe de agenti Claude Code, local. Un singur binar Go, UI in browser pe 127.0.0.1.
+Local Claude Code agent teams. A single Go binary, with a browser UI on 127.0.0.1.
 
-Echipa unui proiect e o ierarhie: tu dai obiective agentilor radacina, liderii impart munca
-doar echipei lor directe, iar munca trece pe la reviewer (daca exista), apoi la liderul care a
-creat task-ul. Tu vorbesti cu orice agent. Totul se vede live pe un board si ramane salvat in SQLite.
+A project's team is a hierarchy: you give goals to the root agents, leads split the work
+only among their direct team, and work goes through the reviewer (if there is one), then to the lead
+that created the task. You can talk to any agent. Everything is visible live on a board and saved in SQLite.
 
-## Rulare
+## Running
 
     go run ./cmd/foreman start
 
-Deschide http://127.0.0.1:7777. Optiuni: `--port 8080`, `--no-open`.
-Folderul de lucru al proiectului e optional: daca nu alegi unul, se foloseste `~/Foreman/<nume>`.
-Ai nevoie de `claude` (Claude Code) in PATH, autentificat.
+Open http://127.0.0.1:7777. Options: `--port 8080`, `--no-open`.
+The project's working folder is optional: if you don't choose one, `~/Foreman/<name>` is used.
+You need `claude` (Claude Code) in PATH, logged in.
 
 ## Build
 
     go build -o foreman ./cmd/foreman
     GOOS=darwin GOARCH=arm64 go build -o foreman-mac ./cmd/foreman
 
-## Cum functioneaza
+## How it works
 
-- Agentii ruleaza ca `claude -p` headless, cu folderul proiectului ca working directory.
-- Aplicatia expune un server MCP pe `/mcp/<token>`. Tool-urile depind de rol:
-  - liderii au `create_task`, `list_tasks`, `accept_task` si `send_back`;
-  - agentii cu sef au `report_done`;
-  - reviewerii au `review_approve` si `review_reject`;
-  - un agent radacina fara echipa nu are tool-uri.
-- Cand un agent termina, reviewerul (daca exista) si apoi liderul care a creat task-ul sunt
-  trezisi (`--resume`) cu rezultatul.
-- Un sub-lider sparge task-ul primit in sub-task-uri pentru echipa lui. Cand toate sub-task-urile
-  sunt gata, task-ul revine in coada lui, iar sub-liderul il verifica si il raporteaza in sus.
-- Pe canvas nodurile se muta cu mouse-ul, legaturile se trag din ●, iar dublu-click deschide editorul.
-- In API (`POST /api/projects/{id}/agents`, `PUT /api/agents/{id}`), un `parentId` lipsa sau null inseamna
-  agent radacina.
-- `max_parallel` se aplica doar agentilor care au sef.
-- Permisiunile vin doar din aplicatie (`--settings` inline, `--setting-sources user`). `CLAUDE.md`
-  din repo-ul proiectului se citeste in continuare. `git push`, `rm -rf`, `sudo` si instalarile
-  de pachete sunt blocate ca prefix de comanda; cu "Comenzi shell" activ, un agent le poate
-  ocoli (`rm -fr`, `bash -c ...`). Da shell doar agentilor in care ai incredere (aprobarile
-  vin intr-o versiune viitoare).
-- Setarile tale globale Claude (`~/.claude/settings.json`) se aplica si agentilor, deci o regula
-  globala `permissions.allow` le largeste permisiunile.
-- API-ul accepta doar Host 127.0.0.1/localhost si cere `Content-Type: application/json` pe
-  request-urile care modifica ceva (protectie impotriva paginilor web care ar trimite cereri
-  catre aplicatie).
-- Fisierele atasate proiectului stau in `~/.foreman/projects/<id>/files/`; agentii le primesc cu
-  `--add-dir` si le citesc cu Read (inclusiv imagini si PDF).
-- La pornire toate proiectele sunt pe pauza: nimic nu ruleaza (si nu costa) fara sa apesi "Porneste echipa".
+- Agents run as headless `claude -p`, with the project folder as the working directory.
+- The app exposes an MCP server at `/mcp/<token>`. The tools depend on the role:
+  - leads have `create_task`, `list_tasks`, `accept_task` and `send_back`;
+  - agents with a boss have `report_done`;
+  - reviewers have `review_approve` and `review_reject`;
+  - a root agent without a team has no tools.
+- When an agent finishes, the reviewer (if any) and then the lead that created the task are
+  woken up (`--resume`) with the result.
+- A sub-lead splits the task it received into subtasks for its team. When all subtasks
+  are done, the task returns to its queue, and the sub-lead checks it and reports it up.
+- On the canvas, nodes are moved with the mouse, links are dragged from ●, and double-click opens the editor.
+- In the API (`POST /api/projects/{id}/agents`, `PUT /api/agents/{id}`), a missing or null `parentId` means
+  a root agent.
+- `max_parallel` applies only to agents that have a boss.
+- Permissions come only from the app (`--settings` inline, `--setting-sources user`). `CLAUDE.md`
+  from the project's repo is still read. `git push`, `rm -rf`, `sudo` and package installs
+  are blocked as command prefixes; with "Shell commands" enabled, an agent can get
+  around them (`rm -fr`, `bash -c ...`). Only give shell to agents you trust (approvals
+  come in a future version).
+- Your global Claude settings (`~/.claude/settings.json`) also apply to agents, so a global
+  `permissions.allow` rule widens their permissions.
+- The API accepts only Host 127.0.0.1/localhost and requires `Content-Type: application/json` on
+  requests that change something (protection against web pages that would send requests
+  to the app).
+- Files attached to a project live in `~/.foreman/projects/<id>/files/`; agents get them with
+  `--add-dir` and read them with Read (including images and PDFs).
+- On startup all projects are paused: nothing runs (or costs money) until you press "Start team".
 
-## Date
+## Data
 
-    ~/.foreman/foreman.db           proiecte, agenti, task-uri, run-uri, mesaje
-    ~/.foreman/logs/runs/<id>.jsonl logul brut al fiecarui run
-    ~/.foreman/projects/<id>/files/ fisierele atasate proiectului
+    ~/.foreman/foreman.db           projects, agents, tasks, runs, messages
+    ~/.foreman/logs/runs/<id>.jsonl raw log of each run
+    ~/.foreman/projects/<id>/files/ files attached to the project
 
-## Structura
+## Structure
 
-    cmd/foreman/        CLI: start, oprire curata la Ctrl+C
-    internal/config/    AppName si caile de pe disc
-    internal/store/     SQLite (modernc.org/sqlite, fara CGO)
-    internal/prompt/    system prompt, mesajul turei, permisiuni, config MCP
-    internal/runner/    porneste claude, parseaza stream-json, log + broadcast
-    internal/mcp/       server MCP minimal (JSON-RPC peste HTTP)
-    internal/team/      scheduler-ul: tool-urile echipei, pornire/final de run-uri
-    internal/events/    evenimente live per proiect (SSE)
-    internal/web/       API, SSE, UI embedded
+    cmd/foreman/        CLI: start, clean shutdown on Ctrl+C
+    internal/config/    AppName and paths on disk
+    internal/store/     SQLite (modernc.org/sqlite, no CGO)
+    internal/prompt/    system prompt, turn message, permissions, MCP config
+    internal/runner/    starts claude, parses stream-json, log + broadcast
+    internal/mcp/       minimal MCP server (JSON-RPC over HTTP)
+    internal/team/      the scheduler: team tools, run start/finish
+    internal/events/    live per-project events (SSE)
+    internal/web/       API, SSE, embedded UI
 
-## Redenumire
+## Renaming
 
-Numele e in `internal/config/config.go` (`AppName`). Il schimbi acolo, redenumesti
-`cmd/<nume>`, rulezi `go mod edit -module <nume>` si faci replace pe importuri.
+The name is in `internal/config/config.go` (`AppName`). Change it there, rename
+`cmd/<name>`, run `go mod edit -module <name>` and replace the imports.

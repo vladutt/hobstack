@@ -36,7 +36,7 @@ func (s *Server) saveStages(w http.ResponseWriter, r *http.Request) {
 		inProject[a.ID] = true
 	}
 	if len(in.Stages) > 12 {
-		fail(w, badRequest("maxim 12 etape"))
+		fail(w, badRequest("at most 12 stages"))
 		return
 	}
 	seen := map[string]bool{}
@@ -44,26 +44,26 @@ func (s *Server) saveStages(w http.ResponseWriter, r *http.Request) {
 		st := &in.Stages[i]
 		st.Name = strings.TrimSpace(st.Name)
 		if st.Name == "" {
-			fail(w, badRequest("fiecare etapa are nevoie de nume"))
+			fail(w, badRequest("every stage needs a name"))
 			return
 		}
-		if err := maxLen("numele etapei", st.Name, 40); err != nil {
+		if err := maxLen("stage name", st.Name, 40); err != nil {
 			fail(w, err)
 			return
 		}
 		key := strings.ToLower(st.Name)
 		if seen[key] {
-			fail(w, badRequest("doua etape cu numele "+st.Name))
+			fail(w, badRequest("two stages named "+st.Name))
 			return
 		}
 		seen[key] = true
 		if st.Kind != store.KindWork && st.Kind != store.KindCheck {
-			fail(w, badRequest("tip de etapa necunoscut: "+st.Kind))
+			fail(w, badRequest("unknown stage type: "+st.Kind))
 			return
 		}
 		for _, id := range st.AgentIDs {
 			if !inProject[id] {
-				fail(w, badRequest("un agent ales nu e in acest proiect"))
+				fail(w, badRequest("a chosen agent is not in this project"))
 				return
 			}
 		}
@@ -100,10 +100,10 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 	}
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
-		fail(w, badRequest("titlul e obligatoriu"))
+		fail(w, badRequest("title is required"))
 		return
 	}
-	for _, err := range []error{maxLen("titlul", title, 200), maxLen("descrierea", in.Description, 10000)} {
+	for _, err := range []error{maxLen("title", title, 200), maxLen("description", in.Description, 10000)} {
 		if err != nil {
 			fail(w, err)
 			return
@@ -137,14 +137,14 @@ func (s *Server) decideTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Action != "accept" && in.Action != "send_back" {
-		fail(w, badRequest("action trebuie sa fie accept sau send_back"))
+		fail(w, badRequest("action must be accept or send_back"))
 		return
 	}
 	err = s.team.UserDecide(id, in.Action == "accept", in.Feedback)
 	switch {
 	case errors.Is(err, team.ErrNotUserDecision):
 		writeErr(w, http.StatusConflict, err.Error())
-	case err != nil && strings.Contains(err.Error(), "scrie ce trebuie"):
+	case err != nil && in.Action == "send_back" && strings.TrimSpace(in.Feedback) == "": // lipseste feedback-ul
 		fail(w, badRequest(err.Error()))
 	case err != nil:
 		fail(w, err)

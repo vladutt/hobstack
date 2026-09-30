@@ -100,10 +100,10 @@ type queryer interface {
 func checkLinks(q queryer, a Agent) error {
 	if a.ParentID != nil {
 		if *a.ParentID == a.ID {
-			return LinkError("un agent nu poate fi propriul sef")
+			return LinkError("an agent cannot be its own boss")
 		}
 		if !inProject(q, *a.ParentID, a.ProjectID) {
-			return LinkError("seful ales nu e in acest proiect")
+			return LinkError("the chosen boss is not in this project")
 		}
 		// Urcam pe lantul de sefi pornind de la noul sef. Daca ajungem la
 		// agentul editat, legatura ar inchide un cerc. Un agent nou (ID 0) nu e
@@ -112,7 +112,7 @@ func checkLinks(q queryer, a Agent) error {
 			cur := *a.ParentID
 			for steps := 0; steps < 10000; steps++ { // limita: protectie la date deja stricate
 				if cur == a.ID {
-					return LinkError("legatura ar crea un ciclu")
+					return LinkError("the link would create a cycle")
 				}
 				var next sql.NullInt64
 				if err := q.QueryRow(`SELECT parent_id FROM agents WHERE id = ?`, cur).Scan(&next); err != nil {
@@ -127,10 +127,10 @@ func checkLinks(q queryer, a Agent) error {
 	}
 	if a.ReviewerID != nil {
 		if *a.ReviewerID == a.ID {
-			return LinkError("un agent nu poate fi propriul reviewer")
+			return LinkError("an agent cannot be its own reviewer")
 		}
 		if !inProject(q, *a.ReviewerID, a.ProjectID) {
-			return LinkError("reviewer-ul ales nu e in acest proiect")
+			return LinkError("the chosen reviewer is not in this project")
 		}
 	}
 	return nil

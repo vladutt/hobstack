@@ -32,15 +32,15 @@ type agentInput struct {
 func (in agentInput) apply(a *store.Agent) error {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return badRequest("numele agentului e obligatoriu")
+		return badRequest("agent name is required")
 	}
 	if !models.Valid(in.Model) {
-		return badRequest("model necunoscut: " + in.Model)
+		return badRequest("unknown model: " + in.Model)
 	}
 	tools := []string{}
 	for _, tool := range in.Tools {
 		if !slices.Contains(prompt.ValidTools, tool) {
-			return badRequest("tool necunoscut: " + tool)
+			return badRequest("unknown tool: " + tool)
 		}
 		if !slices.Contains(tools, tool) {
 			tools = append(tools, tool)
@@ -54,12 +54,12 @@ func (in agentInput) apply(a *store.Agent) error {
 	a.ParentID, a.ReviewerID = in.ParentID, in.ReviewerID
 	a.Detached = in.Detached && in.ParentID == nil
 	for _, err := range []error{
-		maxLen("numele agentului", a.Name, 40),
-		maxLen("rolul", a.Role, 80),
+		maxLen("agent name", a.Name, 40),
+		maxLen("role", a.Role, 80),
 		maxLen("background", a.Background, 10000),
-		maxLen("instructiunile", a.Instructions, 10000),
+		maxLen("instructions", a.Instructions, 10000),
 		maxLen("definition of done", a.DoneDef, 4000),
-		maxLen("responsabilitatile", a.Responsibilities, 2000),
+		maxLen("responsibilities", a.Responsibilities, 2000),
 	} {
 		if err != nil {
 			return err
@@ -89,7 +89,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.st.CreateAgent(&a); errors.Is(err, store.ErrConflict) {
-		writeErr(w, http.StatusConflict, fmt.Sprintf("exista deja un agent cu numele %s in proiect", a.Name))
+		writeErr(w, http.StatusConflict, fmt.Sprintf("an agent named %s already exists in the project", a.Name))
 		return
 	} else if err != nil {
 		fail(w, err)
@@ -122,7 +122,7 @@ func (s *Server) updateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.st.UpdateAgent(a); errors.Is(err, store.ErrConflict) {
-		writeErr(w, http.StatusConflict, fmt.Sprintf("exista deja un agent cu numele %s in proiect", a.Name))
+		writeErr(w, http.StatusConflict, fmt.Sprintf("an agent named %s already exists in the project", a.Name))
 		return
 	} else if err != nil {
 		fail(w, err)
@@ -145,11 +145,11 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.team.ActiveRunID(id) != "" {
-		writeErr(w, http.StatusConflict, "agentul lucreaza acum; opreste echipa inainte sa il stergi")
+		writeErr(w, http.StatusConflict, "the agent is working now; stop the team before deleting it")
 		return
 	}
 	if err := s.st.DeleteAgent(id); errors.Is(err, store.ErrConflict) {
-		writeErr(w, http.StatusConflict, "agentii care au task-uri si ultimul agent din proiect nu pot fi stersi")
+		writeErr(w, http.StatusConflict, "agents with tasks and the last agent in the project cannot be deleted")
 		return
 	} else if err != nil {
 		fail(w, err)
@@ -164,7 +164,7 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request) {
 // disparut). Agentul e deja salvat, deci o eroare aici doar se logheaza.
 func (s *Server) linksChanged(projectID int64) {
 	if err := s.team.LinksChanged(projectID); err != nil {
-		log.Printf("proiectul %d, legaturi schimbate: %v", projectID, err)
+		log.Printf("project %d, links changed: %v", projectID, err)
 	}
 }
 
@@ -197,7 +197,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	} else if a.Detached {
-		fail(w, badRequest("agentul nu e legat. Leaga-l de Tu sau de un lider ca sa lucreze"))
+		fail(w, badRequest("the agent is not linked. Link it to You or to a lead so it can work"))
 		return
 	}
 	var text string
@@ -215,7 +215,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		text = strings.TrimSpace(r.FormValue("text"))
 		if text == "" && len(files) == 0 {
-			fail(w, badRequest("mesajul e gol"))
+			fail(w, badRequest("the message is empty"))
 			return
 		}
 		if saved, err = s.saveUploads(agent.ProjectID, store.KindMessageFile, files); err != nil {
@@ -223,7 +223,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if text == "" {
-			text = "(vezi atasamentele)"
+			text = "(see attachments)"
 		}
 	} else {
 		var in struct {
@@ -235,11 +235,11 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		text = strings.TrimSpace(in.Text)
 		if text == "" {
-			fail(w, badRequest("mesajul e gol"))
+			fail(w, badRequest("the message is empty"))
 			return
 		}
 	}
-	if err := maxLen("mesajul", text, 10000); err != nil {
+	if err := maxLen("message", text, 10000); err != nil {
 		s.discardUploads(saved)
 		fail(w, err)
 		return
@@ -286,11 +286,11 @@ func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.ParentID != nil {
 		if _, ok := store.FindAgent(agents, *in.ParentID); !ok {
-			fail(w, badRequest("seful ales nu e in acest proiect"))
+			fail(w, badRequest("the chosen boss is not in this project"))
 			return
 		}
 		if *in.ParentID == in.AgentID {
-			fail(w, badRequest("un agent nu poate fi propriul sef"))
+			fail(w, badRequest("an agent cannot be its own boss"))
 			return
 		}
 	}
@@ -320,7 +320,7 @@ func (s *Server) setAgentPosition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if math.Abs(in.X) > 100000 || math.Abs(in.Y) > 100000 {
-		fail(w, badRequest("pozitie invalida"))
+		fail(w, badRequest("invalid position"))
 		return
 	}
 	if err := s.st.SetAgentPosition(id, in.X, in.Y); err != nil {

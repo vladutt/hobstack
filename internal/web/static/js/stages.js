@@ -9,20 +9,20 @@ export function stagesEditor({ project, onSaved, onClose }) {
   const rows = el("div", { class: "stage-rows" });
   const box = el("div", { class: "stages-editor section" },
     el("div", { class: "section-head" },
-      el("h2", {}, "Coloane (etape de lucru)"),
-      el("span", { class: "hint" }, "Task-ul trece prin etape in ordine; il ia primul agent liber din etapa. Dupa ultima, decide liderul.")),
+      el("h2", {}, "Columns (work stages)"),
+      el("span", { class: "hint" }, "A task moves through the stages in order; the first free agent in a stage picks it up. After the last one, the lead decides.")),
     rows,
     el("div", { class: "actions" },
-      el("button", { type: "button", class: "btn", onclick: () => { list.push({ name: "", kind: "work", agentIds: [] }); draw(); } }, "+ Etapa"),
+      el("button", { type: "button", class: "btn", onclick: () => { list.push({ name: "", kind: "work", agentIds: [] }); draw(); } }, "+ Stage"),
       el("span", { class: "grow" }),
-      el("button", { type: "button", class: "btn", onclick: onClose }, "Renunta"),
-      el("button", { type: "button", class: "btn primary", onclick: save }, "Salveaza")));
+      el("button", { type: "button", class: "btn", onclick: onClose }, "Cancel"),
+      el("button", { type: "button", class: "btn primary", onclick: save }, "Save")));
 
   function draw() {
     rows.replaceChildren(...list.map((s, i) => {
-      const name = el("input", { type: "text", value: s.name, maxlength: 40, placeholder: "ex. Dev", oninput: (e) => { s.name = e.target.value; } });
+      const name = el("input", { type: "text", value: s.name, maxlength: 40, placeholder: "e.g. Dev", oninput: (e) => { s.name = e.target.value; } });
       const kind = el("select", { value: s.kind, onchange: (e) => { s.kind = e.target.value; } },
-        el("option", { value: "work" }, "Lucru"), el("option", { value: "check" }, "Verificare"));
+        el("option", { value: "work" }, "Work"), el("option", { value: "check" }, "Check"));
       const agents = project.agents.map((a) => el("label", { class: "check" },
         el("input", { type: "checkbox", checked: s.agentIds.includes(a.id), onchange: (e) => {
           s.agentIds = e.target.checked ? [...s.agentIds, a.id] : s.agentIds.filter((x) => x !== a.id);
@@ -32,13 +32,13 @@ export function stagesEditor({ project, onSaved, onClose }) {
       return el("div", { class: "stage-row" },
         el("div", { class: "stage-row-head" },
           el("span", { class: "stage-num" }, String(i + 1)), name, kind,
-          el("button", { type: "button", class: "btn small", "aria-label": "Mai sus", disabled: i === 0, onclick: () => move(-1) }, "↑"),
-          el("button", { type: "button", class: "btn small", "aria-label": "Mai jos", disabled: i === list.length - 1, onclick: () => move(1) }, "↓"),
-          el("button", { type: "button", class: "btn small danger", "aria-label": "Sterge etapa", disabled: locked,
-            title: locked ? "are task-uri" : "Sterge etapa", onclick: () => { list.splice(i, 1); draw(); } }, "×")),
-        el("div", { class: "stage-agents" }, agents.length ? agents : el("span", { class: "hint" }, "Proiectul nu are agenti.")));
+          el("button", { type: "button", class: "btn small", "aria-label": "Move up", disabled: i === 0, onclick: () => move(-1) }, "↑"),
+          el("button", { type: "button", class: "btn small", "aria-label": "Move down", disabled: i === list.length - 1, onclick: () => move(1) }, "↓"),
+          el("button", { type: "button", class: "btn small danger", "aria-label": "Delete stage", disabled: locked,
+            title: locked ? "has tasks" : "Delete stage", onclick: () => { list.splice(i, 1); draw(); } }, "×")),
+        el("div", { class: "stage-agents" }, agents.length ? agents : el("span", { class: "hint" }, "The project has no agents.")));
     }));
-    if (!list.length) rows.append(el("p", { class: "hint" }, "Nicio etapa: board-ul foloseste coloanele implicite (In asteptare, In lucru, Review, Gata)."));
+    if (!list.length) rows.append(el("p", { class: "hint" }, "No stages: the board uses the default columns (Queued, In progress, Review, Done)."));
   }
 
   async function save() {
@@ -46,7 +46,7 @@ export function stagesEditor({ project, onSaved, onClose }) {
       await api(`/api/projects/${project.id}/stages`, { method: "PUT", body: {
         stages: list.map((s) => ({ id: s.id, name: s.name.trim(), kind: s.kind, agentIds: s.agentIds })),
       } });
-      toast("Coloane salvate.", "ok");
+      toast("Columns saved.", "ok");
       onSaved();
     } catch (err) {
       toast(err.message);

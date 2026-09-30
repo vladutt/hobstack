@@ -42,4 +42,4 @@ Dupa: cron-uri, service install, goreleaser, notificari, git worktrees.
 ## Conventii
 - `go vet ./...` si `go build -race` trebuie sa treaca.
 - Verifica cross-compile: `GOOS=darwin GOARCH=arm64 go build ./cmd/foreman` si `GOOS=windows go build ./cmd/foreman`.
-- Mesajele pentru utilizator in romana, fara diacritice.
+- Tot ce vede utilizatorul (UI, mesaje, erori) si prompturile pentru agenti sunt in engleza. Comentariile din cod raman in romana.

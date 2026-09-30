@@ -250,10 +250,10 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 /* pe Echipa, canvas-ul umple inaltimea ecranului, langa panou */
 @media (min-width: 901px) {
   /* fara sticky aici: ar crea un stacking context si "Ecran mare" ar ramane sub chat */
-  .ws[data-tab="echipa"] .ws-main { height: calc(100vh - 44px); display: flex; flex-direction: column; }
-  .ws[data-tab="echipa"] .team-body { flex: 1; min-height: 0; display: flex; }
-  .ws[data-tab="echipa"] .team-body .canvas-wrap:not(.full) { flex: 1; display: flex; flex-direction: column; }
-  .ws[data-tab="echipa"] .team-body .canvas-wrap:not(.full) svg.team-canvas { flex: 1; min-height: 0; height: auto; }
+  .ws[data-tab="team"] .ws-main { height: calc(100vh - 44px); display: flex; flex-direction: column; }
+  .ws[data-tab="team"] .team-body { flex: 1; min-height: 0; display: flex; }
+  .ws[data-tab="team"] .team-body .canvas-wrap:not(.full) { flex: 1; display: flex; flex-direction: column; }
+  .ws[data-tab="team"] .team-body .canvas-wrap:not(.full) svg.team-canvas { flex: 1; min-height: 0; height: auto; }
 }
 .console.on-details .thread-hint { display: none; }
 

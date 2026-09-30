@@ -63,8 +63,8 @@ export function avatar(name, kind, size = 32) {
 }
 
 export const STATUS_LABELS = {
-  Running: "Ruleaza", Idle: "Inactiv", Paused: "Pe pauza",
-  Working: "Lucreaza", Queued: "In asteptare",
+  Running: "Running", Idle: "Idle", Paused: "Paused",
+  Working: "Working", Queued: "Queued",
 };
 
 export function pill(status) {
@@ -92,13 +92,13 @@ export function toast(message, kind = "error") {
 }
 
 export function clock(iso) {
-  return new Date(iso).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
 
 export const TOOLS = [
-  { id: "write", label: "Scrie fisiere" },
-  { id: "shell", label: "Comenzi shell" },
+  { id: "write", label: "Write files" },
+  { id: "shell", label: "Shell commands" },
   { id: "git", label: "Git: status, diff, commit, branch" },
-  { id: "web", label: "Cautare web" },
+  { id: "web", label: "Web search" },
 ];

@@ -1,5 +1,5 @@
 // api face un request JSON catre server si arunca o eroare cu mesajul
-// serverului (in romana) daca raspunsul nu e ok.
+// serverului daca raspunsul nu e ok.
 // Serverul cere Content-Type: application/json pe orice request care nu e GET
 // (chiar si fara body), ca protectie impotriva request-urilor cross-site.
 export async function api(path, { method = "GET", body } = {}) {

@@ -22,13 +22,13 @@ func TestSubLeadTurnShowsDirectTeamAndSubtasks(t *testing.T) {
 	mustReconcile(t, f)
 	spec := f.fs.last(t, sub)
 	got := turn(spec)
-	if !strings.HasPrefix(got, "Echipa ta directa:\n- Wes") || strings.Contains(got, "Rook") {
+	if !strings.HasPrefix(got, "Your direct team:\n- Wes") || strings.Contains(got, "Rook") {
 		t.Fatalf("echipa directa gresita:\n%s", got)
 	}
-	if !strings.Contains(got, "Sub-task-uri deja create pentru acest task (nu le crea din nou):\n- T-2 [done] Lexer -> Wes") {
+	if !strings.Contains(got, "Subtasks already created for this task (do not create them again):\n- T-2 [done] Lexer -> Wes") {
 		t.Fatalf("lipsesc sub-task-urile:\n%s", got)
 	}
-	if !strings.Contains(argValue(spec.Args, "--append-system-prompt"), "Raportezi lui Lead.") {
+	if !strings.Contains(argValue(spec.Args, "--append-system-prompt"), "You report to Lead.") {
 		t.Fatal("sub-liderul trebuie sa raporteze lui Lead")
 	}
 }
@@ -61,7 +61,7 @@ func TestGraphFullFlow(t *testing.T) {
 	}
 	f.fs.finish(sub1.ID, runner.Outcome{Status: "done", SessionID: "s-sub", Result: "Am delegat."})
 	f.wantStatus(t, 1, store.StatusInProgress) // asteapta T-2, nu trece in review
-	if !f.hasMessage(sub.ID, "T-1 asteapta sub-task-urile: T-2.") {
+	if !f.hasMessage(sub.ID, "T-1 is waiting for its subtasks: T-2.") {
 		t.Fatal("lipseste nota de asteptare")
 	}
 
@@ -77,8 +77,8 @@ func TestGraphFullFlow(t *testing.T) {
 	mustReconcile(t, f)
 	rev1 := f.fs.last(t, rev)
 	rc := f.caller(t, rev1)
-	if !rc.IsReviewer || rc.IsLead || !strings.Contains(turn(rev1), "Revizuiesti munca lui: Wes") ||
-		!strings.Contains(turn(rev1), "Wes a terminat T-2. Verifica-l") {
+	if !rc.IsReviewer || rc.IsLead || !strings.Contains(turn(rev1), "You review the work of: Wes") ||
+		!strings.Contains(turn(rev1), "Wes finished T-2. Check it") {
 		t.Fatalf("rev1: %+v\n%s", rc, turn(rev1))
 	}
 	if _, err := f.tm.ReviewApprove(rc, "T-2", ""); err != nil {
@@ -89,7 +89,7 @@ func TestGraphFullFlow(t *testing.T) {
 	// 5. Sub accepta T-2; T-1 revine in coada si Sub primeste un run pe el
 	mustReconcile(t, f)
 	sub2 := f.fs.last(t, sub)
-	if sub2.ID == sub1.ID || !strings.Contains(turn(sub2), "Rev a aprobat T-2 lucrat de Wes") {
+	if sub2.ID == sub1.ID || !strings.Contains(turn(sub2), "Rev approved T-2, done by Wes") {
 		t.Fatalf("sub2:\n%s", turn(sub2))
 	}
 	if _, err := f.tm.AcceptTask(f.caller(t, sub2), "T-2", ""); err != nil {
@@ -111,7 +111,7 @@ func TestGraphFullFlow(t *testing.T) {
 	// 6. coordonatorul accepta T-1
 	mustReconcile(t, f)
 	lead2 := f.fs.last(t, f.lead)
-	if !strings.Contains(turn(lead2), "Sub a terminat T-1 (review): Import gata") {
+	if !strings.Contains(turn(lead2), "Sub finished T-1 (review): Import gata") {
 		t.Fatalf("lead2:\n%s", turn(lead2))
 	}
 	if _, err := f.tm.AcceptTask(f.caller(t, lead2), "T-1", ""); err != nil {
@@ -177,7 +177,7 @@ func TestRootsIgnoreMaxParallel(t *testing.T) {
 	if c.IsLead || c.HasParent || c.IsReviewer {
 		t.Fatalf("radacina singura: %+v", c)
 	}
-	if got := turn(f.fs.last(t, solo)); got != "Notificari:\n- Utilizatorul: salut" {
+	if got := turn(f.fs.last(t, solo)); got != "Notifications:\n- User: salut" {
 		t.Fatalf("tura Solo: %q", got)
 	}
 }
@@ -187,7 +187,7 @@ func TestUserMessageCopyGoesToParent(t *testing.T) {
 	sub := f.agent(t, "Sub", &f.lead, nil)
 	wes := f.agent(t, "Wes", &sub, nil)
 	f.tm.UserMessage(wes.ID, "ce faci?", nil)
-	if !f.hasMessage(sub.ID, "Utilizatorul -> Wes: ce faci?") || f.hasMessage(f.lead.ID, "Utilizatorul -> Wes") {
+	if !f.hasMessage(sub.ID, "User -> Wes: ce faci?") || f.hasMessage(f.lead.ID, "User -> Wes") {
 		t.Fatal("copia trebuie sa ajunga doar la seful direct")
 	}
 	f.tm.UserMessage(f.lead.ID, "salut", nil)
@@ -208,7 +208,7 @@ func TestAcceptBlockedSubtaskNotifiesParent(t *testing.T) {
 	if err := f.tm.AcceptBlocked(child.ID); err != nil {
 		t.Fatal(err)
 	}
-	if !f.hasMessage(sub.ID, "Utilizatorul a acceptat T-2.") || !f.hasMessage(sub.ID, "Toate sub-task-urile pentru T-1 sunt gata") {
+	if !f.hasMessage(sub.ID, "The user accepted T-2.") || !f.hasMessage(sub.ID, "All subtasks for T-1 are done") {
 		t.Fatal("sub-liderul (creator si asignatul parintelui) trebuie anuntat")
 	}
 	f.wantStatus(t, 1, store.StatusQueued)
@@ -224,7 +224,7 @@ func TestResumeWakesReviewer(t *testing.T) {
 	f.tm.Stop(f.p.ID)
 	f.tm.Resume(f.p.ID)
 	pending, _ := f.st.Undelivered(f.vera.ID)
-	if len(pending) != 1 || pending[0].Text != "Echipa a fost repornita. Asteapta decizia ta: T-1." {
+	if len(pending) != 1 || pending[0].Text != "The team was restarted. Waiting for your decision: T-1." {
 		t.Fatalf("Vera: %+v", pending)
 	}
 	if p, _ := f.st.Undelivered(f.lead.ID); len(p) != 0 {
@@ -274,7 +274,7 @@ func TestRootAssigneeWithoutDeciderGetsUserNote(t *testing.T) {
 	if _, err := f.tm.toReview(&task, solo, agents, "Solo a terminat"); err != nil {
 		t.Fatal(err)
 	}
-	if !f.hasMessage(solo.ID, "Utilizatorul decide din board (Accepta / Deblocheaza).") || f.hasMessage(solo.ID, "Leaga-l") {
+	if !f.hasMessage(solo.ID, "The user decides from the board (Accept / Unblock).") || f.hasMessage(solo.ID, "Link it") {
 		t.Fatal("radacina trebuie trimisa la board, fara sfatul cu liderul")
 	}
 	// un agent cu sef sters ramane cu sfatul vechi
@@ -286,7 +286,7 @@ func TestRootAssigneeWithoutDeciderGetsUserNote(t *testing.T) {
 	if _, err := f.tm.toReview(&t2, orphan, nil, "x"); err != nil {
 		t.Fatal(err)
 	}
-	if !f.hasMessage(orphan.ID, "Leaga-l de un lider pe canvas") {
+	if !f.hasMessage(orphan.ID, "Link it to a lead on the canvas") {
 		t.Fatal("non-radacina fara decident primeste sfatul cu liderul")
 	}
 }
@@ -328,7 +328,7 @@ func TestResumeWakesDeciderWhenReviewerGone(t *testing.T) {
 	f.tm.Stop(f.p.ID)
 	f.tm.Resume(f.p.ID)
 	pending, _ := f.st.Undelivered(f.lead.ID)
-	if len(pending) != 1 || pending[0].Text != "Echipa a fost repornita. Asteapta decizia ta: T-1." {
+	if len(pending) != 1 || pending[0].Text != "The team was restarted. Waiting for your decision: T-1." {
 		t.Fatalf("Lead: %+v", pending)
 	}
 }
@@ -345,7 +345,7 @@ func TestLinksChangedMovesOrphanReviewToLead(t *testing.T) {
 		t.Fatalf("stage = %q", got.ReviewStage)
 	}
 	pending, _ := f.st.Undelivered(f.lead.ID)
-	if len(pending) != 1 || !strings.Contains(pending[0].Text, "Rook a terminat T-1") || !strings.Contains(pending[0].Text, "A e gata") {
+	if len(pending) != 1 || !strings.Contains(pending[0].Text, "Rook finished T-1") || !strings.Contains(pending[0].Text, "A e gata") {
 		t.Fatalf("Lead: %+v", pending)
 	}
 	if p, _ := f.st.Undelivered(f.vera.ID); len(p) != 0 {
@@ -371,7 +371,7 @@ func TestLinksChangedBlocksRootWithoutDecider(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.wantStatus(t, 1, store.StatusBlocked)
-	if !f.hasMessage(solo.ID, "Utilizatorul decide din board") {
+	if !f.hasMessage(solo.ID, "The user decides from the board") {
 		t.Fatal("radacina trebuie trimisa la board")
 	}
 }
@@ -386,7 +386,7 @@ func TestLinksChangedNotifiesNewReviewer(t *testing.T) {
 		t.Fatal(err)
 	}
 	pending, _ := f.st.Undelivered(rev.ID)
-	if len(pending) != 1 || !strings.HasPrefix(pending[0].Text, "Rook a terminat T-1 si asteapta review-ul tau.") {
+	if len(pending) != 1 || !strings.HasPrefix(pending[0].Text, "Rook finished T-1 and is waiting for your review.") {
 		t.Fatalf("Rev: %+v", pending)
 	}
 	if got := f.wantStatus(t, 1, store.StatusReview); got.ReviewStage != store.StageReviewer {

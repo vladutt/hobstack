@@ -29,7 +29,7 @@ func TestLeadWakesOnUserMessage(t *testing.T) {
 		t.Fatalf("run-uri pornite: %d", f.fs.count())
 	}
 	spec := f.fs.last(t, f.lead)
-	if !strings.Contains(turn(spec), "Utilizatorul: Fa importul") || !strings.HasPrefix(turn(spec), "Echipa ta directa:") {
+	if !strings.Contains(turn(spec), "User: Fa importul") || !strings.HasPrefix(turn(spec), "Your direct team:") {
 		t.Fatalf("mesajul turei: %q", turn(spec))
 	}
 	if spec.Dir != f.p.Workdir || argValue(spec.Args, "--model") != "sonnet" || hasFlag(spec.Args, "--resume") {
@@ -70,7 +70,7 @@ func TestRunArguments(t *testing.T) {
 	if !strings.Contains(argValue(args, "--mcp-config"), `"url":"http://127.0.0.1:7777/mcp/`) {
 		t.Errorf("--mcp-config = %s", argValue(args, "--mcp-config"))
 	}
-	if !strings.Contains(argValue(args, "--append-system-prompt"), "Esti Rook, Backend Dev, in proiectul ApiUnit. Raportezi lui Lead.") {
+	if !strings.Contains(argValue(args, "--append-system-prompt"), "You are Rook, Backend Dev, in the project ApiUnit. You report to Lead.") {
 		t.Error("system prompt gresit")
 	}
 }
@@ -106,7 +106,7 @@ func TestFullFlow(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	lead2 := f.fs.last(t, f.lead)
-	if lead2.ID == lead1.ID || !strings.Contains(turn(lead2), "Rook a terminat T-1 (review): A e gata") {
+	if lead2.ID == lead1.ID || !strings.Contains(turn(lead2), "Rook finished T-1 (review): A e gata") {
 		t.Fatalf("lead-ul nu a fost trezit corect: %q", turn(lead2))
 	}
 	if argValue(lead2.Args, "--resume") != "s-lead" {
@@ -133,11 +133,11 @@ func TestFullFlow(t *testing.T) {
 
 	mustReconcile(t, f)
 	rook3 := f.fs.last(t, f.rook)
-	if !strings.Contains(turn(rook3), "Task T-1: A") || !strings.Contains(turn(rook3), "Feedback la incercarea anterioara:\nLipsesc testele") {
+	if !strings.Contains(turn(rook3), "Task T-1: A") || !strings.Contains(turn(rook3), "Feedback on the previous attempt:\nLipsesc testele") {
 		t.Fatalf("rook3: %q", turn(rook3))
 	}
 	lead3 := f.fs.last(t, f.lead)
-	if !strings.Contains(turn(lead3), "Rook a terminat T-3 fara report_done (review): C e gata") {
+	if !strings.Contains(turn(lead3), "Rook finished T-3 without report_done (review): C e gata") {
 		t.Fatalf("lead3: %q", turn(lead3))
 	}
 	if _, err := f.tm.AcceptTask(f.caller(t, lead3), "T-3", ""); err != nil {
@@ -164,14 +164,14 @@ func TestFailedWorkerRunGoesToReview(t *testing.T) {
 	f.task(t, "A", f.rook, store.StatusQueued)
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: "failed", Error: "Reached maximum budget ($1)"})
-	if got := f.wantStatus(t, 1, store.StatusReview); got.Result != "run esuat: Reached maximum budget ($1)" {
+	if got := f.wantStatus(t, 1, store.StatusReview); got.Result != "run failed: Reached maximum budget ($1)" {
 		t.Fatalf("rezultat = %q", got.Result)
 	}
 	pending, _ := f.st.Undelivered(f.lead.ID)
-	if len(pending) != 1 || !strings.Contains(pending[0].Text, "Run-ul lui Rook pe T-1 a esuat") {
+	if len(pending) != 1 || !strings.Contains(pending[0].Text, "Rook's run on T-1 failed") {
 		t.Fatalf("notificari lead: %+v", pending)
 	}
-	if !f.hasMessage(f.rook.ID, "Run esuat: Reached maximum budget") {
+	if !f.hasMessage(f.rook.ID, "Run failed: Reached maximum budget") {
 		t.Error("lipseste evenimentul din thread-ul worker-ului")
 	}
 }
@@ -221,7 +221,7 @@ func TestResumeWakesLeadForReview(t *testing.T) {
 		t.Fatalf("run-uri pornite: %d", f.fs.count())
 	}
 	got := turn(f.fs.last(t, f.lead))
-	if !strings.Contains(got, "Echipa a fost repornita") || !strings.Contains(got, "T-1") {
+	if !strings.Contains(got, "The team was restarted") || !strings.Contains(got, "T-1") {
 		t.Fatalf("tura lead-ului: %q", got)
 	}
 }
@@ -270,7 +270,7 @@ func TestMissingWorkdirPausesProject(t *testing.T) {
 	if p, _ := f.st.GetProject(f.p.ID); !p.Paused {
 		t.Fatal("proiectul trebuia pus pe pauza")
 	}
-	if !f.hasMessage(f.lead.ID, "Nu pot porni Lead") {
+	if !f.hasMessage(f.lead.ID, "Cannot start Lead") {
 		t.Fatal("lipseste explicatia din thread-ul lead-ului")
 	}
 }
@@ -283,7 +283,7 @@ func TestPromptChangeStartsNewSession(t *testing.T) {
 	if hasFlag(f.fs.last(t, f.rook).Args, "--resume") {
 		t.Fatal("prompt schimbat: nu trebuia --resume")
 	}
-	if !f.hasMessage(f.rook.ID, "sesiune noua") {
+	if !f.hasMessage(f.rook.ID, "new session") {
 		t.Fatal("lipseste evenimentul de sesiune noua")
 	}
 }
@@ -292,10 +292,10 @@ func TestDirectMessageToWorker(t *testing.T) {
 	f := setup(t)
 	f.tm.UserMessage(f.rook.ID, "ce faci?", nil)
 	mustReconcile(t, f)
-	if got := turn(f.fs.last(t, f.rook)); !strings.Contains(got, "Notificari:\n- Utilizatorul: ce faci?") {
+	if got := turn(f.fs.last(t, f.rook)); !strings.Contains(got, "Notifications:\n- User: ce faci?") {
 		t.Fatalf("worker: %q", got)
 	}
-	if got := turn(f.fs.last(t, f.lead)); !strings.Contains(got, "Utilizatorul -> Rook: ce faci?") {
+	if got := turn(f.fs.last(t, f.lead)); !strings.Contains(got, "User -> Rook: ce faci?") {
 		t.Fatalf("lead: %q", got)
 	}
 	msgs, _ := f.st.ListMessages(f.rook.ID)
@@ -322,7 +322,7 @@ func TestBlockedTaskActions(t *testing.T) {
 	if err := f.tm.AcceptBlocked(c.ID); !errors.Is(err, ErrNotBlocked) {
 		t.Fatalf("task neblocat: %v", err)
 	}
-	if !f.hasMessage(f.lead.ID, "Utilizatorul a deblocat T-1") {
+	if !f.hasMessage(f.lead.ID, "The user unblocked T-1") {
 		t.Fatal("lead-ul trebuie anuntat")
 	}
 }

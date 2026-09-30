@@ -28,9 +28,9 @@ import (
 	"foreman/internal/web"
 )
 
-const usage = `%[1]s - echipe de agenti Claude Code, local
+const usage = `%[1]s - local Claude Code agent teams
 
-Utilizare:
+Usage:
   %[1]s start [--port 7777] [--no-open]
 `
 
@@ -48,15 +48,15 @@ func main() {
 		os.Exit(1)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "eroare:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
 func start(args []string) error {
 	fl := flag.NewFlagSet("start", flag.ExitOnError)
-	port := fl.Int("port", 7777, "portul pe care asculta UI-ul")
-	noOpen := fl.Bool("no-open", false, "nu deschide browserul automat")
+	port := fl.Int("port", 7777, "port the UI listens on")
+	noOpen := fl.Bool("no-open", false, "don't open the browser automatically")
 	fl.Parse(args)
 
 	paths, err := config.Default()
@@ -64,11 +64,11 @@ func start(args []string) error {
 		return err
 	}
 	if err := paths.Ensure(); err != nil {
-		return fmt.Errorf("nu pot crea %s: %w", paths.Root, err)
+		return fmt.Errorf("cannot create %s: %w", paths.Root, err)
 	}
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {
-		return errors.New("nu gasesc 'claude' in PATH. Instaleaza Claude Code si incearca din nou")
+		return errors.New("'claude' not found in PATH. Install Claude Code and try again")
 	}
 	st, err := store.Open(paths.DB)
 	if err != nil {
@@ -85,7 +85,7 @@ func start(args []string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("portul %d e ocupat, incearca --port: %w", *port, err)
+		return fmt.Errorf("port %d is in use, try --port: %w", *port, err)
 	}
 	url := "http://" + ln.Addr().String() // portul real, nu cel din flag
 
@@ -95,7 +95,7 @@ func start(args []string) error {
 	tm.SetFilesRoot(paths.Projects)
 	// dupa un restart: run-urile vechi devin "interrupted" si totul sta pe pauza
 	if err := tm.Recover(); err != nil {
-		return fmt.Errorf("recuperarea starii: %w", err)
+		return fmt.Errorf("recovering state: %w", err)
 	}
 	go tm.Run(ctx)
 
@@ -113,8 +113,8 @@ func start(args []string) error {
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
 
-	log.Printf("%s ruleaza pe %s", config.AppName, url)
-	log.Printf("date: %s", paths.Root)
+	log.Printf("%s running at %s", config.AppName, url)
+	log.Printf("data: %s", paths.Root)
 	log.Printf("claude: %s", claudeBin)
 	if !*noOpen {
 		openBrowser(url)
@@ -131,7 +131,7 @@ func start(args []string) error {
 		}
 	}
 
-	log.Println("opresc agentii activi...")
+	log.Println("stopping active agents...")
 	mgr.Shutdown()
 	shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -149,6 +149,6 @@ func openBrowser(url string) {
 		cmd = exec.Command("xdg-open", url)
 	}
 	if err := cmd.Start(); err != nil {
-		log.Printf("deschide manual: %s", url)
+		log.Printf("open manually: %s", url)
 	}
 }

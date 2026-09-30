@@ -79,7 +79,7 @@ func TestCreateProjectFromSetup(t *testing.T) {
 	before := len(e.projects(t))
 	proposal["agents"].([]map[string]any)[0]["reportsTo"] = "Bob"
 	code, raw = e.do(t, "POST", "/api/projects/setup", map[string]any{"workdir": t.TempDir(), "proposal": proposal})
-	if code != 400 || !strings.Contains(string(raw), "ciclu") {
+	if code != 400 || !strings.Contains(string(raw), "cycle") {
 		t.Fatalf("ciclu: %d %s", code, raw)
 	}
 	if len(e.projects(t)) != before {

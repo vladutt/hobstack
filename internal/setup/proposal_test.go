@@ -31,14 +31,14 @@ func TestValidateProposalNormalizes(t *testing.T) {
 
 func TestValidateProposalErrors(t *testing.T) {
 	cases := map[string]func(p *Proposal){
-		"legatura ar crea un ciclu":    func(p *Proposal) { p.Agents[0].ReportsTo = "Bob" },
-		"exista deja un agent":         func(p *Proposal) { p.Agents[1].Name = "ANA" },
-		"nu exista in propunere":       func(p *Proposal) { p.Agents[1].ReviewedBy = "Zed" },
-		"propriul reviewer":            func(p *Proposal) { p.Agents[1].ReviewedBy = "Bob" },
-		"doar tool-urile write si git": func(p *Proposal) { p.Agents[1].Tools = []string{"shell"} },
-		"numele proiectului":           func(p *Proposal) { p.Name = "  " },
-		"cel putin un agent":           func(p *Proposal) { p.Agents = nil },
-		"maxim 12 agenti": func(p *Proposal) {
+		"the link would create a cycle":  func(p *Proposal) { p.Agents[0].ReportsTo = "Bob" },
+		"there is already an agent":      func(p *Proposal) { p.Agents[1].Name = "ANA" },
+		"does not exist in the proposal": func(p *Proposal) { p.Agents[1].ReviewedBy = "Zed" },
+		"their own reviewer":             func(p *Proposal) { p.Agents[1].ReviewedBy = "Bob" },
+		"only the write and git tools":   func(p *Proposal) { p.Agents[1].Tools = []string{"shell"} },
+		"project name":                   func(p *Proposal) { p.Name = "  " },
+		"at least one agent":             func(p *Proposal) { p.Agents = nil },
+		"at most 12 agents": func(p *Proposal) {
 			for i := 0; i < 11; i++ {
 				p.Agents = append(p.Agents, ProposedAgent{Name: "X" + string(rune('a'+i)), ReportsTo: "Ana"})
 			}
@@ -73,7 +73,7 @@ func TestValidateProposalSingleRoot(t *testing.T) {
 func TestValidateProposalGoalLimit(t *testing.T) {
 	p := valid()
 	p.Goal = strings.Repeat("x", 2001)
-	if err := ValidateProposal(p, true); err == nil || !strings.Contains(err.Error(), "obiectivul") {
+	if err := ValidateProposal(p, true); err == nil || !strings.Contains(err.Error(), "goal") {
 		t.Fatalf("am %v", err)
 	}
 }

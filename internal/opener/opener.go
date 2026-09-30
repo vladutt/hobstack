@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	ErrNoHTML        = errors.New("nu am gasit niciun fisier .html in folderul proiectului")
-	ErrUnknownEditor = errors.New("editor necunoscut sau neinstalat")
+	ErrNoHTML        = errors.New("no .html file found in the project folder")
+	ErrUnknownEditor = errors.New("unknown or not installed editor")
 )
 
 // Editor e un editor detectat pe calculator.

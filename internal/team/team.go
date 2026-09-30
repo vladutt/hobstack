@@ -198,5 +198,5 @@ func clip(s string) string {
 
 // ProposeSetup apartine wizard-ului (pachetul setup); echipa nu il serveste.
 func (t *Team) ProposeSetup(mcp.Caller, json.RawMessage) (string, error) {
-	return "", errors.New("propose_setup nu e disponibil aici")
+	return "", errors.New("propose_setup is not available here")
 }

@@ -28,7 +28,7 @@ func setupFail(w http.ResponseWriter, err error) {
 
 func (s *Server) startSetup(w http.ResponseWriter, r *http.Request) {
 	if s.wizard == nil {
-		writeErr(w, http.StatusNotImplemented, "wizard-ul nu e disponibil")
+		writeErr(w, http.StatusNotImplemented, "the wizard is not available")
 		return
 	}
 	var in struct {
@@ -96,7 +96,7 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 	}
 	p := store.Project{Name: in.Proposal.Name, Goal: in.Proposal.Goal, Context: in.Proposal.Context, Workdir: dir}
 	if _, err := s.st.CreateProjectWithTeam(&p, in.Proposal.Members()); errors.Is(err, store.ErrConflict) {
-		writeErr(w, http.StatusBadRequest, "exista deja un agent cu acest nume in proiect")
+		writeErr(w, http.StatusBadRequest, "an agent with this name already exists in the project")
 		return
 	} else if err != nil {
 		fail(w, err)
@@ -104,7 +104,7 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 	}
 	// ca la createProject: un folder ramas de la un proiect vechi cu acelasi id
 	if err := os.RemoveAll(filepath.Join(s.dirs.Projects, strconv.FormatInt(p.ID, 10))); err != nil {
-		log.Printf("curatare folder vechi proiect %d: %v", p.ID, err)
+		log.Printf("cleaning up old project folder %d: %v", p.ID, err)
 	}
 	writeJSON(w, http.StatusCreated, p)
 }
