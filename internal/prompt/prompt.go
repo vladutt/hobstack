@@ -68,7 +68,8 @@ const howSubLead = `When you receive a task from your boss, break it into subtas
 
 const howWorker = `Work only on the task you received and do not change anything outside it. ` +
 	`When you finish, call mcp__team__report_done with the requested summary. ` +
-	`If something is unclear or blocked, call mcp__team__report_done explaining the problem instead of guessing.`
+	`If something is unclear or blocked and only the user can resolve it, use mcp__team__ask_user; ` +
+	`if it is a problem for your lead, call mcp__team__report_done explaining it. Do not guess.`
 
 const howReviewer = `You check the work of the agents listed under "You review the work of" (in the turn message). When you receive a task to check, ` +
 	`read the result and the changed files, then call mcp__team__review_approve if it is good, or ` +

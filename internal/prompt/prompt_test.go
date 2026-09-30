@@ -185,3 +185,17 @@ func TestSystemAskUser(t *testing.T) {
 		}
 	}
 }
+
+// workerul nu mai e trimis la report_done pentru orice nelamurire:
+// ce poate rezolva doar utilizatorul merge pe ask_user
+func TestWorkerUnclearUsesAskUser(t *testing.T) {
+	got := System(proj, store.Agent{Name: "A"}, Links{BossName: "Atlas"})
+	want := "If something is unclear or blocked and only the user can resolve it, use mcp__team__ask_user; " +
+		"if it is a problem for your lead, call mcp__team__report_done explaining it. Do not guess."
+	if !strings.Contains(got, want) {
+		t.Fatalf("lipseste regula pentru nelamuriri:\n%s", got)
+	}
+	if strings.Contains(got, "call mcp__team__report_done explaining the problem instead of guessing") {
+		t.Fatal("textul vechi a ramas")
+	}
+}

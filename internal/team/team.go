@@ -132,6 +132,14 @@ func (t *Team) isActive(agentID int64) bool {
 	return ok
 }
 
+// activeTaskID intoarce task-ul run-ului activ al agentului; 0 = fara run
+// activ sau run fara task.
+func (t *Team) activeTaskID(agentID int64) int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.active[agentID].taskID
+}
+
 // AgentStatus intoarce statusul afisat si task-ul curent (in lucru sau urmatorul).
 func (t *Team) AgentStatus(a store.Agent, tasks []store.Task) (string, *store.Task) {
 	pending, _ := t.st.HasUndelivered(a.ID)

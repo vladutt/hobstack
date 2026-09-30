@@ -117,9 +117,17 @@ func (s *Store) CloseQuestion(id int64, status, answer string) error {
 	return ErrConflict
 }
 
-// HasOpenQuestionForRun: run-ul a pus o intrebare care inca asteapta raspuns.
-func (s *Store) HasOpenQuestionForRun(runID string) (bool, error) {
+// HasOpenQuestionForTask: task-ul are cel putin o intrebare deschisa. Regula:
+// un task asteapta raspunsul utilizatorului cat timp are ORICE intrebare deschisa.
+func (s *Store) HasOpenQuestionForTask(taskID int64) (bool, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM questions WHERE run_id = ? AND run_id != '' AND status = 'open'`, runID).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM questions WHERE task_id = ? AND status = 'open'`, taskID).Scan(&n)
+	return n > 0, err
+}
+
+// HasQuestionForRun: run-ul a pus cel putin o intrebare (deschisa sau inchisa).
+func (s *Store) HasQuestionForRun(runID string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM questions WHERE run_id = ? AND run_id != ''`, runID).Scan(&n)
 	return n > 0, err
 }

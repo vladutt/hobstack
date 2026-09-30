@@ -176,6 +176,7 @@ export async function workspaceView(root, projectId, route) {
     const task = q.taskId ? p.tasks.find((t) => t.id === q.taskId) : null;
     return questionBox(q, {
       agentName: agent ? agent.name : "Agent",
+      avatar: agent ? avatar(agent.name, kindOf(agent), 20) : null,
       taskRef: task ? ref(task) : null,
       onDone: reload,
     });

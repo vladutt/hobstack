@@ -3,7 +3,8 @@ import { el, toast } from "./ui.js";
 
 // questionBox: o intrebare a unui agent catre utilizator, cu optiunile ca
 // butoane si un raspuns liber (Send / Dismiss). onDone se cheama dupa trimitere.
-export function questionBox(q, { agentName, taskRef, onDone }) {
+// avatar: nodul cu avatarul agentului (il construieste apelantul) sau null.
+export function questionBox(q, { agentName, avatar, taskRef, onDone }) {
   const answer = el("textarea", { rows: 2, maxlength: 4000, placeholder: "Your answer", "aria-label": `Answer to ${agentName}` });
   const send = async (text) => {
     if (!text.trim()) { answer.focus(); return; }
@@ -38,7 +39,7 @@ export function questionBox(q, { agentName, taskRef, onDone }) {
   });
   const options = q.options || [];
   return el("div", { class: "question" },
-    el("div", { class: "question-head" }, el("strong", {}, agentName), taskRef ? " · " + taskRef : null),
+    el("div", { class: "question-head" }, avatar || null, el("strong", {}, agentName), taskRef ? " · " + taskRef : null),
     el("p", { class: "question-text" }, q.text),
     options.length ? el("div", { class: "actions" }, options.map((o) => button(o, "btn small", () => send(o)))) : null,
     el("div", { class: "question-answer" }, answer,

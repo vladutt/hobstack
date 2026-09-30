@@ -20,11 +20,8 @@ func TestQuestionsLifecycle(t *testing.T) {
 	if len(open) != 1 || open[0].Options[1] != "No" || *open[0].TaskID != task.ID {
 		t.Fatalf("open: %+v", open)
 	}
-	if ok, _ := s.HasOpenQuestionForRun("run-1"); !ok {
-		t.Fatal("run-1 are o intrebare deschisa")
-	}
-	if ok, _ := s.HasOpenQuestionForRun("run-2"); ok {
-		t.Fatal("run-2 nu are")
+	if ok, _ := s.HasOpenQuestionForTask(task.ID); !ok {
+		t.Fatal("task-ul are o intrebare deschisa")
 	}
 	if err := s.CloseQuestion(q.ID, QuestionAnswered, "Yes"); err != nil {
 		t.Fatal(err)
@@ -78,5 +75,46 @@ func TestRequeueSkipsWaitingForAnswer(t *testing.T) {
 	}
 	if w, _ := s.GetTask(waiting.ID); w.Status != StatusInProgress {
 		t.Fatalf("RequeueAll: %s", w.Status)
+	}
+}
+
+// regula: un task asteapta cat timp are ORICE intrebare deschisa pe el
+func TestQuestionHelpers(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	task := Task{ProjectID: p.ID, Title: "A", AssigneeID: lead.ID}
+	s.CreateTask(&task)
+	if ok, err := s.HasOpenQuestionForTask(task.ID); err != nil || ok {
+		t.Fatalf("fara intrebari: %v %v", ok, err)
+	}
+	if ok, _ := s.HasQuestionForRun("run-1"); ok {
+		t.Fatal("run-1 nu a intrebat inca")
+	}
+	q1 := Question{ProjectID: p.ID, AgentID: lead.ID, TaskID: &task.ID, RunID: "run-1", Text: "1?"}
+	q2 := Question{ProjectID: p.ID, AgentID: lead.ID, TaskID: &task.ID, RunID: "run-1", Text: "2?"}
+	s.AddQuestion(&q1)
+	s.AddQuestion(&q2)
+	if ok, _ := s.HasOpenQuestionForTask(task.ID); !ok {
+		t.Fatal("task-ul are intrebari deschise")
+	}
+	s.CloseQuestion(q1.ID, QuestionAnswered, "x")
+	if ok, _ := s.HasOpenQuestionForTask(task.ID); !ok {
+		t.Fatal("a doua intrebare e inca deschisa")
+	}
+	s.CloseQuestion(q2.ID, QuestionDismissed, "")
+	if ok, _ := s.HasOpenQuestionForTask(task.ID); ok {
+		t.Fatal("toate intrebarile sunt inchise")
+	}
+	// HasQuestionForRun conteaza orice status
+	if ok, _ := s.HasQuestionForRun("run-1"); !ok {
+		t.Fatal("run-1 a intrebat")
+	}
+	if ok, _ := s.HasQuestionForRun("run-2"); ok {
+		t.Fatal("run-2 nu a intrebat")
+	}
+	// run_id gol nu se potriveste niciodata
+	s.AddQuestion(&Question{ProjectID: p.ID, AgentID: lead.ID, Text: "no run"})
+	if ok, _ := s.HasQuestionForRun(""); ok {
+		t.Fatal("run_id gol")
 	}
 }

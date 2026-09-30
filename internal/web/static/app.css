@@ -326,7 +326,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .needs-you[hidden] { display: none; }
 .needs-you h2 { font-size: 14px; color: var(--amber); margin: 0; }
 .question { border: 1px solid var(--amber); background: var(--amber-bg); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
-.question-head { font-size: 13px; }
+.question-head { font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .question-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .question-answer { display: flex; gap: 8px; align-items: flex-start; }
 .question-answer textarea { flex: 1; min-width: 0; }
