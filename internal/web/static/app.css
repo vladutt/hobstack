@@ -282,3 +282,19 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .wizard-tools { display: flex; flex-wrap: wrap; gap: 14px; }
 .wizard-actions { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0; border-top: 1px solid var(--line); }
 .wizard-actions .grow { flex: 1; }
+
+/* ---------- etape (coloane proprii) ---------- */
+.board.stages-board { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); overflow-x: auto; padding-bottom: 6px; }
+.col-agents { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 4px; }
+.col-kind { margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.board-hint { margin: 8px 0 0; }
+.stages-editor { margin-bottom: 12px; }
+.stage-rows { display: grid; gap: 10px; }
+.stage-row { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; background: var(--card-2); }
+.stage-row-head { display: flex; gap: 8px; align-items: center; }
+.stage-row-head input { flex: 1; min-width: 0; }
+.stage-row-head select { width: auto; }
+.stage-num { font-family: var(--mono); color: var(--muted); width: 18px; text-align: center; }
+.stage-agents { display: flex; flex-wrap: wrap; gap: 12px; }
+/* board-ul cu etape ramane pe scroll orizontal si pe ecrane inguste */
+@media (max-width: 1250px) { .board.stages-board { grid-template-columns: none; } }
