@@ -10,6 +10,7 @@ import (
 
 	"foreman/internal/mcp"
 	"foreman/internal/runner"
+	"foreman/internal/store"
 )
 
 type fakeStarter struct {
@@ -251,4 +252,87 @@ func hasArgPair(args []string, flag, value string) bool {
 		}
 	}
 	return false
+}
+
+func folderInput(t *testing.T) (FolderInput, string, string) {
+	client, landing := t.TempDir(), t.TempDir()
+	return FolderInput{
+		Project: store.Project{ID: 3, Name: "Probe", Goal: "Ship v2", Context: "Shared API", Folders: []store.Folder{
+			{ID: 1, Name: "Client", Path: client}, {ID: 2, Name: "Landing", Path: landing},
+		}},
+		Folder: store.Folder{ID: 2, Name: "Landing", Path: landing},
+		Team:   []store.Agent{{ID: 7, Name: "Lead", Role: "Lead"}, {ID: 8, Name: "Rook", Role: "Backend", ParentID: ptr64(7)}},
+	}, client, landing
+}
+
+func ptr64(v int64) *int64 { return &v }
+
+func TestStartFolder(t *testing.T) {
+	m, f := newTest(t)
+	in, client, landing := folderInput(t)
+	s, err := m.StartFolder(in, "a landing page for pricing", "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := f.specs[0]
+	if spec.Dir != landing || !hasArgPair(spec.Args, "--add-dir", client) || s.ProjectID != 3 || s.FolderID != 2 || s.Title != "Probe · Landing" {
+		t.Fatalf("spec dir=%s session=%+v", spec.Dir, s)
+	}
+	for _, want := range []string{"Project: Probe", "Folder to set up: Landing (" + landing + ")", "- Rook: Backend", "reports to Lead", "a landing page for pricing"} {
+		if !strings.Contains(spec.Prompt, want) {
+			t.Errorf("turn prompt fara %q:\n%s", want, spec.Prompt)
+		}
+	}
+	if sys := argAfter(spec.Args, "--append-system-prompt"); !strings.Contains(sys, "EXISTING project") {
+		t.Fatalf("system prompt fara modul folder")
+	}
+
+	// propunerea: sef existent ok; nume luat sau alt folder refuzate; titlul ramane
+	bk := m.Wrap(innerBackend{})
+	c, _ := bk.Resolve(tokenOf(t, spec))
+	taken := `{"name":"Probe","agents":[{"name":"rook","role":"x","reportsTo":"Lead"}]}`
+	if _, err := bk.ProposeSetup(c, json.RawMessage(taken)); err == nil || !strings.Contains(err.Error(), "already an agent") {
+		t.Fatalf("nume luat: %v", err)
+	}
+	wrongFolder := `{"name":"Probe","folders":[{"path":"` + client + `"}],"agents":[{"name":"Lia","role":"x","reportsTo":"Lead"}]}`
+	if _, err := bk.ProposeSetup(c, json.RawMessage(wrongFolder)); err == nil {
+		t.Fatal("alt folder trebuia refuzat")
+	}
+	okProp := `{"name":"Probe","folders":[{"path":"` + landing + `","context":"Hugo"}],"agents":[{"name":"Lia","role":"Landing lead","reportsTo":"Lead"}]}`
+	if _, err := bk.ProposeSetup(c, json.RawMessage(okProp)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := m.Get(s.ID); got.Title != "Probe · Landing" || got.Proposal == nil {
+		t.Fatalf("%+v", got)
+	}
+	// fara "name" (completat din proiect) si folder fara path: acceptat
+	noName := `{"folders":[{"name":"Landing"}],"agents":[{"name":"Mia","role":"x","reportsTo":"Lead"}]}`
+	if _, err := bk.ProposeSetup(c, json.RawMessage(noName)); err != nil {
+		t.Fatalf("fara name: %v", err)
+	}
+	if got, _ := m.Get(s.ID); got.Proposal.Name != "Probe" {
+		t.Fatalf("name: %q", got.Proposal.Name)
+	}
+}
+
+func TestStartFolderValidation(t *testing.T) {
+	m, _ := newTest(t)
+	in, _, _ := folderInput(t)
+	if _, err := m.StartFolder(in, "", "gpt-5"); err == nil {
+		t.Fatal("model invalid")
+	}
+	in.Folder.Path = filepath.Join(in.Folder.Path, "nu-exista")
+	if _, err := m.StartFolder(in, "", "sonnet"); err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("folder lipsa: %v", err)
+	}
+}
+
+// argAfter intoarce valoarea de dupa un flag
+func argAfter(args []string, flag string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag {
+			return args[i+1]
+		}
+	}
+	return ""
 }

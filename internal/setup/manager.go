@@ -18,6 +18,7 @@ import (
 	"foreman/internal/models"
 	"foreman/internal/prompt"
 	"foreman/internal/runner"
+	"foreman/internal/store"
 )
 
 const (
@@ -43,7 +44,9 @@ type Session struct {
 	Title       string    `json:"title"` // pentru card: numele propus, altfel folderul sau descrierea
 	Workdirs    []string  `json:"workdirs"`
 	Description string    `json:"description"`
-	Model       string    `json:"model"` // modelul analistului, pentru Retry
+	Model       string    `json:"model"`     // modelul analistului, pentru Retry
+	ProjectID   int64     `json:"projectId"` // 0 = proiect nou; altfel modul folder (agenti pentru un folder existent)
+	FolderID    int64     `json:"folderId"`
 	Status      string    `json:"status"`
 	Proposal    *Proposal `json:"proposal"`
 	Error       string    `json:"error"`
@@ -52,6 +55,10 @@ type Session struct {
 	token   string
 	tempDir string // folderul gol folosit cand nu exista folder de proiect
 	hidden  bool   // ascunsa din lista (Dismiss sau proiect creat din ea)
+
+	existing    []string // modul folder: numele agentilor care exista deja
+	brief       string   // modul folder: proiectul si echipa, pentru mesajul analistului
+	projectName string   // modul folder: completeaza numele lipsa din propunere
 }
 
 type Manager struct {
@@ -148,17 +155,71 @@ func (m *Manager) Start(workdirs []string, description, model string) (Session, 
 	return m.snapshot(s), nil
 }
 
+// FolderInput: proiectul existent, folderul analizat si echipa de acum.
+type FolderInput struct {
+	Project store.Project
+	Folder  store.Folder
+	Team    []store.Agent
+}
+
+// StartFolder porneste analistul pentru un folder dintr-un proiect existent:
+// propune contextul folderului si agenti noi pentru el (modul folder).
+func (m *Manager) StartFolder(in FolderInput, description, model string) (Session, error) {
+	description = strings.TrimSpace(description)
+	if err := tooLong("description", description, 4000); err != nil {
+		return Session{}, err
+	}
+	if !models.Valid(model) {
+		return Session{}, ValidationError("unknown model: " + model)
+	}
+	dir := filepath.Clean(in.Folder.Path)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return Session{}, ValidationError("the folder does not exist: " + dir)
+	}
+	existing := make([]string, 0, len(in.Team))
+	for _, a := range in.Team {
+		existing = append(existing, a.Name)
+	}
+	m.cleanupOld()
+	s := &Session{ID: randomHex(8), RunID: runner.NewID(), Title: in.Project.Name + " · " + in.Folder.Name,
+		Workdirs: []string{dir}, Description: description, Model: model,
+		ProjectID: in.Project.ID, FolderID: in.Folder.ID,
+		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16),
+		existing: existing, brief: folderBrief(in), projectName: in.Project.Name}
+	m.mu.Lock()
+	m.sessions[s.ID] = s
+	m.tokens[s.token] = s.ID
+	m.mu.Unlock()
+
+	args := m.args(s, model)
+	for _, f := range in.Project.Folders {
+		if filepath.Clean(f.Path) != dir {
+			args = append(args, "--add-dir", f.Path) // celelalte foldere: doar citire
+		}
+	}
+	spec := runner.Spec{ID: s.RunID, Key: "setup-" + s.ID, Dir: dir, Args: args, Prompt: turnPrompt(s)}
+	if _, err := m.starter.Start(spec, func(o runner.Outcome) { m.finish(s.ID, o) }); err != nil {
+		m.finish(s.ID, runner.Outcome{RunID: s.RunID, Status: "failed", Error: err.Error()})
+		return Session{}, err
+	}
+	return m.snapshot(s), nil
+}
+
 func (m *Manager) args(s *Session, model string) []string {
 	settings, _ := json.Marshal(map[string]any{"permissions": map[string]any{
 		"allow": []string{"Read", "Glob", "Grep", "LS", "mcp__team__propose_setup"},
 		"deny": []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "WebFetch", "WebSearch",
 			"Agent", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite"},
 	}})
+	system := systemPrompt
+	if s.ProjectID != 0 {
+		system += "\n\n" + folderSystemPrompt
+	}
 	out := []string{
 		"-p", turnPrompt(s),
 		"--output-format", "stream-json", "--verbose",
 		"--model", model,
-		"--append-system-prompt", systemPrompt,
+		"--append-system-prompt", system,
 		"--setting-sources", "user",
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
@@ -280,22 +341,32 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return "", ValidationError("the proposal is not valid JSON: " + err.Error())
 	}
-	if err := ValidateProposal(&p, true, nil); err != nil {
-		return "", err
-	}
 	m.mu.Lock()
 	s, ok := m.sessions[id]
-	var running bool
-	var workdirs []string
+	var running, folderMode bool
+	var workdirs, existing []string
+	var projectName string
 	if ok {
-		running, workdirs = s.Status == StatusRunning, s.Workdirs
+		running, workdirs, existing, folderMode = s.Status == StatusRunning, s.Workdirs, s.existing, s.ProjectID != 0
+		projectName = s.projectName
 	}
 	m.mu.Unlock()
 	if !ok || !running {
 		return "", ErrNotFound
 	}
-	if err := CheckFolderPaths(&p, workdirs); err != nil { // Workdirs nu se schimba dupa Start
+	// Workdirs si existing nu se schimba dupa pornire
+	if folderMode && strings.TrimSpace(p.Name) == "" {
+		p.Name = projectName // analistul poate omite numele; folosim cel al proiectului
+	}
+	if err := ValidateProposal(&p, true, existing); err != nil {
 		return "", err
+	}
+	check := CheckFolderPaths(&p, workdirs)
+	if folderMode {
+		check = CheckFolderProposal(&p, workdirs[0])
+	}
+	if check != nil {
+		return "", check
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -303,7 +374,9 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 		return "", ErrNotFound
 	}
 	s.Proposal = &p // o propunere noua o inlocuieste pe cea veche
-	s.Title = p.Name
+	if !folderMode {
+		s.Title = p.Name // in modul folder titlul ramane "<proiect> · <folder>"
+	}
 	return "Proposal received. You are done: do nothing else.", nil
 }
 

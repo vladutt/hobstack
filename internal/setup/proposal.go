@@ -293,6 +293,9 @@ func CheckFolderProposal(p *Proposal, folderPath string) error {
 	if len(p.Folders) == 0 {
 		return nil
 	}
+	if p.Folders[0].Path == "" && len(p.Folders) == 1 {
+		return nil // fara path: e folderul analizat
+	}
 	if len(p.Folders) > 1 || filepath.Clean(p.Folders[0].Path) != folderPath {
 		return ValidationError("put exactly this folder in folders: " + folderPath)
 	}

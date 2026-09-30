@@ -176,7 +176,7 @@ func TestValidateProposalExternalBoss(t *testing.T) {
 }
 
 func TestCheckFolderProposal(t *testing.T) {
-	ok := []*Proposal{{}, {Folders: []ProposedFolder{{Path: "/c/landing/"}}}}
+	ok := []*Proposal{{}, {Folders: []ProposedFolder{{Path: "/c/landing/"}}}, {Folders: []ProposedFolder{{Name: "Landing"}}}}
 	for _, p := range ok {
 		if err := CheckFolderProposal(p, "/c/landing"); err != nil {
 			t.Fatalf("%+v: %v", p.Folders, err)

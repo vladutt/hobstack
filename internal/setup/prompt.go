@@ -1,6 +1,11 @@
 package setup
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+
+	"foreman/internal/store"
+)
 
 const systemPrompt = `You are the team architect in Foreman. You read a project and propose a small team of Claude Code agents that will work on it.
 
@@ -20,7 +25,62 @@ Rules:
 - The shared context describes the actual project in the folder (what you read), not assumed technologies.
 - At the end, call propose_setup once with the whole proposal. If you get an error, fix it and call it again; otherwise stop.`
 
+// folderSystemPrompt se adauga in modul folder (agenti pentru un folder al unui proiect existent).
+const folderSystemPrompt = `Folder mode: you are adding ONE folder to an EXISTING project. The existing team is listed in the message; do not change, repeat or rename existing agents.
+- Propose only new agents that work in this folder: usually one sub-lead and 1-3 workers.
+- The sub-lead reports to an existing agent (usually the root lead): put its exact name in reportsTo. New names must not match existing ones.
+- Put exactly this folder in folders (its path as given), with a short name and its own context (stack, build/test/run commands, conventions). If it has a CLAUDE.md, base the context on it.
+- name: repeat the project name; goal and context of the project are ignored.`
+
+// folderBrief: proiectul, folderele si echipa existenta, pentru mesajul analistului.
+func folderBrief(in FolderInput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Project: %s\n", in.Project.Name)
+	if g := strings.TrimSpace(in.Project.Goal); g != "" {
+		fmt.Fprintf(&b, "Goal: %s\n", g)
+	}
+	if c := strings.TrimSpace(in.Project.Context); c != "" {
+		fmt.Fprintf(&b, "Shared context:\n%s\n", c)
+	}
+	fmt.Fprintf(&b, "Folder to set up: %s (%s)\n", in.Folder.Name, in.Folder.Path)
+	for _, f := range in.Project.Folders {
+		if f.ID != in.Folder.ID {
+			fmt.Fprintf(&b, "Other folder (read only): %s (%s)\n", f.Name, f.Path)
+		}
+	}
+	names := map[int64]string{}
+	for _, a := range in.Team {
+		names[a.ID] = a.Name
+	}
+	folderName := func(a store.Agent) string { return store.HomeFolder(a, in.Project.Folders).Name }
+	b.WriteString("Existing team:")
+	for _, a := range in.Team {
+		line := "\n- " + a.Name
+		if a.Role != "" {
+			line += ": " + a.Role
+		}
+		line += ", folder: " + folderName(a)
+		if a.ParentID != nil {
+			line += ", reports to " + names[*a.ParentID]
+		} else if !a.Detached {
+			line += ", reports to the user"
+		}
+		if r := strings.TrimSpace(a.Responsibilities); r != "" {
+			line += ", takes: " + r
+		}
+		b.WriteString(line)
+	}
+	return b.String()
+}
+
 func turnPrompt(s *Session) string {
+	if s.ProjectID != 0 {
+		want := "The user did not describe what these agents should do; infer it from the folder."
+		if s.Description != "" {
+			want = "What the new agents should do: " + s.Description
+		}
+		return s.brief + "\n" + want
+	}
 	folder := "There is no folder yet: the project is new."
 	switch {
 	case len(s.Workdirs) == 1:
