@@ -25,7 +25,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   const feedback = el("textarea", { rows: 3, placeholder: "What needs to change? (needed for Send back)", "aria-label": "Feedback" });
 
   const titleId = `task-modal-title-${taskId}`;
-  const closeBtn = el("button", { type: "button", class: "modal-close", "aria-label": "Close", onclick: () => onClose() }, "×");
+  const closeBtn = el("button", { type: "button", class: "modal-close", "aria-label": "Close", onclick: () => requestClose() }, "×");
   const head = el("div", { class: "modal-head-main" });
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
   const actionsBox = el("div", { class: "modal-actions", hidden: true });
@@ -37,10 +37,10 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   // inceputa in fereastra si terminata pe fundal sa nu inchida
   let downOnOverlay = false;
   overlay.addEventListener("mousedown", (e) => { downOnOverlay = e.target === overlay; });
-  overlay.addEventListener("click", (e) => { if (downOnOverlay && e.target === overlay) onClose(); });
+  overlay.addEventListener("click", (e) => { if (downOnOverlay && e.target === overlay) requestClose(); });
 
   const onKey = (e) => {
-    if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+    if (e.key === "Escape") { e.preventDefault(); requestClose(); return; }
     if (e.key === "Tab") trapFocus(e);
   };
   document.addEventListener("keydown", onKey);
@@ -49,6 +49,19 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   document.body.append(overlay);
   dialog.focus();
   load();
+
+  // requestClose: feedback-ul netrimis nu se pierde in tacere
+  function requestClose() {
+    if (feedback.value.trim() && !confirm("Discard your feedback?")) return;
+    onClose();
+  }
+
+  // whenText: "HH:MM" pentru azi, altfel data scurta + ora ("Sep 30 14:02")
+  function whenText(iso) {
+    const d = new Date(iso);
+    if (d.toDateString() === new Date().toDateString()) return clock(iso);
+    return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${clock(iso)}`;
+  }
 
   // trapFocus: Tab ramane in fereastra (aria-modal)
   function trapFocus(e) {
@@ -94,15 +107,18 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   function render() {
     const t = data.task;
     const agent = project.agents.find((a) => a.id === t.assigneeId);
-    const who = data.assignee || agent?.name || "";
+    // etapa fara agent liber: asignatul e doar un loc ocupat (ca pe cardul din board)
+    const queuedInStage = !!t.stageId && t.status === "queued";
+    const who = queuedInStage ? "" : (data.assignee || agent?.name || "");
     const waiting = t.status === "review" ? actions.waitingOn(t) : null;
     const stuck = (project.stuck || []).some((s) => s.taskId === t.id);
     head.replaceChildren(
       el("h2", { id: titleId, class: "modal-title" }, el("span", { class: "task-id" }, `T-${t.number}`), "· ", t.title),
       el("div", { class: "modal-meta" },
         el("span", { class: `pill pill-task-${t.status}` }, STATUS[t.status] || t.status),
+        queuedInStage ? el("span", { class: "hint" }, data.stage ? `queued in stage ${data.stage}` : "queued in stage") : null,
         who ? el("span", { class: "modal-who" }, avatar(who, kindOf(agent), 20), who) : null,
-        data.stage ? el("span", { class: "hint" }, `Stage: ${data.stage}`) : null,
+        data.stage && !queuedInStage ? el("span", { class: "hint" }, `Stage: ${data.stage}`) : null,
         waiting ? el("span", { class: "task-stage" }, `with ${waiting}`) : null,
         stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null));
 
@@ -117,7 +133,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
       el("section", { class: "modal-section" },
         el("h3", {}, "History"),
         el("ol", { class: "history" }, ...events.map((ev) => el("li", {},
-          el("time", { datetime: ev.at, title: new Date(ev.at).toLocaleString() }, clock(ev.at)),
+          el("time", { datetime: ev.at, title: new Date(ev.at).toLocaleString() }, whenText(ev.at)),
           el("span", {}, ev.text))))),
       t.result ? reportNode(t.result) : null,
     ].filter(Boolean));

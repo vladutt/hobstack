@@ -62,7 +62,7 @@ func TestRequeueSkipsWaitingForAnswer(t *testing.T) {
 		s.SaveTask(tk)
 	}
 	s.AddQuestion(&Question{ProjectID: p.ID, AgentID: lead.ID, TaskID: &waiting.ID, Text: "?"})
-	if err := s.RequeueInProgress(p.ID); err != nil {
+	if _, err := s.RequeueInProgress(p.ID); err != nil {
 		t.Fatal(err)
 	}
 	w, _ := s.GetTask(waiting.ID)
@@ -70,7 +70,7 @@ func TestRequeueSkipsWaitingForAnswer(t *testing.T) {
 	if w.Status != StatusInProgress || o.Status != StatusQueued {
 		t.Fatalf("waiting=%s other=%s", w.Status, o.Status)
 	}
-	if err := s.RequeueAllInProgress(); err != nil {
+	if _, err := s.RequeueAllInProgress(); err != nil {
 		t.Fatal(err)
 	}
 	if w, _ := s.GetTask(waiting.ID); w.Status != StatusInProgress {

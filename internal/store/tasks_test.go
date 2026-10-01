@@ -54,7 +54,7 @@ func TestSaveTaskAndRequeue(t *testing.T) {
 	b.Status = StatusReview
 	s.SaveTask(&b)
 
-	if err := s.RequeueInProgress(p.ID); err != nil {
+	if _, err := s.RequeueInProgress(p.ID); err != nil {
 		t.Fatal(err)
 	}
 	gotA, _ := s.GetTask(a.ID)
@@ -188,7 +188,7 @@ func TestRequeueKeepsWaitingParent(t *testing.T) {
 	if err != nil || len(subs) != 1 || subs[0].ID != child.ID || *subs[0].CreatorID != sub.ID {
 		t.Fatalf("Subtasks = %+v, %v", subs, err)
 	}
-	if err := s.RequeueInProgress(p.ID); err != nil {
+	if _, err := s.RequeueInProgress(p.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.GetTask(parent.ID); got.Status != StatusInProgress {
@@ -199,7 +199,7 @@ func TestRequeueKeepsWaitingParent(t *testing.T) {
 	}
 	child.Status = StatusDone
 	s.SaveTask(&child)
-	if err := s.RequeueAllInProgress(); err != nil {
+	if _, err := s.RequeueAllInProgress(); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.GetTask(parent.ID); got.Status != StatusQueued {
@@ -262,8 +262,8 @@ func TestRequeueClearsNudgedAt(t *testing.T) {
 	p, lead := newProject(t, s)
 	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	for _, requeue := range []func() error{
-		func() error { return s.RequeueInProgress(p.ID) },
-		s.RequeueAllInProgress,
+		func() error { _, err := s.RequeueInProgress(p.ID); return err },
+		func() error { _, err := s.RequeueAllInProgress(); return err },
 	} {
 		task := Task{ProjectID: p.ID, Title: "A", AssigneeID: lead.ID}
 		if err := s.CreateTask(&task); err != nil {

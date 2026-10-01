@@ -274,6 +274,9 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
 	}
+	if o.Status == store.RunStopped {
+		t.taskEvent(task, "requeued", actorForeman, "Stopped; back in the queue")
+	}
 	t.emit(ar.projectID, "task", task)
 	return nil
 }

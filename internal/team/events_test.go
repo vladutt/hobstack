@@ -321,3 +321,60 @@ func TestEventsStuck(t *testing.T) {
 	wantEvent(t, f, a.ID, "nudged", "Foreman", "Foreman nudged Lead")
 	wantEvent(t, f, b.ID, "requeued", "Foreman", "Foreman requeued it")
 }
+
+// countKind numara evenimentele de felul kind ale task-ului.
+func countKind(t *testing.T, f *fixture, taskID int64, kind string) int {
+	t.Helper()
+	n := 0
+	for _, k := range eventKinds(t, f, taskID) {
+		if k == kind {
+			n++
+		}
+	}
+	return n
+}
+
+func TestStopRecordsRequeuedOnce(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	run := f.fs.last(t, f.rook)
+	if err := f.tm.Stop(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	wantEvent(t, f, task.ID, "requeued", "Foreman", "Stopped; back in the queue")
+	// finish(stopped) vine dupa Stop: task-ul nu mai e In progress, nu se dubleaza
+	f.fs.finish(run.ID, runner.Outcome{Status: "stopped"})
+	if n := countKind(t, f, task.ID, "requeued"); n != 1 {
+		t.Fatalf("requeued: %d", n)
+	}
+}
+
+func TestRunStoppedRecordsRequeued(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	// run-ul se opreste singur (fara Stop pe echipa)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: "stopped"})
+	f.wantStatus(t, 1, store.StatusQueued)
+	if n := countKind(t, f, task.ID, "requeued"); n != 1 {
+		t.Fatalf("requeued: %d", n)
+	}
+}
+
+func TestRecoverRecordsRequeuedSkipsWaiting(t *testing.T) {
+	f := setup(t)
+	sub := f.agent(t, "Sub", &f.lead, nil)
+	wes := f.agent(t, "Wes", &sub, nil)
+	parent := f.task(t, "Import", sub, store.StatusInProgress)
+	child := store.Task{ProjectID: f.p.ID, Title: "Parser", AssigneeID: wes.ID, CreatorID: &sub.ID, ParentTaskID: &parent.ID}
+	f.st.CreateTask(&child)
+	plain := f.task(t, "B", f.rook, store.StatusInProgress)
+	if err := f.tm.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	wantEvent(t, f, plain.ID, "requeued", "Foreman", "back in the queue")
+	if n := countKind(t, f, parent.ID, "requeued"); n != 0 {
+		t.Fatalf("task-ul care asteapta sub-task-uri nu se pune in coada: %d", n)
+	}
+}

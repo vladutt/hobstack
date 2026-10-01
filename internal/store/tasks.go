@@ -178,15 +178,32 @@ const notWaitingAnswer = ` AND id NOT IN (SELECT task_id FROM questions WHERE st
 // (la Stop team: procesele au fost oprite, munca se reia mai tarziu) si curata
 // nudged_at, ca orice schimbare de stare. Cele care
 // asteapta sub-task-uri sau un raspuns de la utilizator raman In progress.
-func (s *Store) RequeueInProgress(projectID int64) error {
-	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?, nudged_at = NULL
-		WHERE project_id = ? AND status = 'in_progress'`+notWaitingParent+notWaitingAnswer, now(), projectID)
-	return err
+// Intoarce id-urile task-urilor mutate efectiv (pentru istoric).
+func (s *Store) RequeueInProgress(projectID int64) ([]int64, error) {
+	return s.queryIDs(`UPDATE tasks SET status = 'queued', updated_at = ?, nudged_at = NULL
+		WHERE project_id = ? AND status = 'in_progress'`+notWaitingParent+notWaitingAnswer+` RETURNING id`, now(), projectID)
 }
 
 // RequeueAllInProgress face acelasi lucru pentru toate proiectele (la pornirea serverului).
-func (s *Store) RequeueAllInProgress() error {
-	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?, nudged_at = NULL
-		WHERE status = 'in_progress'`+notWaitingParent+notWaitingAnswer, now())
-	return err
+func (s *Store) RequeueAllInProgress() ([]int64, error) {
+	return s.queryIDs(`UPDATE tasks SET status = 'queued', updated_at = ?, nudged_at = NULL
+		WHERE status = 'in_progress'`+notWaitingParent+notWaitingAnswer+` RETURNING id`, now())
+}
+
+// queryIDs ruleaza un UPDATE ... RETURNING id si strange id-urile.
+func (s *Store) queryIDs(q string, args ...any) ([]int64, error) {
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

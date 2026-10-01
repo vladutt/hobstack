@@ -361,9 +361,11 @@ func (t *Team) Stop(projectID int64) error {
 			log.Printf("stopping run %s: %v", id, err)
 		}
 	}
-	if err := t.st.RequeueInProgress(projectID); err != nil {
+	moved, err := t.st.RequeueInProgress(projectID)
+	if err != nil {
 		return err
 	}
+	t.recordRequeued(moved)
 	t.emit(projectID, "project", map[string]int64{"id": projectID})
 	return nil
 }
@@ -535,9 +537,11 @@ func (t *Team) Recover() error {
 	if err := t.st.InterruptRunning(); err != nil {
 		return err
 	}
-	if err := t.st.RequeueAllInProgress(); err != nil {
+	ids, err := t.st.RequeueAllInProgress()
+	if err != nil {
 		return err
 	}
+	t.recordRequeued(ids)
 	return t.st.PauseAll()
 }
 
@@ -727,4 +731,18 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	}
 	t.Kick(task.ProjectID)
 	return nil
+}
+
+// recordRequeued noteaza in istoric ca task-urile au fost puse inapoi in coada
+// (Stop / repornire server). Primeste doar id-urile mutate efectiv de store,
+// deci nu apar duplicate fata de ramura RunStopped din recordOutcome.
+func (t *Team) recordRequeued(ids []int64) {
+	for _, id := range ids {
+		task, err := t.st.GetTask(id)
+		if err != nil {
+			log.Printf("task %d: %v", id, err)
+			continue
+		}
+		t.taskEvent(task, "requeued", actorForeman, "Stopped; back in the queue")
+	}
 }
