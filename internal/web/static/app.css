@@ -111,14 +111,15 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .col { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 120px; min-width: 0; }
 .col-head { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--soft); text-transform: uppercase; letter-spacing: .04em; padding: 2px 4px; }
-.task { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
-.task summary { list-style: none; cursor: pointer; display: grid; gap: 8px; }
-.task summary::-webkit-details-marker { display: none; }
+/* cardul de task e un buton (click / Enter deschide modala) */
+.task { background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 8px; width: 100%; text-align: left; color: var(--text); font: 14px/1.5 var(--sans); cursor: pointer; }
+.task:hover { border-color: var(--line-2); }
+.task:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
 .task-title { font-size: 13px; overflow-wrap: anywhere; }
+.task-desc { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .task-id { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-right: 6px; }
 .task-who { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .task-stage { font-size: 11px; color: var(--amber); margin-left: auto; }
-.task-detail { font-size: 12px; color: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; display: grid; gap: 6px; }
 .badge-stuck { font-size: 11px; font-weight: 600; color: var(--amber); margin-left: auto; }
 .badge-blocked { font-size: 11px; font-weight: 600; color: var(--red); margin-left: auto; }
 .ws-head .page-head { margin-bottom: 0; }
@@ -148,7 +149,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .composer textarea { min-height: 40px; height: 40px; }
 .empty { color: var(--muted); text-align: center; margin: auto; padding: 20px; }
 
-.toast { position: fixed; bottom: 20px; right: 20px; background: #3a2220; color: #f3d6d2; border: 1px solid #5c302c; padding: 10px 14px; border-radius: 10px; max-width: 420px; z-index: 10; }
+.toast { position: fixed; bottom: 20px; right: 20px; background: #3a2220; color: #f3d6d2; border: 1px solid #5c302c; padding: 10px 14px; border-radius: 10px; max-width: 420px; z-index: 40; } /* peste modala */
 
 /* sub 1250px board-ul trece pe 2 coloane, dar chat-ul ramane in dreapta */
 @media (max-width: 1250px) {
@@ -362,3 +363,38 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 /* in chat: intrebarea sta intre thread si campul de scris, cu inaltime limitata */
 .chat-question { border-top: 1px solid var(--line); padding: 12px 12px 0; max-height: 45%; overflow-y: auto; flex-shrink: 0; }
 .chat-question[hidden] { display: none; }
+
+/* modala de task (peste tot, sub toast) */
+.modal-overlay { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.modal { background: var(--card); border: 1px solid var(--line-2); border-radius: var(--radius); width: 100%; max-width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0, 0, 0, .5); outline: none; }
+.modal-head { display: flex; gap: 12px; align-items: flex-start; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+.modal-head-main { flex: 1; min-width: 0; display: grid; gap: 8px; }
+.modal-title { font-size: 17px; overflow-wrap: anywhere; }
+.modal-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+.modal-meta .task-stage, .modal-meta .badge-stuck { margin-left: 0; }
+.modal-who { display: inline-flex; gap: 6px; align-items: center; color: var(--soft); }
+.modal-close { background: none; border: 1px solid transparent; border-radius: 8px; color: var(--muted); font-size: 22px; line-height: 1; width: 34px; height: 34px; cursor: pointer; flex-shrink: 0; }
+.modal-close:hover, .modal-close:focus-visible { color: var(--text); border-color: var(--line-2); outline: none; }
+.modal-body { overflow-y: auto; padding: 16px 18px; display: grid; gap: 18px; min-height: 0; }
+.modal-section { display: grid; gap: 8px; min-width: 0; }
+.modal-section h3 { margin: 0; font: 600 12px var(--sans); color: var(--soft); text-transform: uppercase; letter-spacing: .04em; }
+.modal-section .hint { margin: 0; }
+.modal-text { font-size: 13px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.modal-report { margin: 0; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--soft); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+.modal-report[hidden] { display: none; }
+.modal-actions { border-top: 1px solid var(--line); padding: 14px 18px; display: grid; gap: 10px; }
+.modal-actions[hidden] { display: none; }
+.modal-actions .hint { margin: 0; }
+.history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.history li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.history time { font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 2px; }
+.pill-task-queued { background: #262b29; color: var(--muted); }
+.pill-task-in_progress { background: rgba(108, 195, 180, .14); color: var(--teal); }
+.pill-task-review { background: rgba(229, 165, 75, .14); color: var(--amber); }
+.pill-task-blocked { background: rgba(224, 115, 106, .14); color: var(--red); }
+.pill-task-done { background: rgba(108, 195, 180, .08); color: var(--soft); }
+/* pe mobil modala ocupa aproape tot ecranul */
+@media (max-width: 720px) {
+  .modal-overlay { padding: 8px; }
+  .modal { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
+}

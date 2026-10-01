@@ -6,6 +6,7 @@ import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
 import { questionBox } from "./questions.js";
 import { stuckBox, refreshStuckAges } from "./stuck.js";
+import { taskModal } from "./task-modal.js";
 
 const COLUMNS = [
   { title: "Queued", statuses: ["queued"] },
@@ -23,19 +24,22 @@ const TABS = [
   { id: "files", label: "Files" },
 ];
 
-// parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId }.
+// parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId, taskId }.
 // Link-urile vechi #/p/3/agent/7 duc in tab-ul Echipa, cu agentul 7 selectat.
+// #/p/3/tasks/12 deschide modala task-ului 12 peste board.
 export function parseWorkspaceRoute(rest) {
   const parts = (rest || "").split("/").filter(Boolean);
   // adresele vechi (in romana) duc in tab-urile noi
   const legacy = { "task-uri": "tasks", "echipa": "team", "fisiere": "files" };
   if (parts[0] in legacy) parts[0] = legacy[parts[0]];
   if (parts[0] === "agent") {
-    return { tab: "team", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null };
+    return { tab: "team", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null, taskId: null };
   }
   const tab = TABS.some((t) => t.id === parts[0]) ? parts[0] : TABS[0].id;
-  const agentId = tab === "team" && /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null;
-  return { tab, agentId };
+  const num = /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null;
+  const agentId = tab === "team" ? num : null;
+  const taskId = tab === "tasks" ? num : null;
+  return { tab, agentId, taskId };
 }
 
 export async function workspaceView(root, projectId, route) {
@@ -45,7 +49,6 @@ export async function workspaceView(root, projectId, route) {
     panel: route.tab === "team" ? "details" : "chat", // panoul din dreapta: "details" sau "chat"
     selected: null,   // agentul selectat (chat si detalii)
     seen: new Set(),  // id-urile mesajelor afisate in thread
-    open: new Set(),  // task-urile deschise pe board (raman deschise la redesenare)
     folderFilter: null, // id-ul folderului filtrat pe board; null = toate
     liveRunId: null,
     liveStream: null,
@@ -63,6 +66,7 @@ export async function workspaceView(root, projectId, route) {
   state.selected = state.project.agents.some((a) => a.id === route.agentId) ? route.agentId : firstRootId();
   let editor = null;     // formularul din Detalii
   let editorKey = "";    // editableKey pentru datele din formular
+  let modal = null;      // modala task-ului deschis (adresa #/p/<id>/tasks/<taskId>)
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const dropResets = []; // resetari de contor + outline, apelate la orice drop/dragend
@@ -375,6 +379,7 @@ export async function workspaceView(root, projectId, route) {
   async function update(r) {
     const keep = keepPanel;
     keepPanel = false;
+    syncModal(r.taskId);
     if (r.tab === "team" && state.tab !== "team" && !keep) state.panel = "details"; // intrarea pe Echipa arata Detaliile
     state.tab = r.tab;
     if (r.tab === "team" && r.agentId && r.agentId !== state.selected) {
@@ -564,20 +569,22 @@ export async function workspaceView(root, projectId, route) {
     try {
       await api(`/api/tasks/${t.id}/assign`, { method: "POST", body: { agentId } });
       await reload();
-    } catch (err) { toast(err.message); await reload(); }
+      return true;
+    } catch (err) { toast(err.message); await reload(); return false; }
   }
 
-  // decide: utilizatorul decide un task creat de el, ajuns dupa ultima etapa
-  async function decide(t, action) {
-    let feedback = "";
-    if (action === "send_back") {
-      feedback = prompt(`What needs to change in ${ref(t)}?`) || "";
-      if (!feedback.trim()) return;
+  // decide: utilizatorul decide un task creat de el, ajuns dupa ultima etapa.
+  // feedback e obligatoriu la send_back (il scrie in modala). Intoarce true daca a reusit.
+  async function decide(t, action, feedback = "") {
+    if (action === "send_back" && !feedback.trim()) {
+      toast(`Write what needs to change in ${ref(t)}.`);
+      return false;
     }
     try {
       await api(`/api/tasks/${t.id}/decide`, { method: "POST", body: { action, feedback } });
       await reload();
-    } catch (err) { toast(err.message); }
+      return true;
+    } catch (err) { toast(err.message); return false; }
   }
 
   // stageName: la cine asteapta un task din review (reviewer-ul asignatului, altfel creatorul, altfel seful)
@@ -589,42 +596,48 @@ export async function workspaceView(root, projectId, route) {
     return target ? target.name : null;
   }
 
+  // taskCard: cardul compact de pe board; click / Enter / Space deschide modala
+  // (prin adresa, ca refresh-ul si Back sa mearga)
   function taskCard(t, who, byId) {
     const blocked = t.status === "blocked";
     const stage = t.status === "review" ? stageName(t, who, byId) : null;
     const waiting = t.stageId && t.status === "queued"; // in etapa, il ia primul agent liber
     const stuck = (state.project.stuck || []).some((s) => s.taskId === t.id);
-    const mine = t.status === "review" && (state.project.userDecides || []).includes(t.id);
-    return el("details", {
-      class: "task",
-      open: state.open.has(t.id),
-      ontoggle: (e) => (e.target.open ? state.open.add(t.id) : state.open.delete(t.id)),
+    return el("button", {
+      type: "button", class: "task", "data-task-id": t.id,
+      onclick: () => { location.hash = `#/p/${projectId}/tasks/${t.id}`; },
     },
-      el("summary", {},
-        el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)), t.title),
-        el("span", { class: "task-who" },
-          waiting ? el("span", { class: "hint" }, "queued") : [who && avatar(who.name, kindOf(who), 20), who ? who.name : "?"],
-          blocked && el("span", { class: "badge-blocked" }, "Blocked"),
-          stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null,
-          stage && el("span", { class: "task-stage" }, `with ${stage}`))),
-      el("div", { class: "task-detail" },
-        t.description && el("div", {}, t.description),
-        t.feedback && el("div", {}, el("strong", {}, "Feedback: "), t.feedback),
-        t.result && el("div", {}, el("strong", {}, "Result: "), t.result),
-        !t.description && !t.feedback && !t.result && el("div", { class: "hint" }, "No details yet."),
-        blocked && el("div", { class: "actions" },
-          el("button", { type: "button", class: "btn small primary", onclick: () => taskAction(t, "accept") }, "Accept"),
-          el("button", { type: "button", class: "btn small", onclick: () => taskAction(t, "unblock") }, "Unblock")),
-        (t.status === "queued" || t.status === "blocked") && el("label", { class: "assign-row" },
-          el("span", { class: "hint" }, "Assignee"),
-          el("select", {
-            class: "select-small", value: String(t.assigneeId), "aria-label": `Assignee for ${ref(t)}`,
-            onchange: (e) => assign(t, Number(e.target.value)),
-          }, assignable(t.stageId).map((a) => el("option", { value: a.id }, a.name)),
-            !assignable(t.stageId).some((a) => a.id === t.assigneeId) && el("option", { value: t.assigneeId }, who ? who.name : "?"))),
-        mine && el("div", { class: "actions" },
-          el("button", { type: "button", class: "btn small primary", onclick: () => decide(t, "accept") }, "Accept"),
-          el("button", { type: "button", class: "btn small", onclick: () => decide(t, "send_back") }, "Send back"))));
+      el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)), t.title),
+      t.description ? el("span", { class: "task-desc" }, t.description) : null,
+      el("span", { class: "task-who" },
+        waiting ? el("span", { class: "hint" }, "queued") : [who ? avatar(who.name, kindOf(who), 20) : null, who ? who.name : "?"],
+        blocked ? el("span", { class: "badge-blocked" }, "Blocked") : null,
+        stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null,
+        stage ? el("span", { class: "task-stage" }, `with ${stage}`) : null));
+  }
+
+  // syncModal: deschide / inchide modala dupa taskId din adresa
+  function syncModal(taskId) {
+    if (modal && modal.taskId === taskId) return;
+    const closed = modal?.taskId ?? null;
+    modal?.destroy();
+    modal = null;
+    if (taskId && !gone()) {
+      modal = taskModal({
+        projectId, taskId, project: state.project, info,
+        onClose: () => { location.hash = `#/p/${projectId}/tasks`; },
+        actions: {
+          taskAction, decide, assign, assignable,
+          waitingOn: (t) => {
+            const byId = new Map(state.project.agents.map((a) => [a.id, a]));
+            return stageName(t, byId.get(t.assigneeId), byId);
+          },
+        },
+      });
+      return;
+    }
+    // focusul revine pe cardul task-ului inchis
+    if (closed) board.querySelector(`[data-task-id="${closed}"]`)?.focus();
   }
 
   function firstRootId() {
@@ -918,12 +931,15 @@ export async function workspaceView(root, projectId, route) {
     }
   }
 
+  // taskAction: accept / unblock / nudge pe un task. Intoarce true daca a reusit.
   async function taskAction(t, what) {
     try {
       await api(`/api/tasks/${t.id}/${what}`, { method: "POST" });
       await reload();
+      return true;
     } catch (err) {
       toast(err.message);
+      return false;
     }
   }
 
@@ -939,6 +955,7 @@ export async function workspaceView(root, projectId, route) {
     if (gone()) return;
     if (!selectedAgent()) { state.selected = firstRootId(); syncHash(); } // agent sters
     renderAll();
+    modal?.refresh(state.project); // modala deschisa isi reincarca task-ul
     syncLive();
   }
   const scheduleReload = () => {
@@ -947,6 +964,7 @@ export async function workspaceView(root, projectId, route) {
   };
 
   renderAll();
+  syncModal(route.taskId); // refresh pe adresa unui task: modala se redeschide
   loadFiles();
   await loadThread();
   syncLive();
@@ -955,6 +973,7 @@ export async function workspaceView(root, projectId, route) {
   syncHash();
   if (gone()) {
     stopLive();
+    modal?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
@@ -984,6 +1003,7 @@ export async function workspaceView(root, projectId, route) {
   const cleanup = () => {
     disposed = true;
     editor?.destroy();
+    modal?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
