@@ -86,7 +86,7 @@ function setupCard(s, refresh) {
 
 function projectCard(p) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const asks = p.openQuestions || 0; // intrebari ale agentilor care asteapta raspuns
+  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0); // intrebari si task-uri blocate
   return el("a", { class: "card" + (asks > 0 ? " needs-you-card" : ""), href: `#/p/${p.id}` },
     el("div", { class: "card-top" }, el("span", { class: "card-title" }, p.name),
       el("span", { class: "actions" }, pill(p.status),

@@ -5,6 +5,7 @@ import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
 import { questionBox } from "./questions.js";
+import { stuckBox } from "./stuck.js";
 
 const COLUMNS = [
   { title: "Queued", statuses: ["queued"] },
@@ -72,6 +73,7 @@ export async function workspaceView(root, projectId, route) {
   // intrebarile deschise ale agentilor ("Needs you"): containerul se creeaza o
   // singura data si nu se scoate din pagina, ca raspunsul tastat sa nu se piarda
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true });
+  let keepPanel = false; // urmatorul update() pastreaza panoul ales (vezi openChat)
   let needsKey = null;  // id-urile intrebarilor desenate ultima data in banda
   let pageHead = null;  // capul paginii desenat ultima data (inlocuit la fiecare renderHeader)
   const canvas = teamCanvas({
@@ -182,17 +184,38 @@ export async function workspaceView(root, projectId, route) {
     });
   }
 
+  // stuckNode: caseta unui task blocat (nimeni nu-l misca)
+  function stuckNode(s) {
+    return stuckBox(s, {
+      agent: state.project.agents.find((a) => a.id === s.agentId),
+      projectId,
+      onDone: reload,
+      onOpen: openChat,
+    });
+  }
+
+  // openChat: link-ul "Open <agent>" duce pe agent cu panoul Chat. update()
+  // ar deschide Detaliile, deci tinem minte alegerea pana trece prin update.
+  // Daca adresa e deja cea din link nu vine hashchange: doar aratam Chat-ul.
+  function openChat(href) {
+    state.panel = "chat";
+    if (location.hash === href) { renderTabs(); scrollDown(true); return; }
+    keepPanel = true;
+  }
+
   // renderNeeds: banda "Needs you". O redesenam doar cand se schimba setul de
   // intrebari: reload-urile dese (SSE) ar sterge raspunsul pe care il scrii.
   function renderNeeds() {
     const questions = state.project.questions || [];
-    const key = questions.map((q) => q.id).join(",");
+    const stuck = state.project.stuck || [];
+    const key = questions.map((q) => "q" + q.id).concat(stuck.map((s) => "s" + s.taskId)).join(",");
     if (key === needsKey) return;
     needsKey = key;
-    needsBox.hidden = !questions.length;
+    needsBox.hidden = !(questions.length + stuck.length);
     needsBox.replaceChildren(
-      el("h2", {}, `Needs you (${questions.length})`),
-      ...questions.map(questionNode)); // replaceChildren nativ nu aplatizeaza array-uri
+      el("h2", {}, `Needs you (${questions.length + stuck.length})`),
+      ...questions.map(questionNode),
+      ...stuck.map(stuckNode)); // replaceChildren nativ nu aplatizeaza array-uri
   }
 
   // renderChatQuestion: intrebarea agentului selectat in chat; aceeasi regula:
@@ -330,11 +353,13 @@ export async function workspaceView(root, projectId, route) {
 
   // update: ruta s-a schimbat in acelasi proiect (alt tab sau alt agent)
   async function update(r) {
-    if (r.tab === "team" && state.tab !== "team") state.panel = "details"; // intrarea pe Echipa arata Detaliile
+    const keep = keepPanel;
+    keepPanel = false;
+    if (r.tab === "team" && state.tab !== "team" && !keep) state.panel = "details"; // intrarea pe Echipa arata Detaliile
     state.tab = r.tab;
     if (r.tab === "team" && r.agentId && r.agentId !== state.selected) {
       if (!state.project.agents.some((a) => a.id === r.agentId)) { renderTabs(); return; }
-      state.panel = "details";
+      if (!keep) state.panel = "details";
       await select(r.agentId);
       return;
     }
@@ -548,6 +573,7 @@ export async function workspaceView(root, projectId, route) {
     const blocked = t.status === "blocked";
     const stage = t.status === "review" ? stageName(t, who, byId) : null;
     const waiting = t.stageId && t.status === "queued"; // in etapa, il ia primul agent liber
+    const stuck = (state.project.stuck || []).some((s) => s.taskId === t.id);
     const mine = t.status === "review" && (state.project.userDecides || []).includes(t.id);
     return el("details", {
       class: "task",
@@ -559,6 +585,7 @@ export async function workspaceView(root, projectId, route) {
         el("span", { class: "task-who" },
           waiting ? el("span", { class: "hint" }, "queued") : [who && avatar(who.name, kindOf(who), 20), who ? who.name : "?"],
           blocked && el("span", { class: "badge-blocked" }, "Blocked"),
+          stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null,
           stage && el("span", { class: "task-stage" }, `with ${stage}`))),
       el("div", { class: "task-detail" },
         t.description && el("div", {}, t.description),
