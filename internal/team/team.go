@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"time"
 
 	"foreman/internal/config"
 	"foreman/internal/events"
@@ -43,6 +44,10 @@ type Team struct {
 	// Goala = agentii nu primesc fisiere (cazul testelor).
 	filesRoot string
 
+	// now da ora curenta (time.Now); ticker-ul detectorului de task-uri
+	// blocate si web-ul o folosesc prin Now.
+	now func() time.Time
+
 	// work serializeaza toate schimbarile de stare: tool-uri MCP, final de run,
 	// reconciliere, actiuni din UI. E mai simplu decat sa analizam fiecare
 	// combinatie de goroutine, iar operatiile sunt oricum scurte.
@@ -68,6 +73,7 @@ func New(st *store.Store, runs Starter, hub *events.Hub, baseURL string) *Team {
 		runs:    runs,
 		hub:     hub,
 		baseURL: baseURL,
+		now:     time.Now,
 		active:  map[int64]activeRun{},
 		tokens:  map[string]mcp.Caller{},
 		pending: map[int64]bool{},

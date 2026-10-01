@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"foreman/internal/prompt"
 	"foreman/internal/store"
@@ -16,11 +17,20 @@ import (
 var ErrNotBlocked = errors.New("the task is not blocked")
 
 // Run proceseaza cererile Kick pana cand ctx e anulat. Porneste din main.
+// O data pe minut cauta si task-urile blocate (CheckStuck).
 func (t *Team) Run(ctx context.Context) {
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-tick.C:
+			// CheckStuck face Kick daca a impins ceva; bucla il preia la urmatorul tur
+			if err := t.CheckStuck(t.now()); err != nil {
+				log.Printf("stuck tasks: %v", err)
+			}
+			continue
 		case <-t.wake:
 		}
 		t.mu.Lock()
@@ -487,6 +497,17 @@ func allSubtasksDone(taskID int64, tasks []store.Task) bool {
 		}
 	}
 	return found
+}
+
+// hasUnfinishedSubtasks: true doar daca task-ul are cel putin un sub-task
+// care nu e Done (un task fara sub-task-uri nu asteapta nimic).
+func hasUnfinishedSubtasks(taskID int64, tasks []store.Task) bool {
+	for _, sub := range tasks {
+		if sub.ParentTaskID != nil && *sub.ParentTaskID == taskID && sub.Status != store.StatusDone {
+			return true
+		}
+	}
+	return false
 }
 
 // Recover aduce baza de date intr-o stare curata la pornirea serverului:
