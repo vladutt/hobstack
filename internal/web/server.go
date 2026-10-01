@@ -88,6 +88,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/agents/{id}/position", s.setAgentPosition)
 	mux.HandleFunc("GET /api/agents/{id}/messages", s.listMessages)
 	mux.HandleFunc("POST /api/agents/{id}/messages", s.postMessage)
+	mux.HandleFunc("POST /api/agents/{id}/new-chat", s.newChat)
 	mux.HandleFunc("POST /api/prompt-preview", s.promptPreview)
 
 	mux.HandleFunc("GET /api/projects/{id}/files", s.listFiles)
@@ -176,7 +177,7 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusBadRequest, le.Error())
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
-	case errors.Is(err, team.ErrNotBlocked), errors.Is(err, team.ErrNotStuck):
+	case errors.Is(err, team.ErrNotBlocked), errors.Is(err, team.ErrNotStuck), errors.Is(err, team.ErrAgentBusy):
 		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, store.ErrConflict):
 		writeErr(w, http.StatusConflict, "conflict with the current state")

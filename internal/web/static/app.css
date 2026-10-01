@@ -129,6 +129,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 /* chat-ul incepe din varful paginii si ocupa exact inaltimea ecranului, deci campul de scris e mereu vizibil */
 .console { position: sticky; top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; height: calc(100vh - 44px); min-height: 360px; }
 .console-head { display: flex; gap: 10px; align-items: center; padding: 14px; border-bottom: 1px solid var(--line); }
+.console-head .new-chat { margin-left: auto; flex: none; }
+.thread .earlier { align-self: center; }
 .thread { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .msg { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .msg.me { align-items: flex-end; }

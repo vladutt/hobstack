@@ -214,3 +214,22 @@ func clip(s string) string {
 func (t *Team) ProposeSetup(mcp.Caller, json.RawMessage) (string, error) {
 	return "", errors.New("propose_setup is not available here")
 }
+
+// ErrAgentBusy: agentul are un run activ (New chat cere oprirea lui intai).
+var ErrAgentBusy = errors.New("the agent is working; stop it first")
+
+// NewChat porneste un chat nou cu agentul: sesiune Claude noua la urmatorul
+// mesaj, iar thread-ul arata doar ce urmeaza (istoricul ramane salvat).
+func (t *Team) NewChat(agentID int64) (store.Message, error) {
+	t.work.Lock()
+	defer t.work.Unlock()
+	if t.ActiveRunID(agentID) != "" {
+		return store.Message{}, ErrAgentBusy
+	}
+	m, err := t.st.StartNewChat(agentID, "New chat started.")
+	if err != nil {
+		return store.Message{}, err
+	}
+	t.emit(m.ProjectID, "message", m)
+	return m, nil
+}

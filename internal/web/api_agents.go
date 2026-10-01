@@ -180,12 +180,37 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	// ?chat=1: doar chat-ul curent (de la ultimul "New chat") si cate mesaje sunt ascunse
+	if r.URL.Query().Get("chat") == "1" {
+		msgs, earlier, err := s.st.ListChat(id)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"messages": msgs, "earlier": earlier})
+		return
+	}
 	msgs, err := s.st.ListMessages(id)
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, msgs)
+}
+
+// newChat porneste un chat nou cu agentul (sesiune Claude noua, istoric ascuns).
+func (s *Server) newChat(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	m, err := s.team.NewChat(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, m)
 }
 
 func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {

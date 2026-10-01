@@ -688,7 +688,11 @@ export async function workspaceView(root, projectId, route) {
           ? "Detached: not working. Link it on the canvas to You or to a lead."
           : !boss
             ? "Direct thread. Give it goals here and it delegates to its team."
-            : `Direct thread. ${boss.name} is copied on what you write.`)));
+            : `Direct thread. ${boss.name} is copied on what you write.`)),
+      a.detached ? null : el("button", {
+        type: "button", class: "btn small new-chat", title: "Start a fresh session; earlier messages stay saved",
+        onclick: () => newChat(a),
+      }, "New chat"));
     input.placeholder = a.detached ? "Link the agent to message it" : isLead ? `Write to ${a.name}...` : `Message ${a.name}`;
     input.disabled = sendBtn.disabled = clip.disabled = !!a.detached;
     note.textContent = state.project.paused ? "The team is paused: the message waits until you start it." : "";
@@ -720,14 +724,38 @@ export async function workspaceView(root, projectId, route) {
   async function loadThread() {
     const id = state.selected;
     if (!id) return;
-    const messages = await api(`/api/agents/${id}/messages`);
+    // implicit doar chat-ul curent (de la ultimul "New chat"); "Earlier messages" aduce tot
+    const all = state.showAllFor === id;
+    const data = all ? { messages: await api(`/api/agents/${id}/messages`), earlier: 0 }
+      : await api(`/api/agents/${id}/messages?chat=1`);
     if (gone() || id !== state.selected) return; // s-a schimbat selectia intre timp
     stopLive();
     state.seen = new Set();
     thread.replaceChildren();
-    if (!messages.length) thread.append(el("div", { class: "empty" }, "No messages yet."));
-    messages.forEach(addMessage);
+    if (data.earlier > 0) {
+      thread.append(el("button", {
+        type: "button", class: "btn small earlier",
+        onclick: async () => { state.showAllFor = id; await loadThread(); syncLive(); },
+      }, `Earlier messages (${data.earlier})`));
+    }
+    if (!data.messages.length) thread.append(el("div", { class: "empty" }, "No messages yet."));
+    data.messages.forEach(addMessage);
     scrollDown(true);
+  }
+
+  // newChat: sesiune Claude noua cu agentul; istoricul ramane salvat (Earlier messages)
+  async function newChat(a) {
+    if (!confirm(`Start a new chat with ${a.name}? ${a.name} starts a fresh session and forgets this conversation. Earlier messages stay saved.`)) return;
+    try {
+      await api(`/api/agents/${a.id}/new-chat`, { method: "POST" });
+      if (state.selected !== a.id) return;
+      state.showAllFor = null;
+      state.panel = "chat"; // chat-ul nou se vede imediat, chiar daca era deschis Details
+      renderTabs();
+      syncHash();
+      await loadThread();
+      syncLive();
+    } catch (err) { toast(err.message); }
   }
 
   function addMessage(m) {
