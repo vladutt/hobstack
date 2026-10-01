@@ -1,0 +1,154 @@
+package web
+
+import (
+	"encoding/json"
+	"slices"
+	"testing"
+
+	"foreman/internal/store"
+)
+
+func TestAccessInResponses(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Beacon")
+	task := store.Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID}
+	if err := e.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	e.st.RecordAccessDenial(p.ID, w.ID, &task.ID, "Bash", "npm test")
+	e.st.RecordAccessDenial(p.ID, w.ID, &task.ID, "WebFetch", "https://x.dev")
+
+	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
+	var d struct {
+		AccessRequests int `json:"accessRequests"`
+		Access         []struct {
+			ID             int64  `json:"id"`
+			AgentID        int64  `json:"agentId"`
+			AgentName      string `json:"agentName"`
+			TaskID         *int64 `json:"taskId"`
+			Ref            string `json:"ref"`
+			Tool           string `json:"tool"`
+			Detail         string `json:"detail"`
+			Count          int    `json:"count"`
+			CanEnableShell bool   `json:"canEnableShell"`
+		} `json:"access"`
+	}
+	json.Unmarshal(raw, &d)
+	if d.AccessRequests != 2 || len(d.Access) != 2 {
+		t.Fatalf("%s", raw)
+	}
+	a := d.Access[0]
+	if a.AgentName != "Beacon" || a.Ref != task.Ref() || a.Tool != "Bash" || a.Detail != "npm test" || !a.CanEnableShell || a.TaskID == nil {
+		t.Fatalf("%+v", a)
+	}
+	if d.Access[1].CanEnableShell {
+		t.Fatalf("WebFetch nu are Enable Shell: %+v", d.Access[1])
+	}
+	_, raw = e.do(t, "GET", "/api/projects", nil)
+	var cards []struct {
+		AccessRequests int `json:"accessRequests"`
+	}
+	json.Unmarshal(raw, &cards)
+	if len(cards) != 1 || cards[0].AccessRequests != 2 {
+		t.Fatalf("%s", raw)
+	}
+	// fara cereri: lista e [] (nu null)
+	p2 := e.createProject(t, t.TempDir())
+	_, raw = e.do(t, "GET", "/api/projects/"+itoa(p2.ID), nil)
+	var m map[string]json.RawMessage
+	json.Unmarshal(raw, &m)
+	if string(m["access"]) != "[]" {
+		t.Fatalf("access: %s", m["access"])
+	}
+}
+
+func TestAccessDismiss(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Beacon")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "ls")
+	reqs, _ := e.st.ListOpenAccessRequests(p.ID)
+	if code, _ := e.do(t, "POST", "/api/access/"+itoa(reqs[0].ID)+"/dismiss", nil); code != 204 {
+		t.Fatalf("dismiss: %d", code)
+	}
+	if n, _ := e.st.CountOpenAccessRequests(p.ID); n != 0 {
+		t.Fatalf("a ramas deschisa: %d", n)
+	}
+	if code, _ := e.do(t, "POST", "/api/access/99999/dismiss", nil); code != 404 {
+		t.Fatalf("inexistenta: %d", code)
+	}
+	if code, _ := e.do(t, "POST", "/api/access/99999/enable-shell", nil); code != 404 {
+		t.Fatalf("enable-shell inexistenta: %d", code)
+	}
+}
+
+func TestAccessEnableShell(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Beacon")
+	w.Tools, w.Role = []string{"write"}, "Builder"
+	if err := e.st.UpdateAgent(w); err != nil {
+		t.Fatal(err)
+	}
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "npm test")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "WebFetch", "https://x.dev")
+	reqs, _ := e.st.ListOpenAccessRequests(p.ID)
+
+	// alt tool decat Bash: 409, nimic schimbat
+	if code, _ := e.do(t, "POST", "/api/access/"+itoa(reqs[1].ID)+"/enable-shell", nil); code != 409 {
+		t.Fatalf("WebFetch: %d", code)
+	}
+	if code, raw := e.do(t, "POST", "/api/access/"+itoa(reqs[0].ID)+"/enable-shell", nil); code != 204 {
+		t.Fatalf("enable-shell: %d %s", code, raw)
+	}
+	got, _ := e.st.GetAgent(w.ID)
+	if !slices.Contains(got.Tools, "shell") || !slices.Contains(got.Tools, "write") || got.Role != "Builder" || got.Name != "Beacon" {
+		t.Fatalf("agent: %+v", got)
+	}
+	open, _ := e.st.ListOpenAccessRequests(p.ID)
+	if len(open) != 1 || open[0].Tool != "WebFetch" {
+		t.Fatalf("deschise: %+v", open)
+	}
+	// a doua oara pe acelasi rand: tool-ul nu se dubleaza
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "make")
+	open, _ = e.st.ListOpenAccessRequests(p.ID)
+	if code, _ := e.do(t, "POST", "/api/access/"+itoa(open[1].ID)+"/enable-shell", nil); code != 204 {
+		t.Fatalf("a doua oara: %d", code)
+	}
+	got, _ = e.st.GetAgent(w.ID)
+	if n := len(got.Tools); n != 2 {
+		t.Fatalf("tools duplicate: %v", got.Tools)
+	}
+}
+
+func TestUpdateProjectKeepsAutonomy(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	body := func(autonomy any) map[string]any {
+		m := map[string]any{"name": "ApiUnit", "goal": "Import", "folders": []map[string]any{{"id": p.Folders[0].ID, "path": p.Folders[0].Path}}}
+		if autonomy != nil {
+			m["autonomy"] = autonomy
+		}
+		return m
+	}
+	put := func(b map[string]any) store.Project {
+		code, raw := e.do(t, "PUT", "/api/projects/"+itoa(p.ID), b)
+		if code != 200 {
+			t.Fatalf("PUT: %d %s", code, raw)
+		}
+		var out store.Project
+		json.Unmarshal(raw, &out)
+		return out
+	}
+	if !put(body(true)).Autonomy {
+		t.Fatal("autonomy nu s-a salvat")
+	}
+	// un PUT fara camp (alt client) nu il reseteaza
+	if !put(body(nil)).Autonomy {
+		t.Fatal("PUT fara autonomy a resetat-o")
+	}
+	if put(body(false)).Autonomy {
+		t.Fatal("autonomy false nu s-a salvat")
+	}
+}

@@ -350,7 +350,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .needs-you[hidden] { display: none; }
 .needs-you h2 { font-size: 14px; color: var(--amber); margin: 0; }
 /* sub-containerele (intrebari, blocate) nu sunt cutii: casetele lor stau direct in grila benzii */
-.needs-questions, .needs-stuck { display: contents; }
+.needs-questions, .needs-stuck, .needs-access { display: contents; }
 .question { border: 1px solid var(--amber); background: var(--amber-bg); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
 .question-head { font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .question-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -358,6 +358,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .question-answer textarea { flex: 1; min-width: 0; }
 .ask-mark { color: var(--amber); font-weight: 700; }
 .node text.ask-mark { fill: var(--amber); font: 700 14px var(--sans); }
+.pill-auto { background: rgba(108, 195, 180, .14); color: var(--teal); }
+.question.access code { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
 .pill-ask { background: rgba(229, 165, 75, .14); color: var(--amber); }
 .card.needs-you-card { border-color: var(--amber); }
 /* in chat: intrebarea sta intre thread si campul de scris, cu inaltime limitata */

@@ -6,6 +6,7 @@ import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
 import { questionBox } from "./questions.js";
 import { stuckBox, refreshStuckAges } from "./stuck.js";
+import { accessBox } from "./access.js";
 import { taskModal } from "./task-modal.js";
 
 const COLUMNS = [
@@ -82,14 +83,16 @@ export async function workspaceView(root, projectId, route) {
   const needsTitle = el("h2", {});
   const questionsBox = el("div", { class: "needs-questions" });
   const stuckList = el("div", { class: "needs-stuck" });
+  const accessList = el("div", { class: "needs-access" });
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
-    needsTitle, questionsBox, stuckList);
+    needsTitle, questionsBox, stuckList, accessList);
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
-  const agesTimer = setInterval(() => refreshStuckAges(stuckList), 60000);
+  const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
   let keepPanel = false; // urmatorul update() pastreaza panoul ales (vezi openChat)
   let questionsKey = null; // id-urile intrebarilor desenate ultima data in banda
   let stuckKey = null;     // id-urile task-urilor blocate desenate ultima data
+  let accessKey = null;    // id:count ale cererilor de acces desenate ultima data
   let pageHead = null;  // capul paginii desenat ultima data (inlocuit la fiecare renderHeader)
   const canvas = teamCanvas({
     onSelect: (id) => select(id),
@@ -209,6 +212,16 @@ export async function workspaceView(root, projectId, route) {
     });
   }
 
+  // accessNode: caseta unei cereri de acces (un tool refuzat unui agent)
+  function accessNode(r) {
+    return accessBox(r, {
+      agent: state.project.agents.find((a) => a.id === r.agentId),
+      projectId,
+      onDone: reload,
+      onOpen: openChat,
+    });
+  }
+
   // openChat: link-ul "Open <agent>" duce pe agent cu panoul Chat. update()
   // ar deschide Detaliile, deci tinem minte alegerea pana trece prin update.
   // Daca adresa e deja cea din link nu vine hashchange: doar aratam Chat-ul.
@@ -227,7 +240,8 @@ export async function workspaceView(root, projectId, route) {
   function renderNeeds() {
     const questions = state.project.questions || [];
     const stuck = state.project.stuck || [];
-    const total = questions.length + stuck.length;
+    const access = state.project.access || [];
+    const total = questions.length + stuck.length + access.length;
     needsTitle.textContent = `Needs you (${total})`;
     needsBox.hidden = !total;
     const qKey = questions.map((q) => q.id).join(",");
@@ -239,6 +253,11 @@ export async function workspaceView(root, projectId, route) {
     if (sKey !== stuckKey) {
       stuckKey = sKey;
       stuckList.replaceChildren(...stuck.map(stuckNode));
+    }
+    const aKey = access.map((r) => `${r.id}:${r.count}`).join(",");
+    if (aKey !== accessKey) {
+      accessKey = aKey;
+      accessList.replaceChildren(...access.map(accessNode));
     }
   }
 
@@ -403,7 +422,8 @@ export async function workspaceView(root, projectId, route) {
     const head = el("header", { class: "page-head" },
       el("div", {},
         el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / ", p.name),
-        el("div", { class: "actions" }, el("h1", {}, p.name), pill(p.status)),
+        el("div", { class: "actions" }, el("h1", {}, p.name), pill(p.status),
+          p.autonomy ? el("span", { class: "pill pill-auto", title: "Agents don't ask you questions" }, "Autonomous") : null),
         p.goal && el("p", { class: "muted clamp" }, "Goal: " + p.goal),
         p.paused && el("p", { class: "hint" }, "The team is paused. Messages stay queued until you start it.")),
       el("div", { class: "head-actions" },

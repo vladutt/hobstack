@@ -86,10 +86,11 @@ function setupCard(s, refresh) {
 
 function projectCard(p) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0); // intrebari si task-uri blocate
+  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0); // intrebari, task-uri blocate, cereri de acces
   return el("a", { class: "card" + (asks > 0 ? " needs-you-card" : ""), href: `#/p/${p.id}` },
     el("div", { class: "card-top" }, el("span", { class: "card-title" }, p.name),
       el("span", { class: "actions" }, pill(p.status),
+        p.autonomy ? el("span", { class: "pill pill-auto", title: "Agents don't ask you questions" }, "Autonomous") : null,
         asks ? el("span", { class: "pill pill-ask" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null)),
     el("p", { class: "muted clamp" }, p.goal || "No goal yet."),
     el("div", { class: "avatars" },
@@ -119,6 +120,7 @@ export async function projectFormView(root, id) {
   const parallel = el("input", { type: "number", min: 1, max: 100, value: p.maxParallel || "", placeholder: "no limit" });
   const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd || "", placeholder: "no limit" });
 
+  const autonomy = el("input", { type: "checkbox", checked: !!p.autonomy });
   root.append(el("form", { class: "form", onsubmit: save },
     el("header", { class: "page-head" },
       el("div", {},
@@ -142,6 +144,8 @@ export async function projectFormView(root, id) {
           field("Parallel workers", parallel),
           field("Budget per run (USD)", budget)),
         el("p", { class: "hint" }, "Both are optional: leave them empty for no limit. The budget only matters if you use an API key (with a subscription you do not pay per run); when set, a run stops once it reaches it. Agents that report directly to you do not count toward the limit."),
+        el("label", { class: "check" }, autonomy, el("span", {}, "Full autonomy")),
+        el("p", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."),
         !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page."))),
     el("section", { class: "section" },
       el("div", { class: "section-head" },
@@ -156,6 +160,7 @@ export async function projectFormView(root, id) {
     const body = {
       name: name.value, goal: goal.value, context: context.value, folders: folders.values(),
       maxParallel: Number(parallel.value) || 0, budgetUsd: Number(budget.value) || 0,
+      autonomy: autonomy.checked,
     };
     try {
       const saved = id

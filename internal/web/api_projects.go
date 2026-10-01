@@ -30,6 +30,8 @@ type projectInput struct {
 	Folders     []folderInput `json:"folders"`
 	MaxParallel int           `json:"maxParallel"`
 	BudgetUSD   float64       `json:"budgetUsd"`
+	// Autonomy: pointer, ca un PUT fara camp sa nu reseteze bifa
+	Autonomy *bool `json:"autonomy"`
 }
 
 // folders valideaza folderele si le creeaza pe disc pe cele lipsa (ultimul
@@ -115,6 +117,7 @@ func (in projectInput) toProject(workspaces string) (store.Project, error) {
 		Context:     strings.TrimSpace(in.Context),
 		MaxParallel: in.MaxParallel,
 		BudgetUSD:   in.BudgetUSD,
+		Autonomy:    in.Autonomy != nil && *in.Autonomy,
 	}
 	if p.Name == "" {
 		return p, badRequest("project name is required")
@@ -173,6 +176,8 @@ type projectCard struct {
 	OpenQuestions int `json:"openQuestions"`
 	// StuckTasks: cate task-uri impinse deja stau tot blocate ("Needs you")
 	StuckTasks int `json:"stuckTasks"`
+	// AccessRequests: cereri de acces deschise (un tool refuzat unui agent)
+	AccessRequests int `json:"accessRequests"`
 }
 
 type agentView struct {
@@ -194,6 +199,8 @@ type projectDetail struct {
 	Questions []store.Question `json:"questions"`
 	// Stuck: task-urile blocate pe care utilizatorul le poate impinge (mereu non-nil)
 	Stuck []team.StuckTask `json:"stuck"`
+	// Access: cererile de acces deschise (mereu non-nil)
+	Access []accessView `json:"access"`
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -210,6 +217,9 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 	}
 	c := projectCard{Project: p, Team: []memberBrief{}, Total: len(tasks), Status: "Idle"}
 	if c.OpenQuestions, err = s.st.CountOpenQuestions(p.ID); err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	if c.AccessRequests, err = s.st.CountOpenAccessRequests(p.ID); err != nil {
 		return projectCard{}, nil, nil, nil, err
 	}
 	for _, a := range agents {
@@ -286,7 +296,12 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	if questions == nil {
 		questions = []store.Question{}
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, Questions: questions, Stuck: stuck}
+	access, err := s.accessViews(p.ID, agents, tasks)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, Questions: questions, Stuck: stuck, Access: access}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents) {
 			d.UserDecides = append(d.UserDecides, t.ID)
@@ -375,6 +390,9 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.ID, p.Paused, p.CreatedAt = existing.ID, existing.Paused, existing.CreatedAt
+	if in.Autonomy == nil {
+		p.Autonomy = existing.Autonomy // UpdateProject scrie campul: fara el in corp il pastram
+	}
 	if err := s.st.UpdateProject(p); err != nil {
 		fail(w, err)
 		return
