@@ -320,7 +320,7 @@ func TestUserDecidesWhenNoDecider(t *testing.T) {
 	f.st.CreateTask(&task)
 	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
 	f.st.SaveTask(&task)
-	if !f.tm.UserDecides(task, mustAgents(t, f)) {
+	if !f.tm.UserDecides(task, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatal("fara creator si cu asignat radacina, decide utilizatorul")
 	}
 }

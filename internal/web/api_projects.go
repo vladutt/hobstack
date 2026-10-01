@@ -195,6 +195,10 @@ type projectDetail struct {
 	Stages []store.Stage `json:"stages"` // coloanele proprii (etape); gol = board-ul implicit
 	// UserDecides: task-urile din "La lider" pe care le decide utilizatorul (butoane in board)
 	UserDecides []int64 `json:"userDecides"`
+	// UserCanDecide: task-urile pe care utilizatorul le poate decide din board
+	// (regula fara autonomie, ca verificarea din team.UserDecide); in modul
+	// autonom include si cele pe care le decide radacina
+	UserCanDecide []int64 `json:"userCanDecide"`
 	// Questions: intrebarile deschise ale agentilor catre utilizator
 	Questions []store.Question `json:"questions"`
 	// Stuck: task-urile blocate pe care utilizatorul le poate impinge (mereu non-nil)
@@ -301,10 +305,13 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, Questions: questions, Stuck: stuck, Access: access}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access}
 	for _, t := range tasks {
-		if s.team.UserDecides(t, agents) {
+		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)
+		}
+		if s.team.UserDecides(t, agents, false) {
+			d.UserCanDecide = append(d.UserCanDecide, t.ID)
 		}
 	}
 	for _, a := range agents {

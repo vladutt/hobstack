@@ -20,7 +20,7 @@ const stuckAfter = 5 * time.Minute
 
 // Felurile de blocaj.
 const (
-	stuckDecision = "decision" // in review, decidentul (agent) e idle
+	stuckDecision = "decision" // in review (sau blocat, in modul autonom), decidentul (agent) e idle
 	stuckOrphan   = "orphan"   // in progress, fara run si fara nimic de asteptat
 )
 
@@ -45,7 +45,12 @@ func (t *Team) Now() time.Time { return t.now() }
 // decidentul poate fi radacina. Se cheama cu t.work tinut.
 func (t *Team) stuckKind(task store.Task, agents []store.Agent, tasks []store.Task, open []store.Question, autonomous bool) (string, store.Agent, bool) {
 	switch task.Status {
-	case store.StatusReview:
+	case store.StatusReview, store.StatusBlocked:
+		// un task blocat e o decizie doar in modul autonom (o ia radacina);
+		// fara autonomie, sau blocat iar dupa un run esuat (Escalated), decide utilizatorul
+		if task.Status == store.StatusBlocked && (!autonomous || task.Escalated) {
+			return "", store.Agent{}, false
+		}
 		id := decisionOwnerIn(task, agents, autonomous)
 		if id == 0 {
 			return "", store.Agent{}, false // decide utilizatorul: are butoane pe board

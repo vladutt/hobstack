@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"foreman/internal/prompt"
 	"foreman/internal/store"
 )
 
@@ -21,7 +22,8 @@ type accessView struct {
 	Detail    string    `json:"detail"`
 	Count     int       `json:"count"`
 	UpdatedAt time.Time `json:"updatedAt"`
-	// CanEnableShell: tool-ul refuzat e Bash si agentul nu are inca "shell"
+	// CanEnableShell: tool-ul refuzat e Bash, agentul nu are inca "shell" si
+	// comanda nu e in refuzurile fixe (acolo Shell nu ar ajuta)
 	CanEnableShell bool `json:"canEnableShell"`
 }
 
@@ -37,7 +39,7 @@ func (s *Server) accessViews(projectID int64, agents []store.Agent, tasks []stor
 		for _, a := range agents {
 			if a.ID == r.AgentID {
 				v.AgentName = a.Name
-				v.CanEnableShell = r.Tool == "Bash" && !slices.Contains(a.Tools, "shell")
+				v.CanEnableShell = r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail)
 			}
 		}
 		if r.TaskID != nil {

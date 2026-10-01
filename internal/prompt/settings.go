@@ -32,6 +32,33 @@ var denyAlways = []string{
 	"Bash(pip install:*)", "Bash(brew install:*)",
 }
 
+// AlwaysDeniedTool spune daca tool-ul (fara argumente, ex. TaskUpdate) e in
+// lista fixa de refuzuri: un refuz al lui e intentionat, nu o cerere de acces.
+func AlwaysDeniedTool(tool string) bool {
+	return !strings.HasPrefix(tool, "Bash(") && slices.Contains(denyAlways, tool)
+}
+
+// AlwaysDeniedBash spune daca o comanda Bash e refuzata de lista fixa (git push,
+// rm -rf, sudo, npm install...), chiar si cu Shell pornit. Comenzile legate cu
+// &&, ||, ; sau | se verifica pe bucati, ca in Claude Code.
+func AlwaysDeniedBash(command string) bool {
+	parts := strings.FieldsFunc(command, func(r rune) bool { return r == '&' || r == '|' || r == ';' })
+	for _, part := range parts {
+		cmd := strings.Join(strings.Fields(part), " ") // spatii normalizate
+		for _, rule := range denyAlways {
+			prefix, ok := strings.CutPrefix(rule, "Bash(")
+			if !ok {
+				continue
+			}
+			prefix = strings.TrimSuffix(prefix, ":*)")
+			if cmd == prefix || strings.HasPrefix(cmd, prefix+" ") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Settings intoarce JSON-ul pentru --settings. In modul -p, ce lipseste din
 // allow sau apare in deny e refuzat automat, fara sa intrebe pe nimeni.
 // home e folderul agentului: cu tool-ul write, scrie doar acolo ("" = oriunde).

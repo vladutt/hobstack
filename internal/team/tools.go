@@ -280,9 +280,13 @@ func decisionOwnerIn(task store.Task, agents []store.Agent, autonomous bool) int
 			return r.ID
 		}
 	}
-	// modul autonom: un task blocat il decide radacina (doar ea poate send_back pe Blocked)
+	// modul autonom: un task blocat il decide radacina (doar ea poate send_back pe Blocked).
+	// Blocat iar dupa ce radacina i-a dat inca o incercare (Escalated) inseamna un
+	// run esuat (altfel ar fi fost acceptat automat): decide utilizatorul, ca fara autonomie.
 	if autonomous && task.Status == store.StatusBlocked {
-		if r, ok := autoRoot(task, agents); ok {
+		if task.Escalated {
+			autonomous = false
+		} else if r, ok := autoRoot(task, agents); ok {
 			return r.ID
 		}
 	}
@@ -488,6 +492,12 @@ func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agen
 	blocked := task.SendBacks >= MaxSendBacks
 	root, hasRoot := autoRoot(*task, agents)
 	auto := blocked && autonomous && (task.Escalated || !hasRoot)
+	failedRun := auto && t.lastRunFailed(task.ID)
+	if failedRun {
+		// un run esuat nu se accepta niciodata automat: blocat, decide utilizatorul
+		// (ca fara autonomie). Escalated ramane, deci decisionOwnerIn il lasa utilizatorului.
+		auto, autonomous = false, false
+	}
 	switch {
 	case auto:
 		markDone(task)
@@ -508,7 +518,11 @@ func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agen
 		return true, nil
 	}
 	if blocked {
-		t.taskEvent(*task, "blocked", actorForeman, fmt.Sprintf("Blocked after %d send-backs", MaxSendBacks))
+		reason := fmt.Sprintf("Blocked after %d send-backs", MaxSendBacks)
+		if failedRun {
+			reason += ": the last run failed, you decide"
+		}
+		t.taskEvent(*task, "blocked", actorForeman, reason)
 		ids := map[int64]bool{extra: true}
 		if w, ok := store.FindAgent(agents, task.AssigneeID); ok && w.ReviewerID != nil {
 			ids[*w.ReviewerID] = true
@@ -521,7 +535,8 @@ func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agen
 			delete(ids, root.ID)
 			delete(ids, 0) // 0 = utilizatorul (send back din board)
 			text := fmt.Sprintf("%s is blocked after %d rejections or send-backs. As the root lead in full autonomy, decide: "+
-				"accept_task to take it as it is, or send_back with clear feedback for one more try.", task.Ref(), MaxSendBacks)
+				"accept_task to take it as it is, or send_back with clear feedback for one more try. "+
+				"If it is blocked again it will be accepted automatically.", task.Ref(), MaxSendBacks)
 			t.note(task.ProjectID, root.ID, text, false)
 			others := fmt.Sprintf("%s is blocked after %d rejections or send-backs. %s decides.", task.Ref(), MaxSendBacks, root.Name)
 			for id := range ids {
@@ -538,13 +553,33 @@ func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agen
 	return blocked, nil
 }
 
+// lastRunFailed spune daca ultimul rezultat al task-ului (dintre evenimentele
+// "reported" si "failed" din istoric) e un run esuat. Se apeleaza cu t.work blocat.
+func (t *Team) lastRunFailed(taskID int64) bool {
+	evs, err := t.st.ListTaskEvents(taskID)
+	if err != nil {
+		log.Printf("task %d: events: %v", taskID, err)
+		return false
+	}
+	for i := len(evs) - 1; i >= 0; i-- {
+		switch evs[i].Kind {
+		case "failed":
+			return true
+		case "reported":
+			return false
+		}
+	}
+	return false
+}
+
 // blockedReply e raspunsul pentru apelant cand rejectTask a intors true:
 // task blocat, sau (in modul autonom) acceptat automat.
 func blockedReply(task store.Task, agents []store.Agent, autonomous bool) string {
 	if task.Status == store.StatusDone {
 		return fmt.Sprintf("%s was sent back %d times and was accepted automatically (full autonomy).", task.Ref(), MaxSendBacks)
 	}
-	if autonomous {
+	// blocat cu Escalated (dupa un run esuat): decide utilizatorul
+	if autonomous && !task.Escalated {
 		if r, ok := autoRoot(task, agents); ok {
 			return fmt.Sprintf("%s was sent back %d times and is now blocked; %s decides.", task.Ref(), MaxSendBacks, r.Name)
 		}
@@ -639,6 +674,10 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 		// modul autonom: radacina poate da task-ului blocat inca o incercare
 		if r, ok := autoRoot(task, agents); !ok || r.ID != c.AgentID {
 			return "", fmt.Errorf("%s is blocked; in full autonomy only the root lead can send it back", task.Ref())
+		}
+		// a primit deja o incercare in plus si s-a blocat iar dupa un run esuat
+		if task.Escalated {
+			return "", fmt.Errorf("%s is blocked again after a failed run; the user decides", task.Ref())
 		}
 		// rejectTask / sendToStage numara si trimiterea asta, deci dupa ea
 		// SendBacks = MaxSendBacks - 1: inca o respingere il blocheaza din nou,

@@ -25,7 +25,7 @@ func TestUserTaskWithoutStages(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := f.wantStatus(t, 1, store.StatusReview)
-	if !f.tm.UserDecides(got, mustAgents(t, f)) {
+	if !f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatalf("trebuia sa decida utilizatorul: %+v", got)
 	}
 	if err := f.tm.UserDecide(got.ID, false, "mai adauga teste"); err != nil {
@@ -53,7 +53,7 @@ func TestUserTaskThroughReviewer(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := f.wantStatus(t, 1, store.StatusReview)
-	if !f.tm.UserDecides(got, mustAgents(t, f)) {
+	if !f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatalf("dupa reviewer decide utilizatorul: %+v", got)
 	}
 }

@@ -7,7 +7,7 @@ const STATUS = {
 };
 
 // taskModal: fereastra unui task deschisa peste board (adresa #/p/<id>/tasks/<taskId>).
-// - project: proiectul curent (agenti, userDecides, stuck); refresh(project) il inlocuieste.
+// - project: proiectul curent (agenti, userDecides, userCanDecide, stuck); refresh(project) il inlocuieste.
 // - onClose(): cerut la Esc / click pe fundal / x (apelantul schimba adresa si cheama destroy).
 // - actions: functiile din workspace, ca sa nu dublam cererile:
 //   taskAction(t, "accept"|"unblock"|"nudge"), decide(t, action, feedback), assign(t, agentId),
@@ -155,14 +155,26 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     return el("section", { class: "modal-section" }, el("div", {}, btn), text);
   }
 
+  // rootName: numele radacinii agentului (urcand pe parentId); garda contra ciclurilor
+  function rootName(agentId) {
+    const byId = new Map(project.agents.map((a) => [a.id, a]));
+    let a = byId.get(agentId);
+    const seen = new Set();
+    while (a?.parentId && byId.has(a.parentId) && !seen.has(a.id)) { seen.add(a.id); a = byId.get(a.parentId); }
+    return a ? a.name : "The root lead";
+  }
+
   // renderActions: zona se reconstruieste doar cand se schimba ce trebuie aratat
   // (starea, decizia utilizatorului, stuck, asignatul); altfel butoanele si
   // textarea raman pe loc la fiecare refresh.
   function renderActions(t, stuck) {
-    const mine = t.status === "review" && (project.userDecides || []).includes(t.id);
+    // mine: utilizatorul poate decide din board (si in modul autonom, unde decide radacina)
+    const mine = t.status === "review" && (project.userCanDecide || []).includes(t.id);
+    // byRoot: in modul autonom decide radacina asignatului; utilizatorul poate si el
+    const byRoot = mine && !(project.userDecides || []).includes(t.id) ? rootName(t.assigneeId) : null;
     const canAssign = t.status === "queued" || t.status === "blocked";
     const choices = canAssign ? actions.assignable(t.stageId) : [];
-    const key = [t.status, mine, stuck, t.assigneeId, choices.map((a) => a.id).join(".")].join("|");
+    const key = [t.status, mine, byRoot, stuck, t.assigneeId, choices.map((a) => a.id).join(".")].join("|");
     if (key === actionsKey) return;
     actionsKey = key;
 
@@ -184,7 +196,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
         if (ok) feedback.value = "";
         return ok;
       }));
-      parts.push(el("p", { class: "hint" }, "You decide this task."), feedback,
+      parts.push(el("p", { class: "hint" }, byRoot ? `${byRoot} decides this; you can decide it too.` : "You decide this task."), feedback,
         el("div", { class: "actions" }, accept, back));
     }
     if (t.status === "blocked") {

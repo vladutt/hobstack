@@ -3,6 +3,7 @@ package team
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"foreman/internal/runner"
 	"foreman/internal/store"
@@ -50,7 +51,8 @@ func userTaskInReview(t *testing.T, f *fixture, who store.Agent) store.Task {
 }
 
 const blockedRootNote = "T-1 is blocked after 3 rejections or send-backs. As the root lead in full autonomy, decide: " +
-	"accept_task to take it as it is, or send_back with clear feedback for one more try."
+	"accept_task to take it as it is, or send_back with clear feedback for one more try. " +
+	"If it is blocked again it will be accepted automatically."
 
 func TestAutonomyAskUserAnswersWithoutQuestion(t *testing.T) {
 	f := setup(t)
@@ -79,7 +81,7 @@ func TestAutonomyUserTaskDecidedByRoot(t *testing.T) {
 	if !f.hasMessage(f.lead.ID, "(review)") {
 		t.Fatal("radacina primeste nota de review")
 	}
-	if f.tm.UserDecides(task, mustAgents(t, f)) {
+	if f.tm.UserDecides(task, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatal("in modul autonom decide radacina, nu utilizatorul")
 	}
 	if text, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err != nil || text != "T-1 is Done." {
@@ -117,7 +119,7 @@ func TestAutonomyReviewerApprovedUserTaskGoesToRoot(t *testing.T) {
 		t.Fatalf("%q %v", text, err)
 	}
 	got := f.wantStatus(t, 1, store.StatusReview)
-	if f.tm.UserDecides(got, mustAgents(t, f)) || !f.hasMessage(f.lead.ID, "Vera approved T-1") {
+	if f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) || !f.hasMessage(f.lead.ID, "Vera approved T-1") {
 		t.Fatalf("dupa reviewer decide radacina: %+v", got)
 	}
 }
@@ -161,7 +163,7 @@ func TestAutonomyRootRunFailedStaysForUser(t *testing.T) {
 	run := f.fs.last(t, f.lead)
 	f.fs.finish(run.ID, runner.Outcome{Status: store.RunFailed, Error: "boom"})
 	got := f.wantStatus(t, 1, store.StatusReview)
-	if !f.tm.UserDecides(got, mustAgents(t, f)) {
+	if !f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatalf("run esuat fara decident: decide utilizatorul: %+v", got)
 	}
 }
@@ -275,7 +277,7 @@ func TestAutonomyOnlyRootSendsBackBlocked(t *testing.T) {
 func TestAutonomyOffUnchanged(t *testing.T) {
 	f := setup(t)
 	task := userTaskInReview(t, f, f.rook)
-	if !f.tm.UserDecides(task, mustAgents(t, f)) {
+	if !f.tm.UserDecides(task, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatal("fara autonomie decide utilizatorul")
 	}
 	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err == nil {
@@ -319,5 +321,75 @@ func TestRootOf(t *testing.T) {
 	}
 	if _, ok := rootOf(9999, agents); ok {
 		t.Fatal("agent inexistent")
+	}
+}
+
+// in modul autonom un task blocat e o decizie a radacinii: detectorul o impinge;
+// fara autonomie detectorul nu face nimic (decide utilizatorul)
+func TestAutonomyBlockedTaskNudgesRoot(t *testing.T) {
+	for _, auto := range []bool{true, false} {
+		f := setup(t)
+		if auto {
+			autonomous(t, f)
+		}
+		f.st.SetPaused(f.p.ID, false)
+		task := f.task(t, "A", f.rook, store.StatusBlocked)
+		markDelivered(t, f, f.lead)
+		if err := f.tm.CheckStuck(task.UpdatedAt.Add(10 * time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		notes := undelivered(t, f, f.lead)
+		got, _ := f.st.GetTask(task.ID)
+		if auto {
+			if len(notes) != 1 || !strings.Contains(notes[0].Text, "T-1 is waiting for your decision: call accept_task or send_back") || got.NudgedAt == nil {
+				t.Fatalf("autonom: radacina impinsa: %+v %+v", notes, got)
+			}
+		} else if len(notes) != 0 || got.NudgedAt != nil {
+			t.Fatalf("fara autonomie nimic: %+v %+v", notes, got)
+		}
+	}
+}
+
+// un run esuat nu se accepta niciodata automat: task escaladat, run-ul
+// worker-ului esueaza, radacina il trimite inapoi -> Blocked la utilizator
+func TestAutonomyEscalatedFailedRunNotAutoDone(t *testing.T) {
+	f := setup(t)
+	autonomous(t, f)
+	task := f.task(t, "A", f.rook, store.StatusBlocked)
+	task.SendBacks = MaxSendBacks
+	f.st.SaveTask(&task)
+	if _, err := f.tm.SendBack(f.leadCaller(), "T-1", "inca o data"); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 1, store.StatusQueued)
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunFailed, Error: "boom"})
+	f.wantStatus(t, 1, store.StatusReview)
+
+	text, err := f.tm.SendBack(f.leadCaller(), "T-1", "tot nu")
+	if err != nil || text != "T-1 was sent back 3 times and is now blocked. The user decides what happens to it." {
+		t.Fatalf("%q %v", text, err)
+	}
+	got := f.wantStatus(t, 1, store.StatusBlocked)
+	if hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptAfterText) {
+		t.Fatal("un run esuat nu se accepta automat")
+	}
+	if !hasEvent(t, f, got.ID, "blocked", actorForeman, "Blocked after 3 send-backs: the last run failed, you decide") {
+		t.Fatal("lipseste evenimentul de blocare cu motivul")
+	}
+	if !f.hasMessage(f.lead.ID, "T-1 is blocked after 3 rejections or send-backs. The user decides.") {
+		t.Fatal("nota ca fara autonomie")
+	}
+	// radacina nu mai poate da inca o incercare, iar detectorul nu o impinge
+	if _, err := f.tm.SendBack(f.leadCaller(), "T-1", "x"); err == nil || !strings.Contains(err.Error(), "the user decides") {
+		t.Fatalf("send_back pe Blocked dupa run esuat: %v", err)
+	}
+	f.st.SetPaused(f.p.ID, false)
+	markDelivered(t, f, f.lead)
+	if err := f.tm.CheckStuck(got.UpdatedAt.Add(10 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := f.st.HasUndelivered(f.lead.ID); ok {
+		t.Fatal("detectorul nu impinge radacina pentru un task lasat utilizatorului")
 	}
 }

@@ -16,7 +16,7 @@ type Project struct {
 	Workdir     string    `json:"workdir"`
 	Paused      bool      `json:"paused"`
 	MaxParallel int       `json:"maxParallel"`
-	Autonomy    bool      `json:"autonomy"` // full autonomy: agentii nu mai au deny-uri de permisiuni
+	Autonomy    bool      `json:"autonomy"` // full autonomy: agentii nu pun intrebari; decide radacina
 	BudgetUSD   float64   `json:"budgetUsd"`
 	CreatedAt   time.Time `json:"createdAt"`
 	Folders     []Folder  `json:"folders"` // cel putin unul; primul e cel implicit

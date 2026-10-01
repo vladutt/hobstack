@@ -41,7 +41,7 @@ type Task struct {
 	ReviewStage  string `json:"reviewStage"`  // "", "reviewer", "lead"
 	StageID      *int64 `json:"stageId"`      // etapa curenta (coloana proprie); nil = fara etape sau dupa ultima
 	ByUser       bool   `json:"byUser"`       // creat de utilizator din board: la final decide el
-	Escalated    bool   `json:"escalated"`    // un reviewer/lider a cerut utilizatorului sa decida
+	Escalated    bool   `json:"escalated"`    // radacina a dat task-ului blocat inca o incercare (modul autonom)
 
 	// NudgedAt: cand l-a impins ultima data detectorul de task-uri blocate;
 	// nil = neimpins de la ultima schimbare de stare.

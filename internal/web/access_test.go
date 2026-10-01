@@ -152,3 +152,62 @@ func TestUpdateProjectKeepsAutonomy(t *testing.T) {
 		t.Fatal("autonomy false nu s-a salvat")
 	}
 }
+
+// o comanda din refuzurile fixe (git push...) nu primeste Enable Shell: n-ar ajuta
+func TestAccessNoEnableShellForAlwaysDenied(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Beacon")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "git push origin main")
+	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
+	var d struct {
+		Access []struct {
+			CanEnableShell bool `json:"canEnableShell"`
+		} `json:"access"`
+	}
+	json.Unmarshal(raw, &d)
+	if len(d.Access) != 1 || d.Access[0].CanEnableShell {
+		t.Fatalf("%s", raw)
+	}
+}
+
+// userCanDecide: ce poate decide utilizatorul din board, si in modul autonom
+// (unde userDecides nu mai include task-urile decise de radacina)
+func TestDetailUserCanDecide(t *testing.T) {
+	for _, auto := range []bool{false, true} {
+		e := setup(t)
+		p := e.createProject(t, t.TempDir())
+		w := e.addWorker(t, p.ID, "Beacon")
+		if auto {
+			got, _ := e.st.GetProject(p.ID)
+			got.Autonomy = true
+			if err := e.st.UpdateProject(got); err != nil {
+				t.Fatal(err)
+			}
+		}
+		path := "/api/projects/" + itoa(p.ID)
+		_, raw := e.do(t, "POST", path+"/tasks", map[string]any{"title": "A", "assigneeId": w.ID})
+		var task store.Task
+		json.Unmarshal(raw, &task)
+		task.Status, task.ReviewStage = store.StatusReview, store.StageLead
+		if err := e.st.SaveTask(&task); err != nil {
+			t.Fatal(err)
+		}
+		var d struct {
+			UserDecides   []int64 `json:"userDecides"`
+			UserCanDecide []int64 `json:"userCanDecide"`
+		}
+		_, raw = e.do(t, "GET", path, nil)
+		json.Unmarshal(raw, &d)
+		if !slices.Equal(d.UserCanDecide, []int64{task.ID}) {
+			t.Fatalf("autonomy=%v userCanDecide: %s", auto, raw)
+		}
+		want := []int64{task.ID}
+		if auto {
+			want = []int64{} // decide radacina
+		}
+		if !slices.Equal(d.UserDecides, want) {
+			t.Fatalf("autonomy=%v userDecides: %s", auto, raw)
+		}
+	}
+}

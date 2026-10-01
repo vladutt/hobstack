@@ -375,9 +375,11 @@ func stagesOverview(stages []store.Stage, agents []store.Agent) string {
 // are un agent care sa-l decida: creat din board, sau creatorul a disparut).
 // In modul autonom, task-urile pe care le decide radacina nu intra aici
 // (utilizatorul le poate decide totusi din board, vezi UserDecide).
-func (t *Team) UserDecides(task store.Task, agents []store.Agent) bool {
+// autonomous e comutatorul proiectului (apelantul il are deja); cu false
+// raspunde exact ca verificarea din UserDecide (ce poate decide din board).
+func (t *Team) UserDecides(task store.Task, agents []store.Agent, autonomous bool) bool {
 	if task.Status != store.StatusReview || task.ReviewStage != store.StageLead {
 		return false
 	}
-	return decisionOwnerIn(task, agents, t.autonomyOf(task.ProjectID)) == 0
+	return decisionOwnerIn(task, agents, autonomous) == 0
 }

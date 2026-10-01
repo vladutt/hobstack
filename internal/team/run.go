@@ -298,8 +298,8 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 	seen := map[string]bool{}
 	recorded := false
 	for _, d := range denials {
-		switch d.Tool {
-		case "TaskCreate", "TodoWrite", "Agent", "Task":
+		// refuzate intentionat (lista fixa din settings; Task e numele vechi al lui Agent)
+		if d.Tool == "Task" || prompt.AlwaysDeniedTool(d.Tool) {
 			continue
 		}
 		if seen[d.Tool] {

@@ -48,3 +48,12 @@ func TestDenialsCountAcrossRuns(t *testing.T) {
 		t.Fatalf("%+v", rs)
 	}
 }
+
+// toate tool-urile din lista fixa de refuzuri (nu doar cele vechi) sunt ignorate
+func TestDenialsIgnoreFixedDenyList(t *testing.T) {
+	f := setup(t)
+	runTaskWithDenials(t, f, []runner.Denial{{Tool: "TaskUpdate"}, {Tool: "TaskList"}, {Tool: "TaskGet"}})
+	if rs, _ := f.st.ListOpenAccessRequests(f.p.ID); len(rs) != 0 {
+		t.Fatalf("refuzurile fixe nu sunt cereri de acces: %+v", rs)
+	}
+}

@@ -46,7 +46,7 @@ var leadTools = []Tool{
 	},
 	{
 		Name:        "send_back",
-		Description: "Sends a task in Review back to the worker, with concrete feedback. After 3 send-backs the task becomes blocked and the user decides.",
+		Description: "Sends a task in Review back to the worker, with concrete feedback. After 3 send-backs the task becomes blocked and goes to the user (or, in full autonomy, to the root lead).",
 		InputSchema: schema([]string{"task", "feedback"}, map[string]any{
 			"task":     str("The task, e.g. T-3"),
 			"feedback": str("What needs to change, concretely"),
@@ -85,7 +85,7 @@ var reviewTools = []Tool{
 	},
 	{
 		Name:        "review_reject",
-		Description: "Rejects the work of an agent you review, with concrete feedback. The task goes back to the agent. After 3 rejections or send-backs, the task becomes blocked and the user decides.",
+		Description: "Rejects the work of an agent you review, with concrete feedback. The task goes back to the agent. After 3 rejections or send-backs, the task becomes blocked and goes to the user (or, in full autonomy, to the root lead).",
 		InputSchema: schema([]string{"task", "feedback"}, map[string]any{
 			"task":     str("The reviewed task, e.g. T-3"),
 			"feedback": str("What is wrong and what needs to change, concretely"),

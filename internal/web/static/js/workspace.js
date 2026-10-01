@@ -561,7 +561,8 @@ export async function workspaceView(root, projectId, route) {
     const form = el("form", { class: "section task-form", onsubmit: submit },
       el("h2", {}, "New task"),
       field("Title", title), field("Description", description),
-      field("Assignee", who, first ? "The task enters the first stage; you decide at the end." : "The agent picks it up automatically; you decide at the end."),
+      field("Assignee", who, (first ? "The task enters the first stage; " : "The agent picks it up automatically; ") +
+        (p.autonomy ? "the root lead decides at the end (full autonomy)." : "you decide at the end.")),
       el("div", { class: "actions" }, el("span", { class: "grow" }),
         el("button", { type: "button", class: "btn", onclick: closePanel }, "Cancel"), addBtn));
     showPanel("task", form);
