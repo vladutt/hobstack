@@ -1,0 +1,50 @@
+package team
+
+import (
+	"testing"
+
+	"foreman/internal/runner"
+	"foreman/internal/store"
+)
+
+func runTaskWithDenials(t *testing.T, f *fixture, d []runner.Denial) store.Task {
+	t.Helper()
+	task := f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunDone, Denials: d})
+	return task
+}
+
+func TestDenialsBecomeAccessRequest(t *testing.T) {
+	f := setup(t)
+	task := runTaskWithDenials(t, f, []runner.Denial{
+		{Tool: "Bash", Detail: "ls /"}, {Tool: "Bash", Detail: "ls /etc"},
+		{Tool: "TodoWrite", Detail: "x"}, {Tool: "Task"}, {Tool: "Agent"}, {Tool: "TaskCreate"},
+	})
+	rs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(rs) != 1 || rs[0].Tool != "Bash" || rs[0].Count != 1 || rs[0].Detail != "ls /" || rs[0].TaskID == nil || *rs[0].TaskID != task.ID {
+		t.Fatalf("%+v", rs)
+	}
+	evs, _ := f.st.ListTaskEvents(task.ID)
+	found := false
+	for _, e := range evs {
+		if e.Kind == "denied" && e.Text == "Rook was denied Bash: ls /" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("%+v", evs)
+	}
+}
+
+func TestDenialsCountAcrossRuns(t *testing.T) {
+	f := setup(t)
+	runTaskWithDenials(t, f, []runner.Denial{{Tool: "Bash", Detail: "ls /"}})
+	f.task(t, "B", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunFailed, Error: "x", Denials: []runner.Denial{{Tool: "Bash", Detail: "ls /"}}})
+	rs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(rs) != 1 || rs[0].Count != 2 {
+		t.Fatalf("%+v", rs)
+	}
+}

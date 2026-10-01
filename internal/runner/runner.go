@@ -41,6 +41,7 @@ type Outcome struct {
 	Result    string // textul final al agentului
 	CostUSD   float64
 	Error     string
+	Denials   []Denial // actiuni refuzate de permisiuni
 }
 
 // Run este o singura executie `claude -p`. Tine istoricul evenimentelor in

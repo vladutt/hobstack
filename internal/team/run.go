@@ -179,6 +179,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		}
 		t.emit(ar.projectID, "message", m)
 	}
+	t.recordDenials(ar, a, o.Denials)
 	if o.Status == store.RunFailed {
 		t.note(ar.projectID, a.ID, "Run failed: "+o.Error, true)
 	}
@@ -279,4 +280,44 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	}
 	t.emit(ar.projectID, "task", task)
 	return nil
+}
+
+// recordDenials salveaza refuzurile de permisiuni ca cereri de acces (un tool
+// distinct o singura data per run) si le trece in istoricul task-ului.
+// Ruleaza sub t.work, deci nu ia lock-uri.
+func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denial) {
+	var task *store.Task
+	var tid *int64
+	if ar.taskID != 0 {
+		if tk, err := t.st.GetTask(ar.taskID); err == nil {
+			task, tid = &tk, &tk.ID
+		}
+	}
+	seen := map[string]bool{}
+	recorded := false
+	for _, d := range denials {
+		switch d.Tool {
+		case "TaskCreate", "TodoWrite", "Agent", "Task":
+			continue
+		}
+		if seen[d.Tool] {
+			continue
+		}
+		seen[d.Tool] = true
+		if err := t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail); err != nil {
+			log.Printf("agent %d: access denial: %v", a.ID, err)
+			continue
+		}
+		recorded = true
+		if task != nil {
+			text := fmt.Sprintf("%s was denied %s", a.Name, d.Tool)
+			if d.Detail != "" {
+				text += ": " + d.Detail
+			}
+			t.taskEvent(*task, "denied", a.Name, text)
+		}
+	}
+	if recorded {
+		t.emit(ar.projectID, "access", map[string]any{"agentId": a.ID})
+	}
 }

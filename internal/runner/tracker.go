@@ -15,17 +15,54 @@ type tracker struct {
 	hasResult bool
 	isError   bool
 	errText   string
+	denials   []Denial
+}
+
+// Denial e o actiune refuzata de permisiuni in run (din permission_denials).
+type Denial struct {
+	Tool   string
+	Detail string
+}
+
+// denialDetail alege din tool_input campul care spune ce a vrut agentul sa faca.
+func denialDetail(tool string, in map[string]any) string {
+	key := ""
+	switch tool {
+	case "Bash":
+		key = "command"
+	case "Edit", "Write", "MultiEdit", "Read", "NotebookEdit":
+		key = "file_path"
+	case "WebFetch":
+		key = "url"
+	case "WebSearch":
+		key = "query"
+	}
+	d := ""
+	if s, ok := in[key].(string); ok && key != "" {
+		d = s
+	} else if len(in) > 0 {
+		b, _ := json.Marshal(in)
+		d = string(b)
+	}
+	if r := []rune(d); len(r) > 120 {
+		d = string(r[:120]) + "..."
+	}
+	return d
 }
 
 func (t *tracker) observe(line []byte) {
 	var ev struct {
-		Type      string  `json:"type"`
-		Subtype   string  `json:"subtype"`
-		SessionID string  `json:"session_id"`
-		Result    string  `json:"result"`
-		IsError   bool    `json:"is_error"`
-		Cost      float64 `json:"total_cost_usd"`
-		Errors    []any   `json:"errors"`
+		Type              string  `json:"type"`
+		Subtype           string  `json:"subtype"`
+		SessionID         string  `json:"session_id"`
+		Result            string  `json:"result"`
+		IsError           bool    `json:"is_error"`
+		Cost              float64 `json:"total_cost_usd"`
+		Errors            []any   `json:"errors"`
+		PermissionDenials []struct {
+			ToolName  string         `json:"tool_name"`
+			ToolInput map[string]any `json:"tool_input"`
+		} `json:"permission_denials"`
 	}
 	if json.Unmarshal(line, &ev) != nil {
 		return
@@ -40,6 +77,10 @@ func (t *tracker) observe(line []byte) {
 	t.result = ev.Result
 	t.cost = ev.Cost
 	t.isError = ev.IsError
+	t.denials = nil
+	for _, d := range ev.PermissionDenials {
+		t.denials = append(t.denials, Denial{Tool: d.ToolName, Detail: denialDetail(d.ToolName, d.ToolInput)})
+	}
 	var errs []string
 	for _, e := range ev.Errors {
 		errs = append(errs, fmt.Sprint(e))
@@ -57,7 +98,7 @@ func (t *tracker) observe(line []byte) {
 // outcome decide starea finala. Ordinea conteaza: oprirea manuala castiga,
 // apoi eroarea raportata de claude (ex. buget depasit), apoi codul de iesire.
 func (t *tracker) outcome(runID string, waitErr error, stopped bool) Outcome {
-	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost}
+	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Denials: t.denials}
 	switch {
 	case stopped:
 		o.Status, o.Error = "stopped", "stopped"
