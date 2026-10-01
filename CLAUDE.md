@@ -53,6 +53,9 @@ intreaba, radacina decide in locul utilizatorului, fara bucla la blocaj); cereri
 "Needs you" in toate modurile, cu Enable Shell / Dismiss.
 Gata (new chat): butonul "New chat" din chat-ul unui agent sterge sesiunea Claude (urmatorul mesaj porneste una noua) si
 ascunde istoricul (agents.chat_from); mesajele vechi raman salvate, vizibile prin "Earlier messages".
+Gata (conversatia pe task, spec in docs/superpowers/specs/2026-10-01-foreman-task-conversation-design.md): task_events cu
+destinatar si text complet; tab-ul Conversation din modala arata brief-ul, rapoartele, feedback-ul, intrebarile si ce a
+spus fiecare agent in run-urile pe task.
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.
