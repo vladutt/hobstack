@@ -48,6 +48,9 @@ un task nemiscat 5 min (decizie la un agent idle sau In progress fara run) e imp
 "Needs you" cu Nudge again / Open <agent>.
 Gata (modala de task, spec in docs/superpowers/specs/2026-10-01-foreman-task-modal-design.md): istoric per task
 (task_events) inregistrat pe toate drumurile; card compact pe board si modala cu descriere, istoric, raport ascuns si actiuni.
+Gata (full autonomy, spec in docs/superpowers/specs/2026-10-01-foreman-autonomy-design.md): comutator per proiect (agentii nu
+intreaba, radacina decide in locul utilizatorului, fara bucla la blocaj); cererile de acces din permission_denials apar in
+"Needs you" in toate modurile, cu Enable Shell / Dismiss.
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.

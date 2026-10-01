@@ -608,8 +608,14 @@ export async function workspaceView(root, projectId, route) {
   }
 
   // stageName: la cine asteapta un task din review (reviewer-ul asignatului, altfel creatorul, altfel seful)
+  // In modul autonom, un task din board il decide radacina asignatului (daca nu e chiar el).
   function stageName(t, who, byId) {
-    if (t.byUser) return "you";
+    if (t.byUser && !state.project.autonomy) return "you";
+    if (t.byUser && t.reviewStage !== "reviewer") {
+      let root = who;
+      for (const seen = new Set(); root?.parentId && !seen.has(root.id);) { seen.add(root.id); root = byId.get(root.parentId) || root; }
+      return root && root.id !== who?.id ? root.name : "you";
+    }
     const target = t.reviewStage === "reviewer"
       ? byId.get(who?.reviewerId)
       : byId.get(t.creatorId) || byId.get(who?.parentId);
