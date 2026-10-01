@@ -34,7 +34,9 @@ func TestStuckFieldsInJSON(t *testing.T) {
 		t.Fatalf("GET: %d %s", code, raw)
 	}
 	var d map[string]json.RawMessage
-	json.Unmarshal(raw, &d)
+	if err := json.Unmarshal(raw, &d); err != nil {
+		t.Fatalf("JSON: %v %s", err, raw)
+	}
 	if string(d["stuck"]) != "[]" {
 		t.Fatalf("stuck: %s", d["stuck"])
 	}

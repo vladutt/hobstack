@@ -175,17 +175,18 @@ const notWaitingParent = ` AND NOT EXISTS (SELECT 1 FROM tasks sub WHERE sub.par
 const notWaitingAnswer = ` AND id NOT IN (SELECT task_id FROM questions WHERE status = 'open' AND task_id IS NOT NULL)`
 
 // RequeueInProgress muta task-urile In progress ale proiectului inapoi in Queued
-// (la Stop team: procesele au fost oprite, munca se reia mai tarziu). Cele care
+// (la Stop team: procesele au fost oprite, munca se reia mai tarziu) si curata
+// nudged_at, ca orice schimbare de stare. Cele care
 // asteapta sub-task-uri sau un raspuns de la utilizator raman In progress.
 func (s *Store) RequeueInProgress(projectID int64) error {
-	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?
+	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?, nudged_at = NULL
 		WHERE project_id = ? AND status = 'in_progress'`+notWaitingParent+notWaitingAnswer, now(), projectID)
 	return err
 }
 
 // RequeueAllInProgress face acelasi lucru pentru toate proiectele (la pornirea serverului).
 func (s *Store) RequeueAllInProgress() error {
-	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?
+	_, err := s.db.Exec(`UPDATE tasks SET status = 'queued', updated_at = ?, nudged_at = NULL
 		WHERE status = 'in_progress'`+notWaitingParent+notWaitingAnswer, now())
 	return err
 }

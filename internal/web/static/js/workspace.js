@@ -5,7 +5,7 @@ import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
 import { questionBox } from "./questions.js";
-import { stuckBox } from "./stuck.js";
+import { stuckBox, refreshStuckAges } from "./stuck.js";
 
 const COLUMNS = [
   { title: "Queued", statuses: ["queued"] },
@@ -72,9 +72,20 @@ export async function workspaceView(root, projectId, route) {
   const tabsNav = el("nav", { class: "tabs", "aria-label": "Project sections" });
   // intrebarile deschise ale agentilor ("Needs you"): containerul se creeaza o
   // singura data si nu se scoate din pagina, ca raspunsul tastat sa nu se piarda
-  const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true });
+  // Doua sub-containere create o data: intrebarile si task-urile blocate se
+  // redeseneaza separat, ca o schimbare in lista de blocate sa nu stearga
+  // raspunsul tastat la o intrebare.
+  const needsTitle = el("h2", {});
+  const questionsBox = el("div", { class: "needs-questions" });
+  const stuckList = el("div", { class: "needs-stuck" });
+  const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
+    needsTitle, questionsBox, stuckList);
+  // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
+  // fara sa redesenam casetele
+  const agesTimer = setInterval(() => refreshStuckAges(stuckList), 60000);
   let keepPanel = false; // urmatorul update() pastreaza panoul ales (vezi openChat)
-  let needsKey = null;  // id-urile intrebarilor desenate ultima data in banda
+  let questionsKey = null; // id-urile intrebarilor desenate ultima data in banda
+  let stuckKey = null;     // id-urile task-urilor blocate desenate ultima data
   let pageHead = null;  // capul paginii desenat ultima data (inlocuit la fiecare renderHeader)
   const canvas = teamCanvas({
     onSelect: (id) => select(id),
@@ -197,25 +208,34 @@ export async function workspaceView(root, projectId, route) {
   // openChat: link-ul "Open <agent>" duce pe agent cu panoul Chat. update()
   // ar deschide Detaliile, deci tinem minte alegerea pana trece prin update.
   // Daca adresa e deja cea din link nu vine hashchange: doar aratam Chat-ul.
-  function openChat(href) {
+  // Un click cu Cmd/Ctrl/Shift (tab sau fereastra noua) nu schimba pagina
+  // curenta, deci nu tinem minte nimic.
+  function openChat(href, e) {
+    if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) return;
     state.panel = "chat";
     if (location.hash === href) { renderTabs(); scrollDown(true); return; }
     keepPanel = true;
   }
 
-  // renderNeeds: banda "Needs you". O redesenam doar cand se schimba setul de
-  // intrebari: reload-urile dese (SSE) ar sterge raspunsul pe care il scrii.
+  // renderNeeds: banda "Needs you". Titlul si vizibilitatea se actualizeaza
+  // mereu; intrebarile si task-urile blocate se redeseneaza fiecare doar cand
+  // se schimba setul lor: reload-urile dese (SSE) ar sterge raspunsul pe care il scrii.
   function renderNeeds() {
     const questions = state.project.questions || [];
     const stuck = state.project.stuck || [];
-    const key = questions.map((q) => "q" + q.id).concat(stuck.map((s) => "s" + s.taskId)).join(",");
-    if (key === needsKey) return;
-    needsKey = key;
-    needsBox.hidden = !(questions.length + stuck.length);
-    needsBox.replaceChildren(
-      el("h2", {}, `Needs you (${questions.length + stuck.length})`),
-      ...questions.map(questionNode),
-      ...stuck.map(stuckNode)); // replaceChildren nativ nu aplatizeaza array-uri
+    const total = questions.length + stuck.length;
+    needsTitle.textContent = `Needs you (${total})`;
+    needsBox.hidden = !total;
+    const qKey = questions.map((q) => q.id).join(",");
+    if (qKey !== questionsKey) {
+      questionsKey = qKey;
+      questionsBox.replaceChildren(...questions.map(questionNode)); // replaceChildren nativ nu aplatizeaza array-uri
+    }
+    const sKey = stuck.map((s) => s.taskId).join(",");
+    if (sKey !== stuckKey) {
+      stuckKey = sKey;
+      stuckList.replaceChildren(...stuck.map(stuckNode));
+    }
   }
 
   // renderChatQuestion: intrebarea agentului selectat in chat; aceeasi regula:
@@ -971,6 +991,7 @@ export async function workspaceView(root, projectId, route) {
     canvas.destroy();
     stopLive();
     clearTimeout(reloadTimer);
+    clearInterval(agesTimer);
   };
   return { cleanup, update };
 }

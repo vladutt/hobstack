@@ -348,6 +348,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .needs-you { display: grid; gap: 10px; }
 .needs-you[hidden] { display: none; }
 .needs-you h2 { font-size: 14px; color: var(--amber); margin: 0; }
+/* sub-containerele (intrebari, blocate) nu sunt cutii: casetele lor stau direct in grila benzii */
+.needs-questions, .needs-stuck { display: contents; }
 .question { border: 1px solid var(--amber); background: var(--amber-bg); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
 .question-head { font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .question-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

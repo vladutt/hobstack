@@ -193,9 +193,20 @@ func (t *Team) Reconcile(projectID int64) error {
 		if err != nil {
 			return err
 		}
+		// SaveTask curata nudged_at; il pastram: un task repus in coada de
+		// detector (orfan) si ramas iar orfan nu se mai repune automat, ci
+		// apare utilizatorului in "Needs you". Sfarsitul normal al run-ului
+		// (review, done etc.) il curata prin SaveTask.
+		nudgedAt := task.NudgedAt
 		task.Status = store.StatusInProgress
 		if err := t.st.SaveTask(task); err != nil {
 			return err
+		}
+		if nudgedAt != nil {
+			if err := t.st.SetTaskNudged(task.ID, *nudgedAt); err != nil {
+				return err
+			}
+			task.NudgedAt = nudgedAt
 		}
 		ctx := ctxFor(a, task.ID)
 		ctx.Stage = stageLine(stages, *task)

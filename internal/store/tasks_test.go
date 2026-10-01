@@ -255,3 +255,33 @@ func TestTaskNudgedAt(t *testing.T) {
 		t.Fatal("task inexistent: vreau eroare")
 	}
 }
+
+// repunerea in coada (Stop team, pornirea serverului) e o schimbare de stare: curata nudged_at
+func TestRequeueClearsNudgedAt(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	for _, requeue := range []func() error{
+		func() error { return s.RequeueInProgress(p.ID) },
+		s.RequeueAllInProgress,
+	} {
+		task := Task{ProjectID: p.ID, Title: "A", AssigneeID: lead.ID}
+		if err := s.CreateTask(&task); err != nil {
+			t.Fatal(err)
+		}
+		task.Status = StatusInProgress
+		if err := s.SaveTask(&task); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetTaskNudged(task.ID, at); err != nil {
+			t.Fatal(err)
+		}
+		if err := requeue(); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := s.GetTask(task.ID)
+		if got.Status != StatusQueued || got.NudgedAt != nil {
+			t.Fatalf("%s %v", got.Status, got.NudgedAt)
+		}
+	}
+}

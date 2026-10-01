@@ -146,7 +146,19 @@ func (t *Team) checkProjectStuck(projectID int64, now time.Time) (bool, error) {
 	decisions := map[int64][]store.Task{}
 	nudged := false
 	for _, task := range tasks {
-		if task.NudgedAt != nil || now.Sub(task.UpdatedAt) < stuckAfter {
+		if task.NudgedAt != nil {
+			// impins deja: in minutul (un tick) in care trece pragul de
+			// vizibilitate trimitem un eveniment, ca pagina deschisa sa se
+			// reincarce si sa-l arate in "Needs you"
+			since := now.Sub(*task.NudgedAt)
+			if since >= stuckAfter && since < stuckAfter+time.Minute {
+				if _, _, ok := t.stuckKind(task, agents, tasks, open); ok {
+					t.emit(projectID, "task", task)
+				}
+			}
+			continue
+		}
+		if now.Sub(task.UpdatedAt) < stuckAfter {
 			continue
 		}
 		kind, a, ok := t.stuckKind(task, agents, tasks, open)

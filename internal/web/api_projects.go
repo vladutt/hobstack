@@ -197,18 +197,20 @@ type projectDetail struct {
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
-func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task, error) {
+// card intoarce si task-urile blocate (calculate o singura data), ca getProject
+// sa nu le mai calculeze inca o data pentru lista din detaliu.
+func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task, []team.StuckTask, error) {
 	agents, err := s.st.ListAgents(p.ID)
 	if err != nil {
-		return projectCard{}, nil, nil, err
+		return projectCard{}, nil, nil, nil, err
 	}
 	tasks, err := s.st.ListTasks(p.ID)
 	if err != nil {
-		return projectCard{}, nil, nil, err
+		return projectCard{}, nil, nil, nil, err
 	}
 	c := projectCard{Project: p, Team: []memberBrief{}, Total: len(tasks), Status: "Idle"}
 	if c.OpenQuestions, err = s.st.CountOpenQuestions(p.ID); err != nil {
-		return projectCard{}, nil, nil, err
+		return projectCard{}, nil, nil, nil, err
 	}
 	for _, a := range agents {
 		r := store.RolesOf(a, agents)
@@ -216,7 +218,7 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 	}
 	stuck, err := s.team.StuckTasks(p.ID, s.team.Now())
 	if err != nil {
-		return projectCard{}, nil, nil, err
+		return projectCard{}, nil, nil, nil, err
 	}
 	c.StuckTasks = len(stuck)
 	busy := s.team.ProjectActive(p.ID)
@@ -234,7 +236,7 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 	case busy:
 		c.Status = "Running"
 	}
-	return c, agents, tasks, nil
+	return c, agents, tasks, stuck, nil
 }
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
@@ -245,7 +247,7 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []projectCard{}
 	for _, p := range projects {
-		c, _, _, err := s.card(p)
+		c, _, _, _, err := s.card(p)
 		if err != nil {
 			fail(w, err)
 			return
@@ -266,7 +268,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	c, agents, tasks, err := s.card(p)
+	c, agents, tasks, stuck, err := s.card(p)
 	if err != nil {
 		fail(w, err)
 		return
@@ -283,11 +285,6 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if questions == nil {
 		questions = []store.Question{}
-	}
-	stuck, err := s.team.StuckTasks(p.ID, s.team.Now())
-	if err != nil {
-		fail(w, err)
-		return
 	}
 	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, Questions: questions, Stuck: stuck}
 	for _, t := range tasks {
