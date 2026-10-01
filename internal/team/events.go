@@ -2,6 +2,7 @@ package team
 
 import (
 	"log"
+	"strings"
 
 	"foreman/internal/store"
 )
@@ -58,4 +59,37 @@ func (t *Team) record(task store.Task, n taskNote) {
 		return
 	}
 	t.taskEvent(task, n.kind, n.actor, n.text)
+}
+
+// briefBody e corpul comunicarii "created": titlul, apoi descrierea (daca exista).
+func briefBody(title, description string) string {
+	if d := strings.TrimSpace(description); d != "" {
+		return title + "\n\n" + d
+	}
+	return title
+}
+
+// orDefault intoarce s fara spatii la capete, sau def daca e gol.
+func orDefault(s, def string) string {
+	if s = strings.TrimSpace(s); s != "" {
+		return s
+	}
+	return def
+}
+
+// agentName intoarce numele agentului cu id-ul dat, sau "" daca nu exista.
+func agentName(agents []store.Agent, id int64) string {
+	if a, ok := store.FindAgent(agents, id); ok {
+		return a.Name
+	}
+	return ""
+}
+
+// whoName e destinatarul unei comunicari care merge la un agent daca exista
+// (ok), altfel la utilizator.
+func whoName(a store.Agent, ok bool) string {
+	if ok {
+		return a.Name
+	}
+	return actorUser
 }

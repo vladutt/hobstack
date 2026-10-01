@@ -114,6 +114,7 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 	}
 	task := store.Task{ProjectID: projectID, Title: title, Description: description, ByUser: true}
 	var assigned string // textul evenimentului "assigned" din istoric
+	var to string       // destinatarul brief-ului ("" = coada etapei)
 	if len(stages) > 0 {
 		first := stages[0]
 		task.StageID = &first.ID
@@ -126,6 +127,7 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 			}
 			task.AssigneeID = agentID
 			assigned = "Assigned to " + a.Name
+			to = a.Name
 		}
 	} else {
 		if agentID == 0 {
@@ -137,11 +139,12 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 		}
 		task.AssigneeID = agentID
 		assigned = "Assigned to " + a.Name
+		to = a.Name
 	}
 	if err := t.st.CreateTask(&task); err != nil {
 		return store.Task{}, err
 	}
-	t.taskEvent(task, "created", actorUser, "Created by you")
+	t.taskMsg(task, "created", actorUser, to, "Created by you", briefBody(task.Title, task.Description))
 	t.taskEvent(task, "assigned", actorUser, assigned)
 	if a, ok := store.FindAgent(agents, task.AssigneeID); ok && task.StageID == nil {
 		t.note(projectID, a.ID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), title), true)
@@ -218,6 +221,7 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 		if err := t.st.SaveTask(task); err != nil {
 			return "", err
 		}
+		ev.to = "" // in coada etapei urmatoare: fara destinatar anume
 		t.record(*task, ev)
 		t.taskEvent(*task, "stage", byName, "Moved to stage "+next.Name)
 		t.emit(task.ProjectID, "task", *task)
@@ -225,6 +229,7 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 		return fmt.Sprintf("%s moved to stage %s.", task.Ref(), next.Name), nil
 	}
 	boss, ok := decider(*task, agents, autonomous)
+	ev.to = whoName(boss, ok) // dupa ultima etapa: decidentul, altfel utilizatorul
 	if !ok && autonomous {
 		markDone(task)
 		if err := t.st.SaveTask(task); err != nil {
@@ -253,7 +258,11 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 // pentru istoric; daca task-ul schimba etapa, urmeaza "Moved to stage". Se apeleaza cu t.work blocat.
 func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, agents []store.Agent, by int64, ev taskNote, autonomous bool) (bool, error) {
 	moved := task.StageID == nil || *task.StageID != st.ID
+	// destinatarul feedback-ului: asignatul daca task-ul ramane la el (blocat),
+	// altfel nimeni anume (inapoi in coada etapei, il ia primul liber)
+	ev.to = agentName(agents, task.AssigneeID)
 	if task.SendBacks+1 < MaxSendBacks {
+		ev.to = ""
 		task.StageID = &st.ID
 		task.AssigneeID = placeholder(st, task.AssigneeID)
 	} else if task.StageID == nil {
@@ -290,7 +299,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 		if err := t.st.SaveTask(&task); err != nil {
 			return err
 		}
-		t.taskEvent(task, "user_accepted", actorUser, "You accepted")
+		t.taskMsg(task, "user_accepted", actorUser, agentName(agents, task.AssigneeID), "You accepted", "Accepted")
 		t.emit(task.ProjectID, "task", task)
 		t.Kick(task.ProjectID)
 		return nil
@@ -303,7 +312,9 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if err != nil {
 		return err
 	}
-	sent := taskNote{"sent_back", actorUser, "You sent it back: " + feedback, "", ""}
+	// destinatarul: asignatul (cu etape il schimba sendToStage)
+	sent := taskNote{kind: "sent_back", actor: actorUser, text: "You sent it back: " + feedback,
+		to: agentName(agents, task.AssigneeID), body: feedback}
 	// decizia utilizatorului nu declanseaza niciodata acceptul automat: regulile de azi
 	if len(stages) == 0 {
 		// fara etape: inapoi la acelasi agent, cu feedback

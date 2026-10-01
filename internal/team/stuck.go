@@ -198,7 +198,8 @@ func (t *Team) checkProjectStuck(projectID int64, autonomous bool, now time.Time
 func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []store.Task, agents []store.Agent, now time.Time, autonomous bool) error {
 	switch kind {
 	case stuckDecision:
-		if err := t.note(projectID, a.ID, nudgeText(a, tasks, agents, autonomous), false); err != nil {
+		nudge := nudgeText(a, tasks, agents, autonomous)
+		if err := t.note(projectID, a.ID, nudge, false); err != nil {
 			return err
 		}
 		refs, verb := refsOf(tasks)
@@ -210,7 +211,8 @@ func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []
 				return err
 			}
 			task.NudgedAt = &now
-			t.taskEvent(task, "nudged", actorForeman, "Foreman nudged "+a.Name)
+			// aceeasi nota pe fiecare task impins (o comunicare per task, nu per destinatar)
+			t.taskMsg(task, "nudged", actorForeman, a.Name, "Foreman nudged "+a.Name, nudge)
 			t.emit(projectID, "task", task)
 		}
 	case stuckOrphan:

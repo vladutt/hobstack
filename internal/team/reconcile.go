@@ -649,11 +649,11 @@ func (t *Team) closeQuestion(id int64, status, answer string) error {
 	}
 	if q.TaskID != nil {
 		if task, err := t.st.GetTask(*q.TaskID); err == nil {
-			text := "You answered"
+			text, body := "You answered", answer
 			if status == store.QuestionDismissed {
-				text = "You dismissed the question"
+				text, body = "You dismissed the question", "Dismissed"
 			}
-			t.taskEvent(task, "answered", actorUser, text)
+			t.taskMsg(task, "answered", actorUser, a.Name, text, orDefault(body, "(empty answer)"))
 		}
 	}
 	q.Status, q.Answer = status, answer
@@ -728,7 +728,7 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 		return err
 	}
 	if accept {
-		t.taskEvent(task, "user_accepted", actorUser, "You accepted")
+		t.taskMsg(task, "user_accepted", actorUser, agentName(agents, task.AssigneeID), "You accepted", "Accepted")
 	} else {
 		t.taskEvent(task, "unblocked", actorUser, "You unblocked it")
 	}

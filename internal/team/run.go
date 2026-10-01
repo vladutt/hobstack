@@ -270,7 +270,9 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 			break
 		}
 		task.Result = strings.TrimSpace(o.Result)
-		ev := taskNote{"reported", a.Name, a.Name + " finished without report_done", "", ""}
+		// body e raportul (raspunsul final al run-ului); destinatarul il alege toReview
+		ev := taskNote{kind: "reported", actor: a.Name, text: a.Name + " finished without report_done",
+			body: orDefault(task.Result, "(finished without a report)")}
 		_, err = t.toReview(&task, a, agents, fmt.Sprintf("%s finished %s without report_done", a.Name, task.Ref()), ev)
 		return err
 	}
