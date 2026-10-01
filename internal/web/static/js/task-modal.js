@@ -213,10 +213,10 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   }
 
   // bubble: un mesaj din conversatie; "You" la dreapta, antet "from → to · ora"
-  function bubble(it) {
+  function bubble(it, idx) {
     const from = it.from || "?";
     const a = project.agents.find((x) => x.name === from);
-    const key = `${it.type}|${it.at}|${from}`;
+    const key = `${it.type}|${it.kind || ""}|${it.at}|${from}|${it.to || ""}|${it.runId || ""}|${idx}`;
     const long = it.text.length > LONG_TEXT;
     const text = el("div", { class: "conv-text" });
     const more = long ? el("button", { type: "button", class: "btn small conv-more" }) : null;

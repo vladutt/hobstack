@@ -129,3 +129,39 @@ func TestGetTaskConversation(t *testing.T) {
 		t.Fatalf("ordine: %s", raw)
 	}
 }
+
+func TestConversationDedupAndSlimEvents(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Rook")
+	task := store.Task{ProjectID: p.ID, Title: "Login", AssigneeID: w.ID}
+	if err := e.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	e.st.CreateRun(&store.Run{ID: "r1", AgentID: w.ID, TaskID: task.ID})
+	e.st.AddMessage(&store.Message{ProjectID: p.ID, AgentID: w.ID, Kind: store.KindMsg, Author: "Rook", Text: "all done", RunID: "r1"})
+	e.st.AddMessage(&store.Message{ProjectID: p.ID, AgentID: w.ID, Kind: store.KindMsg, Author: "Rook", Text: "other note", RunID: "r1"})
+	e.st.AddTaskEvent(&store.TaskEvent{TaskID: task.ID, At: time.Now().UTC().Add(-time.Hour), Kind: "reported", Actor: "Rook", To: "Lead", Text: "Reported", Body: "all done"})
+
+	_, raw := e.do(t, "GET", "/api/tasks/"+itoa(task.ID), nil)
+	var d struct {
+		Conversation []map[string]any `json:"conversation"`
+		Events       []map[string]any `json:"events"`
+	}
+	json.Unmarshal(raw, &d)
+	if len(d.Conversation) != 2 || d.Conversation[0]["type"] != "event" || d.Conversation[0]["text"] != "all done" ||
+		d.Conversation[1]["type"] != "run" || d.Conversation[1]["text"] != "other note" {
+		t.Fatalf("duplicat: %s", raw)
+	}
+	if len(d.Events) != 1 || d.Events[0]["body"] != "" || d.Events[0]["to"] != "" || d.Events[0]["text"] != "Reported" {
+		t.Fatalf("events fara body/to: %s", raw)
+	}
+}
+
+func TestConversationRunTextCap(t *testing.T) {
+	long := strings.Repeat("x", 20010)
+	got := buildConversation(nil, []store.Message{{Author: "Rook", Text: long, RunID: "r1"}})
+	if len(got) != 1 || len([]rune(got[0].Text)) != 20006 || !strings.HasSuffix(got[0].Text, " [...]") {
+		t.Fatalf("cap: %d", len([]rune(got[0].Text)))
+	}
+}

@@ -78,14 +78,19 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	working, workingID := "", int64(0)
-	if aid, ok := s.team.WorkingOn(id); ok {
-		if a, err := s.st.GetAgent(aid); err == nil {
-			working, workingID = a.Name, aid
-		}
+	if s.team.WorkingOn(id, task.AssigneeID) {
+		working, workingID = assignee, task.AssigneeID
+	}
+	conv := buildConversation(events, runMsgs)
+	// textul complet e doar in conversation; copiile din events (istoric) nu il mai poarta
+	slim := make([]store.TaskEvent, len(events))
+	for i, e := range events {
+		e.Body, e.To = "", ""
+		slim[i] = e
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"task": task, "events": events, "assignee": assignee, "stage": stage,
-		"conversation": buildConversation(events, runMsgs), "working": working, "workingAgentId": workingID,
+		"task": task, "events": slim, "assignee": assignee, "stage": stage,
+		"conversation": conv, "working": working, "workingAgentId": workingID,
 	})
 }
 
@@ -101,17 +106,33 @@ type convItem struct {
 	RunID string    `json:"runId,omitempty"`
 }
 
+// maxConvText: lungimea maxima (in caractere) a unui mesaj de run in conversatie (ca la corpul evenimentelor).
+const maxConvText = 20000
+
 // buildConversation uneste evenimentele cu body si mesajele din run-uri, sortate dupa
 // timp (la egalitate evenimentele inaintea mesajelor); mereu non-nil.
 func buildConversation(events []store.TaskEvent, msgs []store.Message) []convItem {
 	out := []convItem{}
+	// (autor, text) al rapoartelor: un run terminat fara report_done salveaza acelasi text
+	// si ca mesaj, si ca eveniment "reported"; il pastram doar pe cel din eveniment
+	reported := map[[2]string]bool{}
 	for _, e := range events {
 		if e.Body != "" {
 			out = append(out, convItem{Type: "event", At: e.At, Kind: e.Kind, From: e.Actor, To: e.To, Text: e.Body})
+			if e.Kind == "reported" {
+				reported[[2]string{e.Actor, e.Body}] = true
+			}
 		}
 	}
 	for _, m := range msgs {
-		out = append(out, convItem{Type: "run", At: m.CreatedAt, From: m.Author, Text: m.Text, RunID: m.RunID})
+		text := m.Text
+		if r := []rune(text); len(r) > maxConvText {
+			text = string(r[:maxConvText]) + " [...]"
+		}
+		if reported[[2]string{m.Author, text}] {
+			continue
+		}
+		out = append(out, convItem{Type: "run", At: m.CreatedAt, From: m.Author, Text: text, RunID: m.RunID})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if !out[i].At.Equal(out[j].At) {

@@ -146,19 +146,15 @@ func (t *Team) activeTaskID(agentID int64) int64 {
 	return t.active[agentID].taskID
 }
 
-// WorkingOn spune care agent are acum un run activ pe task-ul dat.
-func (t *Team) WorkingOn(taskID int64) (agentID int64, ok bool) {
+// WorkingOn spune daca agentul asignat are acum un run activ pe task-ul dat.
+func (t *Team) WorkingOn(taskID, assigneeID int64) bool {
 	if taskID == 0 {
-		return 0, false
+		return false
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for id, ar := range t.active {
-		if ar.taskID == taskID {
-			return id, true
-		}
-	}
-	return 0, false
+	ar, ok := t.active[assigneeID]
+	return ok && ar.taskID == taskID
 }
 
 // AgentStatus intoarce statusul afisat si task-ul curent (in lucru sau urmatorul).
