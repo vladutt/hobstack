@@ -48,3 +48,28 @@ func TestTaskEventsAddListCascade(t *testing.T) {
 		t.Fatalf("dupa stergerea proiectului: %+v", evs)
 	}
 }
+
+func TestTaskEventToBodyRoundTrip(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	task := Task{ProjectID: p.ID, Title: "t", AssigneeID: w.ID}
+	if err := s.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	e := TaskEvent{TaskID: task.ID, Kind: "reported", Actor: "Rook", To: "Vera", Text: "short", Body: "full report"}
+	if err := s.AddTaskEvent(&e); err != nil {
+		t.Fatal(err)
+	}
+	plain := TaskEvent{TaskID: task.ID, Kind: "created", Actor: "You", Text: "x"}
+	if err := s.AddTaskEvent(&plain); err != nil {
+		t.Fatal(err)
+	}
+	evs, err := s.ListTaskEvents(task.ID)
+	if err != nil || len(evs) != 2 {
+		t.Fatalf("%+v %v", evs, err)
+	}
+	if evs[0].To != "Vera" || evs[0].Body != "full report" || evs[1].To != "" || evs[1].Body != "" {
+		t.Fatalf("to/body: %+v", evs)
+	}
+}

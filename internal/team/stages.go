@@ -303,7 +303,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if err != nil {
 		return err
 	}
-	sent := taskNote{"sent_back", actorUser, "You sent it back: " + feedback}
+	sent := taskNote{"sent_back", actorUser, "You sent it back: " + feedback, "", ""}
 	// decizia utilizatorului nu declanseaza niciodata acceptul automat: regulile de azi
 	if len(stages) == 0 {
 		// fara etape: inapoi la acelasi agent, cu feedback

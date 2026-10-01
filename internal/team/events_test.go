@@ -378,3 +378,26 @@ func TestRecoverRecordsRequeuedSkipsWaiting(t *testing.T) {
 		t.Fatalf("task-ul care asteapta sub-task-uri nu se pune in coada: %d", n)
 	}
 }
+
+func TestTaskMsgTruncates(t *testing.T) {
+	f := setup(t)
+	task := store.Task{ProjectID: f.p.ID, Title: "t", AssigneeID: f.rook.ID}
+	if err := f.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	f.tm.taskMsg(task, "reported", "Rook", "Vera", strings.Repeat("a", 300), strings.Repeat("ă", 20005))
+	f.tm.taskMsg(task, "created", "You", "Rook", "short", "full")
+	evs, err := f.st.ListTaskEvents(task.ID)
+	if err != nil || len(evs) != 2 {
+		t.Fatalf("%+v %v", evs, err)
+	}
+	if r := []rune(evs[0].Text); len(r) != 203 {
+		t.Fatalf("text %d", len(r))
+	}
+	if !strings.HasSuffix(evs[0].Body, " [...]") || len([]rune(evs[0].Body)) != 20006 || evs[0].To != "Vera" {
+		t.Fatalf("body %d to %q", len([]rune(evs[0].Body)), evs[0].To)
+	}
+	if evs[1].Body != "full" || evs[1].To != "Rook" {
+		t.Fatalf("%+v", evs[1])
+	}
+}

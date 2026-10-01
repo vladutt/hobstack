@@ -10,6 +10,8 @@ type TaskEvent struct {
 	Kind   string    `json:"kind"`
 	Actor  string    `json:"actor"`
 	Text   string    `json:"text"`
+	To     string    `json:"to"`   // destinatarul comunicarii ("" = nimeni anume)
+	Body   string    `json:"body"` // textul complet ("" = doar istoric)
 }
 
 // AddTaskEvent salveaza un eveniment; At zero = acum.
@@ -17,8 +19,8 @@ func (s *Store) AddTaskEvent(e *TaskEvent) error {
 	if e.At.IsZero() {
 		e.At = time.Now().UTC()
 	}
-	res, err := s.db.Exec(`INSERT INTO task_events (task_id, created_at, kind, actor, text) VALUES (?, ?, ?, ?, ?)`,
-		e.TaskID, e.At.UTC().Format(time.RFC3339Nano), e.Kind, e.Actor, e.Text)
+	res, err := s.db.Exec(`INSERT INTO task_events (task_id, created_at, kind, actor, text, to_actor, body) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		e.TaskID, e.At.UTC().Format(time.RFC3339Nano), e.Kind, e.Actor, e.Text, e.To, e.Body)
 	if err != nil {
 		return err
 	}
@@ -28,7 +30,7 @@ func (s *Store) AddTaskEvent(e *TaskEvent) error {
 
 // ListTaskEvents intoarce istoricul task-ului in ordinea inregistrarii; mereu non-nil.
 func (s *Store) ListTaskEvents(taskID int64) ([]TaskEvent, error) {
-	rows, err := s.db.Query(`SELECT id, task_id, created_at, kind, actor, text FROM task_events WHERE task_id = ? ORDER BY id`, taskID)
+	rows, err := s.db.Query(`SELECT id, task_id, created_at, kind, actor, text, to_actor, body FROM task_events WHERE task_id = ? ORDER BY id`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +39,7 @@ func (s *Store) ListTaskEvents(taskID int64) ([]TaskEvent, error) {
 	for rows.Next() {
 		var e TaskEvent
 		var at string
-		if err := rows.Scan(&e.ID, &e.TaskID, &at, &e.Kind, &e.Actor, &e.Text); err != nil {
+		if err := rows.Scan(&e.ID, &e.TaskID, &at, &e.Kind, &e.Actor, &e.Text, &e.To, &e.Body); err != nil {
 			return nil, err
 		}
 		e.At = parseTime(at)

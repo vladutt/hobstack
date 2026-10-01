@@ -702,7 +702,7 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 		if i := stageIndex(stages, task.StageID); i >= 0 {
 			target = stages[i]
 		}
-		sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback}
+		sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback, "", ""}
 		blocked, err := t.sendToStage(&task, target, feedback, agents, lead.ID, sent, autonomous)
 		if err != nil {
 			return "", err
@@ -715,7 +715,7 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 		return fmt.Sprintf("%s sent back to stage %s (%d/%d).", task.Ref(), target.Name, task.SendBacks, MaxSendBacks), nil
 	}
 
-	sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback}
+	sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback, "", ""}
 	blocked, err := t.rejectTask(&task, feedback, agents, lead.ID, sent, autonomous)
 	if err != nil {
 		return "", err
@@ -813,7 +813,7 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 
 // reportedNote e evenimentul "a raportat" al unui report_done.
 func reportedNote(worker store.Agent) taskNote {
-	return taskNote{"reported", worker.Name, worker.Name + " reported it done"}
+	return taskNote{"reported", worker.Name, worker.Name + " reported it done", "", ""}
 }
 
 // reviewTarget valideaza apelul unui reviewer si intoarce task-ul, asignatul si lista de agenti.
@@ -914,12 +914,12 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 
 // approvedNote e evenimentul unei aprobari (reviewer sau etapa de verificare).
 func approvedNote(r store.Agent) taskNote {
-	return taskNote{"approved", r.Name, r.Name + " approved"}
+	return taskNote{"approved", r.Name, r.Name + " approved", "", ""}
 }
 
 // rejectedNote e evenimentul unei respingeri (reviewer sau etapa de verificare).
 func rejectedNote(r store.Agent, feedback string) taskNote {
-	return taskNote{"rejected", r.Name, r.Name + " rejected: " + feedback}
+	return taskNote{"rejected", r.Name, r.Name + " rejected: " + feedback, "", ""}
 }
 
 func (t *Team) ReviewReject(c mcp.Caller, ref, feedback string) (string, error) {
