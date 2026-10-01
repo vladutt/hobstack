@@ -6,6 +6,9 @@ const STATUS = {
   queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done",
 };
 
+// Peste cate caractere o bula din conversatie se arata scurtata.
+const LONG_TEXT = 600;
+
 // taskModal: fereastra unui task deschisa peste board (adresa #/p/<id>/tasks/<taskId>).
 // - project: proiectul curent (agenti, userDecides, userCanDecide, stuck); refresh(project) il inlocuieste.
 // - onClose(): cerut la Esc / click pe fundal / x (apelantul schimba adresa si cheama destroy).
@@ -20,6 +23,12 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   let destroyed = false;
   let reportOpen = false; // "Show report" ramane desfasurat la refresh
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
+  let tab = null;         // "conversation" | "history"; null = inca nealeasa (se alege la primul raspuns)
+  let convKey = null;     // ce s-a desenat ultima data in conversatie
+  let histKey = null;     // idem pentru istoric
+  let topKey = null;      // idem pentru descriere + feedback
+  let reportKey = null;   // idem pentru raport
+  const expanded = new Set(); // bulele cu "Show more" deschis (cheie: tip + at + from)
   // textarea de feedback se creeaza o singura data: textul scris ramane chiar
   // daca zona de actiuni se reconstruieste
   const feedback = el("textarea", { rows: 3, placeholder: "What needs to change? (needed for Send back)", "aria-label": "Feedback" });
@@ -27,6 +36,16 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   const titleId = `task-modal-title-${taskId}`;
   const closeBtn = el("button", { type: "button", class: "modal-close", "aria-label": "Close", onclick: () => requestClose() }, "×");
   const head = el("div", { class: "modal-head-main" });
+  // nodurile corpului raman pe loc intre refresh-uri (scroll-ul, tab-ul, "Show more" nu se pierd);
+  // se rescrie doar continutul care s-a schimbat
+  const topBox = el("div", { class: "modal-top" });
+  const convPane = el("div", { class: "conv", id: `conv-${taskId}`, role: "tabpanel", hidden: true });
+  const histPane = el("div", { id: `hist-${taskId}`, role: "tabpanel", hidden: true });
+  const tabConv = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": convPane.id, onclick: () => setTab("conversation") }, "Conversation");
+  const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "History");
+  const tabsSection = el("section", { class: "modal-section", hidden: true },
+    el("div", { class: "modal-tabs", role: "tablist" }, tabConv, tabHist), convPane, histPane);
+  const reportBox = el("div", { class: "modal-top" });
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
   const actionsBox = el("div", { class: "modal-actions", hidden: true });
   const dialog = el("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": titleId, tabindex: "-1" },
@@ -102,6 +121,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     actionsBox.hidden = true;
     actionsBox.replaceChildren();
     actionsKey = null;
+    topKey = histKey = convKey = reportKey = null; // la urmatorul succes se redeseneaza tot
   }
 
   function render() {
@@ -122,22 +142,109 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
         waiting ? el("span", { class: "task-stage" }, `with ${waiting}`) : null,
         stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null));
 
-    const events = data.events || [];
-    // replaceChildren nativ scrie null ca text: filtram sectiunile lipsa
-    body.replaceChildren(...[
-      el("section", { class: "modal-section" },
-        el("h3", {}, "Description"),
-        t.description ? el("div", { class: "modal-text" }, t.description) : el("p", { class: "hint" }, "No description.")),
-      t.feedback ? el("section", { class: "modal-section" },
-        el("h3", {}, "Feedback"), el("div", { class: "modal-text" }, t.feedback)) : null,
-      el("section", { class: "modal-section" },
-        el("h3", {}, "History"),
-        el("ol", { class: "history" }, ...events.map((ev) => el("li", {},
-          el("time", { datetime: ev.at, title: new Date(ev.at).toLocaleString() }, whenText(ev.at)),
-          el("span", {}, ev.text))))),
-      t.result ? reportNode(t.result) : null,
-    ].filter(Boolean));
+    // prima data scoatem "Loading..." si punem nodurile stabile
+    if (!body.contains(tabsSection)) body.replaceChildren(topBox, tabsSection, reportBox);
+
+    const topNow = JSON.stringify([t.description, t.feedback]);
+    if (topNow !== topKey) {
+      topKey = topNow;
+      // replaceChildren nativ scrie null ca text: filtram sectiunile lipsa
+      topBox.replaceChildren(...[
+        el("section", { class: "modal-section" },
+          el("h3", {}, "Description"),
+          t.description ? el("div", { class: "modal-text" }, t.description) : el("p", { class: "hint" }, "No description.")),
+        t.feedback ? el("section", { class: "modal-section" },
+          el("h3", {}, "Feedback"), el("div", { class: "modal-text" }, t.feedback)) : null,
+      ].filter(Boolean));
+    }
+    tabsSection.hidden = false;
+    if (tab === null) tab = (data.conversation || []).length ? "conversation" : "history";
+    renderHistory(data.events || []);
+    renderConversation();
+    applyTab();
+    const repNow = t.result || "";
+    if (repNow !== reportKey) {
+      reportKey = repNow;
+      reportBox.replaceChildren(...(t.result ? [reportNode(t.result)] : []));
+    }
     renderActions(t, stuck);
+  }
+
+  function setTab(name) {
+    tab = name;
+    applyTab();
+  }
+
+  function applyTab() {
+    const conv = tab === "conversation";
+    tabConv.setAttribute("aria-selected", String(conv));
+    tabHist.setAttribute("aria-selected", String(!conv));
+    tabConv.tabIndex = conv ? 0 : -1;
+    tabHist.tabIndex = conv ? -1 : 0;
+    convPane.hidden = !conv;
+    histPane.hidden = conv;
+  }
+
+  function renderHistory(events) {
+    const key = events.map((ev) => `${ev.at}|${ev.text}`).join("\n");
+    if (key === histKey) return;
+    histKey = key;
+    histPane.replaceChildren(el("ol", { class: "history" }, ...events.map((ev) => el("li", {},
+      el("time", { datetime: ev.at, title: new Date(ev.at).toLocaleString() }, whenText(ev.at)),
+      el("span", {}, ev.text)))));
+  }
+
+  // renderConversation: se redeseneaza doar cand se schimba numarul de elemente, ultimul
+  // moment sau cine lucreaza (ca "Show more" si scroll-ul sa ramana)
+  function renderConversation() {
+    const items = data.conversation || [];
+    const last = items.length ? items[items.length - 1].at : "";
+    const key = `${items.length}|${last}|${data.working || ""}|${data.workingAgentId || 0}`;
+    if (key === convKey) return;
+    convKey = key;
+    const nodes = items.map(bubble);
+    if (!items.length && !data.working) nodes.push(el("p", { class: "hint" }, "No conversation recorded for this task."));
+    if (data.working) {
+      nodes.push(el("div", { class: "conv-working" },
+        el("span", {}, `${data.working} is working on it…`),
+        data.workingAgentId ? el("a", { href: `#/p/${projectId}/team/${data.workingAgentId}` }, "Watch live") : null));
+    }
+    convPane.replaceChildren(...nodes);
+  }
+
+  // bubble: un mesaj din conversatie; "You" la dreapta, antet "from → to · ora"
+  function bubble(it) {
+    const from = it.from || "?";
+    const a = project.agents.find((x) => x.name === from);
+    const key = `${it.type}|${it.at}|${from}`;
+    const long = it.text.length > LONG_TEXT;
+    const text = el("div", { class: "conv-text" });
+    const more = long ? el("button", { type: "button", class: "btn small conv-more" }) : null;
+    const paint = () => {
+      const open = expanded.has(key);
+      text.textContent = long && !open ? it.text.slice(0, LONG_TEXT).trimEnd() + "…" : it.text;
+      if (more) {
+        more.textContent = open ? "Show less" : "Show more";
+        more.setAttribute("aria-expanded", String(open));
+      }
+    };
+    if (more) {
+      more.addEventListener("click", () => {
+        if (expanded.has(key)) expanded.delete(key); else expanded.add(key);
+        paint();
+      });
+    }
+    paint();
+    const showTo = it.type === "event" && it.to;
+    return el("div", { class: `conv-msg${from === "You" ? " me" : ""}` },
+      el("div", { class: "conv-head" },
+        avatar(from, a ? kindOf(a) : "user", 20),
+        el("span", { class: "conv-from" }, from),
+        showTo ? el("span", { class: "conv-arrow", "aria-hidden": "true" }, "→") : null,
+        showTo ? el("span", { class: "conv-from" }, it.to) : null,
+        el("span", { class: "conv-sep", "aria-hidden": "true" }, "·"),
+        el("time", { datetime: it.at, title: new Date(it.at).toLocaleString() }, whenText(it.at))),
+      text, more);
   }
 
   // reportNode: raportul AI, ascuns implicit

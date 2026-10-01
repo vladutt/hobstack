@@ -402,3 +402,22 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
   .modal-overlay { padding: 8px; }
   .modal { max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
 }
+
+/* modala task: tab-uri Conversation / History */
+.modal-top { display: grid; gap: 18px; min-width: 0; }
+.modal-top:empty { display: none; }
+.modal-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.modal-tabs .tab { background: none; border: 0; border-bottom: 2px solid transparent; font: 600 13px var(--sans); cursor: pointer; }
+.modal-tabs .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--amber); }
+.modal-section[hidden], .conv[hidden] { display: none; }
+.modal-section > [role="tabpanel"][hidden] { display: none; }
+
+.conv { display: grid; gap: 12px; min-width: 0; padding-top: 4px; }
+.conv-msg { display: grid; gap: 4px; justify-items: start; min-width: 0; max-width: 100%; }
+.conv-msg.me { justify-items: end; }
+.conv-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--muted); min-width: 0; }
+.conv-from { color: var(--soft); font-weight: 600; }
+.conv-text { max-width: min(100%, 520px); padding: 9px 12px; border-radius: 12px; background: var(--them); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.conv-msg.me .conv-text { background: var(--me); color: #f1e6d3; }
+.conv-working { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 13px; color: var(--amber); }
+.conv-working a { color: var(--teal); }

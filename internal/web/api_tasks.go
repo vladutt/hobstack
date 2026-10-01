@@ -2,6 +2,8 @@ package web
 
 import (
 	"net/http"
+	"sort"
+	"time"
 
 	"foreman/internal/store"
 )
@@ -70,5 +72,52 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"task": task, "events": events, "assignee": assignee, "stage": stage})
+	runMsgs, err := s.st.ListTaskRunMessages(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	working, workingID := "", int64(0)
+	if aid, ok := s.team.WorkingOn(id); ok {
+		if a, err := s.st.GetAgent(aid); err == nil {
+			working, workingID = a.Name, aid
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"task": task, "events": events, "assignee": assignee, "stage": stage,
+		"conversation": buildConversation(events, runMsgs), "working": working, "workingAgentId": workingID,
+	})
+}
+
+// convItem e un element al conversatiei unui task: o comunicare (eveniment cu body)
+// sau un mesaj al agentului dintr-un run.
+type convItem struct {
+	Type  string    `json:"type"` // "event" | "run"
+	At    time.Time `json:"at"`
+	Kind  string    `json:"kind,omitempty"`
+	From  string    `json:"from"`
+	To    string    `json:"to,omitempty"`
+	Text  string    `json:"text"`
+	RunID string    `json:"runId,omitempty"`
+}
+
+// buildConversation uneste evenimentele cu body si mesajele din run-uri, sortate dupa
+// timp (la egalitate evenimentele inaintea mesajelor); mereu non-nil.
+func buildConversation(events []store.TaskEvent, msgs []store.Message) []convItem {
+	out := []convItem{}
+	for _, e := range events {
+		if e.Body != "" {
+			out = append(out, convItem{Type: "event", At: e.At, Kind: e.Kind, From: e.Actor, To: e.To, Text: e.Body})
+		}
+	}
+	for _, m := range msgs {
+		out = append(out, convItem{Type: "run", At: m.CreatedAt, From: m.Author, Text: m.Text, RunID: m.RunID})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if !out[i].At.Equal(out[j].At) {
+			return out[i].At.Before(out[j].At)
+		}
+		return out[i].Type == "event" && out[j].Type == "run"
+	})
+	return out
 }

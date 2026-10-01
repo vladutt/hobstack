@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"foreman/internal/store"
 )
@@ -71,5 +72,60 @@ func TestGetTaskDetailStageName(t *testing.T) {
 	json.Unmarshal(raw, &d)
 	if d.Stage != "Dev" {
 		t.Fatalf("stage: %s", raw)
+	}
+}
+
+type convDetail struct {
+	Conversation   []map[string]any `json:"conversation"`
+	Working        string           `json:"working"`
+	WorkingAgentID int64            `json:"workingAgentId"`
+}
+
+func TestGetTaskConversation(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Rook")
+	task := store.Task{ProjectID: p.ID, Title: "Login", AssigneeID: w.ID}
+	if err := e.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/tasks/" + itoa(task.ID)
+
+	// task fara nimic: lista goala non-nil, nimeni nu lucreaza
+	code, raw := e.do(t, "GET", path, nil)
+	var d convDetail
+	json.Unmarshal(raw, &d)
+	if code != 200 || d.Conversation == nil || len(d.Conversation) != 0 || d.Working != "" || d.WorkingAgentID != 0 ||
+		!strings.Contains(string(raw), `"conversation":[]`) {
+		t.Fatalf("gol: %d %s", code, raw)
+	}
+
+	// doar run-uri (task vechi)
+	if err := e.st.CreateRun(&store.Run{ID: "r1", AgentID: w.ID, TaskID: task.ID}); err != nil {
+		t.Fatal(err)
+	}
+	e.st.AddMessage(&store.Message{ProjectID: p.ID, AgentID: w.ID, Kind: store.KindMsg, Author: "Rook", Text: "done it", RunID: "r1"})
+	_, raw = e.do(t, "GET", path, nil)
+	d = convDetail{}
+	json.Unmarshal(raw, &d)
+	if len(d.Conversation) != 1 || d.Conversation[0]["type"] != "run" || d.Conversation[0]["runId"] != "r1" {
+		t.Fatalf("doar run: %s", raw)
+	}
+
+	// evenimente cu body inaintea mesajului din run; cele fara body lipsesc
+	base := time.Now().UTC().Add(-time.Hour)
+	e.st.AddTaskEvent(&store.TaskEvent{TaskID: task.ID, At: base, Kind: "created", Actor: "You", Text: "Created"})
+	e.st.AddTaskEvent(&store.TaskEvent{TaskID: task.ID, At: base, Kind: "assigned", Actor: "Lead", To: "Rook", Text: "Assigned", Body: "please do it"})
+	e.st.AddTaskEvent(&store.TaskEvent{TaskID: task.ID, At: base.Add(time.Minute), Kind: "reported", Actor: "Rook", Text: "Reported", Body: "all done"})
+	_, raw = e.do(t, "GET", path, nil)
+	d = convDetail{}
+	json.Unmarshal(raw, &d)
+	if len(d.Conversation) != 3 {
+		t.Fatalf("3 elemente: %s", raw)
+	}
+	c := d.Conversation
+	if c[0]["type"] != "event" || c[0]["text"] != "please do it" || c[0]["from"] != "Lead" || c[0]["to"] != "Rook" || c[0]["kind"] != "assigned" ||
+		c[1]["text"] != "all done" || c[2]["type"] != "run" || c[2]["text"] != "done it" {
+		t.Fatalf("ordine: %s", raw)
 	}
 }
