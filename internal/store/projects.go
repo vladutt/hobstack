@@ -16,17 +16,18 @@ type Project struct {
 	Workdir     string    `json:"workdir"`
 	Paused      bool      `json:"paused"`
 	MaxParallel int       `json:"maxParallel"`
+	Autonomy    bool      `json:"autonomy"` // full autonomy: agentii nu mai au deny-uri de permisiuni
 	BudgetUSD   float64   `json:"budgetUsd"`
 	CreatedAt   time.Time `json:"createdAt"`
 	Folders     []Folder  `json:"folders"` // cel putin unul; primul e cel implicit
 }
 
-const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, created_at`
+const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at`
 
 func scanProject(sc scanner) (Project, error) {
 	var p Project
 	var created string
-	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &created)
+	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &p.Autonomy, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, ErrNotFound
 	}
@@ -49,9 +50,9 @@ func (s *Store) CreateProject(p *Project) (Agent, error) {
 	}
 	defer tx.Rollback() // nu face nimic dupa Commit
 
-	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, created)
+	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, p.Autonomy, created)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -91,9 +92,9 @@ func (s *Store) CreateProjectWithTeam(p *Project, team []NewMember) ([]Agent, er
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, created)
+	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, p.Autonomy, created)
 	if err != nil {
 		return nil, err
 	}
@@ -184,8 +185,8 @@ func (s *Store) UpdateProject(p Project) error {
 	if len(p.Folders) > 0 {
 		p.Workdir = p.Folders[0].Path
 	}
-	if err := mustAffect(tx.Exec(`UPDATE projects SET name = ?, goal = ?, context = ?, workdir = ?, max_parallel = ?, budget_usd = ?
-		WHERE id = ?`, p.Name, p.Goal, p.Context, p.Workdir, p.MaxParallel, p.BudgetUSD, p.ID)); err != nil {
+	if err := mustAffect(tx.Exec(`UPDATE projects SET name = ?, goal = ?, context = ?, workdir = ?, max_parallel = ?, budget_usd = ?, autonomy = ?
+		WHERE id = ?`, p.Name, p.Goal, p.Context, p.Workdir, p.MaxParallel, p.BudgetUSD, p.Autonomy, p.ID)); err != nil {
 		return err
 	}
 	if len(p.Folders) > 0 {

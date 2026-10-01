@@ -41,6 +41,7 @@ type Task struct {
 	ReviewStage  string `json:"reviewStage"`  // "", "reviewer", "lead"
 	StageID      *int64 `json:"stageId"`      // etapa curenta (coloana proprie); nil = fara etape sau dupa ultima
 	ByUser       bool   `json:"byUser"`       // creat de utilizator din board: la final decide el
+	Escalated    bool   `json:"escalated"`    // un reviewer/lider a cerut utilizatorului sa decida
 
 	// NudgedAt: cand l-a impins ultima data detectorul de task-uri blocate;
 	// nil = neimpins de la ultima schimbare de stare.
@@ -50,7 +51,7 @@ type Task struct {
 // Ref e forma afisata a task-ului: T-3.
 func (t Task) Ref() string { return fmt.Sprintf("T-%d", t.Number) }
 
-const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at`
+const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at, escalated`
 
 func scanTask(sc scanner) (Task, error) {
 	var t Task
@@ -58,7 +59,7 @@ func scanTask(sc scanner) (Task, error) {
 	var nudged sql.NullString
 	err := sc.Scan(&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description, &t.AssigneeID,
 		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated,
-		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser, &nudged)
+		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser, &nudged, &t.Escalated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
 	}
@@ -132,8 +133,8 @@ func (s *Store) ListTasks(projectID int64) ([]Task, error) {
 func (s *Store) SaveTask(t *Task) error {
 	ts := now()
 	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, review_stage = ?,
-		assignee_id = ?, stage_id = ?, updated_at = ?, nudged_at = NULL
-		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), ts, t.ID))
+		assignee_id = ?, stage_id = ?, escalated = ?, updated_at = ?, nudged_at = NULL
+		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), t.Escalated, ts, t.ID))
 	if err != nil {
 		return err
 	}
