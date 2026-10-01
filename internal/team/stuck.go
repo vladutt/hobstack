@@ -204,6 +204,7 @@ func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []
 				return err
 			}
 			task.NudgedAt = &now
+			t.taskEvent(task, "nudged", actorForeman, "Foreman nudged "+a.Name)
 			t.emit(projectID, "task", task)
 		}
 	case stuckOrphan:
@@ -218,6 +219,7 @@ func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []
 				return err
 			}
 			task.NudgedAt = &now
+			t.taskEvent(task, "requeued", actorForeman, "Foreman requeued it")
 			t.emit(projectID, "task", task)
 			text := fmt.Sprintf("Foreman requeued %s: it was in progress with nothing running.", task.Ref())
 			if err := t.note(projectID, a.ID, text, true); err != nil {

@@ -113,28 +113,36 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 		return store.Task{}, AssignError("the project has no agents")
 	}
 	task := store.Task{ProjectID: projectID, Title: title, Description: description, ByUser: true}
+	var assigned string // textul evenimentului "assigned" din istoric
 	if len(stages) > 0 {
 		first := stages[0]
 		task.StageID = &first.ID
 		task.AssigneeID = placeholder(first, agents[0].ID)
+		assigned = "Queued for stage " + first.Name
 		if agentID != 0 {
-			if _, err := checkAssignee(agents, agentID, &first); err != nil {
+			a, err := checkAssignee(agents, agentID, &first)
+			if err != nil {
 				return store.Task{}, err
 			}
 			task.AssigneeID = agentID
+			assigned = "Assigned to " + a.Name
 		}
 	} else {
 		if agentID == 0 {
 			return store.Task{}, AssignError("choose the agent who does the task")
 		}
-		if _, err := checkAssignee(agents, agentID, nil); err != nil {
+		a, err := checkAssignee(agents, agentID, nil)
+		if err != nil {
 			return store.Task{}, err
 		}
 		task.AssigneeID = agentID
+		assigned = "Assigned to " + a.Name
 	}
 	if err := t.st.CreateTask(&task); err != nil {
 		return store.Task{}, err
 	}
+	t.taskEvent(task, "created", actorUser, "Created by you")
+	t.taskEvent(task, "assigned", actorUser, assigned)
 	if a, ok := store.FindAgent(agents, task.AssigneeID); ok && task.StageID == nil {
 		t.note(projectID, a.ID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), title), true)
 	}
@@ -183,6 +191,7 @@ func (t *Team) AssignTask(taskID, agentID int64) error {
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
 	}
+	t.taskEvent(task, "assigned", actorUser, "Assigned to "+a.Name)
 	if boss, ok := decider(task, agents); ok {
 		t.note(task.ProjectID, boss.ID, fmt.Sprintf("The user moved %s to %s.", task.Ref(), a.Name), true)
 	}
@@ -195,8 +204,9 @@ func (t *Team) AssignTask(taskID, agentID int64) error {
 var ErrNotUserDecision = errors.New("the task is not waiting for your decision")
 
 // advance muta un task (cu Result pus) in etapa urmatoare, sau la lider dupa
-// ultima etapa. Se apeleaza cu t.work blocat. Intoarce textul pentru apelant.
-func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Agent, byName string) (string, error) {
+// ultima etapa. ev (raportul sau aprobarea) intra in istoric dupa salvare,
+// urmat de mutarea in etapa. Se apeleaza cu t.work blocat. Intoarce textul pentru apelant.
+func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Agent, byName string, ev taskNote) (string, error) {
 	task.Feedback, task.ReviewStage = "", store.StageNone
 	if next, ok := nextStage(stages, task.StageID); ok {
 		task.StageID = &next.ID
@@ -205,6 +215,8 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 		if err := t.st.SaveTask(task); err != nil {
 			return "", err
 		}
+		t.record(*task, ev)
+		t.taskEvent(*task, "stage", byName, "Moved to stage "+next.Name)
 		t.emit(task.ProjectID, "task", *task)
 		t.Kick(task.ProjectID)
 		return fmt.Sprintf("%s moved to stage %s.", task.Ref(), next.Name), nil
@@ -214,6 +226,7 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 	if err := t.st.SaveTask(task); err != nil {
 		return "", err
 	}
+	t.record(*task, ev)
 	t.emit(task.ProjectID, "task", *task)
 	if boss, ok := decider(*task, agents); ok {
 		t.note(task.ProjectID, boss.ID, clip(fmt.Sprintf("%s went through all stages (last: %s). Decide with accept_task or send_back: %s", task.Ref(), byName, task.Result)), false)
@@ -223,8 +236,10 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 }
 
 // sendToStage pune un task inapoi, Queued, in etapa st, cu feedback (numara
-// trimiterea; la MaxSendBacks se blocheaza in etapa curenta). Se apeleaza cu t.work blocat.
-func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, agents []store.Agent, by int64) (bool, error) {
+// trimiterea; la MaxSendBacks se blocheaza in etapa curenta). ev e respingerea
+// pentru istoric; daca task-ul schimba etapa, urmeaza "Moved to stage". Se apeleaza cu t.work blocat.
+func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, agents []store.Agent, by int64, ev taskNote) (bool, error) {
+	moved := task.StageID == nil || *task.StageID != st.ID
 	if task.SendBacks+1 < MaxSendBacks {
 		task.StageID = &st.ID
 		task.AssigneeID = placeholder(st, task.AssigneeID)
@@ -233,7 +248,11 @@ func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, ag
 		// pe board (cu Accepta / Deblocheaza) si sa reia drumul prin etape
 		task.StageID = &st.ID
 	}
-	return t.rejectTask(task, feedback, agents, by)
+	blocked, err := t.rejectTask(task, feedback, agents, by, ev)
+	if err == nil && !blocked && moved {
+		t.taskEvent(*task, "stage", ev.actor, "Moved to stage "+st.Name)
+	}
+	return blocked, err
 }
 
 // UserDecide: utilizatorul decide un task al lui (creat din board) ajuns la final.
@@ -256,6 +275,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 		if err := t.st.SaveTask(&task); err != nil {
 			return err
 		}
+		t.taskEvent(task, "user_accepted", actorUser, "You accepted")
 		t.emit(task.ProjectID, "task", task)
 		t.Kick(task.ProjectID)
 		return nil
@@ -268,9 +288,10 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if err != nil {
 		return err
 	}
+	sent := taskNote{"sent_back", actorUser, "You sent it back: " + feedback}
 	if len(stages) == 0 {
 		// fara etape: inapoi la acelasi agent, cu feedback
-		if _, err := t.rejectTask(&task, feedback, agents, 0); err != nil {
+		if _, err := t.rejectTask(&task, feedback, agents, 0, sent); err != nil {
 			return err
 		}
 		t.Kick(task.ProjectID)
@@ -280,7 +301,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if i := stageIndex(stages, task.StageID); i >= 0 {
 		target = stages[i]
 	}
-	if _, err := t.sendToStage(&task, target, feedback, agents, 0); err != nil {
+	if _, err := t.sendToStage(&task, target, feedback, agents, 0, sent); err != nil {
 		return err
 	}
 	t.Kick(task.ProjectID)

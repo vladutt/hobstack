@@ -218,6 +218,7 @@ func (t *Team) Reconcile(projectID int64) error {
 			}
 			return t.startFailed(p, notify, a, err)
 		}
+		t.taskEvent(*task, "started", a.Name, a.Name+" started working")
 		if err := t.delivered(p.ID, msgs); err != nil {
 			return err
 		}
@@ -481,6 +482,9 @@ func (t *Team) relinkReviews(projectID int64) error {
 		if err := t.st.SaveTask(task); err != nil {
 			return err
 		}
+		if !hasBoss {
+			t.taskEvent(*task, "blocked", actorForeman, "Blocked: the reviewer is gone and no one can decide, you decide")
+		}
 		t.emit(projectID, "task", *task)
 		if !hasBoss {
 			if err := t.note(projectID, assignee.ID, noDeciderText(*task, assignee), true); err != nil {
@@ -628,6 +632,15 @@ func (t *Team) closeQuestion(id int64, status, answer string) error {
 		t.work.Unlock()
 		return err
 	}
+	if q.TaskID != nil {
+		if task, err := t.st.GetTask(*q.TaskID); err == nil {
+			text := "You answered"
+			if status == store.QuestionDismissed {
+				text = "You dismissed the question"
+			}
+			t.taskEvent(task, "answered", actorUser, text)
+		}
+	}
 	q.Status, q.Answer = status, answer
 	t.emit(q.ProjectID, "question", q)
 	t.work.Unlock()
@@ -697,6 +710,11 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	}
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
+	}
+	if accept {
+		t.taskEvent(task, "user_accepted", actorUser, "You accepted")
+	} else {
+		t.taskEvent(task, "unblocked", actorUser, "You unblocked it")
 	}
 	if d, ok := decider(task, agents); ok {
 		t.note(task.ProjectID, d.ID, text, false)

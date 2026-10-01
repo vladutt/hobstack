@@ -216,6 +216,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		if o.Status == store.RunStopped {
 			return nil
 		}
+		t.taskEvent(task, "waiting_subtasks", a.Name, "Waiting for subtasks "+strings.Join(open, ", "))
 		return t.note(ar.projectID, a.ID, fmt.Sprintf("%s is waiting for its subtasks: %s.", task.Ref(), strings.Join(open, ", ")), true)
 	}
 	// regula: task-ul asteapta cat timp are orice intrebare deschisa pe el
@@ -241,6 +242,10 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		if err := t.st.SaveTask(&task); err != nil {
 			return err
 		}
+		t.taskEvent(task, "failed", a.Name, fmt.Sprintf("%s's run failed: %s", a.Name, o.Error))
+		if task.Status == store.StatusBlocked {
+			t.taskEvent(task, "blocked", actorForeman, "Blocked: no one can decide, you decide")
+		}
 		t.emit(ar.projectID, "task", task)
 		if !hasBoss {
 			return nil
@@ -262,7 +267,8 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 			break
 		}
 		task.Result = strings.TrimSpace(o.Result)
-		_, err = t.toReview(&task, a, agents, fmt.Sprintf("%s finished %s without report_done", a.Name, task.Ref()))
+		ev := taskNote{"reported", a.Name, a.Name + " finished without report_done"}
+		_, err = t.toReview(&task, a, agents, fmt.Sprintf("%s finished %s without report_done", a.Name, task.Ref()), ev)
 		return err
 	}
 	if err := t.st.SaveTask(&task); err != nil {

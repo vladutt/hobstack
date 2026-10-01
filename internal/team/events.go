@@ -20,3 +20,20 @@ func (t *Team) taskEvent(task store.Task, kind, actor, text string) {
 		log.Printf("task %d: event: %v", task.ID, err)
 	}
 }
+
+// Actorii evenimentelor care nu sunt agenti.
+const (
+	actorUser    = "You"     // actiune din board
+	actorForeman = "Foreman" // automat (detector, blocare, scheduler)
+)
+
+// taskNote e un eveniment pe care il inregistreaza un helper comun (toReview,
+// rejectTask, advance) imediat dupa salvare, inaintea evenimentelor lui proprii.
+type taskNote struct{ kind, actor, text string }
+
+// record inregistreaza n; un taskNote gol nu inregistreaza nimic.
+func (t *Team) record(task store.Task, n taskNote) {
+	if n.kind != "" {
+		t.taskEvent(task, n.kind, n.actor, n.text)
+	}
+}

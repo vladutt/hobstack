@@ -271,7 +271,7 @@ func TestRootAssigneeWithoutDeciderGetsUserNote(t *testing.T) {
 	agents, _ := f.st.ListAgents(f.p.ID)
 	task.CreatorID = nil
 	task.Result = "gata"
-	if _, err := f.tm.toReview(&task, solo, agents, "Solo a terminat"); err != nil {
+	if _, err := f.tm.toReview(&task, solo, agents, "Solo a terminat", taskNote{}); err != nil {
 		t.Fatal(err)
 	}
 	if !f.hasMessage(solo.ID, "The user decides from the board (Accept / Unblock).") || f.hasMessage(solo.ID, "Link it") {
@@ -283,7 +283,7 @@ func TestRootAssigneeWithoutDeciderGetsUserNote(t *testing.T) {
 	t2 := f.task(t, "B", orphan, store.StatusInProgress)
 	t2.CreatorID = nil
 	orphan.ParentID = &f.lead.ID
-	if _, err := f.tm.toReview(&t2, orphan, nil, "x"); err != nil {
+	if _, err := f.tm.toReview(&t2, orphan, nil, "x", taskNote{}); err != nil {
 		t.Fatal(err)
 	}
 	if !f.hasMessage(orphan.ID, "Link it to a lead on the canvas") {

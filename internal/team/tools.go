@@ -67,6 +67,8 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 	if err := t.st.CreateTask(&task); err != nil {
 		return "", err
 	}
+	t.taskEvent(task, "created", lead.Name, "Created by "+lead.Name)
+	t.taskEvent(task, "assigned", lead.Name, "Assigned to "+w.Name)
 	t.note(c.ProjectID, lead.ID, fmt.Sprintf("Created %s for %s: %s", task.Ref(), w.Name, title), true)
 	t.note(c.ProjectID, w.ID, fmt.Sprintf("%s assigned by %s: %s", task.Ref(), lead.Name, title), true)
 	t.emit(c.ProjectID, "task", task)
@@ -96,12 +98,14 @@ func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []stor
 	}
 	first := stages[0]
 	who := placeholder(first, lead.ID)
+	assigned := "Queued for stage " + first.Name // fara asignat: il ia primul liber din etapa
 	if name := strings.TrimSpace(assignee); name != "" {
 		w, err := t.st.FindAgentByName(c.ProjectID, name)
 		if err != nil || !slices.Contains(first.AgentIDs, w.ID) {
 			return "", fmt.Errorf("%q is not in stage %s (the first stage); leave assignee empty so the first free agent takes it", name, first.Name)
 		}
 		who = w.ID
+		assigned = "Assigned to " + w.Name
 	}
 	parentID, _, err := t.parentTaskFor(c)
 	if err != nil {
@@ -112,6 +116,8 @@ func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []stor
 	if err := t.st.CreateTask(&task); err != nil {
 		return "", err
 	}
+	t.taskEvent(task, "created", lead.Name, "Created by "+lead.Name)
+	t.taskEvent(task, "assigned", lead.Name, assigned)
 	t.note(c.ProjectID, lead.ID, fmt.Sprintf("Created %s in stage %s: %s", task.Ref(), first.Name, title), true)
 	t.emit(c.ProjectID, "task", task)
 	t.Kick(c.ProjectID)
@@ -256,14 +262,16 @@ func canDecide(callerID int64, task store.Task, agents []store.Agent) bool {
 
 // toReview muta un task (cu Result deja pus) in Review: la reviewer-ul
 // asignatului daca are, altfel la liderul care decide. Intoarce agentul
-// notificat (zero daca nu exista). Se apeleaza cu t.work blocat.
-func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.Agent, headline string) (store.Agent, error) {
+// notificat (zero daca nu exista). ev (raportul) intra in istoric dupa salvare,
+// urmat de blocare daca nu poate decide nimeni. Se apeleaza cu t.work blocat.
+func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.Agent, headline string, ev taskNote) (store.Agent, error) {
 	// task dintr-o etapa terminat fara raport: la lider (sau la utilizator), in aceeasi etapa
 	if task.StageID != nil {
 		task.Status, task.ReviewStage = store.StatusReview, store.StageLead
 		if err := t.st.SaveTask(task); err != nil {
 			return store.Agent{}, err
 		}
+		t.record(*task, ev)
 		t.emit(task.ProjectID, "task", *task)
 		boss, ok := decider(*task, agents)
 		if ok {
@@ -290,6 +298,10 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 	}
 	if err := t.st.SaveTask(task); err != nil {
 		return store.Agent{}, err
+	}
+	t.record(*task, ev)
+	if task.Status == store.StatusBlocked {
+		t.taskEvent(*task, "blocked", actorForeman, "Blocked: no one can check it, you decide")
 	}
 	switch {
 	case !hasWho && task.ByUser:
@@ -338,6 +350,7 @@ func (t *Team) afterDone(task store.Task) error {
 	if err := t.st.SaveTask(&parent); err != nil {
 		return err
 	}
+	t.taskEvent(parent, "requeued", actorForeman, "All subtasks are done; back in the queue")
 	t.emit(parent.ProjectID, "task", parent)
 	text := fmt.Sprintf("All subtasks for %s are done; %s is back in the queue so you can check it and report it.", parent.Ref(), parent.Ref())
 	return t.note(parent.ProjectID, parent.AssigneeID, text, true)
@@ -346,8 +359,9 @@ func (t *Team) afterDone(task store.Task) error {
 // rejectTask e partea comuna a send_back si review_reject: numara respingerea
 // si, la MaxSendBacks, blocheaza task-ul si anunta reviewer-ul si decidentul.
 // Intoarce true daca task-ul s-a blocat; altfel a ramas Queued, iar apelantul
-// scrie notele si trezeste asignatul. Se apeleaza cu t.work blocat.
-func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agent, extra int64) (bool, error) {
+// scrie notele si trezeste asignatul. ev (respingerea) intra in istoric dupa
+// salvare, urmat de blocare daca e cazul. Se apeleaza cu t.work blocat.
+func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agent, extra int64, ev taskNote) (bool, error) {
 	task.SendBacks++
 	task.Feedback = feedback
 	task.ReviewStage = store.StageNone
@@ -360,7 +374,9 @@ func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agen
 	if err := t.st.SaveTask(task); err != nil {
 		return false, err
 	}
+	t.record(*task, ev)
 	if blocked {
+		t.taskEvent(*task, "blocked", actorForeman, fmt.Sprintf("Blocked after %d send-backs", MaxSendBacks))
 		ids := map[int64]bool{extra: true}
 		if w, ok := store.FindAgent(agents, task.AssigneeID); ok && w.ReviewerID != nil {
 			ids[*w.ReviewerID] = true
@@ -408,6 +424,9 @@ func (t *Team) AcceptTask(c mcp.Caller, ref, note string) (string, error) {
 	task.StageID = nil
 	if err := t.st.SaveTask(&task); err != nil {
 		return "", err
+	}
+	if lead, ok := store.FindAgent(agents, c.AgentID); ok {
+		t.taskEvent(task, "accepted", lead.Name, lead.Name+" accepted")
 	}
 	text := "Accepted " + task.Ref()
 	if n := strings.TrimSpace(note); n != "" {
@@ -477,7 +496,8 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 		if i := stageIndex(stages, task.StageID); i >= 0 {
 			target = stages[i]
 		}
-		blocked, err := t.sendToStage(&task, target, feedback, agents, lead.ID)
+		sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback}
+		blocked, err := t.sendToStage(&task, target, feedback, agents, lead.ID, sent)
 		if err != nil {
 			return "", err
 		}
@@ -489,7 +509,8 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 		return fmt.Sprintf("%s sent back to stage %s (%d/%d).", task.Ref(), target.Name, task.SendBacks, MaxSendBacks), nil
 	}
 
-	blocked, err := t.rejectTask(&task, feedback, agents, lead.ID)
+	sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback}
+	blocked, err := t.rejectTask(&task, feedback, agents, lead.ID, sent)
 	if err != nil {
 		return "", err
 	}
@@ -546,7 +567,7 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 		}
 		task.Result = summary
 		t.note(c.ProjectID, worker.ID, "Finished "+task.Ref()+" in its stage", true)
-		return t.advance(&task, stages, agents, worker.Name)
+		return t.advance(&task, stages, agents, worker.Name, reportedNote(worker))
 	}
 	if worker.ParentID == nil {
 		return "", errors.New("you report directly to the user: write the summary in your reply, without report_done")
@@ -566,7 +587,7 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 	}
 
 	task.Result = summary
-	who, err := t.toReview(&task, worker, agents, worker.Name+" finished "+task.Ref())
+	who, err := t.toReview(&task, worker, agents, worker.Name+" finished "+task.Ref(), reportedNote(worker))
 	if err != nil {
 		return "", err
 	}
@@ -579,6 +600,11 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 		return task.Ref() + " is in Review.", nil
 	}
 	return fmt.Sprintf("%s is in Review. %s will check it.", task.Ref(), who.Name), nil
+}
+
+// reportedNote e evenimentul "a raportat" al unui report_done.
+func reportedNote(worker store.Agent) taskNote {
+	return taskNote{"reported", worker.Name, worker.Name + " reported it done"}
 }
 
 // reviewTarget valideaza apelul unui reviewer si intoarce task-ul, asignatul si lista de agenti.
@@ -618,7 +644,7 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 			task.Result = strings.TrimSpace(task.Result + "\nReview note: " + n)
 		}
 		t.note(c.ProjectID, c.AgentID, "Approved "+task.Ref(), true)
-		return t.advance(&task, stages, agents, checker.Name)
+		return t.advance(&task, stages, agents, checker.Name, approvedNote(checker))
 	}
 
 	task, worker, agents, err := t.reviewTarget(c, ref)
@@ -632,6 +658,7 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		if err := t.st.SaveTask(&task); err != nil {
 			return "", err
 		}
+		t.record(task, approvedNote(reviewer))
 		t.note(c.ProjectID, reviewer.ID, "Approved "+task.Ref(), true)
 		t.emit(c.ProjectID, "task", task)
 		return fmt.Sprintf("%s went to the user for a decision.", task.Ref()), nil
@@ -642,6 +669,8 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		if err := t.st.SaveTask(&task); err != nil {
 			return "", err
 		}
+		t.record(task, approvedNote(reviewer))
+		t.taskEvent(task, "blocked", actorForeman, "Blocked: no one can decide, you decide")
 		t.note(c.ProjectID, worker.ID, noDeciderText(task, worker), true)
 		t.emit(c.ProjectID, "task", task)
 		return fmt.Sprintf("%s is blocked: no one can decide. The user decides.", task.Ref()), nil
@@ -650,6 +679,7 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 	if err := t.st.SaveTask(&task); err != nil {
 		return "", err
 	}
+	t.record(task, approvedNote(reviewer))
 	text := fmt.Sprintf("%s approved %s, done by %s (review): %s", reviewer.Name, task.Ref(), worker.Name, task.Result)
 	if n := strings.TrimSpace(note); n != "" {
 		text += " Note: " + n
@@ -659,6 +689,16 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 	t.emit(c.ProjectID, "task", task)
 	t.Kick(c.ProjectID)
 	return fmt.Sprintf("%s went to %s for a decision.", task.Ref(), boss.Name), nil
+}
+
+// approvedNote e evenimentul unei aprobari (reviewer sau etapa de verificare).
+func approvedNote(r store.Agent) taskNote {
+	return taskNote{"approved", r.Name, r.Name + " approved"}
+}
+
+// rejectedNote e evenimentul unei respingeri (reviewer sau etapa de verificare).
+func rejectedNote(r store.Agent, feedback string) taskNote {
+	return taskNote{"rejected", r.Name, r.Name + " rejected: " + feedback}
 }
 
 func (t *Team) ReviewReject(c mcp.Caller, ref, feedback string) (string, error) {
@@ -675,7 +715,8 @@ func (t *Team) ReviewReject(c mcp.Caller, ref, feedback string) (string, error) 
 			return "", errors.New("feedback is required: say concretely what needs to change")
 		}
 		back := backStage(stages, task.StageID)
-		blocked, err := t.sendToStage(&task, back, feedback, agents, c.AgentID)
+		checker, _ := store.FindAgent(agents, c.AgentID)
+		blocked, err := t.sendToStage(&task, back, feedback, agents, c.AgentID, rejectedNote(checker, feedback))
 		if err != nil {
 			return "", err
 		}
@@ -696,7 +737,7 @@ func (t *Team) ReviewReject(c mcp.Caller, ref, feedback string) (string, error) 
 		return "", errors.New("feedback is required: say concretely what needs to change")
 	}
 	reviewer, _ := store.FindAgent(agents, c.AgentID)
-	blocked, err := t.rejectTask(&task, feedback, agents, reviewer.ID)
+	blocked, err := t.rejectTask(&task, feedback, agents, reviewer.ID, rejectedNote(reviewer, feedback))
 	if err != nil {
 		return "", err
 	}
@@ -757,6 +798,13 @@ func (t *Team) AskUser(c mcp.Caller, question string, options []string) (string,
 	}
 	if err := t.st.AddQuestion(&q); err != nil {
 		return "", err
+	}
+	if q.TaskID != nil {
+		if task, err := t.st.GetTask(*q.TaskID); err == nil {
+			if a, err := t.st.GetAgent(c.AgentID); err == nil {
+				t.taskEvent(task, "asked", a.Name, a.Name+" asked you: "+question)
+			}
+		}
 	}
 	t.note(c.ProjectID, c.AgentID, clip("Asked you: "+question), true)
 	t.emit(c.ProjectID, "question", q)
