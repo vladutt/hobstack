@@ -41,19 +41,24 @@ type Task struct {
 	ReviewStage  string `json:"reviewStage"`  // "", "reviewer", "lead"
 	StageID      *int64 `json:"stageId"`      // etapa curenta (coloana proprie); nil = fara etape sau dupa ultima
 	ByUser       bool   `json:"byUser"`       // creat de utilizator din board: la final decide el
+
+	// NudgedAt: cand l-a impins ultima data detectorul de task-uri blocate;
+	// nil = neimpins de la ultima schimbare de stare.
+	NudgedAt *time.Time `json:"nudgedAt"`
 }
 
 // Ref e forma afisata a task-ului: T-3.
 func (t Task) Ref() string { return fmt.Sprintf("T-%d", t.Number) }
 
-const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user`
+const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at`
 
 func scanTask(sc scanner) (Task, error) {
 	var t Task
 	var created, updated string
+	var nudged sql.NullString
 	err := sc.Scan(&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description, &t.AssigneeID,
 		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated,
-		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser)
+		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser, &nudged)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
 	}
@@ -61,6 +66,10 @@ func scanTask(sc scanner) (Task, error) {
 		return Task{}, err
 	}
 	t.CreatedAt, t.UpdatedAt = parseTime(created), parseTime(updated)
+	if nudged.Valid {
+		at := parseTime(nudged.String)
+		t.NudgedAt = &at
+	}
 	return t, nil
 }
 
@@ -118,17 +127,25 @@ func (s *Store) ListTasks(projectID int64) ([]Task, error) {
 }
 
 // SaveTask salveaza starea unui task: status, rezultat, feedback, trimiteri
-// inapoi, etapa de review, asignatul si etapa de lucru (coloana).
+// inapoi, etapa de review, asignatul si etapa de lucru (coloana). Orice
+// schimbare de stare inseamna activitate, deci curata si nudged_at.
 func (s *Store) SaveTask(t *Task) error {
 	ts := now()
 	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, review_stage = ?,
-		assignee_id = ?, stage_id = ?, updated_at = ?
+		assignee_id = ?, stage_id = ?, updated_at = ?, nudged_at = NULL
 		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), ts, t.ID))
 	if err != nil {
 		return err
 	}
 	t.UpdatedAt = parseTime(ts)
+	t.NudgedAt = nil
 	return nil
+}
+
+// SetTaskNudged noteaza momentul in care detectorul a impins task-ul.
+// Nu atinge updated_at: impingerea nu e o schimbare de stare.
+func (s *Store) SetTaskNudged(id int64, at time.Time) error {
+	return mustAffect(s.db.Exec(`UPDATE tasks SET nudged_at = ? WHERE id = ?`, at.UTC().Format(time.RFC3339Nano), id))
 }
 
 // Subtasks intoarce task-urile sparte din parentTaskID, in ordinea numarului.

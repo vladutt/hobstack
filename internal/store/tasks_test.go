@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestTaskNumbersPerProject(t *testing.T) {
@@ -222,5 +223,35 @@ func TestReviewStageSaved(t *testing.T) {
 	s.SaveTask(&task)
 	if got, _ := s.GetTask(task.ID); got.ReviewStage != StageReviewer {
 		t.Fatalf("review_stage = %q", got.ReviewStage)
+	}
+}
+
+func TestTaskNudgedAt(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	task := Task{ProjectID: p.ID, Title: "A", AssigneeID: lead.ID}
+	if err := s.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	if task.NudgedAt != nil {
+		t.Fatal("un task nou nu e impins")
+	}
+	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	if err := s.SetTaskNudged(task.ID, at); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetTask(task.ID)
+	if got.NudgedAt == nil || !got.NudgedAt.Equal(at) {
+		t.Fatalf("%v", got.NudgedAt)
+	}
+	got.Status = StatusReview
+	if err := s.SaveTask(&got); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.GetTask(task.ID); again.NudgedAt != nil {
+		t.Fatal("SaveTask trebuia sa curete nudged_at")
+	}
+	if err := s.SetTaskNudged(9999, at); err == nil {
+		t.Fatal("task inexistent: vreau eroare")
 	}
 }
