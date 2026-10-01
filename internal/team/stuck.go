@@ -7,6 +7,7 @@ package team
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -110,55 +111,67 @@ func (t *Team) CheckStuck(now time.Time) error {
 }
 
 // checkStuckLocked face munca din CheckStuck si intoarce proiectele atinse.
+// O eroare pe un proiect nu le sare pe celelalte: se logheaza si se strang.
 func (t *Team) checkStuckLocked(now time.Time) ([]int64, error) {
 	projects, err := t.st.ListProjects()
 	if err != nil {
 		return nil, err
 	}
 	var touched []int64
+	var errs []error
 	for _, p := range projects {
 		if p.Paused {
 			continue // pauza e alegerea utilizatorului
 		}
-		agents, tasks, open, err := t.stuckInputs(p.ID)
+		nudged, err := t.checkProjectStuck(p.ID, now)
 		if err != nil {
-			return touched, err
-		}
-		// deciziile se grupeaza pe agent: o singura nota pentru toate task-urile lui
-		var order []store.Agent
-		decisions := map[int64][]store.Task{}
-		nudged := false
-		for _, task := range tasks {
-			if task.NudgedAt != nil || now.Sub(task.UpdatedAt) < stuckAfter {
-				continue
-			}
-			kind, a, ok := t.stuckKind(task, agents, tasks, open)
-			if !ok {
-				continue
-			}
-			if kind == stuckOrphan {
-				if err := t.nudgeLocked(p.ID, kind, a, []store.Task{task}, agents, now); err != nil {
-					return touched, err
-				}
-				nudged = true
-				continue
-			}
-			if _, seen := decisions[a.ID]; !seen {
-				order = append(order, a)
-			}
-			decisions[a.ID] = append(decisions[a.ID], task)
-		}
-		for _, a := range order {
-			if err := t.nudgeLocked(p.ID, stuckDecision, a, decisions[a.ID], agents, now); err != nil {
-				return touched, err
-			}
-			nudged = true
+			log.Printf("project %d: stuck check: %v", p.ID, err)
+			errs = append(errs, err)
 		}
 		if nudged {
 			touched = append(touched, p.ID)
 		}
 	}
-	return touched, nil
+	return touched, errors.Join(errs...)
+}
+
+// checkProjectStuck impinge task-urile blocate ale unui proiect; spune daca a impins ceva.
+func (t *Team) checkProjectStuck(projectID int64, now time.Time) (bool, error) {
+	agents, tasks, open, err := t.stuckInputs(projectID)
+	if err != nil {
+		return false, err
+	}
+	// deciziile se grupeaza pe agent: o singura nota pentru toate task-urile lui
+	var order []store.Agent
+	decisions := map[int64][]store.Task{}
+	nudged := false
+	for _, task := range tasks {
+		if task.NudgedAt != nil || now.Sub(task.UpdatedAt) < stuckAfter {
+			continue
+		}
+		kind, a, ok := t.stuckKind(task, agents, tasks, open)
+		if !ok {
+			continue
+		}
+		if kind == stuckOrphan {
+			if err := t.nudgeLocked(projectID, kind, a, []store.Task{task}, agents, now); err != nil {
+				return nudged, err
+			}
+			nudged = true
+			continue
+		}
+		if _, seen := decisions[a.ID]; !seen {
+			order = append(order, a)
+		}
+		decisions[a.ID] = append(decisions[a.ID], task)
+	}
+	for _, a := range order {
+		if err := t.nudgeLocked(projectID, stuckDecision, a, decisions[a.ID], agents, now); err != nil {
+			return nudged, err
+		}
+		nudged = true
+	}
+	return nudged, nil
 }
 
 // nudgeLocked impinge agentul pentru task-urile date (toate de acelasi fel) si

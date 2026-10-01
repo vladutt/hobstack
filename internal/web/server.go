@@ -105,6 +105,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/assign", s.assignTask)
 	mux.HandleFunc("POST /api/tasks/{id}/accept", s.acceptTask)
 	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)
+	mux.HandleFunc("POST /api/tasks/{id}/nudge", s.nudgeTask)
 
 	mux.HandleFunc("GET /api/runs/{id}/events", s.streamRun)
 
@@ -172,7 +173,7 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusBadRequest, le.Error())
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
-	case errors.Is(err, team.ErrNotBlocked):
+	case errors.Is(err, team.ErrNotBlocked), errors.Is(err, team.ErrNotStuck):
 		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, store.ErrConflict):
 		writeErr(w, http.StatusConflict, "conflict with the current state")

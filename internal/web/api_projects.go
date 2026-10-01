@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"foreman/internal/store"
+	"foreman/internal/team"
 )
 
 type folderInput struct {
@@ -170,6 +171,8 @@ type projectCard struct {
 	Total  int           `json:"total"`
 	// OpenQuestions: intrebari de la agenti la care utilizatorul nu a raspuns
 	OpenQuestions int `json:"openQuestions"`
+	// StuckTasks: cate task-uri impinse deja stau tot blocate ("Needs you")
+	StuckTasks int `json:"stuckTasks"`
 }
 
 type agentView struct {
@@ -189,6 +192,8 @@ type projectDetail struct {
 	UserDecides []int64 `json:"userDecides"`
 	// Questions: intrebarile deschise ale agentilor catre utilizator
 	Questions []store.Question `json:"questions"`
+	// Stuck: task-urile blocate pe care utilizatorul le poate impinge (mereu non-nil)
+	Stuck []team.StuckTask `json:"stuck"`
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -209,6 +214,11 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 		r := store.RolesOf(a, agents)
 		c.Team = append(c.Team, memberBrief{ID: a.ID, Name: a.Name, IsLead: r.IsLead, IsRoot: r.IsRoot})
 	}
+	stuck, err := s.team.StuckTasks(p.ID, s.team.Now())
+	if err != nil {
+		return projectCard{}, nil, nil, err
+	}
+	c.StuckTasks = len(stuck)
 	busy := s.team.ProjectActive(p.ID)
 	for _, t := range tasks {
 		switch t.Status {
@@ -274,7 +284,12 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	if questions == nil {
 		questions = []store.Question{}
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, Questions: questions}
+	stuck, err := s.team.StuckTasks(p.ID, s.team.Now())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, Questions: questions, Stuck: stuck}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents) {
 			d.UserDecides = append(d.UserDecides, t.ID)
