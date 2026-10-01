@@ -43,6 +43,9 @@ intrebarile deschise apar pe proiect, pe card, in chat si pe agent; raspunsul tr
 coada (un task care asteapta raspuns nu e re-pus in coada la Stop team / restart).
 Gata (chat in wizard, spec in docs/superpowers/specs/2026-09-30-foreman-wizard-chat-design.md): la pasul 3, panoul
 "Foreman" reia sesiunea analistului (--resume) si schimba propunerea la cerere, cu Undo.
+Gata (task-uri blocate, spec in docs/superpowers/specs/2026-10-01-foreman-stuck-tasks-design.md): verificare la 1 min;
+un task nemiscat 5 min (decizie la un agent idle sau In progress fara run) e impins automat o data, apoi apare in
+"Needs you" cu Nudge again / Open <agent>.
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.
