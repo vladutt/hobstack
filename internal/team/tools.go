@@ -280,6 +280,12 @@ func decisionOwnerIn(task store.Task, agents []store.Agent, autonomous bool) int
 			return r.ID
 		}
 	}
+	// modul autonom: un task blocat il decide radacina (doar ea poate send_back pe Blocked)
+	if autonomous && task.Status == store.StatusBlocked {
+		if r, ok := autoRoot(task, agents); ok {
+			return r.ID
+		}
+	}
 	if d, ok := decider(task, agents, autonomous); ok {
 		return d.ID
 	}

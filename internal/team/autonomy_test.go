@@ -150,7 +150,8 @@ func TestAutonomyRootAssigneeAutoDone(t *testing.T) {
 	}
 }
 
-func TestAutonomyRootRunFailedAutoDone(t *testing.T) {
+// un run esuat nu se accepta niciodata automat: fara decident ramane la utilizator
+func TestAutonomyRootRunFailedStaysForUser(t *testing.T) {
 	f := setup(t)
 	autonomous(t, f)
 	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.lead.ID); err != nil {
@@ -159,7 +160,44 @@ func TestAutonomyRootRunFailedAutoDone(t *testing.T) {
 	mustReconcile(t, f)
 	run := f.fs.last(t, f.lead)
 	f.fs.finish(run.ID, runner.Outcome{Status: store.RunFailed, Error: "boom"})
-	f.wantStatus(t, 1, store.StatusDone)
+	got := f.wantStatus(t, 1, store.StatusReview)
+	if !f.tm.UserDecides(got, mustAgents(t, f)) {
+		t.Fatalf("run esuat fara decident: decide utilizatorul: %+v", got)
+	}
+}
+
+// in modul autonom un task blocat il decide radacina (si nu creatorul intermediar)
+func TestAutonomyBlockedOwnerIsRoot(t *testing.T) {
+	f := setup(t)
+	mid := f.agent(t, "Mid", &f.lead, nil)
+	w := f.agent(t, "W", &mid, nil)
+	task := f.task(t, "A", w, store.StatusBlocked)
+	task.CreatorID = &mid.ID
+	agents := mustAgents(t, f)
+	if id := decisionOwnerIn(task, agents, true); id != f.lead.ID {
+		t.Fatalf("autonom: %d, vreau radacina %d", id, f.lead.ID)
+	}
+	if id := decisionOwnerIn(task, agents, false); id != mid.ID {
+		t.Fatalf("fara autonomie: %d, vreau creatorul %d", id, mid.ID)
+	}
+}
+
+// send back din board nu declanseaza acceptul automat, nici pe un task escaladat
+func TestAutonomyUserSendBackNeverAutoDone(t *testing.T) {
+	f := setup(t)
+	autonomous(t, f)
+	task := userTaskInReview(t, f, f.rook)
+	task.SendBacks, task.Escalated = MaxSendBacks-1, true
+	if err := f.st.SaveTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.UserDecide(task.ID, false, "inca o data"); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 1, store.StatusBlocked)
+	if hasEvent(t, f, task.ID, "accepted", actorForeman, autoAcceptAfterText) {
+		t.Fatal("decizia utilizatorului nu accepta automat")
+	}
 }
 
 func TestAutonomyBlockedEscalatesToRoot(t *testing.T) {

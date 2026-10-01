@@ -304,10 +304,10 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 		return err
 	}
 	sent := taskNote{"sent_back", actorUser, "You sent it back: " + feedback}
-	autonomous := t.autonomyOf(task.ProjectID)
+	// decizia utilizatorului nu declanseaza niciodata acceptul automat: regulile de azi
 	if len(stages) == 0 {
 		// fara etape: inapoi la acelasi agent, cu feedback
-		if _, err := t.rejectTask(&task, feedback, agents, 0, sent, autonomous); err != nil {
+		if _, err := t.rejectTask(&task, feedback, agents, 0, sent, false); err != nil {
 			return err
 		}
 		t.Kick(task.ProjectID)
@@ -317,7 +317,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if i := stageIndex(stages, task.StageID); i >= 0 {
 		target = stages[i]
 	}
-	if _, err := t.sendToStage(&task, target, feedback, agents, 0, sent, autonomous); err != nil {
+	if _, err := t.sendToStage(&task, target, feedback, agents, 0, sent, false); err != nil {
 		return err
 	}
 	t.Kick(task.ProjectID)
