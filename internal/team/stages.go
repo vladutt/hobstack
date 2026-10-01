@@ -186,13 +186,14 @@ func (t *Team) AssignTask(taskID, agentID int64) error {
 	}
 	task.AssigneeID = a.ID
 	if task.Status == store.StatusBlocked {
-		task.Status, task.SendBacks = store.StatusQueued, 0
+		// deblocat de utilizator: incercari noi, ca la Unblock
+		task.Status, task.SendBacks, task.Escalated = store.StatusQueued, 0, false
 	}
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
 	}
 	t.taskEvent(task, "assigned", actorUser, "Assigned to "+a.Name)
-	if boss, ok := decider(task, agents); ok {
+	if boss, ok := decider(task, agents, t.autonomyOf(task.ProjectID)); ok {
 		t.note(task.ProjectID, boss.ID, fmt.Sprintf("The user moved %s to %s.", task.Ref(), a.Name), true)
 	}
 	t.note(task.ProjectID, a.ID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), task.Title), true)
@@ -206,7 +207,9 @@ var ErrNotUserDecision = errors.New("the task is not waiting for your decision")
 // advance muta un task (cu Result pus) in etapa urmatoare, sau la lider dupa
 // ultima etapa. ev (raportul sau aprobarea) intra in istoric dupa salvare,
 // urmat de mutarea in etapa. Se apeleaza cu t.work blocat. Intoarce textul pentru apelant.
-func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Agent, byName string, ev taskNote) (string, error) {
+// In modul autonom, dupa ultima etapa decide radacina; daca nu exista (asignatul
+// e radacina), task-ul trece direct in Done.
+func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Agent, byName string, ev taskNote, autonomous bool) (string, error) {
 	task.Feedback, task.ReviewStage = "", store.StageNone
 	if next, ok := nextStage(stages, task.StageID); ok {
 		task.StageID = &next.ID
@@ -221,6 +224,16 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 		t.Kick(task.ProjectID)
 		return fmt.Sprintf("%s moved to stage %s.", task.Ref(), next.Name), nil
 	}
+	boss, ok := decider(*task, agents, autonomous)
+	if !ok && autonomous {
+		markDone(task)
+		if err := t.st.SaveTask(task); err != nil {
+			return "", err
+		}
+		t.record(*task, ev)
+		t.autoAccepted(*task, autoAcceptText)
+		return fmt.Sprintf("%s went through all stages and was accepted automatically (full autonomy).", task.Ref()), nil
+	}
 	task.StageID = nil
 	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
 	if err := t.st.SaveTask(task); err != nil {
@@ -228,7 +241,7 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 	}
 	t.record(*task, ev)
 	t.emit(task.ProjectID, "task", *task)
-	if boss, ok := decider(*task, agents); ok {
+	if ok {
 		t.note(task.ProjectID, boss.ID, clip(fmt.Sprintf("%s went through all stages (last: %s). Decide with accept_task or send_back: %s", task.Ref(), byName, task.Result)), false)
 	}
 	t.Kick(task.ProjectID)
@@ -238,7 +251,7 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 // sendToStage pune un task inapoi, Queued, in etapa st, cu feedback (numara
 // trimiterea; la MaxSendBacks se blocheaza in etapa curenta). ev e respingerea
 // pentru istoric; daca task-ul schimba etapa, urmeaza "Moved to stage". Se apeleaza cu t.work blocat.
-func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, agents []store.Agent, by int64, ev taskNote) (bool, error) {
+func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, agents []store.Agent, by int64, ev taskNote, autonomous bool) (bool, error) {
 	moved := task.StageID == nil || *task.StageID != st.ID
 	if task.SendBacks+1 < MaxSendBacks {
 		task.StageID = &st.ID
@@ -248,7 +261,7 @@ func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, ag
 		// pe board (cu Accepta / Deblocheaza) si sa reia drumul prin etape
 		task.StageID = &st.ID
 	}
-	blocked, err := t.rejectTask(task, feedback, agents, by, ev)
+	blocked, err := t.rejectTask(task, feedback, agents, by, ev, autonomous)
 	if err == nil && !blocked && moved {
 		t.taskEvent(*task, "stage", ev.actor, "Moved to stage "+st.Name)
 	}
@@ -267,6 +280,8 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if err != nil {
 		return err
 	}
+	// regula de azi (fara autonomie): utilizatorul poate decide din board si
+	// task-urile pe care in modul autonom le decide radacina
 	if task.Status != store.StatusReview || task.ReviewStage != store.StageLead || decisionOwner(task, agents) != 0 {
 		return ErrNotUserDecision
 	}
@@ -289,9 +304,10 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 		return err
 	}
 	sent := taskNote{"sent_back", actorUser, "You sent it back: " + feedback}
+	autonomous := t.autonomyOf(task.ProjectID)
 	if len(stages) == 0 {
 		// fara etape: inapoi la acelasi agent, cu feedback
-		if _, err := t.rejectTask(&task, feedback, agents, 0, sent); err != nil {
+		if _, err := t.rejectTask(&task, feedback, agents, 0, sent, autonomous); err != nil {
 			return err
 		}
 		t.Kick(task.ProjectID)
@@ -301,7 +317,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if i := stageIndex(stages, task.StageID); i >= 0 {
 		target = stages[i]
 	}
-	if _, err := t.sendToStage(&task, target, feedback, agents, 0, sent); err != nil {
+	if _, err := t.sendToStage(&task, target, feedback, agents, 0, sent, autonomous); err != nil {
 		return err
 	}
 	t.Kick(task.ProjectID)
@@ -357,6 +373,11 @@ func stagesOverview(stages []store.Stage, agents []store.Agent) string {
 
 // UserDecides: task-ul asteapta decizia utilizatorului (e la "La lider" si nu
 // are un agent care sa-l decida: creat din board, sau creatorul a disparut).
+// In modul autonom, task-urile pe care le decide radacina nu intra aici
+// (utilizatorul le poate decide totusi din board, vezi UserDecide).
 func (t *Team) UserDecides(task store.Task, agents []store.Agent) bool {
-	return task.Status == store.StatusReview && task.ReviewStage == store.StageLead && decisionOwner(task, agents) == 0
+	if task.Status != store.StatusReview || task.ReviewStage != store.StageLead {
+		return false
+	}
+	return decisionOwnerIn(task, agents, t.autonomyOf(task.ProjectID)) == 0
 }

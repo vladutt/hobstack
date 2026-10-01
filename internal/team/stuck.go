@@ -41,11 +41,12 @@ type StuckTask struct {
 func (t *Team) Now() time.Time { return t.now() }
 
 // stuckKind spune daca task-ul e blocat (fara prag de timp): "decision" cu agentul
-// care trebuie sa decida, sau "orphan" cu asignatul. Se cheama cu t.work tinut.
-func (t *Team) stuckKind(task store.Task, agents []store.Agent, tasks []store.Task, open []store.Question) (string, store.Agent, bool) {
+// care trebuie sa decida, sau "orphan" cu asignatul. In modul autonom (autonomous)
+// decidentul poate fi radacina. Se cheama cu t.work tinut.
+func (t *Team) stuckKind(task store.Task, agents []store.Agent, tasks []store.Task, open []store.Question, autonomous bool) (string, store.Agent, bool) {
 	switch task.Status {
 	case store.StatusReview:
-		id := decisionOwner(task, agents)
+		id := decisionOwnerIn(task, agents, autonomous)
 		if id == 0 {
 			return "", store.Agent{}, false // decide utilizatorul: are butoane pe board
 		}
@@ -123,7 +124,7 @@ func (t *Team) checkStuckLocked(now time.Time) ([]int64, error) {
 		if p.Paused {
 			continue // pauza e alegerea utilizatorului
 		}
-		nudged, err := t.checkProjectStuck(p.ID, now)
+		nudged, err := t.checkProjectStuck(p.ID, p.Autonomy, now)
 		if err != nil {
 			log.Printf("project %d: stuck check: %v", p.ID, err)
 			errs = append(errs, err)
@@ -136,7 +137,7 @@ func (t *Team) checkStuckLocked(now time.Time) ([]int64, error) {
 }
 
 // checkProjectStuck impinge task-urile blocate ale unui proiect; spune daca a impins ceva.
-func (t *Team) checkProjectStuck(projectID int64, now time.Time) (bool, error) {
+func (t *Team) checkProjectStuck(projectID int64, autonomous bool, now time.Time) (bool, error) {
 	agents, tasks, open, err := t.stuckInputs(projectID)
 	if err != nil {
 		return false, err
@@ -152,7 +153,7 @@ func (t *Team) checkProjectStuck(projectID int64, now time.Time) (bool, error) {
 			// reincarce si sa-l arate in "Needs you"
 			since := now.Sub(*task.NudgedAt)
 			if since >= stuckAfter && since < stuckAfter+time.Minute {
-				if _, _, ok := t.stuckKind(task, agents, tasks, open); ok {
+				if _, _, ok := t.stuckKind(task, agents, tasks, open, autonomous); ok {
 					t.emit(projectID, "task", task)
 				}
 			}
@@ -161,12 +162,12 @@ func (t *Team) checkProjectStuck(projectID int64, now time.Time) (bool, error) {
 		if now.Sub(task.UpdatedAt) < stuckAfter {
 			continue
 		}
-		kind, a, ok := t.stuckKind(task, agents, tasks, open)
+		kind, a, ok := t.stuckKind(task, agents, tasks, open, autonomous)
 		if !ok {
 			continue
 		}
 		if kind == stuckOrphan {
-			if err := t.nudgeLocked(projectID, kind, a, []store.Task{task}, agents, now); err != nil {
+			if err := t.nudgeLocked(projectID, kind, a, []store.Task{task}, agents, now, autonomous); err != nil {
 				return nudged, err
 			}
 			nudged = true
@@ -178,7 +179,7 @@ func (t *Team) checkProjectStuck(projectID int64, now time.Time) (bool, error) {
 		decisions[a.ID] = append(decisions[a.ID], task)
 	}
 	for _, a := range order {
-		if err := t.nudgeLocked(projectID, stuckDecision, a, decisions[a.ID], agents, now); err != nil {
+		if err := t.nudgeLocked(projectID, stuckDecision, a, decisions[a.ID], agents, now, autonomous); err != nil {
 			return nudged, err
 		}
 		nudged = true
@@ -189,10 +190,10 @@ func (t *Team) checkProjectStuck(projectID int64, now time.Time) (bool, error) {
 // nudgeLocked impinge agentul pentru task-urile date (toate de acelasi fel) si
 // noteaza nudged_at = now. Folosit de CheckStuck si de Nudge. Se cheama cu
 // t.work tinut; apelantul face Kick dupa ce il elibereaza.
-func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []store.Task, agents []store.Agent, now time.Time) error {
+func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []store.Task, agents []store.Agent, now time.Time, autonomous bool) error {
 	switch kind {
 	case stuckDecision:
-		if err := t.note(projectID, a.ID, nudgeText(a, tasks, agents), false); err != nil {
+		if err := t.note(projectID, a.ID, nudgeText(a, tasks, agents, autonomous), false); err != nil {
 			return err
 		}
 		refs, verb := refsOf(tasks)
@@ -243,8 +244,9 @@ func refsOf(tasks []store.Task) (string, string) {
 }
 
 // nudgeText e nota care trezeste agentul. Task-urile la care e reviewer cer
-// review_approve/review_reject; celelalte accept_task/send_back.
-func nudgeText(a store.Agent, tasks []store.Task, agents []store.Agent) string {
+// review_approve/review_reject; celelalte accept_task/send_back. In modul
+// autonom nu mai trimite la ask_user (utilizatorul nu raspunde).
+func nudgeText(a store.Agent, tasks []store.Task, agents []store.Agent, autonomous bool) string {
 	var review, decide []store.Task
 	for _, task := range tasks {
 		if r, ok := reviewerOf(task, agents); ok && task.ReviewStage == store.StageReviewer && r.ID == a.ID {
@@ -262,7 +264,9 @@ func nudgeText(a store.Agent, tasks []store.Task, agents []store.Agent) string {
 		refs, verb := refsOf(decide)
 		parts = append(parts, fmt.Sprintf("%s %s waiting for your decision: call accept_task or send_back.", refs, verb))
 	}
-	parts = append(parts, "If you cannot decide without the user, call ask_user.")
+	if !autonomous {
+		parts = append(parts, "If you cannot decide without the user, call ask_user.")
+	}
 	return strings.Join(parts, " ")
 }
 
@@ -287,7 +291,7 @@ func (t *Team) StuckTasks(projectID int64, now time.Time) ([]StuckTask, error) {
 		if task.NudgedAt == nil || now.Sub(*task.NudgedAt) < stuckAfter {
 			continue
 		}
-		kind, a, ok := t.stuckKind(task, agents, tasks, open)
+		kind, a, ok := t.stuckKind(task, agents, tasks, open, p.Autonomy)
 		if !ok {
 			continue
 		}
@@ -330,9 +334,9 @@ func (t *Team) nudgeOne(taskID int64, now time.Time) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	kind, a, ok := t.stuckKind(task, agents, tasks, open)
+	kind, a, ok := t.stuckKind(task, agents, tasks, open, p.Autonomy)
 	if !ok {
 		return 0, ErrNotStuck
 	}
-	return p.ID, t.nudgeLocked(p.ID, kind, a, []store.Task{task}, agents, now)
+	return p.ID, t.nudgeLocked(p.ID, kind, a, []store.Task{task}, agents, now, p.Autonomy)
 }

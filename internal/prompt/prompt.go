@@ -56,6 +56,9 @@ const howAsk = `If you need a decision, a permission or information that only th
 
 const howAskWait = `Do not call report_done while you wait for the answer.`
 
+// howAuto inlocuieste howAsk / howAskWait cand proiectul e in modul full autonomy.
+const howAuto = `Full autonomy is on: the user will not answer questions. Make reasonable decisions yourself and state your assumptions in your report.`
+
 const howLead = `You are a lead: you have a direct team, listed in the turn message. Break the work into small, clear, verifiable tasks ` +
 	`and create them with mcp__team__create_task, only for agents on your direct team, choosing by each one's "Takes" field. ` +
 	`Do not do their work yourself. When you receive results, check them (you can read the changed files) and call ` +
@@ -70,6 +73,11 @@ const howWorker = `Work only on the task you received and do not change anything
 	`When you finish, call mcp__team__report_done with the requested summary. ` +
 	`If something is unclear or blocked and only the user can resolve it, use mcp__team__ask_user; ` +
 	`if it is a problem for your lead, call mcp__team__report_done explaining it. Do not guess.`
+
+// howWorkerAuto e howWorker fara ask_user (modul full autonomy).
+const howWorkerAuto = `Work only on the task you received and do not change anything outside it. ` +
+	`When you finish, call mcp__team__report_done with the requested summary. ` +
+	`If something is a problem for your lead, call mcp__team__report_done explaining it.`
 
 const howReviewer = `You check the work of the agents listed under "You review the work of" (in the turn message). When you receive a task to check, ` +
 	`read the result and the changed files, then call mcp__team__review_approve if it is good, or ` +
@@ -148,7 +156,11 @@ func System(p store.Project, a store.Agent, l Links) string {
 			how = append(how, howSubLead)
 		}
 	} else if !isRoot {
-		how = append(how, howWorker)
+		if p.Autonomy {
+			how = append(how, howWorkerAuto)
+		} else {
+			how = append(how, howWorker)
+		}
 	}
 	if l.IsReviewer {
 		how = append(how, howReviewer)
@@ -156,9 +168,14 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if isRoot && !l.IsLead && !l.IsReviewer {
 		how = append(how, howSolo)
 	}
-	how = append(how, howAsk)
-	if !isRoot {
-		how = append(how, howAskWait)
+	switch {
+	case p.Autonomy:
+		// agentii nu pun intrebari: decid singuri si isi spun presupunerile
+		how = append(how, howAuto)
+	case isRoot:
+		how = append(how, howAsk)
+	default:
+		how = append(how, howAsk, howAskWait)
 	}
 	section(&b, "How you work", strings.Join(how, "\n\n"))
 	return strings.TrimSpace(b.String())

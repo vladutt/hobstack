@@ -196,9 +196,47 @@ func (t *Team) ListTasks(c mcp.Caller, status string) (string, error) {
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
+// rootOf intoarce radacina agentului: stramosul fara sef (urcand pe parent_id).
+// Un agent fara sef (sau cu seful sters) e chiar radacina. false daca agentul nu exista.
+func rootOf(agentID int64, agents []store.Agent) (store.Agent, bool) {
+	a, ok := store.FindAgent(agents, agentID)
+	if !ok {
+		return a, false
+	}
+	seen := map[int64]bool{a.ID: true} // garda contra unui ciclu in date
+	for a.ParentID != nil {
+		p, ok := store.FindAgent(agents, *a.ParentID)
+		if !ok || seen[p.ID] {
+			break
+		}
+		seen[p.ID] = true
+		a = p
+	}
+	return a, true
+}
+
 // decider intoarce liderul care decide un task din Review: creatorul, iar
-// daca a fost sters, seful asignatului.
-func decider(task store.Task, agents []store.Agent) (store.Agent, bool) {
+// daca a fost sters, seful asignatului. In modul autonom, unde ar decide
+// utilizatorul (task din board sau fara decident) decide radacina
+// asignatului, daca nu e chiar asignatul.
+func decider(task store.Task, agents []store.Agent, autonomous bool) (store.Agent, bool) {
+	if d, ok := baseDecider(task, agents); ok || !autonomous {
+		return d, ok
+	}
+	return autoRoot(task, agents)
+}
+
+// autoRoot intoarce radacina asignatului daca e alt agent decat asignatul
+// (regula decidentului in modul autonom).
+func autoRoot(task store.Task, agents []store.Agent) (store.Agent, bool) {
+	if r, ok := rootOf(task.AssigneeID, agents); ok && r.ID != task.AssigneeID {
+		return r, true
+	}
+	return store.Agent{}, false
+}
+
+// baseDecider e regula de azi (fara autonomie).
+func baseDecider(task store.Task, agents []store.Agent) (store.Agent, bool) {
 	if task.ByUser {
 		return store.Agent{}, false // creat din board: decide utilizatorul
 	}
@@ -222,10 +260,18 @@ func reviewerOf(task store.Task, agents []store.Agent) (store.Agent, bool) {
 	return store.FindAgent(agents, *w.ReviewerID)
 }
 
-// decisionOwner intoarce agentul care trebuie sa decida acum un task din
-// Review sau Blocked: reviewer-ul in etapa reviewer (daca inca exista),
-// altfel decidentul. Intoarce 0 daca nu decide nimeni.
+// decisionOwner e decisionOwnerIn fara autonomie: cine decide dupa regulile
+// de azi. UserDecide il foloseste ca utilizatorul sa poata decide din board
+// si in modul autonom.
 func decisionOwner(task store.Task, agents []store.Agent) int64 {
+	return decisionOwnerIn(task, agents, false)
+}
+
+// decisionOwnerIn intoarce agentul care trebuie sa decida acum un task din
+// Review sau Blocked: reviewer-ul in etapa reviewer (daca inca exista),
+// altfel decidentul (in modul autonom, radacina in locul utilizatorului).
+// Intoarce 0 daca nu decide nimeni.
+func decisionOwnerIn(task store.Task, agents []store.Agent, autonomous bool) int64 {
 	if task.Status != store.StatusReview && task.Status != store.StatusBlocked {
 		return 0
 	}
@@ -234,10 +280,48 @@ func decisionOwner(task store.Task, agents []store.Agent) int64 {
 			return r.ID
 		}
 	}
-	if d, ok := decider(task, agents); ok {
+	if d, ok := decider(task, agents, autonomous); ok {
 		return d.ID
 	}
 	return 0
+}
+
+// autonomyOf citeste comutatorul full autonomy al proiectului (o data per
+// apel de tool sau final de run). La eroare, modul e considerat oprit.
+func (t *Team) autonomyOf(projectID int64) bool {
+	p, err := t.st.GetProject(projectID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			log.Printf("project %d: autonomy: %v", projectID, err)
+		}
+		return false
+	}
+	return p.Autonomy
+}
+
+// Textele acceptului automat din modul autonom (istoricul task-ului).
+const (
+	autoAcceptText      = "Accepted automatically (full autonomy)"
+	autoAcceptAfterText = "Accepted automatically after repeated send-backs (full autonomy)"
+)
+
+// markDone pune task-ul in Done (fara sa-l salveze), ca la accept_task.
+func markDone(task *store.Task) {
+	task.Status, task.ReviewStage, task.StageID = store.StatusDone, store.StageNone, nil
+}
+
+// autoAccepted termina acceptul automat al unui task deja salvat in Done:
+// istoric, UI, trezirea parintelui (afterDone) si scheduler-ul. Kick nu ia
+// t.work, deci se poate chema si cu lock-ul tinut (ca in AcceptTask).
+// Se apeleaza cu t.work blocat.
+func (t *Team) autoAccepted(task store.Task, text string) {
+	t.taskEvent(task, "accepted", actorForeman, text)
+	t.emit(task.ProjectID, "task", task)
+	// task-ul e deja Done: o eroare la trezirea parintelui nu il strica
+	if err := t.afterDone(task); err != nil {
+		log.Printf("after auto accept %s: %v", task.Ref(), err)
+	}
+	t.Kick(task.ProjectID)
 }
 
 // noDeciderText e nota pentru asignatul unui task pe care nu il poate decide nimeni.
@@ -249,8 +333,17 @@ func noDeciderText(task store.Task, assignee store.Agent) string {
 }
 
 // canDecide: accept_task si send_back sunt permise creatorului si oricarui
-// sef de-al lui. Fara creator (sters), oricarui sef al asignatului.
-func canDecide(callerID int64, task store.Task, agents []store.Agent) bool {
+// sef de-al lui. Fara creator (sters), oricarui sef al asignatului. In modul
+// autonom, unde ar decide utilizatorul (task din board sau fara decident),
+// decide si radacina asignatului.
+func canDecide(callerID int64, task store.Task, agents []store.Agent, autonomous bool) bool {
+	if autonomous {
+		if _, ok := baseDecider(task, agents); !ok {
+			if r, ok := autoRoot(task, agents); ok && r.ID == callerID {
+				return true
+			}
+		}
+	}
 	if task.ByUser {
 		return false // creat din board: decide doar utilizatorul
 	}
@@ -265,15 +358,23 @@ func canDecide(callerID int64, task store.Task, agents []store.Agent) bool {
 // notificat (zero daca nu exista). ev (raportul) intra in istoric dupa salvare,
 // urmat de blocare daca nu poate decide nimeni. Se apeleaza cu t.work blocat.
 func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.Agent, headline string, ev taskNote) (store.Agent, error) {
+	autonomous := t.autonomyOf(task.ProjectID)
 	// task dintr-o etapa terminat fara raport: la lider (sau la utilizator), in aceeasi etapa
 	if task.StageID != nil {
+		boss, ok := decider(*task, agents, autonomous)
 		task.Status, task.ReviewStage = store.StatusReview, store.StageLead
+		if !ok && autonomous {
+			markDone(task) // modul autonom, nimeni deasupra: Done automat
+		}
 		if err := t.st.SaveTask(task); err != nil {
 			return store.Agent{}, err
 		}
 		t.record(*task, ev)
+		if task.Status == store.StatusDone {
+			t.autoAccepted(*task, autoAcceptText)
+			return store.Agent{}, nil
+		}
 		t.emit(task.ProjectID, "task", *task)
-		boss, ok := decider(*task, agents)
 		if ok {
 			t.note(boss.ProjectID, boss.ID, clip(fmt.Sprintf("%s (review): %s", headline, task.Result)), false)
 		}
@@ -289,9 +390,13 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		task.ReviewStage = store.StageReviewer
 	} else {
 		task.ReviewStage = store.StageLead
-		who, hasWho = decider(*task, agents)
+		who, hasWho = decider(*task, agents, autonomous)
 	}
-	if !hasWho && !task.ByUser {
+	switch {
+	case !hasWho && autonomous:
+		// modul autonom si asignatul e radacina (nimeni deasupra): Done automat
+		markDone(task)
+	case !hasWho && !task.ByUser:
 		// nimeni nu poate decide: nu lasam task-ul blocat in Review, decide utilizatorul
 		task.Status = store.StatusBlocked
 		task.ReviewStage = store.StageNone
@@ -300,6 +405,10 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		return store.Agent{}, err
 	}
 	t.record(*task, ev)
+	if task.Status == store.StatusDone {
+		t.autoAccepted(*task, autoAcceptText)
+		return store.Agent{}, nil
+	}
 	if task.Status == store.StatusBlocked {
 		t.taskEvent(*task, "blocked", actorForeman, "Blocked: no one can check it, you decide")
 	}
@@ -361,39 +470,79 @@ func (t *Team) afterDone(task store.Task) error {
 // Intoarce true daca task-ul s-a blocat; altfel a ramas Queued, iar apelantul
 // scrie notele si trezeste asignatul. ev (respingerea) intra in istoric dupa
 // salvare, urmat de blocare daca e cazul. Se apeleaza cu t.work blocat.
-func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agent, extra int64, ev taskNote) (bool, error) {
+//
+// In modul autonom blocajul ajunge la radacina asignatului (nu la utilizator).
+// Daca task-ul a mai fost deblocat o data de radacina (Escalated) sau nu are o
+// radacina care sa decida, nu se mai blocheaza: trece direct in Done (fara
+// bucla blocat <-> send_back). Atunci intoarce tot true, cu task.Status = Done.
+func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agent, extra int64, ev taskNote, autonomous bool) (bool, error) {
 	task.SendBacks++
 	task.Feedback = feedback
 	task.ReviewStage = store.StageNone
 	blocked := task.SendBacks >= MaxSendBacks
-	if blocked {
+	root, hasRoot := autoRoot(*task, agents)
+	auto := blocked && autonomous && (task.Escalated || !hasRoot)
+	switch {
+	case auto:
+		markDone(task)
+	case blocked:
 		task.Status = store.StatusBlocked
-	} else {
+	default:
 		task.Status = store.StatusQueued
 	}
 	if err := t.st.SaveTask(task); err != nil {
 		return false, err
 	}
 	t.record(*task, ev)
+	if auto {
+		t.autoAccepted(*task, autoAcceptAfterText)
+		if hasRoot {
+			t.note(task.ProjectID, root.ID, fmt.Sprintf("%s was accepted automatically after repeated send-backs (full autonomy).", task.Ref()), true)
+		}
+		return true, nil
+	}
 	if blocked {
 		t.taskEvent(*task, "blocked", actorForeman, fmt.Sprintf("Blocked after %d send-backs", MaxSendBacks))
 		ids := map[int64]bool{extra: true}
 		if w, ok := store.FindAgent(agents, task.AssigneeID); ok && w.ReviewerID != nil {
 			ids[*w.ReviewerID] = true
 		}
-		if d, ok := decider(*task, agents); ok {
+		if d, ok := decider(*task, agents, autonomous); ok {
 			ids[d.ID] = true
 		}
-		text := fmt.Sprintf("%s is blocked after %d rejections or send-backs. The user decides.", task.Ref(), MaxSendBacks)
-		for id := range ids {
-			t.note(task.ProjectID, id, text, true)
+		if autonomous {
+			// radacina decide: nota ei e nelivrata, ca s-o trezeasca
+			delete(ids, root.ID)
+			delete(ids, 0) // 0 = utilizatorul (send back din board)
+			text := fmt.Sprintf("%s is blocked after %d rejections or send-backs. As the root lead in full autonomy, decide: "+
+				"accept_task to take it as it is, or send_back with clear feedback for one more try.", task.Ref(), MaxSendBacks)
+			t.note(task.ProjectID, root.ID, text, false)
+			others := fmt.Sprintf("%s is blocked after %d rejections or send-backs. %s decides.", task.Ref(), MaxSendBacks, root.Name)
+			for id := range ids {
+				t.note(task.ProjectID, id, others, true)
+			}
+		} else {
+			text := fmt.Sprintf("%s is blocked after %d rejections or send-backs. The user decides.", task.Ref(), MaxSendBacks)
+			for id := range ids {
+				t.note(task.ProjectID, id, text, true)
+			}
 		}
 	}
 	t.emit(task.ProjectID, "task", *task)
 	return blocked, nil
 }
 
-func blockedReply(task store.Task) string {
+// blockedReply e raspunsul pentru apelant cand rejectTask a intors true:
+// task blocat, sau (in modul autonom) acceptat automat.
+func blockedReply(task store.Task, agents []store.Agent, autonomous bool) string {
+	if task.Status == store.StatusDone {
+		return fmt.Sprintf("%s was sent back %d times and was accepted automatically (full autonomy).", task.Ref(), MaxSendBacks)
+	}
+	if autonomous {
+		if r, ok := autoRoot(task, agents); ok {
+			return fmt.Sprintf("%s was sent back %d times and is now blocked; %s decides.", task.Ref(), MaxSendBacks, r.Name)
+		}
+	}
 	return fmt.Sprintf("%s was sent back %d times and is now blocked. The user decides what happens to it.", task.Ref(), MaxSendBacks)
 }
 
@@ -409,7 +558,7 @@ func (t *Team) AcceptTask(c mcp.Caller, ref, note string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !canDecide(c.AgentID, task, agents) {
+	if !canDecide(c.AgentID, task, agents, t.autonomyOf(c.ProjectID)) {
 		return "", fmt.Errorf("only the lead who created %s (or one of their bosses) decides", task.Ref())
 	}
 	if err := t.checkNotAtReviewer(task, agents); err != nil {
@@ -472,13 +621,25 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !canDecide(c.AgentID, task, agents) {
+	autonomous := t.autonomyOf(c.ProjectID)
+	if !canDecide(c.AgentID, task, agents, autonomous) {
 		return "", fmt.Errorf("only the lead who created %s (or one of their bosses) decides", task.Ref())
 	}
 	if err := t.checkNotAtReviewer(task, agents); err != nil {
 		return "", err
 	}
-	if task.Status != store.StatusReview {
+	switch {
+	case task.Status == store.StatusBlocked && autonomous:
+		// modul autonom: radacina poate da task-ului blocat inca o incercare
+		if r, ok := autoRoot(task, agents); !ok || r.ID != c.AgentID {
+			return "", fmt.Errorf("%s is blocked; in full autonomy only the root lead can send it back", task.Ref())
+		}
+		// rejectTask / sendToStage numara si trimiterea asta, deci dupa ea
+		// SendBacks = MaxSendBacks - 1: inca o respingere il blocheaza din nou,
+		// iar cu Escalated al doilea blocaj il accepta automat
+		task.SendBacks = MaxSendBacks - 2
+		task.Escalated = true
+	case task.Status != store.StatusReview:
 		return "", fmt.Errorf("%s is %s; only tasks in review can be sent back", task.Ref(), task.Status)
 	}
 	worker, ok := store.FindAgent(agents, task.AssigneeID)
@@ -497,12 +658,12 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 			target = stages[i]
 		}
 		sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback}
-		blocked, err := t.sendToStage(&task, target, feedback, agents, lead.ID, sent)
+		blocked, err := t.sendToStage(&task, target, feedback, agents, lead.ID, sent, autonomous)
 		if err != nil {
 			return "", err
 		}
 		if blocked {
-			return blockedReply(task), nil
+			return blockedReply(task, agents, autonomous), nil
 		}
 		t.note(c.ProjectID, lead.ID, fmt.Sprintf("Sent %s back to stage %s: %s", task.Ref(), target.Name, feedback), true)
 		t.Kick(c.ProjectID)
@@ -510,12 +671,12 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 	}
 
 	sent := taskNote{"sent_back", lead.Name, lead.Name + " sent it back: " + feedback}
-	blocked, err := t.rejectTask(&task, feedback, agents, lead.ID, sent)
+	blocked, err := t.rejectTask(&task, feedback, agents, lead.ID, sent, autonomous)
 	if err != nil {
 		return "", err
 	}
 	if blocked {
-		return blockedReply(task), nil
+		return blockedReply(task, agents, autonomous), nil
 	}
 	t.note(c.ProjectID, lead.ID, fmt.Sprintf("Sent %s back to %s: %s", task.Ref(), worker.Name, feedback), true)
 	t.note(c.ProjectID, worker.ID, fmt.Sprintf("%s sent back by %s: %s", task.Ref(), lead.Name, feedback), true)
@@ -567,7 +728,7 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 		}
 		task.Result = summary
 		t.note(c.ProjectID, worker.ID, "Finished "+task.Ref()+" in its stage", true)
-		return t.advance(&task, stages, agents, worker.Name, reportedNote(worker))
+		return t.advance(&task, stages, agents, worker.Name, reportedNote(worker), t.autonomyOf(c.ProjectID))
 	}
 	if worker.ParentID == nil {
 		return "", errors.New("you report directly to the user: write the summary in your reply, without report_done")
@@ -595,6 +756,9 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 	t.Kick(c.ProjectID)
 	if task.Status == store.StatusBlocked {
 		return fmt.Sprintf("%s is blocked: no one can check it.", task.Ref()), nil
+	}
+	if task.Status == store.StatusDone {
+		return task.Ref() + " is Done: accepted automatically (full autonomy).", nil
 	}
 	if who.ID == 0 {
 		return task.Ref() + " is in Review.", nil
@@ -644,7 +808,7 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 			task.Result = strings.TrimSpace(task.Result + "\nReview note: " + n)
 		}
 		t.note(c.ProjectID, c.AgentID, "Approved "+task.Ref(), true)
-		return t.advance(&task, stages, agents, checker.Name, approvedNote(checker))
+		return t.advance(&task, stages, agents, checker.Name, approvedNote(checker), t.autonomyOf(c.ProjectID))
 	}
 
 	task, worker, agents, err := t.reviewTarget(c, ref)
@@ -652,7 +816,8 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		return "", err
 	}
 	reviewer, _ := store.FindAgent(agents, c.AgentID)
-	if task.ByUser {
+	autonomous := t.autonomyOf(c.ProjectID)
+	if task.ByUser && !autonomous {
 		// creat de utilizator: dupa verificare decide el
 		task.ReviewStage = store.StageLead
 		if err := t.st.SaveTask(&task); err != nil {
@@ -663,7 +828,18 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		t.emit(c.ProjectID, "task", task)
 		return fmt.Sprintf("%s went to the user for a decision.", task.Ref()), nil
 	}
-	boss, ok := decider(task, agents)
+	boss, ok := decider(task, agents, autonomous)
+	if !ok && autonomous {
+		// modul autonom si asignatul e radacina: nu decide nimeni, Done automat
+		markDone(&task)
+		if err := t.st.SaveTask(&task); err != nil {
+			return "", err
+		}
+		t.record(task, approvedNote(reviewer))
+		t.autoAccepted(task, autoAcceptText)
+		t.note(c.ProjectID, reviewer.ID, "Approved "+task.Ref(), true)
+		return task.Ref() + " is Done: accepted automatically (full autonomy).", nil
+	}
 	if !ok {
 		task.Status, task.ReviewStage = store.StatusBlocked, store.StageNone
 		if err := t.st.SaveTask(&task); err != nil {
@@ -716,12 +892,13 @@ func (t *Team) ReviewReject(c mcp.Caller, ref, feedback string) (string, error) 
 		}
 		back := backStage(stages, task.StageID)
 		checker, _ := store.FindAgent(agents, c.AgentID)
-		blocked, err := t.sendToStage(&task, back, feedback, agents, c.AgentID, rejectedNote(checker, feedback))
+		autonomous := t.autonomyOf(c.ProjectID)
+		blocked, err := t.sendToStage(&task, back, feedback, agents, c.AgentID, rejectedNote(checker, feedback), autonomous)
 		if err != nil {
 			return "", err
 		}
 		if blocked {
-			return blockedReply(task), nil
+			return blockedReply(task, agents, autonomous), nil
 		}
 		t.note(c.ProjectID, c.AgentID, fmt.Sprintf("Rejected %s: %s", task.Ref(), feedback), true)
 		t.Kick(c.ProjectID)
@@ -737,12 +914,13 @@ func (t *Team) ReviewReject(c mcp.Caller, ref, feedback string) (string, error) 
 		return "", errors.New("feedback is required: say concretely what needs to change")
 	}
 	reviewer, _ := store.FindAgent(agents, c.AgentID)
-	blocked, err := t.rejectTask(&task, feedback, agents, reviewer.ID, rejectedNote(reviewer, feedback))
+	autonomous := t.autonomyOf(c.ProjectID)
+	blocked, err := t.rejectTask(&task, feedback, agents, reviewer.ID, rejectedNote(reviewer, feedback), autonomous)
 	if err != nil {
 		return "", err
 	}
 	if blocked {
-		return blockedReply(task), nil
+		return blockedReply(task, agents, autonomous), nil
 	}
 	t.note(c.ProjectID, worker.ID, fmt.Sprintf("%s rejected in review by %s: %s", task.Ref(), reviewer.Name, feedback), true)
 	t.note(c.ProjectID, reviewer.ID, fmt.Sprintf("Rejected %s: %s", task.Ref(), feedback), true)
@@ -768,6 +946,10 @@ func (t *Team) findTask(projectID int64, ref string) (store.Task, error) {
 // AskUser salveaza o intrebare catre utilizator ("Needs you"). Agentul se opreste
 // dupa ea; raspunsul vine ca mesaj (AnswerQuestion).
 func (t *Team) AskUser(c mcp.Caller, question string, options []string) (string, error) {
+	// modul autonom: nicio intrebare, agentul decide singur si continua
+	if t.autonomyOf(c.ProjectID) {
+		return "Full autonomy is on: the user will not answer. Decide yourself, state your assumption, and continue.", nil
+	}
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return "", errors.New("question is required")

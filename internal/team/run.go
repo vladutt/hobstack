@@ -235,15 +235,24 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		task.Status = store.StatusReview
 		task.ReviewStage = store.StageLead
 		task.Result = "run failed: " + o.Error
-		boss, hasBoss := decider(task, agents)
-		// nimeni nu poate decide: decide utilizatorul (blocat; cele din etape raman la "La lider")
-		if !hasBoss && task.StageID == nil && !task.ByUser {
+		autonomous := t.autonomyOf(ar.projectID)
+		boss, hasBoss := decider(task, agents, autonomous)
+		switch {
+		case !hasBoss && autonomous:
+			// modul autonom si asignatul e radacina: nu decide nimeni, Done automat
+			markDone(&task)
+		case !hasBoss && task.StageID == nil && !task.ByUser:
+			// nimeni nu poate decide: decide utilizatorul (blocat; cele din etape raman la "La lider")
 			task.Status, task.ReviewStage = store.StatusBlocked, store.StageNone
 		}
 		if err := t.st.SaveTask(&task); err != nil {
 			return err
 		}
 		t.taskEvent(task, "failed", a.Name, fmt.Sprintf("%s's run failed: %s", a.Name, o.Error))
+		if task.Status == store.StatusDone {
+			t.autoAccepted(task, autoAcceptText)
+			return nil
+		}
 		if task.Status == store.StatusBlocked {
 			t.taskEvent(task, "blocked", actorForeman, "Blocked: no one can decide, you decide")
 		}

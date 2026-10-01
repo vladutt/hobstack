@@ -138,7 +138,7 @@ func (t *Team) Reconcile(projectID int64) error {
 	// 0. cine are de decis porneste primul
 	decides := map[int64]bool{}
 	for _, task := range tasks {
-		if id := decisionOwner(task, agents); id != 0 {
+		if id := decisionOwnerIn(task, agents, p.Autonomy); id != 0 {
 			decides[id] = true
 		}
 	}
@@ -399,9 +399,10 @@ func (t *Team) wakeForDecisions(projectID int64) error {
 		return err
 	}
 	waiting := map[int64][]string{}
+	autonomous := t.autonomyOf(projectID)
 	for _, task := range tasks {
 		// reviewer-ul, sau decidentul daca reviewer-ul a disparut
-		who := decisionOwner(task, agents)
+		who := decisionOwnerIn(task, agents, autonomous)
 		if task.Status == store.StatusInProgress && allSubtasksDone(task.ID, tasks) {
 			who = task.AssigneeID
 		}
@@ -453,6 +454,7 @@ func (t *Team) relinkReviews(projectID int64) error {
 	if err != nil {
 		return err
 	}
+	autonomous := t.autonomyOf(projectID)
 	// reviewerii care au deja mesaje in asteptare nu mai primesc nota
 	hasPending := map[int64]bool{}
 	for _, a := range agents {
@@ -476,8 +478,17 @@ func (t *Team) relinkReviews(projectID int64) error {
 			continue
 		}
 		// reviewer-ul a disparut: decide liderul
-		boss, hasBoss := decider(*task, agents)
+		boss, hasBoss := decider(*task, agents, autonomous)
 		task.ReviewStage = store.StageLead
+		if !hasBoss && autonomous {
+			// modul autonom si asignatul e radacina: Done automat
+			markDone(task)
+			if err := t.st.SaveTask(task); err != nil {
+				return err
+			}
+			t.autoAccepted(*task, autoAcceptText)
+			continue
+		}
 		if !hasBoss {
 			task.Status, task.ReviewStage = store.StatusBlocked, store.StageNone
 		}
@@ -710,6 +721,7 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	} else {
 		task.Status = store.StatusQueued
 		task.SendBacks = 0
+		task.Escalated = false // incercari noi: un nou blocaj ajunge iar la decident
 		text = "The user unblocked " + task.Ref() + "; the assignee resumes it with the latest feedback."
 	}
 	if err := t.st.SaveTask(&task); err != nil {
@@ -720,7 +732,7 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	} else {
 		t.taskEvent(task, "unblocked", actorUser, "You unblocked it")
 	}
-	if d, ok := decider(task, agents); ok {
+	if d, ok := decider(task, agents, t.autonomyOf(task.ProjectID)); ok {
 		t.note(task.ProjectID, d.ID, text, false)
 	}
 	t.emit(task.ProjectID, "task", task)

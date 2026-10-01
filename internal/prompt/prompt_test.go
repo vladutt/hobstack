@@ -199,3 +199,27 @@ func TestWorkerUnclearUsesAskUser(t *testing.T) {
 		t.Fatal("textul vechi a ramas")
 	}
 }
+
+// modul autonom: nicio mentiune a lui ask_user, in schimb fraza de autonomie
+func TestSystemAutonomy(t *testing.T) {
+	auto := proj
+	auto.Autonomy = true
+	a := store.Agent{Name: "A", Role: "Dev"}
+	const want = "Full autonomy is on: the user will not answer questions. Make reasonable decisions yourself and state your assumptions in your report."
+	for _, l := range []Links{{}, {IsLead: true}, {BossName: "Boss"}, {BossName: "Boss", IsLead: true}, {BossName: "Boss", IsReviewer: true}} {
+		got := System(auto, a, l)
+		if strings.Contains(got, "ask_user") || strings.Contains(got, "wait for the answer") {
+			t.Errorf("%+v: ask_user in modul autonom:\n%s", l, got)
+		}
+		if strings.Count(got, want) != 1 {
+			t.Errorf("%+v: lipseste fraza de autonomie:\n%s", l, got)
+		}
+		// modul normal ramane neschimbat
+		if normal := System(proj, a, l); strings.Contains(normal, want) || !strings.Contains(normal, "mcp__team__ask_user") {
+			t.Errorf("%+v: modul normal s-a schimbat:\n%s", l, normal)
+		}
+	}
+	if got := System(auto, a, Links{BossName: "Boss"}); !strings.Contains(got, "call mcp__team__report_done explaining it") {
+		t.Errorf("worker-ul autonom tot raporteaza problemele liderului:\n%s", got)
+	}
+}
