@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"foreman/internal/mcp"
 	"foreman/internal/prompt"
@@ -180,6 +181,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		t.emit(ar.projectID, "message", m)
 	}
 	t.recordDenials(ar, a, o.Denials)
+	t.recordChanges(ar, a, o)
 	if o.Status == store.RunFailed {
 		t.note(ar.projectID, a.ID, "Run failed: "+o.Error, true)
 	}
@@ -324,4 +326,50 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 	if recorded {
 		t.emit(ar.projectID, "access", map[string]any{"agentId": a.ID})
 	}
+}
+
+// recordChanges salveaza modificarile de fisiere si comenzile run-ului pe task
+// (pentru orice status). Caile devin relative la folderul agentului cand sunt in
+// el. Erorile se logheaza. Ruleaza sub t.work, deci nu ia lock-uri.
+func (t *Team) recordChanges(ar activeRun, a store.Agent, o runner.Outcome) {
+	if ar.taskID == 0 || (len(o.Changes) == 0 && len(o.Commands) == 0) {
+		return
+	}
+	task, err := t.st.GetTask(ar.taskID)
+	if err != nil {
+		log.Printf("agent %d: task changes: %v", a.ID, err)
+		return
+	}
+	p, err := t.st.GetProject(ar.projectID)
+	if err != nil {
+		log.Printf("agent %d: task changes: %v", a.ID, err)
+		return
+	}
+	home := store.HomeFolder(a, p.Folders).Path
+
+	now := time.Now()
+	var cs []store.TaskChange
+	for _, c := range o.Changes {
+		path := c.Path
+		if home != "" {
+			if rel, err := filepath.Rel(home, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				path = rel
+			}
+		}
+		var hunks []store.Hunk
+		for _, h := range c.Patch {
+			hunks = append(hunks, store.Hunk{OldStart: h.OldStart, OldLines: h.OldLines, NewStart: h.NewStart, NewLines: h.NewLines, Lines: h.Lines})
+		}
+		cs = append(cs, store.TaskChange{TaskID: task.ID, RunID: o.RunID, AgentID: &a.ID, AgentName: a.Name, At: now,
+			Kind: c.Kind, Tool: c.Tool, Path: path, Patch: hunks, Truncated: c.Truncated})
+	}
+	for _, cmd := range o.Commands {
+		cs = append(cs, store.TaskChange{TaskID: task.ID, RunID: o.RunID, AgentID: &a.ID, AgentName: a.Name, At: now,
+			Kind: "command", Tool: "Bash", Command: cmd})
+	}
+	if err := t.st.AddTaskChanges(cs); err != nil {
+		log.Printf("agent %d: task changes: %v", a.ID, err)
+		return
+	}
+	t.emit(ar.projectID, "task", task)
 }
