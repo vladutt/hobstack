@@ -423,16 +423,15 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .conv-working a { color: var(--teal); }
 
 /* eticheta de fisiere pe cardul task-ului */
-.task-files { font-size: 11px; color: var(--muted); margin-left: auto; }
-.task-who .task-files ~ .task-stage, .task-who .badge-stuck ~ .task-files, .task-who .badge-blocked ~ .task-files { margin-left: 8px; }
+.task-files { font-size: 11px; color: var(--muted); margin-left: 6px; }
 
 /* tab-ul Changes */
-.modal-section > .changes, .changes { display: grid; gap: 14px; min-width: 0; }
+.changes { display: grid; gap: 14px; min-width: 0; }
 .modal-section > [role="tabpanel"] { min-width: 0; }
 .change-group { display: grid; gap: 6px; min-width: 0; }
 .change-run { margin: 0; font-size: 12px; font-weight: 600; color: var(--soft); }
 .change { min-width: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--card-2); overflow: hidden; }
-.change-file { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 7px 10px; color: var(--text); font: 12px var(--mono); text-align: left; cursor: pointer; min-width: 0; }
+.change-file { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 7px 10px; color: var(--text); font: 12px var(--mono); text-align: left; cursor: pointer; min-width: 0; }
 .change-file:hover { background: var(--card); }
 .change-file:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
 .change-path { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -442,7 +441,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .change-body { border-top: 1px solid var(--line); padding: 8px 0 0; min-width: 0; }
 .change-body[hidden] { display: none; }
 .change-body > .hint { margin: 0 10px 8px; }
-.diff { font: 12px/1.5 var(--mono); white-space: pre; overflow-x: auto; background: var(--bg); padding: 4px 0; }
+.diff { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; font: 12px/1.5 var(--mono); white-space: pre; overflow-x: auto; background: var(--bg); padding: 4px 0; }
 .diff-line { white-space: pre; width: max-content; min-width: 100%; padding: 0 10px; }
 .diff-add { color: var(--green); background: rgba(111, 194, 125, .10); }
 .diff-del { color: var(--red); background: rgba(224, 115, 106, .10); }
@@ -451,4 +450,4 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .diff-hunk { color: var(--teal); background: rgba(108, 195, 180, .08); }
 .change-cmds h5 { margin: 0 0 4px; font-size: 12px; color: var(--soft); }
 .change-cmds ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.change-cmds li { font: 12px var(--mono); color: var(--soft); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; overflow-x: auto; white-space: pre; }
+.change-cmds li { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; font: 12px var(--mono); color: var(--soft); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; overflow-x: auto; white-space: pre; }

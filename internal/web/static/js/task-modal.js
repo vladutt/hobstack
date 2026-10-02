@@ -27,7 +27,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   let tab = null;         // "conversation" | "history" | "changes"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
-  let chgCount = null;    // filesChanged cu care s-a incarcat tab-ul Changes (null = neincarcat)
+  let chgSig = null;      // semnatura datelor Changes desenate (null = nedesenat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
   let topKey = null;      // idem pentru descriere + feedback
@@ -128,7 +128,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     actionsBox.replaceChildren();
     actionsKey = null;
     topKey = histKey = convKey = reportKey = null;
-    chgCount = null; // la urmatorul succes se redeseneaza tot
+    chgSig = null; // la urmatorul succes se redeseneaza tot
   }
 
   function render() {
@@ -195,26 +195,22 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     syncChanges();
   }
 
-  // filesChanged-ul task-ului din proiect (0 daca lipseste)
-  function filesChanged() {
-    const pt = (project.tasks || []).find((x) => x.id === taskId);
-    return pt?.filesChanged || 0;
-  }
-
-  // syncChanges: datele Changes se (re)incarca doar cand tab-ul e deschis si numarul de fisiere s-a schimbat
+  // syncChanges: cat timp tab-ul e deschis, la fiecare refresh se cere /changes; se redeseneaza doar daca s-a schimbat semnatura
   async function syncChanges() {
     if (tab !== "changes" || !data) return;
-    const n = filesChanged();
-    if (n === chgCount) return;
-    chgCount = n;
     const my = ++chgSeq;
     try {
       const res = await api(`/api/tasks/${taskId}/changes`);
       if (destroyed || my !== chgSeq) return;
+      const runs = res.runs || [];
+      const sig = JSON.stringify(runs.map((r) => [r.runId, r.commands.length,
+        r.files.map((f) => [f.path, f.kind, f.added, f.removed, f.truncated, f.hunks.length])]));
+      if (sig === chgSig) return;
+      chgSig = sig;
       changes.show(res);
     } catch (err) {
       if (destroyed || my !== chgSeq) return;
-      chgCount = null; // la urmatorul refresh se incearca din nou
+      chgSig = null; // la urmatorul refresh se incearca din nou
       changes.error(err.message);
     }
   }
