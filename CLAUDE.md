@@ -56,6 +56,9 @@ ascunde istoricul (agents.chat_from); mesajele vechi raman salvate, vizibile pri
 Gata (conversatia pe task, spec in docs/superpowers/specs/2026-10-01-foreman-task-conversation-design.md): task_events cu
 destinatar si text complet; tab-ul Conversation din modala arata brief-ul, rapoartele, feedback-ul, intrebarile si ce a
 spus fiecare agent in run-urile pe task.
+Gata (modificarile pe task, spec in docs/superpowers/specs/2026-10-02-foreman-task-changes-design.md): din stream-json
+(tool_use + tool_use_result.structuredPatch) se salveaza diff-urile Edit/Write si comenzile Bash per task (task_changes);
+eticheta "N files" pe card si tab-ul Changes in modala.
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.
