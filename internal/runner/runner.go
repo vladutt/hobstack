@@ -41,7 +41,9 @@ type Outcome struct {
 	Result    string // textul final al agentului
 	CostUSD   float64
 	Error     string
-	Denials   []Denial // actiuni refuzate de permisiuni
+	Denials   []Denial     // actiuni refuzate de permisiuni
+	Changes   []FileChange // fisiere modificate de agent, in ordinea rezultatelor
+	Commands  []string     // comenzile Bash rulate (si cele esuate)
 }
 
 // Run este o singura executie `claude -p`. Tine istoricul evenimentelor in

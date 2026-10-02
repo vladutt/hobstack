@@ -16,6 +16,10 @@ type tracker struct {
 	isError   bool
 	errText   string
 	denials   []Denial
+
+	pending  map[string]pendingCall // tool_use-uri fara rezultat inca, dupa id
+	changes  []FileChange
+	commands []string
 }
 
 // Denial e o actiune refuzata de permisiuni in run (din permission_denials).
@@ -67,6 +71,12 @@ func (t *tracker) observe(line []byte) {
 	if json.Unmarshal(line, &ev) != nil {
 		return
 	}
+	switch ev.Type {
+	case "assistant":
+		t.observeAssistant(line)
+	case "user":
+		t.observeUser(line)
+	}
 	if ev.SessionID != "" {
 		t.sessionID = ev.SessionID
 	}
@@ -98,7 +108,7 @@ func (t *tracker) observe(line []byte) {
 // outcome decide starea finala. Ordinea conteaza: oprirea manuala castiga,
 // apoi eroarea raportata de claude (ex. buget depasit), apoi codul de iesire.
 func (t *tracker) outcome(runID string, waitErr error, stopped bool) Outcome {
-	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Denials: t.denials}
+	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Denials: t.denials, Changes: t.changes, Commands: t.commands}
 	switch {
 	case stopped:
 		o.Status, o.Error = "stopped", "stopped"
