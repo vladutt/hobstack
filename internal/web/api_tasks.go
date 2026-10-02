@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"foreman/internal/store"
@@ -141,4 +142,88 @@ func buildConversation(events []store.TaskEvent, msgs []store.Message) []convIte
 		return out[i].Type == "event" && out[j].Type == "run"
 	})
 	return out
+}
+
+// fileChangeView: un fisier modificat de un agent intr-un run (modificarile aceluiasi fisier unite).
+type fileChangeView struct {
+	Path      string       `json:"path"`
+	Kind      string       `json:"kind"` // "create" daca prima modificare din run a creat fisierul, altfel "edit"
+	Added     int          `json:"added"`
+	Removed   int          `json:"removed"`
+	Truncated bool         `json:"truncated"`
+	Hunks     []store.Hunk `json:"hunks"`
+}
+
+// runChangesView: ce a facut un run pe un task.
+type runChangesView struct {
+	RunID    string           `json:"runId"`
+	Agent    string           `json:"agent"`
+	AgentID  *int64           `json:"agentId"`
+	At       time.Time        `json:"at"`
+	Files    []fileChangeView `json:"files"`
+	Commands []string         `json:"commands"`
+}
+
+// getTaskChanges intoarce modificarile task-ului grupate pe run (in ordinea primei aparitii).
+func (s *Server) getTaskChanges(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if _, err := s.st.GetTask(id); err != nil {
+		fail(w, err)
+		return
+	}
+	changes, err := s.st.ListTaskChanges(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": groupChanges(changes)})
+}
+
+// groupChanges grupeaza pe run_id si uneste modificarile aceluiasi fisier; mereu non-nil.
+func groupChanges(changes []store.TaskChange) []runChangesView {
+	runs := []runChangesView{}
+	runIdx := map[string]int{}
+	fileIdx := map[string]int{} // cheie: run + cale
+	for _, c := range changes {
+		i, ok := runIdx[c.RunID]
+		if !ok {
+			i = len(runs)
+			runIdx[c.RunID] = i
+			runs = append(runs, runChangesView{RunID: c.RunID, Agent: c.AgentName, AgentID: c.AgentID, At: c.At,
+				Files: []fileChangeView{}, Commands: []string{}})
+		}
+		run := &runs[i]
+		if c.Kind == "command" {
+			run.Commands = append(run.Commands, c.Command)
+			continue
+		}
+		key := c.RunID + "\x00" + c.Path
+		j, ok := fileIdx[key]
+		if !ok {
+			j = len(run.Files)
+			fileIdx[key] = j
+			kind := "edit"
+			if c.Kind == "create" {
+				kind = "create"
+			}
+			run.Files = append(run.Files, fileChangeView{Path: c.Path, Kind: kind, Hunks: []store.Hunk{}})
+		}
+		f := &run.Files[j]
+		f.Truncated = f.Truncated || c.Truncated
+		for _, h := range c.Patch {
+			f.Hunks = append(f.Hunks, h)
+			for _, l := range h.Lines {
+				if strings.HasPrefix(l, "+") {
+					f.Added++
+				} else if strings.HasPrefix(l, "-") {
+					f.Removed++
+				}
+			}
+		}
+	}
+	return runs
 }

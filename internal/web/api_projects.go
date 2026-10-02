@@ -188,10 +188,16 @@ type agentView struct {
 	CurrentTask *store.Task `json:"currentTask"`
 }
 
+// taskView: task-ul plus numarul de fisiere modificate de agenti pe el.
+type taskView struct {
+	store.Task
+	FilesChanged int `json:"filesChanged"`
+}
+
 type projectDetail struct {
 	projectCard
 	Agents []agentView   `json:"agents"`
-	Tasks  []store.Task  `json:"tasks"`
+	Tasks  []taskView    `json:"tasks"`
 	Stages []store.Stage `json:"stages"` // coloanele proprii (etape); gol = board-ul implicit
 	// UserDecides: task-urile din "La lider" pe care le decide utilizatorul (butoane in board)
 	UserDecides []int64 `json:"userDecides"`
@@ -305,7 +311,16 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: tasks, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access}
+	changed, err := s.st.CountChangedFiles(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	views := make([]taskView, len(tasks))
+	for i, t := range tasks {
+		views[i] = taskView{Task: t, FilesChanged: changed[t.ID]}
+	}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)

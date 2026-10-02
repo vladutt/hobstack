@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { el, avatar, clock, kindOf } from "./ui.js";
+import { changesView } from "./changes.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
 const STATUS = {
@@ -23,9 +24,12 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   let destroyed = false;
   let reportOpen = false; // "Show report" ramane desfasurat la refresh
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
-  let tab = null;         // "conversation" | "history"; null = inca nealeasa (se alege la primul raspuns)
+  let tab = null;         // "conversation" | "history" | "changes"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
+  let chgCount = null;    // filesChanged cu care s-a incarcat tab-ul Changes (null = neincarcat)
+  let chgSeq = 0;         // ca seq, pentru cererea Changes
+  const changes = changesView();
   let topKey = null;      // idem pentru descriere + feedback
   let reportKey = null;   // idem pentru raport
   const expanded = new Set(); // bulele cu "Show more" deschis (cheie: tip + at + from)
@@ -43,8 +47,10 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   const histPane = el("div", { id: `hist-${taskId}`, role: "tabpanel", hidden: true });
   const tabConv = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": convPane.id, onclick: () => setTab("conversation") }, "Conversation");
   const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "History");
+  const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
+  const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
-    el("div", { class: "modal-tabs", role: "tablist" }, tabConv, tabHist), convPane, histPane);
+    el("div", { class: "modal-tabs", role: "tablist" }, tabConv, tabHist, tabChg), convPane, histPane, chgPane);
   const reportBox = el("div", { class: "modal-top" });
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
   const actionsBox = el("div", { class: "modal-actions", hidden: true });
@@ -121,7 +127,8 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     actionsBox.hidden = true;
     actionsBox.replaceChildren();
     actionsKey = null;
-    topKey = histKey = convKey = reportKey = null; // la urmatorul succes se redeseneaza tot
+    topKey = histKey = convKey = reportKey = null;
+    chgCount = null; // la urmatorul succes se redeseneaza tot
   }
 
   function render() {
@@ -176,13 +183,40 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   }
 
   function applyTab() {
-    const conv = tab === "conversation";
-    tabConv.setAttribute("aria-selected", String(conv));
-    tabHist.setAttribute("aria-selected", String(!conv));
-    tabConv.tabIndex = conv ? 0 : -1;
-    tabHist.tabIndex = conv ? -1 : 0;
-    convPane.hidden = !conv;
-    histPane.hidden = conv;
+    const names = ["conversation", "history", "changes"];
+    const tabs = [tabConv, tabHist, tabChg];
+    const panes = [convPane, histPane, chgPane];
+    names.forEach((n, i) => {
+      const on = tab === n;
+      tabs[i].setAttribute("aria-selected", String(on));
+      tabs[i].tabIndex = on ? 0 : -1;
+      panes[i].hidden = !on;
+    });
+    syncChanges();
+  }
+
+  // filesChanged-ul task-ului din proiect (0 daca lipseste)
+  function filesChanged() {
+    const pt = (project.tasks || []).find((x) => x.id === taskId);
+    return pt?.filesChanged || 0;
+  }
+
+  // syncChanges: datele Changes se (re)incarca doar cand tab-ul e deschis si numarul de fisiere s-a schimbat
+  async function syncChanges() {
+    if (tab !== "changes" || !data) return;
+    const n = filesChanged();
+    if (n === chgCount) return;
+    chgCount = n;
+    const my = ++chgSeq;
+    try {
+      const res = await api(`/api/tasks/${taskId}/changes`);
+      if (destroyed || my !== chgSeq) return;
+      changes.show(res);
+    } catch (err) {
+      if (destroyed || my !== chgSeq) return;
+      chgCount = null; // la urmatorul refresh se incearca din nou
+      changes.error(err.message);
+    }
   }
 
   function renderHistory(events) {

@@ -640,6 +640,7 @@ export async function workspaceView(root, projectId, route) {
         waiting ? el("span", { class: "hint" }, "queued") : [who ? avatar(who.name, kindOf(who), 20) : null, who ? who.name : "?"],
         blocked ? el("span", { class: "badge-blocked" }, "Blocked") : null,
         stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null,
+        t.filesChanged > 0 ? el("span", { class: "task-files" }, `${t.filesChanged} ${t.filesChanged === 1 ? "file" : "files"}`) : null,
         stage ? el("span", { class: "task-stage" }, `with ${stage}`) : null));
   }
 
