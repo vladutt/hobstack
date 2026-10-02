@@ -27,7 +27,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   let tab = null;         // "conversation" | "history" | "changes"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
-  let chgSig = null;      // semnatura datelor Changes desenate (null = nedesenat)
+  let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
   let topKey = null;      // idem pentru descriere + feedback
@@ -128,7 +128,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     actionsBox.replaceChildren();
     actionsKey = null;
     topKey = histKey = convKey = reportKey = null;
-    chgSig = null; // la urmatorul succes se redeseneaza tot
+    chgCount = null; // la urmatorul succes se reincarca tot
   }
 
   function render() {
@@ -195,22 +195,21 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     syncChanges();
   }
 
-  // syncChanges: cat timp tab-ul e deschis, la fiecare refresh se cere /changes; se redeseneaza doar daca s-a schimbat semnatura
+  // syncChanges: cat timp tab-ul e deschis, /changes se cere doar cand changesCount (din GET /api/tasks/{id}) difera de cel incarcat
   async function syncChanges() {
     if (tab !== "changes" || !data) return;
+    const count = data.changesCount;
+    if (count === chgCount) return;
     const my = ++chgSeq;
     try {
       const res = await api(`/api/tasks/${taskId}/changes`);
       if (destroyed || my !== chgSeq) return;
-      const runs = res.runs || [];
-      const sig = JSON.stringify(runs.map((r) => [r.runId, r.commands.length,
-        r.files.map((f) => [f.path, f.kind, f.added, f.removed, f.truncated, f.hunks.length])]));
-      if (sig === chgSig) return;
-      chgSig = sig;
-      changes.show(res);
+      chgCount = count;
+      const hasSubtasks = (project.tasks || []).some((x) => x.parentTaskId === taskId);
+      changes.show(res, hasSubtasks);
     } catch (err) {
       if (destroyed || my !== chgSeq) return;
-      chgSig = null; // la urmatorul refresh se incearca din nou
+      chgCount = null; // la urmatorul refresh se incearca din nou
       changes.error(err.message);
     }
   }

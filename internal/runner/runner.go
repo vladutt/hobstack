@@ -33,6 +33,12 @@ type Spec struct {
 	Prompt string   // mesajul turei, doar pentru evenimentul de start
 }
 
+// Command e o comanda Bash rulata de agent; OK e fals cand rezultatul a fost is_error (esuata sau blocata).
+type Command struct {
+	Text string
+	OK   bool
+}
+
 // Outcome e rezultatul unui run terminat, extras din stream-json.
 type Outcome struct {
 	RunID     string
@@ -43,7 +49,7 @@ type Outcome struct {
 	Error     string
 	Denials   []Denial     // actiuni refuzate de permisiuni
 	Changes   []FileChange // fisiere modificate de agent, in ordinea rezultatelor
-	Commands  []string     // comenzile Bash rulate (si cele esuate)
+	Commands  []Command    // comenzile Bash rulate (si cele esuate)
 }
 
 // Run este o singura executie `claude -p`. Tine istoricul evenimentelor in

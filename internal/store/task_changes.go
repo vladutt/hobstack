@@ -29,6 +29,7 @@ type TaskChange struct {
 	Patch     []Hunk
 	Command   string
 	Truncated bool
+	OK        bool // doar pentru command: comanda a reusit
 }
 
 // AddTaskChanges salveaza toate modificarile intr-o singura tranzactie.
@@ -58,9 +59,9 @@ func (s *Store) AddTaskChanges(changes []TaskChange) error {
 		if c.AgentID != nil {
 			agent = sql.NullInt64{Int64: *c.AgentID, Valid: true}
 		}
-		if _, err := tx.Exec(`INSERT INTO task_changes (task_id, run_id, agent_id, agent_name, created_at, kind, tool, path, patch, command, truncated)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			c.TaskID, c.RunID, agent, c.AgentName, at.UTC().Format(time.RFC3339Nano), c.Kind, c.Tool, c.Path, patch, c.Command, c.Truncated); err != nil {
+		if _, err := tx.Exec(`INSERT INTO task_changes (task_id, run_id, agent_id, agent_name, created_at, kind, tool, path, patch, command, truncated, ok)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			c.TaskID, c.RunID, agent, c.AgentName, at.UTC().Format(time.RFC3339Nano), c.Kind, c.Tool, c.Path, patch, c.Command, c.Truncated, c.OK || c.Kind != "command"); err != nil {
 			return err
 		}
 	}
@@ -69,7 +70,7 @@ func (s *Store) AddTaskChanges(changes []TaskChange) error {
 
 // ListTaskChanges intoarce modificarile task-ului in ordinea inregistrarii; mereu non-nil.
 func (s *Store) ListTaskChanges(taskID int64) ([]TaskChange, error) {
-	rows, err := s.db.Query(`SELECT id, task_id, run_id, agent_id, agent_name, created_at, kind, tool, path, patch, command, truncated
+	rows, err := s.db.Query(`SELECT id, task_id, run_id, agent_id, agent_name, created_at, kind, tool, path, patch, command, truncated, ok
 		FROM task_changes WHERE task_id = ? ORDER BY id`, taskID)
 	if err != nil {
 		return nil, err
@@ -80,7 +81,7 @@ func (s *Store) ListTaskChanges(taskID int64) ([]TaskChange, error) {
 		var c TaskChange
 		var agent sql.NullInt64
 		var at, patch string
-		if err := rows.Scan(&c.ID, &c.TaskID, &c.RunID, &agent, &c.AgentName, &at, &c.Kind, &c.Tool, &c.Path, &patch, &c.Command, &c.Truncated); err != nil {
+		if err := rows.Scan(&c.ID, &c.TaskID, &c.RunID, &agent, &c.AgentName, &at, &c.Kind, &c.Tool, &c.Path, &patch, &c.Command, &c.Truncated, &c.OK); err != nil {
 			return nil, err
 		}
 		if agent.Valid {
@@ -118,4 +119,11 @@ func (s *Store) CountChangedFiles(projectID int64) (map[int64]int, error) {
 		out[id] = n
 	}
 	return out, rows.Err()
+}
+
+// CountTaskChanges intoarce numarul de randuri task_changes ale task-ului (ieftin, fara patch-uri).
+func (s *Store) CountTaskChanges(taskID int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM task_changes WHERE task_id = ?`, taskID).Scan(&n)
+	return n, err
 }

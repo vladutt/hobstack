@@ -133,9 +133,9 @@ func TestCommands(t *testing.T) {
 		use("b3", "Bash", `{"command":`+string(cmd)+`}`),
 		res("b3", "", ""),
 	)
-	if len(o.Commands) != 3 || o.Commands[0] != "ls" || o.Commands[1] != "false" ||
-		o.Commands[2] != long[:2000]+"..." || len(o.Changes) != 0 {
-		t.Fatalf("%q", o.Commands)
+	if len(o.Commands) != 3 || o.Commands[0] != (Command{"ls", true}) || o.Commands[1] != (Command{"false", false}) ||
+		o.Commands[2] != (Command{long[:2000] + "...", true}) || len(o.Changes) != 0 {
+		t.Fatalf("%+v", o.Commands)
 	}
 }
 

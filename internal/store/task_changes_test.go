@@ -22,20 +22,28 @@ func TestTaskChangesAddListCountCascade(t *testing.T) {
 		{TaskID: task.ID, RunID: "r1", AgentID: &w.ID, AgentName: "Rook", Kind: "edit", Tool: "Edit", Path: "a.go", Patch: hunks, Truncated: true},
 		{TaskID: task.ID, RunID: "r1", AgentID: &w.ID, AgentName: "Rook", Kind: "edit", Tool: "Edit", Path: "a.go"},
 		{TaskID: task.ID, RunID: "r1", AgentID: &w.ID, AgentName: "Rook", Kind: "create", Tool: "Write", Path: "b.go"},
-		{TaskID: task.ID, RunID: "r1", AgentID: &w.ID, AgentName: "Rook", Kind: "command", Tool: "Bash", Command: "go test"},
+		{TaskID: task.ID, RunID: "r1", AgentID: &w.ID, AgentName: "Rook", Kind: "command", Tool: "Bash", Command: "go test", OK: true},
+		{TaskID: task.ID, RunID: "r1", AgentID: &w.ID, AgentName: "Rook", Kind: "command", Tool: "Bash", Command: "false"},
 	}
 	if err := s.AddTaskChanges(in); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.ListTaskChanges(task.ID)
-	if err != nil || len(got) != 4 {
+	if err != nil || len(got) != 5 {
 		t.Fatalf("%+v %v", got, err)
 	}
 	if got[0].ID == 0 || got[0].At.IsZero() || !reflect.DeepEqual(got[0].Patch, hunks) || !got[0].Truncated || got[0].Path != "a.go" {
 		t.Fatalf("patch round-trip: %+v", got[0])
 	}
-	if got[3].Kind != "command" || got[3].Command != "go test" || got[3].Patch != nil {
+	if got[3].Kind != "command" || got[3].Command != "go test" || got[3].Patch != nil || !got[3].OK || got[4].OK || !got[0].OK {
 		t.Fatalf("comanda: %+v", got[3])
+	}
+
+	if n, err := s.CountTaskChanges(task.ID); err != nil || n != 5 {
+		t.Fatalf("CountTaskChanges = %d %v", n, err)
+	}
+	if n, err := s.CountTaskChanges(task.ID + 999); err != nil || n != 0 {
+		t.Fatalf("CountTaskChanges fara randuri = %d %v", n, err)
 	}
 
 	// alt proiect cu un task care are si el modificari: nu se amesteca

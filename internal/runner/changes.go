@@ -107,7 +107,7 @@ func (t *tracker) observeUser(line []byte) {
 				if r := []rune(cmd); len(r) > maxCommandLen {
 					cmd = string(r[:maxCommandLen]) + "..."
 				}
-				t.commands = append(t.commands, cmd)
+				t.commands = append(t.commands, Command{Text: cmd, OK: !failed})
 			}
 			continue
 		}

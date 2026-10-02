@@ -345,7 +345,17 @@ func (t *Team) recordChanges(ar activeRun, a store.Agent, o runner.Outcome) {
 		log.Printf("agent %d: task changes: %v", a.ID, err)
 		return
 	}
-	home := store.HomeFolder(a, p.Folders).Path
+	homeFolder := store.HomeFolder(a, p.Folders)
+	home := homeFolder.Path
+	// cu mai multe foldere, calea relativa primeste prefixul numelui folderului (altfel e ambigua)
+	prefix := ""
+	if len(p.Folders) > 1 {
+		prefix = homeFolder.Name
+		if prefix == "" {
+			prefix = store.FolderName(homeFolder.Path)
+		}
+		prefix += "/"
+	}
 
 	now := time.Now()
 	var cs []store.TaskChange
@@ -354,6 +364,9 @@ func (t *Team) recordChanges(ar activeRun, a store.Agent, o runner.Outcome) {
 		if home != "" {
 			if rel, err := filepath.Rel(home, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 				path = rel
+				if prefix != "" {
+					path = prefix + filepath.ToSlash(rel)
+				}
 			}
 		}
 		var hunks []store.Hunk
@@ -365,7 +378,7 @@ func (t *Team) recordChanges(ar activeRun, a store.Agent, o runner.Outcome) {
 	}
 	for _, cmd := range o.Commands {
 		cs = append(cs, store.TaskChange{TaskID: task.ID, RunID: o.RunID, AgentID: &a.ID, AgentName: a.Name, At: now,
-			Kind: "command", Tool: "Bash", Command: cmd})
+			Kind: "command", Tool: "Bash", Command: cmd.Text, OK: cmd.OK})
 	}
 	if err := t.st.AddTaskChanges(cs); err != nil {
 		log.Printf("agent %d: task changes: %v", a.ID, err)

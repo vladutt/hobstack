@@ -25,7 +25,7 @@ func TestRunChangesSavedRelative(t *testing.T) {
 			{Tool: "Edit", Path: filepath.Join(dir, "internal", "a.go"), Kind: "edit", Patch: hunk("-c", "+d"), Truncated: true},
 			{Tool: "Write", Path: outside, Kind: "create"},
 		},
-		Commands: []string{"go test ./..."},
+		Commands: []runner.Command{{Text: "go test ./...", OK: false}},
 	})
 	cs, err := f.st.ListTaskChanges(task.ID)
 	if err != nil || len(cs) != 4 {
@@ -42,7 +42,7 @@ func TestRunChangesSavedRelative(t *testing.T) {
 	if cs[2].Path != outside || cs[2].Kind != "create" {
 		t.Fatalf("calea din afara folderului ramane absoluta: %+v", cs[2])
 	}
-	if cs[3].Kind != "command" || cs[3].Tool != "Bash" || cs[3].Path != "" || cs[3].Command != "go test ./..." {
+	if cs[3].Kind != "command" || cs[3].Tool != "Bash" || cs[3].Path != "" || cs[3].Command != "go test ./..." || cs[3].OK {
 		t.Fatalf("%+v", cs[3])
 	}
 }
@@ -70,5 +70,18 @@ func TestRunWithoutTaskSavesNothing(t *testing.T) {
 	counts, _ := f.st.CountChangedFiles(f.p.ID)
 	if len(counts) != 0 {
 		t.Fatalf("%v", counts)
+	}
+}
+
+func TestRunChangesPrefixedWithFolderNameWhenMultiFolder(t *testing.T) {
+	f := setup(t)
+	_, landing := withFolders(t, f)
+	task := f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunDone,
+		Changes: []runner.FileChange{{Tool: "Write", Path: filepath.Join(landing.Path, "src", "package.json"), Kind: "create"}}})
+	cs, _ := f.st.ListTaskChanges(task.ID)
+	if len(cs) != 1 || cs[0].Path != "Landing/src/package.json" {
+		t.Fatalf("%+v", cs)
 	}
 }

@@ -19,7 +19,7 @@ type tracker struct {
 
 	pending  map[string]pendingCall // tool_use-uri fara rezultat inca, dupa id
 	changes  []FileChange
-	commands []string
+	commands []Command
 }
 
 // Denial e o actiune refuzata de permisiuni in run (din permission_denials).

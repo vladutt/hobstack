@@ -450,4 +450,6 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .diff-hunk { color: var(--teal); background: rgba(108, 195, 180, .08); }
 .change-cmds h5 { margin: 0 0 4px; font-size: 12px; color: var(--soft); }
 .change-cmds ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.change-cmds li { font: 12px var(--mono); color: var(--soft); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; overflow-x: auto; white-space: pre; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+.change-cmds li { display: flex; align-items: baseline; gap: 8px; font: 12px var(--mono); color: var(--soft); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; overflow-x: auto; white-space: pre; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+.cmd-text { flex: 1; min-width: 0; }
+.cmd-failed { flex: none; font: 600 10px var(--sans); color: var(--red); border: 1px solid var(--red); border-radius: 6px; padding: 0 5px; }

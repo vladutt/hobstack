@@ -73,6 +73,11 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	changesCount, err := s.st.CountTaskChanges(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	runMsgs, err := s.st.ListTaskRunMessages(id)
 	if err != nil {
 		fail(w, err)
@@ -92,6 +97,8 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"task": task, "events": slim, "assignee": assignee, "stage": stage,
 		"conversation": conv, "working": working, "workingAgentId": workingID,
+		"changesCount": changesCount, // fingerprint ieftin pentru tab-ul Changes
+
 	})
 }
 
@@ -154,6 +161,12 @@ type fileChangeView struct {
 	Hunks     []store.Hunk `json:"hunks"`
 }
 
+// commandView: o comanda Bash a run-ului si daca a reusit.
+type commandView struct {
+	Text string `json:"text"`
+	OK   bool   `json:"ok"`
+}
+
 // runChangesView: ce a facut un run pe un task.
 type runChangesView struct {
 	RunID    string           `json:"runId"`
@@ -161,7 +174,7 @@ type runChangesView struct {
 	AgentID  *int64           `json:"agentId"`
 	At       time.Time        `json:"at"`
 	Files    []fileChangeView `json:"files"`
-	Commands []string         `json:"commands"`
+	Commands []commandView    `json:"commands"`
 }
 
 // getTaskChanges intoarce modificarile task-ului grupate pe run (in ordinea primei aparitii).
@@ -194,11 +207,11 @@ func groupChanges(changes []store.TaskChange) []runChangesView {
 			i = len(runs)
 			runIdx[c.RunID] = i
 			runs = append(runs, runChangesView{RunID: c.RunID, Agent: c.AgentName, AgentID: c.AgentID, At: c.At,
-				Files: []fileChangeView{}, Commands: []string{}})
+				Files: []fileChangeView{}, Commands: []commandView{}})
 		}
 		run := &runs[i]
 		if c.Kind == "command" {
-			run.Commands = append(run.Commands, c.Command)
+			run.Commands = append(run.Commands, commandView{Text: c.Command, OK: c.OK})
 			continue
 		}
 		key := c.RunID + "\x00" + c.Path

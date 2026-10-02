@@ -21,7 +21,10 @@ type changesResp struct {
 			Truncated bool         `json:"truncated"`
 			Hunks     []store.Hunk `json:"hunks"`
 		} `json:"files"`
-		Commands []string `json:"commands"`
+		Commands []struct {
+			Text string `json:"text"`
+			OK   bool   `json:"ok"`
+		} `json:"commands"`
 	} `json:"runs"`
 }
 
@@ -53,6 +56,7 @@ func TestTaskChangesAPI(t *testing.T) {
 		{TaskID: task.ID, RunID: "r1", AgentID: &aid, AgentName: "Rook", Kind: "edit", Tool: "Edit", Path: "b.go", Patch: h("-a", "+b", " c")},
 		{TaskID: task.ID, RunID: "r1", AgentID: &aid, AgentName: "Rook", Kind: "edit", Tool: "Edit", Path: "a.go", Patch: h("-x", "+z"), Truncated: true},
 		{TaskID: task.ID, RunID: "r1", AgentID: &aid, AgentName: "Rook", Kind: "command", Tool: "Bash", Command: "go test ./..."},
+		{TaskID: task.ID, RunID: "r1", AgentID: &aid, AgentName: "Rook", Kind: "command", Tool: "Bash", Command: "ok-cmd", OK: true},
 		{TaskID: task.ID, RunID: "r2", AgentName: "Gone", Kind: "update", Tool: "Write", Path: "a.go", Patch: h("-q", "+w")},
 	}
 	if err := e.st.AddTaskChanges(in); err != nil {
@@ -74,7 +78,7 @@ func TestTaskChangesAPI(t *testing.T) {
 	if b.Path != "b.go" || b.Kind != "edit" || b.Added != 1 || b.Removed != 1 {
 		t.Fatalf("b.go: %+v", b)
 	}
-	if len(r1.Commands) != 1 || r1.Commands[0] != "go test ./..." {
+	if len(r1.Commands) != 2 || r1.Commands[0].Text != "go test ./..." || r1.Commands[0].OK || !r1.Commands[1].OK {
 		t.Fatalf("comenzi: %v", r1.Commands)
 	}
 	r2 := r.Runs[1]
@@ -83,6 +87,12 @@ func TestTaskChangesAPI(t *testing.T) {
 	}
 	if !contains(raw, `"commands":[]`) {
 		t.Fatalf("commands non-nil: %s", raw)
+	}
+
+	// GET /api/tasks/{id} poarta changesCount (randuri task_changes: 3 fisiere + 2 comenzi + 1 din r2)
+	_, raw = e.do(t, "GET", "/api/tasks/"+itoa(task.ID), nil)
+	if !contains(raw, `"changesCount":6`) {
+		t.Fatalf("changesCount: %s", raw)
 	}
 
 	// filesChanged: caile distincte (a.go, b.go)
