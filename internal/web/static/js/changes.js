@@ -78,10 +78,12 @@ export function changesView() {
     show(data, hasSubtasks) {
       const runs = data.runs || [];
       if (!runs.length) {
-        root.replaceChildren(
+        // replaceChildren nativ scrie null ca text: filtram
+        root.replaceChildren(...[
           el("p", { class: "hint" }, "No file changes recorded for this task."),
           el("p", { class: "hint" }, "Changes made through shell commands are not captured as diffs."),
-          hasSubtasks ? el("p", { class: "hint" }, "Changes made by subtasks are shown on each subtask.") : null);
+          hasSubtasks ? el("p", { class: "hint" }, "Changes made by subtasks are shown on each subtask.") : null,
+        ].filter(Boolean));
         return;
       }
       root.replaceChildren(...runs.map(runNode)); // putine grupuri; liniile de diff nu trec prin spread
