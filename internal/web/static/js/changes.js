@@ -1,4 +1,5 @@
 import { el, clock } from "./ui.js";
+import { statBadge } from "./md.js";
 
 // changesView: tab-ul "Changes" al unui task. Starea "diff deschis" (cheie: run + cale)
 // ramane intre reincarcari ale datelor.
@@ -32,6 +33,14 @@ export function changesView() {
     return d;
   }
 
+  // pathNode: folderul estompat, numele fisierului evidentiat
+  function pathNode(path) {
+    const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1;
+    return el("span", { class: "change-path" },
+      cut ? el("span", { class: "change-dir" }, path.slice(0, cut)) : null,
+      el("span", { class: "change-name" }, path.slice(cut)));
+  }
+
   function fileNode(run, f) {
     const key = `${run.runId}|${f.path}`;
     const trunc = f.truncated ? el("p", { class: "hint" }, "Truncated: the change was too large to keep in full.") : null;
@@ -45,10 +54,8 @@ export function changesView() {
     }
     if (open.has(key)) ensureDiff();
     const btn = el("button", { type: "button", class: "change-file", "aria-expanded": String(open.has(key)) },
-      el("span", { class: "change-path" }, f.path),
-      f.kind === "create" ? el("span", { class: "change-new" }, "new") : null,
-      el("span", { class: "change-add" }, `+${f.added}`),
-      el("span", { class: "change-del" }, `−${f.removed}`));
+      pathNode(f.path),
+      statBadge(f));
     btn.addEventListener("click", () => {
       if (open.has(key)) open.delete(key); else open.add(key);
       if (open.has(key)) ensureDiff();
@@ -62,7 +69,10 @@ export function changesView() {
     const n = run.files.length;
     const parts = [run.agent || "?", clock(run.at)];
     if (n) parts.push(`${n} ${n === 1 ? "file" : "files"}`);
-    const nodes = [el("h4", { class: "change-run" }, parts.join(" · ")), ...run.files.map((f) => fileNode(run, f))];
+    let added = 0, removed = 0;
+    for (const f of run.files) { added += f.added; removed += f.removed; }
+    const nodes = [el("h4", { class: "change-run" }, parts.join(" · "), n ? statBadge({ added, removed }) : null),
+      ...run.files.map((f) => fileNode(run, f))];
     if (run.commands.length) {
       nodes.push(el("div", { class: "change-cmds" },
         el("h5", {}, "Commands run"),

@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { el, avatar, clock, kindOf } from "./ui.js";
 import { changesView } from "./changes.js";
+import { renderMarkdown, changeStats, statBadge } from "./md.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
 const STATUS = {
@@ -30,6 +31,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
+  let stats = new Map();  // cale -> { added, removed, kind }: badge-urile din raport si conversatie
   let topKey = null;      // idem pentru descriere + feedback
   let reportKey = null;   // idem pentru raport
   const expanded = new Set(); // bulele cu "Show more" deschis (cheie: tip + at + from)
@@ -159,9 +161,9 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
       topBox.replaceChildren(...[
         el("section", { class: "modal-section" },
           el("h3", {}, "Description"),
-          t.description ? el("div", { class: "modal-text" }, t.description) : el("p", { class: "hint" }, "No description.")),
+          t.description ? el("div", { class: "modal-text" }, renderMarkdown(t.description)) : el("p", { class: "hint" }, "No description.")),
         t.feedback ? el("section", { class: "modal-section" },
-          el("h3", {}, "Feedback"), el("div", { class: "modal-text" }, t.feedback)) : null,
+          el("h3", {}, "Feedback"), el("div", { class: "modal-text" }, renderMarkdown(t.feedback))) : null,
       ].filter(Boolean));
     }
     tabsSection.hidden = false;
@@ -169,12 +171,15 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     renderHistory(data.events || []);
     renderConversation();
     applyTab();
-    const repNow = t.result || "";
-    if (repNow !== reportKey) {
-      reportKey = repNow;
-      reportBox.replaceChildren(...(t.result ? [reportNode(t.result)] : []));
-    }
+    renderReport();
     renderActions(t, stuck);
+  }
+
+  function renderReport() {
+    const result = data.task.result || "";
+    if (result === reportKey) return;
+    reportKey = result;
+    reportBox.replaceChildren(...(result ? [reportNode(result)] : []));
   }
 
   function setTab(name) {
@@ -195,16 +200,22 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     syncChanges();
   }
 
-  // syncChanges: cat timp tab-ul e deschis, /changes se cere doar cand changesCount (din GET /api/tasks/{id}) difera de cel incarcat
+  // syncChanges: /changes se cere doar cand changesCount (din GET /api/tasks/{id}) difera de cel incarcat;
+  // si cu alt tab deschis, cand exista modificari (raportul si conversatia arata +N −M langa fisiere)
   async function syncChanges() {
-    if (tab !== "changes" || !data) return;
+    if (!data) return;
     const count = data.changesCount;
+    if (tab !== "changes" && !count) return;
     if (count === chgCount) return;
     const my = ++chgSeq;
     try {
       const res = await api(`/api/tasks/${taskId}/changes`);
       if (destroyed || my !== chgSeq) return;
       chgCount = count;
+      stats = changeStats(res);
+      convKey = reportKey = null; // se redeseneaza cu badge-urile noi
+      renderConversation();
+      renderReport();
       const hasSubtasks = (project.tasks || []).some((x) => x.parentTaskId === taskId);
       changes.show(res, hasSubtasks);
     } catch (err) {
@@ -251,7 +262,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     const more = long ? el("button", { type: "button", class: "btn small conv-more" }) : null;
     const paint = () => {
       const open = expanded.has(key);
-      text.textContent = long && !open ? it.text.slice(0, LONG_TEXT).trimEnd() + "…" : it.text;
+      text.replaceChildren(renderMarkdown(long && !open ? it.text.slice(0, LONG_TEXT).trimEnd() + "…" : it.text, stats));
       if (more) {
         more.textContent = open ? "Show less" : "Show more";
         more.setAttribute("aria-expanded", String(open));
@@ -276,9 +287,9 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
       text, more);
   }
 
-  // reportNode: raportul AI, ascuns implicit
+  // reportNode: raportul AI, ascuns implicit; langa buton, rezumatul fisierelor modificate
   function reportNode(result) {
-    const text = el("pre", { class: "modal-report", hidden: !reportOpen }, result);
+    const text = el("div", { class: "modal-report", hidden: !reportOpen }, renderMarkdown(result, stats));
     const btn = el("button", {
       type: "button", class: "btn small", "aria-expanded": String(reportOpen),
       onclick: () => {
@@ -288,7 +299,17 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
         btn.setAttribute("aria-expanded", String(reportOpen));
       },
     }, reportOpen ? "Hide report" : "Show report");
-    return el("section", { class: "modal-section" }, el("div", {}, btn), text);
+    return el("section", { class: "modal-section" }, el("div", { class: "report-head" }, btn, filesSummary()), text);
+  }
+
+  // filesSummary: "2 files changed +3 −1"; click deschide tab-ul Changes
+  function filesSummary() {
+    if (!stats.size) return null;
+    let added = 0, removed = 0;
+    for (const s of stats.values()) { added += s.added; removed += s.removed; }
+    const n = stats.size;
+    return el("button", { type: "button", class: "report-files", title: "Open the Changes tab", onclick: () => { setTab("changes"); tabsSection.scrollIntoView({ block: "nearest" }); } },
+      `${n} ${n === 1 ? "file" : "files"} changed`, statBadge({ added, removed }));
   }
 
   // rootName: numele radacinii agentului (urcand pe parentId); garda contra ciclurilor

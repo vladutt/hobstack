@@ -1,0 +1,165 @@
+import { el } from "./ui.js";
+
+// Markdown minimal pentru textele scrise de agenti (rapoarte, mesaje).
+// Stie: paragrafe, liste (- * 1.), titluri (#), blocuri ``` si linii de diff (+/-),
+// iar in linie: `cod` si **bold**. Totul se construieste cu el(), deci textul
+// ramane text: un agent nu poate injecta HTML.
+//
+// stats (optional): Map cale -> { added, removed, kind } din tab-ul Changes;
+// un `cod` care numeste un fisier modificat primeste langa el +N −M.
+
+// fileStat: cauta fisierul numit intr-un `cod` (ex. "lang/ro/catalog.php" sau
+// "views/x.blade.php:19"); caile din Changes sunt relative la folderul agentului
+// (sau absolute), deci acceptam si potrivire pe sufix.
+function fileStat(code, stats) {
+  if (!stats || !stats.size) return null;
+  const name = code.trim().replace(/:\d+(-\d+)?$/, "").replace(/^\.\//, "");
+  if (!name || /\s/.test(name)) return null;
+  if (stats.has(name)) return stats.get(name);
+  for (const [path, s] of stats) {
+    if (path.endsWith("/" + name) || name.endsWith("/" + path)) return s;
+  }
+  return null;
+}
+
+// statBadge: "+3 −1" (si "new" pentru fisierele create)
+export function statBadge(s) {
+  return el("span", { class: "md-stat" },
+    s.kind === "create" ? el("span", { class: "change-new" }, "new") : null,
+    el("span", { class: s.added ? "change-add" : "change-add zero" }, `+${s.added}`),
+    el("span", { class: s.removed ? "change-del" : "change-del zero" }, `−${s.removed}`));
+}
+
+// plain: text simplu; caile de fisiere modificate scrise fara `` primesc si ele +N −M
+function plain(text, stats) {
+  if (!stats || !stats.size) return [text];
+  const out = [];
+  const re = /[\w.\-/\\]+\.\w+(:\d+)?/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    const s = fileStat(m[0], stats);
+    if (!s) continue;
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(el("span", { class: "md-file" }, el("span", { class: "md-path" }, m[0]), statBadge(s)));
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+// inline: `cod` si **bold**; restul ramane text
+function inline(text, stats) {
+  const out = [];
+  const re = /`([^`]+)`|\*\*([^*]+)\*\*/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(...plain(text.slice(last, m.index), stats));
+    if (m[1] != null) {
+      const s = fileStat(m[1], stats);
+      out.push(s ? el("span", { class: "md-file" }, el("code", {}, m[1]), statBadge(s)) : el("code", {}, m[1]));
+    } else {
+      out.push(el("strong", {}, ...inline(m[2], stats)));
+    }
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(...plain(text.slice(last), stats));
+  return out;
+}
+
+// paragraf: liniile simple raman pe randuri separate (agentii scriu des asa)
+function para(lines, stats) {
+  const kids = [];
+  lines.forEach((l, i) => {
+    if (i) kids.push(el("br"));
+    kids.push(...inline(l, stats));
+  });
+  return el("p", {}, kids);
+}
+
+function diffLine(l) {
+  const cls = l[0] === "+" ? "diff-add" : l[0] === "-" ? "diff-del" : "diff-ctx";
+  return el("div", { class: `diff-line ${cls}` }, l);
+}
+
+const LIST = /^\s*([-*]|\d+[.)])\s+(.*)$/;
+const DIFF = /^[+-](\s|$)/;
+
+// renderMarkdown intoarce un <div class="md"> cu textul formatat.
+export function renderMarkdown(text, stats) {
+  const root = el("div", { class: "md" });
+  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+
+    // bloc ``` ... ```
+    if (/^\s*```/.test(line)) {
+      const body = [];
+      i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i++]);
+      i++; // ``` de inchidere (sau sfarsitul textului)
+      const diffy = body.some((l) => DIFF.test(l));
+      root.append(el("pre", { class: diffy ? "md-pre diff" : "md-pre" }, diffy ? body.map(diffLine) : body.join("\n")));
+      continue;
+    }
+
+    // linii de diff lipite in text: un sir de linii "+ "/"- " in care apare macar un "+"
+    // (altfel e o lista obisnuita cu "-")
+    if (DIFF.test(line)) {
+      let j = i;
+      while (j < lines.length && DIFF.test(lines[j])) j++;
+      const body = lines.slice(i, j);
+      if (body.some((l) => l[0] === "+")) {
+        root.append(el("div", { class: "md-pre diff" }, body.map(diffLine)));
+        i = j;
+        continue;
+      }
+    }
+
+    const h = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (h) {
+      root.append(el("p", { class: "md-h" }, inline(h[2], stats)));
+      i++;
+      continue;
+    }
+
+    if (LIST.test(line)) {
+      const ordered = /^\s*\d/.test(line);
+      const start = ordered ? parseInt(line, 10) : null; // "2." ramane 2, nu devine 1
+      const items = [];
+      while (i < lines.length && lines[i].trim()) {
+        const m = LIST.exec(lines[i]);
+        if (m && (/^\d/.test(m[1]) === ordered)) items.push([m[2]]);
+        else if (m) break; // alt tip de lista: incepe un bloc nou
+        else if (items.length) items[items.length - 1].push(lines[i].trim()); // continuarea elementului
+        i++;
+      }
+      root.append(el(ordered ? "ol" : "ul", { start: start > 1 ? start : null }, items.map((it) => el("li", {}, para(it, stats)))));
+      continue;
+    }
+
+    const body = [];
+    while (i < lines.length && lines[i].trim() && !LIST.test(lines[i]) && !/^\s*```/.test(lines[i])
+      && !/^#{1,6}\s/.test(lines[i]) && !DIFF.test(lines[i])) body.push(lines[i++]);
+    if (!body.length) body.push(lines[i++]); // linie "+ x" fara pereche: ramane text
+    root.append(para(body, stats));
+  }
+  return root;
+}
+
+// changeStats: Map cale -> { added, removed, kind } din raspunsul /changes
+// (acelasi fisier din mai multe run-uri se aduna).
+export function changeStats(data) {
+  const stats = new Map();
+  for (const run of data?.runs || []) {
+    for (const f of run.files || []) {
+      const s = stats.get(f.path) || { added: 0, removed: 0, kind: f.kind };
+      s.added += f.added;
+      s.removed += f.removed;
+      if (f.kind === "create") s.kind = "create";
+      stats.set(f.path, s);
+    }
+  }
+  return stats;
+}
