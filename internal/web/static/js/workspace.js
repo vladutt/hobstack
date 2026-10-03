@@ -4,6 +4,7 @@ import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
+import { recurringPanel } from "./recurring.js";
 import { questionBox } from "./questions.js";
 import { stuckBox, refreshStuckAges } from "./stuck.js";
 import { accessBox } from "./access.js";
@@ -105,10 +106,11 @@ export async function workspaceView(root, projectId, route) {
   const strip = el("div", { class: "team-strip", "aria-label": "Team" });
   const board = el("div", { class: "board" });
   const count = el("span", { class: "hint" });
-  const boardTools = el("div", { class: "actions" }); // Coloane, + Task
+  const boardTools = el("div", { class: "actions" }); // + Task, Recurring, Coloane
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
   const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter by folder" });
-  let boardPanel = null; // "stages" | "task" | null
+  let boardPanel = null; // "stages" | "task" | "recurring" | null
+  let recurring = null; // panoul Recurring cand e deschis ({ el, update })
   const boardHint = el("p", { class: "hint board-hint" }, "Every project is different: set up your own columns (work stages) with the Columns button.");
   const filesList = el("div", { class: "files-list" });
   const projectPicker = el("input", { type: "file", multiple: true, hidden: true });
@@ -494,7 +496,7 @@ export async function workspaceView(root, projectId, route) {
       type: "button", class: "btn small" + (boardPanel === id ? " active" : ""),
       "aria-pressed": String(boardPanel === id), onclick,
     }, label);
-    boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("stages", "Columns", toggleStages));
+    boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("recurring", "Recurring", toggleRecurring), toggle("stages", "Columns", toggleStages));
     if (!stages.length) {
       board.className = "board";
       board.replaceChildren(...COLUMNS.map((c) => column(c.title, tasks.filter((t) => c.statuses.includes(t.status)), byId)));
@@ -524,9 +526,10 @@ export async function workspaceView(root, projectId, route) {
       items.map((t) => taskCard(t, byId.get(t.assigneeId), byId)));
   }
 
-  // boardPanel: ce e deschis deasupra board-ului: null, "stages" sau "task"
+  // boardPanel: ce e deschis deasupra board-ului: null, "stages", "task" sau "recurring"
   function showPanel(id, node) {
     boardPanel = node ? id : null;
+    if (boardPanel !== "recurring") recurring = null;
     editorSlot.replaceChildren(...(node ? [node] : []));
     renderBoard(); // starea butoanelor
   }
@@ -539,6 +542,12 @@ export async function workspaceView(root, projectId, route) {
       onSaved: async () => { closePanel(); await reload(); },
       onClose: closePanel,
     }));
+  }
+
+  function toggleRecurring() {
+    if (boardPanel === "recurring") return closePanel();
+    recurring = recurringPanel({ projectId, project: state.project, assignable, onClose: closePanel, onChanged: reload });
+    showPanel("recurring", recurring.el);
   }
 
   // agentii care pot lua un task: legati; intr-o etapa, doar cei din etapa
@@ -634,7 +643,9 @@ export async function workspaceView(root, projectId, route) {
       type: "button", class: "task", "data-task-id": t.id,
       onclick: () => { location.hash = `#/p/${projectId}/tasks/${t.id}`; },
     },
-      el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)), t.title),
+      el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)),
+        t.recurringId ? el("span", { class: "task-recurring", title: "From a recurring task", "aria-label": "From a recurring task" }, "\u21bb") : null,
+        t.title),
       t.description ? el("span", { class: "task-desc" }, t.description) : null,
       el("span", { class: "task-who" },
         waiting ? el("span", { class: "hint" }, "queued") : [who ? avatar(who.name, kindOf(who), 20) : null, who ? who.name : "?"],
@@ -656,6 +667,13 @@ export async function workspaceView(root, projectId, route) {
         onClose: () => { location.hash = `#/p/${projectId}/tasks`; },
         actions: {
           taskAction, decide, assign, assignable,
+          // inchide modala (prin adresa) si deschide panoul Recurring
+          openRecurring: () => {
+            if (boardPanel !== "recurring") toggleRecurring();
+            // dupa ce modala se inchide (focusul revine pe card), mutam focusul pe panou
+            window.addEventListener("hashchange", () => recurring?.el.querySelector("button")?.focus(), { once: true });
+            location.hash = `#/p/${projectId}/tasks`;
+          },
           waitingOn: (t) => {
             const byId = new Map(state.project.agents.map((a) => [a.id, a]));
             return stageName(t, byId.get(t.assigneeId), byId);
@@ -1011,6 +1029,7 @@ export async function workspaceView(root, projectId, route) {
     if (gone()) return;
     if (!selectedAgent()) { state.selected = firstRootId(); syncHash(); } // agent sters
     renderAll();
+    if (boardPanel === "recurring") recurring?.update(state.project); // formularul deschis nu se redeseneaza
     modal?.refresh(state.project); // modala deschisa isi reincarca task-ul
     syncLive();
   }

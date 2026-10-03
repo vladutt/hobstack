@@ -16,7 +16,8 @@ const LONG_TEXT = 600;
 // - onClose(): cerut la Esc / click pe fundal / x (apelantul schimba adresa si cheama destroy).
 // - actions: functiile din workspace, ca sa nu dublam cererile:
 //   taskAction(t, "accept"|"unblock"|"nudge"), decide(t, action, feedback), assign(t, agentId),
-//   assignable(stageId) -> agenti, waitingOn(t) -> numele la care asteapta un task din review.
+//   assignable(stageId) -> agenti, waitingOn(t) -> numele la care asteapta un task din review,
+//   openRecurring() -> inchide modala si deschide panoul Recurring.
 //   Actiunile intorc true daca au reusit.
 // Intoarce { el, taskId, refresh(project), destroy() }.
 export function taskModal({ projectId, taskId, project, onClose, actions }) {
@@ -145,6 +146,8 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
       el("h2", { id: titleId, class: "modal-title" }, el("span", { class: "task-id" }, `T-${t.number}`), "· ", t.title),
       el("div", { class: "modal-meta" },
         el("span", { class: `pill pill-task-${t.status}` }, STATUS[t.status] || t.status),
+        data.recurring ? el("button", { type: "button", class: "link-btn", onclick: () => actions.openRecurring() },
+          `From recurring: ${data.recurring.title}`) : null,
         queuedInStage ? el("span", { class: "hint" }, data.stage ? `queued in stage ${data.stage}` : "queued in stage") : null,
         who ? el("span", { class: "modal-who" }, avatar(who, kindOf(agent), 20), who) : null,
         data.stage && !queuedInStage ? el("span", { class: "hint" }, `Stage: ${data.stage}`) : null,

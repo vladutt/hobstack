@@ -62,11 +62,15 @@ eticheta "N files" pe card si tab-ul Changes in modala.
 Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.
+Gata (sarcini recurente, spec in docs/superpowers/specs/2026-10-03-foreman-recurring-tasks-design.md): sarcini per
+proiect care creeaza task-uri pe un program (la N ore, zilnic, saptamanal; ora locala), pe ticker-ul din team.Run si o data
+la pornire (o singura rulare pentru cele ratate); sarite cat timp aparitia precedenta e deschisa; auto-accept optional.
+Pachet: internal/schedule.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"
 4. Runs & logs, Settings
-Dupa: cron-uri, service install, goreleaser, notificari, git worktrees.
+Dupa: service install, goreleaser, notificari, git worktrees.
 
 ## Conventii
 - `go vet ./...` si `go build -race` trebuie sa treaca.
