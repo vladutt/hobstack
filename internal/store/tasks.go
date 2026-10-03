@@ -46,12 +46,15 @@ type Task struct {
 	// NudgedAt: cand l-a impins ultima data detectorul de task-uri blocate;
 	// nil = neimpins de la ultima schimbare de stare.
 	NudgedAt *time.Time `json:"nudgedAt"`
+
+	RecurringID *int64 `json:"recurringId"` // sarcina recurenta care l-a creat; nil = creat altfel sau sarcina stearsa
+	AutoAccept  bool   `json:"autoAccept"`  // la final trece singur in Done, in loc sa astepte utilizatorul
 }
 
 // Ref e forma afisata a task-ului: T-3.
 func (t Task) Ref() string { return fmt.Sprintf("T-%d", t.Number) }
 
-const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at, escalated`
+const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at, escalated, recurring_id, auto_accept`
 
 func scanTask(sc scanner) (Task, error) {
 	var t Task
@@ -59,7 +62,8 @@ func scanTask(sc scanner) (Task, error) {
 	var nudged sql.NullString
 	err := sc.Scan(&t.ID, &t.ProjectID, &t.Number, &t.Title, &t.Description, &t.AssigneeID,
 		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated,
-		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser, &nudged, &t.Escalated)
+		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser, &nudged, &t.Escalated,
+		&t.RecurringID, &t.AutoAccept)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
 	}
@@ -88,9 +92,9 @@ func (s *Store) CreateTask(t *Task) error {
 	ts := now()
 	t.Status = StatusQueued
 	t.ReviewStage = StageNone
-	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, creator_id, parent_task_id, stage_id, by_user, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status,
-		nullPtr(t.CreatorID), nullPtr(t.ParentTaskID), nullPtr(t.StageID), t.ByUser, ts, ts)
+	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, creator_id, parent_task_id, stage_id, by_user, recurring_id, auto_accept, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status,
+		nullPtr(t.CreatorID), nullPtr(t.ParentTaskID), nullPtr(t.StageID), t.ByUser, nullPtr(t.RecurringID), t.AutoAccept, ts, ts)
 	if err != nil {
 		return err
 	}
