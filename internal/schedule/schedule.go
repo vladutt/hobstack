@@ -67,7 +67,12 @@ func (s Spec) Next(after time.Time) time.Time {
 	loc := after.Location()
 	if s.Kind == KindEveryHours {
 		n := after.Add(time.Duration(s.EveryHours) * time.Hour)
-		return time.Date(n.Year(), n.Month(), n.Day(), n.Hour(), 0, 0, 0, loc) // aliniat la ora fixa
+		r := time.Date(n.Year(), n.Month(), n.Day(), n.Hour(), 0, 0, 0, loc) // aliniat la ora fixa
+		// la trecerea la ora de iarna ora se repeta: ramanem strict dupa after
+		for !r.After(after) {
+			r = r.Add(time.Hour)
+		}
+		return r
 	}
 	h, m, _ := parseAt(s.At)
 	y, mo, d := after.Date()

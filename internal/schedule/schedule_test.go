@@ -61,6 +61,20 @@ func TestNextDaylightSaving(t *testing.T) {
 	}
 }
 
+// 25 octombrie 2026: in Romania ora 04:00 EEST sare inapoi la 03:00 EET
+func TestNextFallBack(t *testing.T) {
+	loc := bucharest(t)
+	// 2026-10-25 00:30 UTC = 03:30 EEST (first occurrence)
+	after := time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC).In(loc)
+	got := Spec{Kind: KindEveryHours, EveryHours: 1}.Next(after)
+	if !got.After(after) {
+		t.Fatalf("got %v, trebuia dupa after %v", got, after)
+	}
+	if diff := got.Sub(after); diff > time.Hour {
+		t.Fatalf("diferenta prea mare: %v", diff)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	ok := []Spec{
 		{Kind: KindEveryHours, EveryHours: 1}, {Kind: KindEveryHours, EveryHours: 24},
