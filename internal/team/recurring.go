@@ -27,7 +27,9 @@ type RecurringInput struct {
 
 // checkRecurring valideaza programul si asignatul (ca la un task nou din board).
 // Intoarce asignatul ca pointer (nil = prima etapa). Se cheama cu t.work tinut.
-func (t *Team) checkRecurring(projectID int64, in RecurringInput) (*int64, error) {
+// checkWho=false (sarcina oprita): programul se valideaza mereu, dar asignatul
+// doar trebuie sa fie din acest proiect, ca sa se poata opri o sarcina stricata.
+func (t *Team) checkRecurring(projectID int64, in RecurringInput, checkWho bool) (*int64, error) {
 	if err := in.Schedule.Validate(); err != nil {
 		return nil, RecurringError(err.Error())
 	}
@@ -36,7 +38,7 @@ func (t *Team) checkRecurring(projectID int64, in RecurringInput) (*int64, error
 		return nil, err
 	}
 	if in.AssigneeID == 0 {
-		if len(stages) == 0 {
+		if len(stages) == 0 && checkWho {
 			return nil, RecurringError("choose the agent who does the task")
 		}
 		return nil, nil
@@ -44,6 +46,13 @@ func (t *Team) checkRecurring(projectID int64, in RecurringInput) (*int64, error
 	agents, err := t.st.ListAgents(projectID)
 	if err != nil {
 		return nil, err
+	}
+	if !checkWho {
+		if _, ok := store.FindAgent(agents, in.AssigneeID); !ok {
+			return nil, RecurringError("the chosen agent is not in this project")
+		}
+		id := in.AssigneeID
+		return &id, nil
 	}
 	var first *store.Stage
 	if len(stages) > 0 {
@@ -59,7 +68,7 @@ func (t *Team) checkRecurring(projectID int64, in RecurringInput) (*int64, error
 func (t *Team) CreateRecurring(projectID int64, in RecurringInput) (store.RecurringTask, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
-	who, err := t.checkRecurring(projectID, in)
+	who, err := t.checkRecurring(projectID, in, in.Enabled)
 	if err != nil {
 		return store.RecurringTask{}, err
 	}
@@ -79,13 +88,14 @@ func (t *Team) UpdateRecurring(id int64, in RecurringInput) (store.RecurringTask
 	if err != nil {
 		return store.RecurringTask{}, err
 	}
-	who, err := t.checkRecurring(r.ProjectID, in)
+	who, err := t.checkRecurring(r.ProjectID, in, in.Enabled)
 	if err != nil {
 		return store.RecurringTask{}, err
 	}
 	// programul se recalculeaza doar cand s-a schimbat sau sarcina e repornita
 	if in.Schedule != r.Schedule || (in.Enabled && !r.Enabled) {
 		r.NextRunAt = in.Schedule.Next(t.now())
+		r.LastNote = "" // nota veche nu mai e valabila dupa reprogramare
 	}
 	r.Title, r.Description, r.AssigneeID, r.Schedule, r.AutoAccept, r.Enabled = in.Title, in.Description, who, in.Schedule, in.AutoAccept, in.Enabled
 	if err := t.st.SaveRecurring(&r); err != nil {
@@ -135,6 +145,15 @@ func (t *Team) RunRecurringNow(id int64) (store.Task, error) {
 	if open, ok := t.openOccurrence(r); ok {
 		return store.Task{}, RecurringError(open.Ref() + " is still open")
 	}
+	if r.AssigneeID == nil {
+		stages, err := t.st.ListStages(r.ProjectID)
+		if err != nil {
+			return store.Task{}, err
+		}
+		if len(stages) == 0 {
+			return store.Task{}, RecurringError("choose an agent first: the recurring task has no assignee")
+		}
+	}
 	task, err := t.userCreateTask(r.ProjectID, r.Title, r.Description, derefID(r.AssigneeID), &r)
 	if err != nil {
 		return store.Task{}, err
@@ -172,7 +191,7 @@ func (t *Team) runRecurring(id int64, now time.Time, scheduled bool) error {
 			return err
 		}
 		if r.AssigneeID == nil && len(stages) == 0 {
-			r.Enabled, r.LastNote = false, "Turned off: the assignee was deleted"
+			r.Enabled, r.LastNote = false, "Turned off: choose an agent (no assignee and the project has no stages)"
 			break
 		}
 		task, err := t.userCreateTask(r.ProjectID, r.Title, r.Description, derefID(r.AssigneeID), &r)

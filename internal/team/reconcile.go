@@ -487,13 +487,13 @@ func (t *Team) relinkReviews(projectID int64) error {
 		// reviewer-ul a disparut: decide liderul
 		boss, hasBoss := decider(*task, agents, autonomous)
 		task.ReviewStage = store.StageLead
-		if !hasBoss && autonomous {
-			// modul autonom si asignatul e radacina: Done automat
+		if !hasBoss && (autonomous || task.AutoAccept) {
+			// modul autonom (sau task recurent cu auto-accept) si asignatul e radacina: Done automat
 			markDone(task)
 			if err := t.st.SaveTask(task); err != nil {
 				return err
 			}
-			t.autoAccepted(*task, autoAcceptText)
+			t.autoAccepted(*task, acceptText(*task))
 			continue
 		}
 		if !hasBoss {

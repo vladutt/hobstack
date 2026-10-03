@@ -644,7 +644,7 @@ export async function workspaceView(root, projectId, route) {
       onclick: () => { location.hash = `#/p/${projectId}/tasks/${t.id}`; },
     },
       el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)),
-        t.recurringId ? el("span", { class: "task-recurring", title: "From a recurring task", "aria-label": "From a recurring task" }, "\u21bb") : null,
+        t.recurringId ? el("span", { class: "task-recurring", role: "img", title: "From a recurring task", "aria-label": "From a recurring task" }, "\u21bb") : null,
         t.title),
       t.description ? el("span", { class: "task-desc" }, t.description) : null,
       el("span", { class: "task-who" },
@@ -671,7 +671,7 @@ export async function workspaceView(root, projectId, route) {
           openRecurring: () => {
             if (boardPanel !== "recurring") toggleRecurring();
             // dupa ce modala se inchide (focusul revine pe card), mutam focusul pe panou
-            window.addEventListener("hashchange", () => recurring?.el.querySelector("button")?.focus(), { once: true });
+            window.addEventListener("hashchange", () => recurring?.el.querySelector("button:not([hidden])")?.focus(), { once: true });
             location.hash = `#/p/${projectId}/tasks`;
           },
           waitingOn: (t) => {

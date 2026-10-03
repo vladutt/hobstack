@@ -106,8 +106,8 @@ inchis Foreman apar imediat, nu dupa un minut).
 
 1. **Suprapunere**: daca `last_task_id` exista si task-ul nu e Done, nu se creeaza nimic;
    `last_note = "Skipped at HH:MM: T-12 still open"`.
-2. **Asignat sters** (`assignee_id` NULL si proiectul nu are etape): `enabled = false`,
-   `last_note = "Turned off: the assignee was deleted"`.
+2. **Fara asignat** (`assignee_id` NULL si proiectul nu are etape): `enabled = false`,
+   `last_note = "Turned off: choose an agent (no assignee and the project has no stages)"`.
 3. Altfel `userCreateTask(..., &r.ID, r.AutoAccept)`; la succes `last_task_id` = task-ul nou, `last_note = ""`;
    la eroare `last_note` = mesajul erorii (fara reincercare pana la urmatoarea ora).
 4. Mereu: `last_run_at = now`, `next_run_at = Spec.Next(now)`, `SaveRecurring`, eveniment SSE `recurring`.
@@ -176,6 +176,13 @@ asignatul trebuie sa fie agent al proiectului (fara etape: obligatoriu). Erorile
 - Sarcina stearsa: task-urile create raman; `recurring_id` devine NULL (dispare `↻`), `auto_accept` ramane.
 - Ceasul sistemului mutat inapoi: `next_run_at` ramane in viitor si se asteapta; mutat inainte: o singura rulare.
 - O eroare la o sarcina nu opreste celelalte din acelasi tur; se logheaza si ajunge in `last_note`.
+
+Cazuri de margine cunoscute:
+
+- Un asignat sters intr-un proiect CU etape trimite sarcina in prima etapa (`ON DELETE SET NULL`; `DeleteAgent` refuza agentii cu task-uri, deci doar inainte de prima rulare).
+- Cu etape, un worker care termina o etapa ne-finala fara `report_done` primeste auto-accept (ca la autonomie totala), sarind peste etapele urmatoare.
+- Ceas de sistem mutat inapoi dupa ce fusese mult in avans: `next_run_at` ramane in viitor pana atunci (oprit/pornit il recalculeaza).
+- Schimbarea fusului orar al sistemului cere repornirea Foreman (Go citeste `time.Local` la pornire).
 
 ## Teste
 

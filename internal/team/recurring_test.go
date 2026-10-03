@@ -125,7 +125,7 @@ func TestRunDueAssigneeDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := f.st.GetRecurring(r.ID)
-	if got.Enabled || got.LastNote != "Turned off: the assignee was deleted" {
+	if got.Enabled || got.LastNote != "Turned off: choose an agent (no assignee and the project has no stages)" {
 		t.Fatalf("%+v", got)
 	}
 }
@@ -272,5 +272,109 @@ func TestNoAutoAcceptWaitsForUser(t *testing.T) {
 	got := f.wantStatus(t, task.Number, store.StatusReview)
 	if !f.tm.UserDecides(got, mustAgents(t, f), false) {
 		t.Fatalf("fara auto-accept decide utilizatorul: %+v", got)
+	}
+}
+
+func TestUpdateRecurringDisableBrokenAssignee(t *testing.T) {
+	var re RecurringError
+	// agent detasat: oprirea merge, pornirea nu
+	f := setup(t)
+	r := f.recurring(t, RecurringInput{Title: "x", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
+	wes := f.agent(t, "Wes", &f.lead, nil)
+	r = f.recurring(t, RecurringInput{Title: "x", AssigneeID: wes.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
+	wes.ParentID, wes.Detached = nil, true
+	if err := f.st.UpdateAgent(wes); err != nil {
+		t.Fatal(err)
+	}
+	in := RecurringInput{Title: "x", AssigneeID: wes.ID, Schedule: daily9, Enabled: false}
+	if got, err := f.tm.UpdateRecurring(r.ID, in); err != nil || got.Enabled {
+		t.Fatalf("oprire: %+v %v", got, err)
+	}
+	in.Enabled = true
+	if _, err := f.tm.UpdateRecurring(r.ID, in); !errors.As(err, &re) {
+		t.Fatalf("pornire cu agent detasat: %v", err)
+	}
+	// scos din prima etapa
+	f = setup(t)
+	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{f.rook.ID, f.vera.ID}}}); err != nil {
+		t.Fatal(err)
+	}
+	r = f.recurring(t, RecurringInput{Title: "x", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
+	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{f.vera.ID}}}); err != nil {
+		t.Fatal(err)
+	}
+	in = RecurringInput{Title: "x", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: false}
+	if got, err := f.tm.UpdateRecurring(r.ID, in); err != nil || got.Enabled {
+		t.Fatalf("oprire (scos din etapa): %+v %v", got, err)
+	}
+	in.Enabled = true
+	if _, err := f.tm.UpdateRecurring(r.ID, in); !errors.As(err, &re) {
+		t.Fatalf("pornire (scos din etapa): %v", err)
+	}
+	// agent din alt proiect nu trece nici oprit
+	if _, err := f.tm.UpdateRecurring(r.ID, RecurringInput{Title: "x", AssigneeID: 99999, Schedule: daily9}); err == nil {
+		t.Fatal("agent inexistent / din alt proiect")
+	}
+}
+
+func TestUpdateRecurringDisableAssigneeDeleted(t *testing.T) {
+	f := setup(t)
+	wes := f.agent(t, "Wes", &f.lead, nil)
+	r := f.recurring(t, RecurringInput{Title: "x", AssigneeID: wes.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
+	if err := f.st.DeleteAgent(wes.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.tm.UpdateRecurring(r.ID, RecurringInput{Title: "x", Schedule: daily9, Enabled: false})
+	if err != nil || got.Enabled || got.AssigneeID != nil {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestUpdateRecurringReenableClearsNote(t *testing.T) {
+	f := setup(t)
+	r := f.recurring(t, RecurringInput{Title: "x", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: false}, at("2026-10-05 08:00"))
+	r.LastNote = "Turned off: something"
+	if err := f.st.SaveRecurring(&r); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.tm.UpdateRecurring(r.ID, RecurringInput{Title: "x", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true})
+	if err != nil || got.LastNote != "" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+func TestRunRecurringNowNoAssignee(t *testing.T) {
+	f := setup(t)
+	wes := f.agent(t, "Wes", &f.lead, nil)
+	r := f.recurring(t, RecurringInput{Title: "x", AssigneeID: wes.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
+	if err := f.st.DeleteAgent(wes.ID); err != nil {
+		t.Fatal(err)
+	}
+	var re RecurringError
+	_, err := f.tm.RunRecurringNow(r.ID)
+	if !errors.As(err, &re) || err.Error() != "choose an agent first: the recurring task has no assignee" {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestReconcileReviewerGoneAutoAccept(t *testing.T) {
+	f := setup(t)
+	wes := f.agent(t, "Wes", nil, &f.vera) // radacina cu reviewer: nimeni deasupra
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: wes.ID, AutoAccept: true}
+	if err := f.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	task.Status, task.ReviewStage = store.StatusReview, store.StageReviewer
+	f.st.SaveTask(&task)
+	wes.ReviewerID = nil
+	if err := f.st.UpdateAgent(wes); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.LinksChanged(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, task.Number, store.StatusDone)
+	if got := lastEventText(t, f, task.ID); got != "Accepted automatically (recurring task)" {
+		t.Fatalf("%q", got)
 	}
 }

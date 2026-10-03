@@ -173,7 +173,7 @@ export function recurringPanel({ projectId, project, assignable, onClose, onChan
 
     async function submit(e) {
       e.preventDefault();
-      if (!title.value.trim()) return;
+      if (!title.value.trim()) { toast("Title is required."); return; }
       const kind = kindOf();
       if (kind === "weekly" && !mask) { toast("Choose at least one day."); return; }
       const time = kind === "weekly" ? weeklyAt : dailyAt;
