@@ -17,8 +17,12 @@ import (
 var ErrNotBlocked = errors.New("the task is not blocked")
 
 // Run proceseaza cererile Kick pana cand ctx e anulat. Porneste din main.
-// O data pe minut cauta si task-urile blocate (CheckStuck).
+// O data pe minut cauta si task-urile blocate (CheckStuck) si ruleaza sarcinile recurente (RunDue).
 func (t *Team) Run(ctx context.Context) {
+	// rularile ratate cat a fost inchis Foreman apar imediat
+	if err := t.RunDue(t.now()); err != nil {
+		log.Printf("recurring: %v", err)
+	}
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
 	for {
@@ -29,6 +33,9 @@ func (t *Team) Run(ctx context.Context) {
 			// CheckStuck face Kick daca a impins ceva; bucla il preia la urmatorul tur
 			if err := t.CheckStuck(t.now()); err != nil {
 				log.Printf("stuck tasks: %v", err)
+			}
+			if err := t.RunDue(t.now()); err != nil {
+				log.Printf("recurring: %v", err)
 			}
 			continue
 		case <-t.wake:

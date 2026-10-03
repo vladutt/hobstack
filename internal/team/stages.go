@@ -101,6 +101,12 @@ func checkAssignee(agents []store.Agent, agentID int64, stage *store.Stage) (sto
 func (t *Team) UserCreateTask(projectID int64, title, description string, agentID int64) (store.Task, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
+	return t.userCreateTask(projectID, title, description, agentID, nil)
+}
+
+// userCreateTask e corpul lui UserCreateTask; se cheama cu t.work tinut.
+// recurring (optional) e sarcina recurenta care creeaza task-ul.
+func (t *Team) userCreateTask(projectID int64, title, description string, agentID int64, recurring *store.RecurringTask) (store.Task, error) {
 	stages, err := t.st.ListStages(projectID)
 	if err != nil {
 		return store.Task{}, err
@@ -113,6 +119,11 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 		return store.Task{}, AssignError("the project has no agents")
 	}
 	task := store.Task{ProjectID: projectID, Title: title, Description: description, ByUser: true}
+	created := "Created by you"
+	if recurring != nil {
+		task.RecurringID, task.AutoAccept = &recurring.ID, recurring.AutoAccept
+		created = fmt.Sprintf("Created by recurring task %q", recurring.Title)
+	}
 	var assigned string // textul evenimentului "assigned" din istoric
 	var to string       // destinatarul brief-ului ("" = coada etapei)
 	if len(stages) > 0 {
@@ -144,7 +155,7 @@ func (t *Team) UserCreateTask(projectID int64, title, description string, agentI
 	if err := t.st.CreateTask(&task); err != nil {
 		return store.Task{}, err
 	}
-	t.taskMsg(task, "created", actorUser, to, "Created by you", briefBody(task.Title, task.Description))
+	t.taskMsg(task, "created", actorUser, to, created, briefBody(task.Title, task.Description))
 	t.taskEvent(task, "assigned", actorUser, assigned)
 	if a, ok := store.FindAgent(agents, task.AssigneeID); ok && task.StageID == nil {
 		t.note(projectID, a.ID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), title), true)
