@@ -135,6 +135,13 @@ func (t *Team) Reconcile(projectID int64) error {
 			failed = true
 			return t.startFailed(p, notify, a, err)
 		}
+		// ultimul mesaj al utilizatorului: din el pot porni task-uri (pasul "requested" din Flow)
+		for i := len(notes) - 1; i >= 0; i-- {
+			if notes[i].Author == store.AuthorUser {
+				t.setRequest(a.ID, notes[i])
+				break
+			}
+		}
 		if err := t.delivered(p.ID, notes); err != nil {
 			return err
 		}

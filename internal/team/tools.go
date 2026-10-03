@@ -18,6 +18,17 @@ const MaxSendBacks = 3
 
 var _ mcp.Backend = (*Team)(nil) // compilatorul verifica ca Team implementeaza interfata
 
+// recordRequest: un task creat dintr-un run de chat primeste pasul "requested"
+// cu mesajul utilizatorului care a pornit run-ul. Se cheama cu t.work tinut.
+func (t *Team) recordRequest(c mcp.Caller, task store.Task, leadName string) {
+	if c.TaskID != 0 {
+		return // run pe task: task-ul vine din delegare, nu din chat
+	}
+	if m, ok := t.requestOf(c.AgentID, c.RunID); ok {
+		t.taskMsgAt(task, m.CreatedAt, "requested", actorUser, leadName, "Asked in chat", m.Text)
+	}
+}
+
 func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (string, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -67,6 +78,7 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 	if err := t.st.CreateTask(&task); err != nil {
 		return "", err
 	}
+	t.recordRequest(c, task, lead.Name)
 	t.taskMsg(task, "created", lead.Name, w.Name, "Created by "+lead.Name, briefBody(task.Title, task.Description))
 	t.taskEvent(task, "assigned", lead.Name, "Assigned to "+w.Name)
 	t.note(c.ProjectID, lead.ID, fmt.Sprintf("Created %s for %s: %s", task.Ref(), w.Name, title), true)
@@ -118,6 +130,7 @@ func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []stor
 	if err := t.st.CreateTask(&task); err != nil {
 		return "", err
 	}
+	t.recordRequest(c, task, lead.Name)
 	t.taskMsg(task, "created", lead.Name, to, "Created by "+lead.Name, briefBody(task.Title, task.Description))
 	t.taskEvent(task, "assigned", lead.Name, assigned)
 	t.note(c.ProjectID, lead.ID, fmt.Sprintf("Created %s in stage %s: %s", task.Ref(), first.Name, title), true)

@@ -3,6 +3,7 @@ package team
 import (
 	"log"
 	"strings"
+	"time"
 
 	"foreman/internal/store"
 )
@@ -27,13 +28,18 @@ const maxEventBody = 20000
 
 // taskMsg adauga in istoric o comunicare (task, raport, feedback) cu destinatar si text complet.
 func (t *Team) taskMsg(task store.Task, kind, from, to, text, body string) {
+	t.taskMsgAt(task, t.now(), kind, from, to, text, body)
+}
+
+// taskMsgAt e taskMsg cu ora data (pasul "requested" are ora mesajului utilizatorului).
+func (t *Team) taskMsgAt(task store.Task, at time.Time, kind, from, to, text, body string) {
 	if r := []rune(text); len(r) > maxEventText {
 		text = string(r[:maxEventText]) + "..."
 	}
 	if r := []rune(body); len(r) > maxEventBody {
 		body = string(r[:maxEventBody]) + " [...]"
 	}
-	e := store.TaskEvent{TaskID: task.ID, At: t.now(), Kind: kind, Actor: from, To: to, Text: text, Body: body}
+	e := store.TaskEvent{TaskID: task.ID, At: at, Kind: kind, Actor: from, To: to, Text: text, Body: body}
 	if err := t.st.AddTaskEvent(&e); err != nil {
 		log.Printf("task %d: event: %v", task.ID, err)
 	}

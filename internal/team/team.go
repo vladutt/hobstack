@@ -65,6 +65,28 @@ type activeRun struct {
 	projectID int64
 	taskID    int64
 	token     string
+	request   *store.Message // ultimul mesaj al utilizatorului livrat la pornire (doar run-urile de chat)
+}
+
+// setRequest retine mesajul utilizatorului care a pornit run-ul activ al agentului.
+func (t *Team) setRequest(agentID int64, m store.Message) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if ar, ok := t.active[agentID]; ok {
+		ar.request = &m
+		t.active[agentID] = ar
+	}
+}
+
+// requestOf intoarce mesajul retinut pentru run-ul runID al agentului, daca e inca activ.
+func (t *Team) requestOf(agentID int64, runID string) (store.Message, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	ar, ok := t.active[agentID]
+	if !ok || ar.runID != runID || ar.request == nil {
+		return store.Message{}, false
+	}
+	return *ar.request, true
 }
 
 func New(st *store.Store, runs Starter, hub *events.Hub, baseURL string) *Team {
