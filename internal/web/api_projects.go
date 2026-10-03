@@ -211,6 +211,8 @@ type projectDetail struct {
 	Stuck []team.StuckTask `json:"stuck"`
 	// Access: cererile de acces deschise (mereu non-nil)
 	Access []accessView `json:"access"`
+	// Recurring: sarcinile recurente ale proiectului (mereu non-nil)
+	Recurring []recurringView `json:"recurring"`
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -311,6 +313,11 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	recurring, err := s.recurringViews(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	changed, err := s.st.CountChangedFiles(p.ID)
 	if err != nil {
 		fail(w, err)
@@ -320,7 +327,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	for i, t := range tasks {
 		views[i] = taskView{Task: t, FilesChanged: changed[t.ID]}
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, Recurring: recurring}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)

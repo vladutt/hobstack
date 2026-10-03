@@ -100,6 +100,10 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("PUT /api/projects/{id}/stages", s.saveStages)
 	mux.HandleFunc("POST /api/projects/{id}/tasks", s.createUserTask)
+	mux.HandleFunc("POST /api/projects/{id}/recurring", s.createRecurring)
+	mux.HandleFunc("PUT /api/recurring/{id}", s.updateRecurring)
+	mux.HandleFunc("DELETE /api/recurring/{id}", s.deleteRecurring)
+	mux.HandleFunc("POST /api/recurring/{id}/run", s.runRecurring)
 	mux.HandleFunc("GET /api/tasks/{id}", s.getTask)
 	mux.HandleFunc("GET /api/tasks/{id}/changes", s.getTaskChanges)
 	mux.HandleFunc("POST /api/tasks/{id}/decide", s.decideTask)
@@ -171,9 +175,13 @@ func maxLen(label, value string, max int) error {
 func fail(w http.ResponseWriter, err error) {
 	var br badRequest
 	var le store.LinkError
+	var re team.RecurringError
+	var ae team.AssignError
 	switch {
 	case errors.As(err, &br):
 		writeErr(w, http.StatusBadRequest, br.Error())
+	case errors.As(err, &re), errors.As(err, &ae):
+		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.As(err, &le):
 		writeErr(w, http.StatusBadRequest, le.Error())
 	case errors.Is(err, store.ErrNotFound):

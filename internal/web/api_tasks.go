@@ -94,8 +94,16 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		e.Body, e.To = "", ""
 		slim[i] = e
 	}
+	// sarcina recurenta care l-a creat, cat timp mai exista (pentru linkul din modala)
+	var recurring any
+	if task.RecurringID != nil {
+		if rec, err := s.st.GetRecurring(*task.RecurringID); err == nil {
+			recurring = map[string]any{"id": rec.ID, "title": rec.Title}
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"task": task, "events": slim, "assignee": assignee, "stage": stage,
+		"recurring": recurring,
+		"task":      task, "events": slim, "assignee": assignee, "stage": stage,
 		"conversation": conv, "working": working, "workingAgentId": workingID,
 		"changesCount": changesCount, // fingerprint ieftin pentru tab-ul Changes
 
