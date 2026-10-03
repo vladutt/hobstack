@@ -406,7 +406,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 /* modala task: tab-uri Conversation / History */
 .modal-top { display: grid; gap: 18px; min-width: 0; }
 .modal-top:empty { display: none; }
-.modal-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.modal-tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
 .modal-tabs .tab { background: none; border: 0; border-bottom: 2px solid transparent; font: 600 13px var(--sans); cursor: pointer; }
 .modal-tabs .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--amber); }
 .modal-section[hidden], .conv[hidden] { display: none; }

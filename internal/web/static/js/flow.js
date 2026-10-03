@@ -30,10 +30,10 @@ function span(from, to) {
 }
 
 // flowView: tab-ul "Flow" al unui task. Pasii desfasurati (cheie: task + ora + tip)
-// raman intre reincarcari. show(data) cu raspunsul GET /api/tasks/{id}/flow.
-export function flowView({ projectId }) {
+// raman intre reincarcari; open (Set optional) permite preluarea lor de la o alta instanta.
+// show(data) cu raspunsul GET /api/tasks/{id}/flow. Intoarce { el, open, show, error }.
+export function flowView({ projectId, open = new Set() }) {
   const root = el("div", { class: "flow" }, el("p", { class: "hint" }, "Loading..."));
-  const open = new Set();
   let focusId = null;
 
   function stepNode(task, s) {
@@ -53,7 +53,8 @@ export function flowView({ projectId }) {
     });
     return el("li", { class: `flow-step${TONE[s.kind] ? " tone-" + TONE[s.kind] : ""}` },
       el("time", { datetime: s.at, title: new Date(s.at).toLocaleString() }, when(s.at)),
-      el("span", { class: "flow-who" }, s.actor || "?", s.to ? el("span", { class: "flow-arrow", "aria-hidden": "true" }, " → ") : null, s.to || null),
+      // pasul sintetic al task-urilor vechi nu are actor: fara eticheta
+      s.actor ? el("span", { class: "flow-who" }, s.actor, s.to ? el("span", { class: "flow-arrow", "aria-hidden": "true" }, " → ") : null, s.to || null) : null,
       el("span", { class: "flow-text" }, s.kind === "requested" ? "asked in chat" : s.text),
       btn, body);
   }
@@ -63,14 +64,14 @@ export function flowView({ projectId }) {
 
   function taskNode(task) {
     const focus = task.id === focusId;
-    const title = [el("span", { class: "task-id" }, `T-${task.number}`), task.title];
+    const title = [el("span", { class: "task-id" }, `T-${task.number}`), "· ", task.title];
     const head = focus
       ? el("div", { class: "flow-head" }, el("span", { class: "flow-title" }, title))
       : el("a", { class: "flow-head", href: `#/p/${projectId}/tasks/${task.id}` }, el("span", { class: "flow-title" }, title));
     head.append(...[
       el("span", { class: `pill pill-task-${task.status}` }, STATUS[task.status] || task.status),
       task.assignee ? el("span", { class: "hint" }, task.assignee) : null,
-      task.doneAt ? el("span", { class: "hint" }, span(task.createdAt, task.doneAt)) : null,
+      task.doneAt ? el("span", { class: "hint" }, `Done · ${span(task.createdAt, task.doneAt)}`) : null,
     ].filter(Boolean));
     // pasii si sub-task-urile, intercalate dupa ora
     const items = [
@@ -84,6 +85,7 @@ export function flowView({ projectId }) {
 
   return {
     el: root,
+    open,
     show(data) {
       focusId = data.focusId;
       const nodes = [taskNode(data.root)];

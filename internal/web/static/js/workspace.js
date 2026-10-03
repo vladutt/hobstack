@@ -659,11 +659,13 @@ export async function workspaceView(root, projectId, route) {
   function syncModal(taskId) {
     if (modal && modal.taskId === taskId) return;
     const closed = modal?.taskId ?? null;
+    // un link din Flow muta modala pe alt task: ramanem pe Flow, cu pasii desfasurati
+    const keepFlow = taskId && modal?.tab() === "flow" ? { initialTab: "flow", flowOpen: modal.flowOpen } : {};
     modal?.destroy();
     modal = null;
     if (taskId && !gone()) {
       modal = taskModal({
-        projectId, taskId, project: state.project, info,
+        projectId, taskId, project: state.project, info, ...keepFlow,
         onClose: () => { location.hash = `#/p/${projectId}/tasks`; },
         actions: {
           taskAction, decide, assign, assignable,

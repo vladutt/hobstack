@@ -81,6 +81,7 @@ schimbare de schema:
     evenimentului lor "created" (ordinea: pas sau copil, crescator dupa ora).
 - **Culori** (doar tokenuri existente): `accepted`, `user_accepted`, `approved` cu `--green`; `sent_back`, `rejected`,
   `blocked`, `failed` cu `--red`; `asked` cu `--amber`; `requested` cu textul in `--soft` si eticheta "asked in chat".
+- Pasul `requested` apare si in tab-ul Conversation, ca bula "You → <lead>", pentru ca are `body`.
 - **Fara delegare** (radacina fara copii): pasii, plus hint-ul "No delegation: this task was done by one agent."
 - **Latime ingusta**: indentarea scade la 12px pe nivel, textul se imparte pe randuri; pagina nu face scroll orizontal.
 - Tot textul venit de la agenti trece prin `el()` / `renderMarkdown` (niciodata HTML).

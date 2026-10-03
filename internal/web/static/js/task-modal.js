@@ -20,21 +20,24 @@ const LONG_TEXT = 600;
 //   assignable(stageId) -> agenti, waitingOn(t) -> numele la care asteapta un task din review,
 //   openRecurring() -> inchide modala si deschide panoul Recurring.
 //   Actiunile intorc true daca au reusit.
-// Intoarce { el, taskId, refresh(project), destroy() }.
-export function taskModal({ projectId, taskId, project, onClose, actions }) {
+// - initialTab: tab-ul de pornire (ex. "flow"); lipsa = alegere automata la primul raspuns.
+// - flowOpen: Set cu pasii Flow desfasurati, preluat de la modala inlocuita (vezi flowView).
+// Intoarce { el, taskId, refresh(project), tab(), flowOpen, destroy() }.
+export function taskModal({ projectId, taskId, project, onClose, actions, initialTab = null, flowOpen }) {
   let data = null;        // ultimul raspuns GET /api/tasks/{id}
   let seq = 0;            // numarul ultimei cereri: un raspuns vechi nu suprascrie unul nou
   let destroyed = false;
   let reportOpen = false; // "Show report" ramane desfasurat la refresh
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
-  let tab = null;         // "conversation" | "history" | "changes" | "flow"; null = inca nealeasa (se alege la primul raspuns)
+  let tab = initialTab;   // "conversation" | "history" | "changes" | "flow"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
   let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
   let flowSeq = 0;        // ca seq, pentru cererea Flow
-  const flow = flowView({ projectId });
+  let flowKey = null;     // ultimul raspuns Flow desenat (serializat)
+  const flow = flowView({ projectId, open: flowOpen });
   let stats = new Map();  // cale -> { added, removed, kind }: badge-urile din raport si conversatie
   let topKey = null;      // idem pentru descriere + feedback
   let reportKey = null;   // idem pentru raport
@@ -135,7 +138,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     actionsBox.hidden = true;
     actionsBox.replaceChildren();
     actionsKey = null;
-    topKey = histKey = convKey = reportKey = null;
+    topKey = histKey = convKey = reportKey = flowKey = null;
     chgCount = null; // la urmatorul succes se reincarca tot
   }
 
@@ -217,9 +220,15 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
     try {
       const res = await api(`/api/tasks/${taskId}/flow`);
       if (destroyed || my !== flowSeq) return;
-      flow.show(res);
+      // arborele se redeseneaza doar daca s-a schimbat (focusul si scroll-ul raman)
+      const key = JSON.stringify(res);
+      if (key !== flowKey) {
+        flowKey = key;
+        flow.show(res);
+      }
     } catch (err) {
       if (destroyed || my !== flowSeq) return;
+      flowKey = null;
       flow.error(err.message);
     }
   }
@@ -409,6 +418,8 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   return {
     el: overlay,
     taskId,
+    tab: () => tab,
+    flowOpen: flow.open,
     // refresh: dupa un reload al proiectului (SSE) reincarcam task-ul
     refresh(p) {
       if (destroyed) return;
