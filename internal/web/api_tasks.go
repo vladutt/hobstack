@@ -204,6 +204,21 @@ func (s *Server) getTaskChanges(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"runs": groupChanges(changes)})
 }
 
+// getTaskFlow intoarce arborele de delegare al task-ului (tab-ul Flow).
+func (s *Server) getTaskFlow(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	f, err := s.st.TaskFlow(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, f)
+}
+
 // groupChanges grupeaza pe run_id si uneste modificarile aceluiasi fisier; mereu non-nil.
 func groupChanges(changes []store.TaskChange) []runChangesView {
 	runs := []runChangesView{}
