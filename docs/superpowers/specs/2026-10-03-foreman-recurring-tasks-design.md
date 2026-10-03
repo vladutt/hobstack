@@ -139,8 +139,8 @@ Sub-task-urile create de un lider dintr-un task recurent nu mostenesc `auto_acce
 
 - Lista vine in detaliul proiectului (`GET /api/projects/{id}`), cheia `recurring: [view]`, ca etapele; SSE-ul
   existent o reincarca.
-- `POST /api/projects/{id}/recurring` (corp: title, description, assigneeId (0 = prima etapa), kind, everyHours, at,
-  weekdays, autoAccept, enabled) -> 201 view
+- `POST /api/projects/{id}/recurring` (corp: title, description, assigneeId (0 = prima etapa),
+  schedule: {kind, everyHours, at, weekdays}, autoAccept, enabled) -> 201 view
 - `PUT /api/recurring/{id}` (acelasi corp) -> view
 - `DELETE /api/recurring/{id}` -> 204
 - `POST /api/recurring/{id}/run` -> 201 task creat
