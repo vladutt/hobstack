@@ -66,6 +66,9 @@ Gata (sarcini recurente, spec in docs/superpowers/specs/2026-10-03-foreman-recur
 proiect care creeaza task-uri pe un program (la N ore, zilnic, saptamanal; ora locala), pe ticker-ul din team.Run si o data
 la pornire (o singura rulare pentru cele ratate); sarite cat timp aparitia precedenta e deschisa; auto-accept optional.
 Pachet: internal/schedule.
+Gata (Flow, spec in docs/superpowers/specs/2026-10-03-foreman-task-flow-design.md): tab-ul Flow din modala de task arata
+arborele de delegare de la radacina (store.TaskFlow, GET /api/tasks/{id}/flow), cu pasii din task_events si sub-task-urile
+intercalate; pasul "requested" leaga task-ul de mesajul din chat care l-a pornit (activeRun.request, doar in memorie).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"

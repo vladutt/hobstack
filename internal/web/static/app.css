@@ -508,3 +508,26 @@ pre.md-pre:not(.diff) { padding: 6px 10px; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--soft); font: 13px var(--sans); cursor: pointer; text-align: left; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 3px; }
+
+/* tab-ul Flow */
+.flow { display: grid; gap: 10px; min-width: 0; }
+.flow-task { display: grid; gap: 6px; min-width: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--card-2); padding: 8px 10px; }
+.flow-task.focus { border-color: var(--amber); }
+.flow-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text); text-decoration: none; font-weight: 600; min-width: 0; }
+a.flow-head:hover .flow-title { text-decoration: underline; }
+a.flow-head:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 4px; }
+.flow-title { min-width: 0; overflow-wrap: anywhere; }
+.flow-steps { list-style: none; margin: 0; padding: 0 0 0 10px; border-left: 2px solid var(--line); display: grid; gap: 4px; min-width: 0; }
+.flow-step { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12px; color: var(--soft); min-width: 0; }
+.flow-step time { color: var(--muted); font-family: var(--mono); font-variant-ligatures: none; }
+.flow-who { color: var(--text); font-weight: 600; }
+.flow-arrow { color: var(--muted); font-weight: 400; }
+.flow-text { min-width: 0; overflow-wrap: anywhere; }
+.flow-step.tone-ok .flow-text { color: var(--green); }
+.flow-step.tone-bad .flow-text { color: var(--red); }
+.flow-step.tone-warn .flow-text { color: var(--amber); }
+.flow-step.tone-user .flow-text { color: var(--soft); font-style: italic; }
+.flow-body { flex-basis: 100%; font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; min-width: 0; }
+.flow-body[hidden] { display: none; }
+.flow-child { list-style: none; min-width: 0; }
+@media (max-width: 560px) { .flow-steps { padding-left: 6px; } .flow-task { padding: 6px 8px; } }

@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { el, avatar, clock, kindOf } from "./ui.js";
 import { changesView } from "./changes.js";
+import { flowView } from "./flow.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
@@ -26,12 +27,14 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   let destroyed = false;
   let reportOpen = false; // "Show report" ramane desfasurat la refresh
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
-  let tab = null;         // "conversation" | "history" | "changes"; null = inca nealeasa (se alege la primul raspuns)
+  let tab = null;         // "conversation" | "history" | "changes" | "flow"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
   let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
+  let flowSeq = 0;        // ca seq, pentru cererea Flow
+  const flow = flowView({ projectId });
   let stats = new Map();  // cale -> { added, removed, kind }: badge-urile din raport si conversatie
   let topKey = null;      // idem pentru descriere + feedback
   let reportKey = null;   // idem pentru raport
@@ -52,8 +55,10 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "History");
   const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
   const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
+  const flowPane = el("div", { id: `flow-${taskId}`, role: "tabpanel", hidden: true }, flow.el);
+  const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
-    el("div", { class: "modal-tabs", role: "tablist" }, tabConv, tabHist, tabChg), convPane, histPane, chgPane);
+    el("div", { class: "modal-tabs", role: "tablist" }, tabConv, tabHist, tabChg, tabFlow), convPane, histPane, chgPane, flowPane);
   const reportBox = el("div", { class: "modal-top" });
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
   const actionsBox = el("div", { class: "modal-actions", hidden: true });
@@ -191,9 +196,9 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
   }
 
   function applyTab() {
-    const names = ["conversation", "history", "changes"];
-    const tabs = [tabConv, tabHist, tabChg];
-    const panes = [convPane, histPane, chgPane];
+    const names = ["conversation", "history", "changes", "flow"];
+    const tabs = [tabConv, tabHist, tabChg, tabFlow];
+    const panes = [convPane, histPane, chgPane, flowPane];
     names.forEach((n, i) => {
       const on = tab === n;
       tabs[i].setAttribute("aria-selected", String(on));
@@ -201,6 +206,22 @@ export function taskModal({ projectId, taskId, project, onClose, actions }) {
       panes[i].hidden = !on;
     });
     syncChanges();
+    syncFlow();
+  }
+
+  // syncFlow: cat timp tab-ul e deschis, arborele se cere la fiecare desenare a modalei
+  // (un sub-task se poate schimba fara ca task-ul curent sa se miste)
+  async function syncFlow() {
+    if (tab !== "flow" || !data) return;
+    const my = ++flowSeq;
+    try {
+      const res = await api(`/api/tasks/${taskId}/flow`);
+      if (destroyed || my !== flowSeq) return;
+      flow.show(res);
+    } catch (err) {
+      if (destroyed || my !== flowSeq) return;
+      flow.error(err.message);
+    }
   }
 
   // syncChanges: /changes se cere doar cand changesCount (din GET /api/tasks/{id}) difera de cel incarcat;
