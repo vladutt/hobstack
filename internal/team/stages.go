@@ -241,13 +241,16 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 	}
 	boss, ok := decider(*task, agents, autonomous)
 	ev.to = whoName(boss, ok) // dupa ultima etapa: decidentul, altfel utilizatorul
-	if !ok && autonomous {
+	if !ok && (autonomous || task.AutoAccept) {
 		markDone(task)
 		if err := t.st.SaveTask(task); err != nil {
 			return "", err
 		}
 		t.record(*task, ev)
-		t.autoAccepted(*task, autoAcceptText)
+		t.autoAccepted(*task, acceptText(*task))
+		if task.AutoAccept {
+			return fmt.Sprintf("%s went through all stages and was accepted automatically (recurring task).", task.Ref()), nil
+		}
 		return fmt.Sprintf("%s went through all stages and was accepted automatically (full autonomy).", task.Ref()), nil
 	}
 	task.StageID = nil

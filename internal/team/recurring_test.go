@@ -206,3 +206,71 @@ func TestUpdateRecurringRecomputesNext(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// recurringTask creeaza prin scheduler un task pentru agent, cu auto-accept dat
+func (f *fixture) recurringTask(t *testing.T, who store.Agent, auto bool) store.Task {
+	t.Helper()
+	r := f.recurring(t, RecurringInput{Title: "Daily", AssigneeID: who.ID, Schedule: daily9, Enabled: true, AutoAccept: auto}, at("2026-10-05 08:00"))
+	if _, err := f.tm.RunRecurringNow(r.ID); err != nil {
+		t.Fatal(err)
+	}
+	tasks, _ := f.st.ListTasks(f.p.ID)
+	task := tasks[len(tasks)-1]
+	task.Status = store.StatusInProgress
+	f.st.SaveTask(&task)
+	return task
+}
+
+func lastEventText(t *testing.T, f *fixture, taskID int64) string {
+	t.Helper()
+	evs, _ := f.st.ListTaskEvents(taskID)
+	return evs[len(evs)-1].Text
+}
+
+func TestAutoAcceptWithoutReviewer(t *testing.T) {
+	f := setup(t)
+	task := f.recurringTask(t, f.rook, true)
+	if _, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", "all green"); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, task.Number, store.StatusDone)
+	if got := lastEventText(t, f, task.ID); got != "Accepted automatically (recurring task)" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestAutoAcceptAfterReviewer(t *testing.T) {
+	f := setup(t)
+	wes := f.agent(t, "Wes", &f.lead, &f.vera)
+	task := f.recurringTask(t, wes, true)
+	f.tm.ReportDone(f.workerCaller(wes, task.ID), "", "gata")
+	f.wantStatus(t, task.Number, store.StatusReview) // intai reviewer-ul
+	vc := f.workerCaller(f.vera, 0)
+	vc.IsReviewer = true
+	if _, err := f.tm.ReviewApprove(vc, task.Ref(), ""); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, task.Number, store.StatusDone)
+}
+
+func TestAutoAcceptAfterLastStage(t *testing.T) {
+	f := setup(t)
+	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{f.rook.ID}}}); err != nil {
+		t.Fatal(err)
+	}
+	task := f.recurringTask(t, f.rook, true)
+	if _, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", "gata"); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, task.Number, store.StatusDone)
+}
+
+func TestNoAutoAcceptWaitsForUser(t *testing.T) {
+	f := setup(t)
+	task := f.recurringTask(t, f.rook, false)
+	f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", "gata")
+	got := f.wantStatus(t, task.Number, store.StatusReview)
+	if !f.tm.UserDecides(got, mustAgents(t, f), false) {
+		t.Fatalf("fara auto-accept decide utilizatorul: %+v", got)
+	}
+}

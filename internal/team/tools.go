@@ -315,7 +315,16 @@ func (t *Team) autonomyOf(projectID int64) bool {
 const (
 	autoAcceptText      = "Accepted automatically (full autonomy)"
 	autoAcceptAfterText = "Accepted automatically after repeated send-backs (full autonomy)"
+	recurringAcceptText = "Accepted automatically (recurring task)"
 )
+
+// acceptText: textul din istoric pentru un task trecut singur in Done.
+func acceptText(task store.Task) string {
+	if task.AutoAccept {
+		return recurringAcceptText
+	}
+	return autoAcceptText
+}
 
 // markDone pune task-ul in Done (fara sa-l salveze), ca la accept_task.
 func markDone(task *store.Task) {
@@ -375,7 +384,7 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 	if task.StageID != nil {
 		boss, ok := decider(*task, agents, autonomous)
 		task.Status, task.ReviewStage = store.StatusReview, store.StageLead
-		if !ok && autonomous {
+		if !ok && (autonomous || task.AutoAccept) {
 			markDone(task) // modul autonom, nimeni deasupra: Done automat
 		}
 		if err := t.st.SaveTask(task); err != nil {
@@ -384,7 +393,7 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		ev.to = whoName(boss, ok) // raportul merge la decident (sau la utilizator)
 		t.record(*task, ev)
 		if task.Status == store.StatusDone {
-			t.autoAccepted(*task, autoAcceptText)
+			t.autoAccepted(*task, acceptText(*task))
 			return store.Agent{}, nil
 		}
 		t.emit(task.ProjectID, "task", *task)
@@ -406,6 +415,9 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		who, hasWho = decider(*task, agents, autonomous)
 	}
 	switch {
+	case !hasWho && task.AutoAccept:
+		// sarcina recurenta cu auto-accept: nu mai asteapta utilizatorul
+		markDone(task)
 	case !hasWho && autonomous:
 		// modul autonom si asignatul e radacina (nimeni deasupra): Done automat
 		markDone(task)
@@ -420,7 +432,7 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 	ev.to = whoName(who, hasWho) // reviewer-ul sau decidentul; fara ei, utilizatorul
 	t.record(*task, ev)
 	if task.Status == store.StatusDone {
-		t.autoAccepted(*task, autoAcceptText)
+		t.autoAccepted(*task, acceptText(*task))
 		return store.Agent{}, nil
 	}
 	if task.Status == store.StatusBlocked {
@@ -870,6 +882,17 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 	autonomous := t.autonomyOf(c.ProjectID)
 	approved := approvedNote(reviewer, note)
 	approved.to = actorUser // fara decident (task din board, blocat, Done automat): utilizatorul
+	if task.ByUser && task.AutoAccept && !autonomous {
+		// sarcina recurenta cu auto-accept: dupa reviewer trece direct in Done
+		markDone(&task)
+		if err := t.st.SaveTask(&task); err != nil {
+			return "", err
+		}
+		t.record(task, approved)
+		t.note(c.ProjectID, reviewer.ID, "Approved "+task.Ref(), true)
+		t.autoAccepted(task, recurringAcceptText)
+		return fmt.Sprintf("%s was accepted automatically (recurring task).", task.Ref()), nil
+	}
 	if task.ByUser && !autonomous {
 		// creat de utilizator: dupa verificare decide el
 		task.ReviewStage = store.StageLead
