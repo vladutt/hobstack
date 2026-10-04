@@ -109,6 +109,7 @@ export async function workspaceView(root, projectId, route) {
   const boardTools = el("div", { class: "actions" }); // + Task, Recurring, Coloane
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
   const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter by folder" });
+  const doneOpen = new Set(); // grupurile din Done desfasurate (id-ul radacinii); raman la refresh
   let boardPanel = null; // "stages" | "task" | "recurring" | null
   let recurring = null; // panoul Recurring cand e deschis ({ el, update })
   const boardHint = el("p", { class: "hint board-hint" }, "Every project is different: set up your own columns (work stages) with the Columns button.");
@@ -499,7 +500,7 @@ export async function workspaceView(root, projectId, route) {
     boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("recurring", "Recurring", toggleRecurring), toggle("stages", "Columns", toggleStages));
     if (!stages.length) {
       board.className = "board";
-      board.replaceChildren(...COLUMNS.map((c) => column(c.title, tasks.filter((t) => c.statuses.includes(t.status)), byId)));
+      board.replaceChildren(...COLUMNS.map((c) => column(c.title, tasks.filter((t) => c.statuses.includes(t.status)), byId, null, c.statuses.includes("done"))));
       boardHint.hidden = false;
       return;
     }
@@ -512,18 +513,89 @@ export async function workspaceView(root, projectId, route) {
       ...(loose.length ? [column("No stage", loose, byId)] : []),
       ...stages.map((s) => column(s.name, inStage(s), byId, s)),
       column("With lead", tasks.filter((t) => t.status === "review"), byId),
-      column("Done", tasks.filter((t) => t.status === "done"), byId));
+      column("Done", tasks.filter((t) => t.status === "done"), byId, null, true));
   }
 
-  function column(title, items, byId, stage) {
+  // column: o coloana a board-ului; grouped (coloana Done) pune sub-task-urile sub radacina lor
+  function column(title, items, byId, stage, grouped) {
     const agents = stage ? stage.agentIds.map((id) => byId.get(id)).filter(Boolean) : [];
+    const cards = grouped ? doneGroups(items).map((g) => doneCard(g, byId)) : items.map((t) => taskCard(t, byId.get(t.assigneeId), byId));
     return el("div", { class: "col" },
       el("div", { class: "col-head" },
         el("span", {}, title, stage?.kind === "check" && el("span", { class: "tag col-kind" }, "check")),
-        el("span", {}, items.length)),
+        el("span", {}, cards.length)),
       stage && el("div", { class: "col-agents" },
         agents.length ? agents.map((a) => avatar(a.name, kindOf(a), 18)) : el("span", { class: "badge-blocked" }, "no agents")),
-      items.map((t) => taskCard(t, byId.get(t.assigneeId), byId)));
+      cards);
+  }
+
+  // doneGroups: in Done, un task al carui parinte e tot Done intra sub cel mai de sus
+  // stramos Done (radacina grupului); un sub-task Done cu parintele inca deschis ramane
+  // card separat. Intoarce [{ root, subs: [{ task, depth }] }] in ordinea task-urilor primite.
+  function doneGroups(items) {
+    const done = new Set(items.map((t) => t.id));
+    const kids = new Map(); // parinte -> sub-task-urile lui Done
+    const tops = [];
+    for (const t of items) {
+      if (t.parentTaskId && t.parentTaskId !== t.id && done.has(t.parentTaskId)) {
+        if (!kids.has(t.parentTaskId)) kids.set(t.parentTaskId, []);
+        kids.get(t.parentTaskId).push(t);
+      } else {
+        tops.push(t);
+      }
+    }
+    const seen = new Set();
+    const walk = (id, depth, out) => {
+      for (const c of kids.get(id) || []) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        out.push({ task: c, depth });
+        walk(c.id, depth + 1, out);
+      }
+    };
+    const group = (root) => {
+      seen.add(root.id);
+      const subs = [];
+      walk(root.id, 0, subs);
+      return { root, subs };
+    };
+    const groups = tops.map(group);
+    // ciclu in parent_task_id (date stricate): ce n-a fost atins ramane card separat
+    for (const t of items) if (!seen.has(t.id)) groups.push(group(t));
+    return groups;
+  }
+
+  // doneCard: cardul radacinii plus "▸ N subtasks", care desfasoara sub-task-urile ca randuri
+  // compacte; click pe un rand deschide modala task-ului (ca un card)
+  function doneCard(g, byId) {
+    const card = taskCard(g.root, byId.get(g.root.assigneeId), byId);
+    if (!g.subs.length) return card;
+    const n = g.subs.length;
+    const label = (open) => `${open ? "▾" : "▸"} ${n} ${n === 1 ? "subtask" : "subtasks"}`;
+    const listId = `done-subs-${g.root.id}`;
+    const list = el("ul", { class: "done-subs", id: listId, hidden: !doneOpen.has(g.root.id) },
+      g.subs.map(({ task, depth }) => {
+        const who = byId.get(task.assigneeId);
+        return el("li", { style: `--depth:${depth}` },
+          el("button", {
+            type: "button", class: "done-sub", "data-task-id": task.id,
+            onclick: () => { location.hash = `#/p/${projectId}/tasks/${task.id}`; },
+          },
+            el("span", { class: "task-id" }, ref(task)),
+            el("span", { class: "done-sub-title" }, task.title),
+            who ? el("span", { class: "hint" }, who.name) : null));
+      }));
+    const btn = el("button", {
+      type: "button", class: "done-toggle", "aria-controls": listId, "aria-expanded": String(doneOpen.has(g.root.id)),
+      onclick: () => {
+        if (doneOpen.has(g.root.id)) doneOpen.delete(g.root.id); else doneOpen.add(g.root.id);
+        const open = doneOpen.has(g.root.id);
+        list.hidden = !open;
+        btn.setAttribute("aria-expanded", String(open));
+        btn.textContent = label(open);
+      },
+    }, label(doneOpen.has(g.root.id)));
+    return el("div", { class: "done-group" }, card, btn, list);
   }
 
   // boardPanel: ce e deschis deasupra board-ului: null, "stages", "task" sau "recurring"
