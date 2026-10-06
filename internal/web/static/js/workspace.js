@@ -521,6 +521,12 @@ export async function workspaceView(root, projectId, route) {
       folderOf(p, byId.get(t.assigneeId))?.id === state.folderFilter;
     // pe board stau doar radacinile; o radacina ramane daca ea sau un descendent trece filtrul
     const groups = taskGroups(p.tasks).filter((g) => passes(g.root) || g.subs.some((s) => passes(s.task)));
+    // in fiecare coloana, cele mai recente primele: ultima activitate din grup (radacina sau
+    // orice sub-task); la egalitate, task-ul creat mai tarziu (numar mai mare)
+    const lastActivity = (g) => Math.max(Date.parse(g.root.updatedAt) || 0,
+      ...g.subs.map((s) => Date.parse(s.task.updatedAt) || 0));
+    for (const g of groups) g.last = lastActivity(g);
+    groups.sort((a, b) => b.last - a.last || b.root.number - a.root.number);
     count.textContent = `${p.done} of ${p.total} done`;
     // replaceChildren nu ignora false (el() da): filtram noi
     // butoanele deschid si inchid panoul lor (editorul de coloane sau formularul de task)
