@@ -536,7 +536,7 @@ export async function workspaceView(root, projectId, route) {
     };
     for (const g of groups) {
       g.key = colKey(groupAt(g));
-      // grupul sta in alta coloana decat task-ul care a pornit firul: aratam cate follow-up-uri sunt deschise
+      // grupul sta in alta coloana decat task-ul care a pornit firul: aratam cate radacini follow-up sunt deschise
       g.openLabel = g.followOpen > 0 && g.key !== colKey(g.root) ? g.followOpen : 0;
     }
     const inCol = (key) => groups.filter((g) => g.key === key);
@@ -569,7 +569,8 @@ export async function workspaceView(root, projectId, route) {
   // (ca inainte). Intr-un fir: daca toate radacinile de arbore din fir (pornirea si fiecare
   // follow-up) sunt gata, radacina (deci Done); altfel radacina deschisa cu cea mai recenta
   // activitate. Sub-task-urile nu conteaza aici: starea lor se vede deja in radacina arborelui
-  // (un parinte care asteapta sub-task-uri ramane In progress).
+  // (un parinte care asteapta sub-task-uri ramane In progress). Deliberat: grupul trece in Done
+  // cand toate radacinile de arbore sunt gata, chiar daca un sub-task e inca deschis.
   function groupAt(g) {
     const open = [g.root, ...g.follows].filter((t) => t.status !== "done");
     if (!open.length) return g.root;
@@ -631,17 +632,22 @@ export async function workspaceView(root, projectId, route) {
     for (const t of tasks) if (!seen.has(t.id)) trees.push(tree(t));
 
     // hostOf: arborele in al carui grup intra un arbore. thread_id e mereu canonic (pornirea
-    // firului), dar daca tinta e la randul ei un follow-up urcam mai departe; un ciclu sau o
-    // tinta lipsa opresc urcarea (arborele ramane grupul lui).
+    // firului), dar daca tinta e la randul ei un follow-up urcam mai departe; o tinta lipsa
+    // opreste urcarea (ultimul arbore gasit e gazda). Un ciclu in thread_id (date stricate):
+    // gazda e arborele din ciclu cu numarul de radacina cel mai mic, acelasi pentru toti
+    // arborii care ajung in ciclu, ca exact unul sa gazduiasca restul.
     const hostOf = (tr) => {
-      const path = new Set([tr]);
-      let cur = tr;
+      const path = [tr];
       for (;;) {
+        const cur = path[path.length - 1];
         const target = cur.root.threadId && byTask.get(cur.root.threadId);
         const next = target && treeOf.get(target.id);
-        if (!next || path.has(next)) return cur;
-        path.add(next);
-        cur = next;
+        if (!next) return cur;
+        const at = path.indexOf(next);
+        if (at >= 0) {
+          return path.slice(at).reduce((a, b) => (b.root.number < a.root.number ? b : a));
+        }
+        path.push(next);
       }
     };
     const followers = new Map(); // arbore gazda -> arborii follow-up
@@ -652,18 +658,26 @@ export async function workspaceView(root, projectId, route) {
       followers.get(host).push(tr);
     }
     const groups = [];
-    for (const tr of trees) {
-      if (hostOf(tr) !== tr) continue; // e deja in grupul firului lui
-      const fs = (followers.get(tr) || []).sort((a, b) => a.root.number - b.root.number);
+    const shown = new Set(); // arborii deja pusi intr-un grup
+    const emit = (tr, fs) => {
+      fs.sort((a, b) => a.root.number - b.root.number);
       const subs = [...tr.subs];
-      let followOpen = 0;
+      shown.add(tr);
       for (const f of fs) {
+        shown.add(f);
         subs.push({ task: f.root, depth: 0, follow: true });
         for (const s of f.subs) subs.push({ task: s.task, depth: s.depth + 1 });
-        followOpen += [f.root, ...f.subs.map((s) => s.task)].filter((t) => t.status !== "done").length;
       }
+      // followOpen: radacinile follow-up deschise, aceleasi care decid coloana (groupAt)
+      const followOpen = fs.filter((f) => f.root.status !== "done").length;
       groups.push({ root: tr.root, subs, follows: fs.map((f) => f.root), followOpen });
+    };
+    for (const tr of trees) {
+      if (hostOf(tr) !== tr) continue; // e deja in grupul firului lui
+      emit(tr, followers.get(tr) || []);
     }
+    // plasa de siguranta: un arbore neatins (n-ar trebui) devine grupul lui, ca sa nu pierdem task-uri
+    for (const tr of trees) if (!shown.has(tr)) emit(tr, []);
     return groups;
   }
 
