@@ -32,17 +32,18 @@ type Agent struct {
 	Responsibilities string   `json:"responsibilities"` // "Ce ia"
 	PosX             *float64 `json:"posX"`             // nil = asezare automata pe canvas
 	PosY             *float64 `json:"posY"`
-	FolderID         *int64   `json:"folderId"` // nil = primul folder al proiectului
+	FolderID         *int64   `json:"folderId"`  // nil = primul folder al proiectului
+	CreatedBy        *int64   `json:"createdBy"` // liderul care l-a adaugat (add_agent); nil = utilizatorul sau wizard-ul
 }
 
-const agentCols = `id, project_id, name, role, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y, detached, folder_id`
+const agentCols = `id, project_id, name, role, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y, detached, folder_id, created_by`
 
 func scanAgent(sc scanner) (Agent, error) {
 	var a Agent
 	var tools, created string
 	err := sc.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Role, &a.Model, &a.Background,
 		&a.Instructions, &a.DoneDef, &tools, &a.SessionID, &a.PromptHash, &created,
-		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY, &a.Detached, &a.FolderID)
+		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY, &a.Detached, &a.FolderID, &a.CreatedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, ErrNotFound
 	}
@@ -70,10 +71,10 @@ func toolsJSON(tools []string) string {
 func insertAgent(ex execer, a *Agent) error {
 	created := now()
 	a.Detached = a.Detached && a.ParentID == nil // un agent cu sef e mereu legat
-	res, err := ex.Exec(`INSERT INTO agents (project_id, name, role, position, model, background, instructions, done_def, tools, parent_id, reviewer_id, responsibilities, detached, folder_id, created_at)
-		VALUES (?, ?, ?, 'worker', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 'worker': coloana veche, pastrata doar pentru ca e NOT NULL
+	res, err := ex.Exec(`INSERT INTO agents (project_id, name, role, position, model, background, instructions, done_def, tools, parent_id, reviewer_id, responsibilities, detached, folder_id, created_by, created_at)
+		VALUES (?, ?, ?, 'worker', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // 'worker': coloana veche, pastrata doar pentru ca e NOT NULL
 		a.ProjectID, a.Name, a.Role, a.Model, a.Background, a.Instructions, a.DoneDef, toolsJSON(a.Tools),
-		nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.Responsibilities, a.Detached, nullPtr(a.FolderID), created)
+		nullPtr(a.ParentID), nullPtr(a.ReviewerID), a.Responsibilities, a.Detached, nullPtr(a.FolderID), nullPtr(a.CreatedBy), created)
 	if isUnique(err) {
 		return ErrConflict
 	}
