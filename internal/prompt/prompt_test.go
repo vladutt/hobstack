@@ -13,6 +13,9 @@ var proj = store.Project{Name: "ApiUnit", Goal: "Import din OpenAPI 3.1", Contex
 
 func ptrID(v int64) *int64 { return &v }
 
+// propozitia pentru lideri despre firele de lucru (continues la create_task)
+const continuesSentence = `When a new task continues earlier work (a fix after an audit, a follow-up of T-85), pass continues: "T-85" to mcp__team__create_task so it is grouped with it.`
+
 func TestSystemRoles(t *testing.T) {
 	a := store.Agent{Name: "Sub", Role: "Tech Lead", Background: "Stie Laravel.", DoneDef: "rezumat si fisiere schimbate"}
 	cases := []struct {
@@ -26,16 +29,16 @@ func TestSystemRoles(t *testing.T) {
 				"# How you work\nWork only on the task you received", "# Background\nStie Laravel."},
 			[]string{"create_task", "review_approve"}},
 		{"sub-lider", Links{BossName: "Atlas", IsLead: true},
-			[]string{"mcp__team__create_task", "stop without calling report_done", `"Takes"`},
+			[]string{"mcp__team__create_task", "stop without calling report_done", `"Takes"`, continuesSentence},
 			[]string{"Work only on the task you received", "review_approve"}},
 		{"radacina lider", Links{IsLead: true},
-			[]string{"You report to the user.", "mcp__team__create_task",
+			[]string{"You report to the user.", "mcp__team__create_task", continuesSentence,
 				"# When you finish\nWhen the goal is reached, write the user a summary. The summary includes: rezumat si fisiere schimbate"},
 			[]string{"report_done"}},
 		{"reviewer", Links{BossName: "Atlas", IsReviewer: true},
 			[]string{"mcp__team__review_approve", "mcp__team__review_reject", "Work only on the task you received",
 				"Read the changed files to check the work; do not rely only on the summary."},
-			[]string{"create_task"}},
+			[]string{"create_task", "continues:"}},
 		{"singur", Links{},
 			[]string{"You report to the user.", "You talk directly with the user"},
 			[]string{"mcp__team__create_task", "report_done"}},

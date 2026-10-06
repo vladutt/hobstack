@@ -18,8 +18,8 @@ type fakeBackend struct {
 }
 
 func (f *fakeBackend) Resolve(tok string) (Caller, bool) { c, ok := f.callers[tok]; return c, ok }
-func (f *fakeBackend) CreateTask(c Caller, title, desc, assignee string) (string, error) {
-	f.calls = append(f.calls, "create_task|"+title+"|"+desc+"|"+assignee)
+func (f *fakeBackend) CreateTask(c Caller, title, desc, assignee, continues string) (string, error) {
+	f.calls = append(f.calls, "create_task|"+title+"|"+desc+"|"+assignee+"|"+continues)
 	return "Creat T-1 pentru " + assignee, f.err
 }
 func (f *fakeBackend) ListTasks(c Caller, status string) (string, error) {
@@ -258,8 +258,13 @@ func TestCallCreateTask(t *testing.T) {
 	if isErr || text != "Creat T-1 pentru Rook" {
 		t.Fatalf("%q %v", text, isErr)
 	}
-	if len(fb.calls) != 1 || fb.calls[0] != "create_task|Parser|d|Rook" {
+	if len(fb.calls) != 1 || fb.calls[0] != "create_task|Parser|d|Rook|" {
 		t.Fatalf("apeluri: %v", fb.calls)
+	}
+	// continues ajunge la backend asa cum l-a scris agentul
+	rpc(t, ts, "lead", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"create_task","arguments":{"title":"Fix","assignee":"Rook","continues":"T-85"}}}`)
+	if len(fb.calls) != 2 || fb.calls[1] != "create_task|Fix||Rook|T-85" {
+		t.Fatalf("apeluri cu continues: %v", fb.calls)
 	}
 }
 
@@ -365,6 +370,23 @@ func TestCreateTaskSchemaWithStages(t *testing.T) {
 	}
 	if got := required("stagelead"); got != `["title"]` {
 		t.Fatalf("cu etape: %s", got)
+	}
+	// ambele variante au argumentul optional continues
+	for _, token := range []string{"lead", "stagelead"} {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":3,"method":"tools/list"}`)
+		found := false
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			m := tool.(map[string]any)
+			if m["name"] != "create_task" {
+				continue
+			}
+			props := m["inputSchema"].(map[string]any)["properties"].(map[string]any)
+			c, ok := props["continues"].(map[string]any)
+			found = ok && c["description"] == "Optional: the task this continues (e.g. T-85), so it is grouped with it on the board"
+		}
+		if !found {
+			t.Fatalf("%s: create_task fara continues", token)
+		}
 	}
 }
 

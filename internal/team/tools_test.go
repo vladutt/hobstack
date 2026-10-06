@@ -11,7 +11,7 @@ import (
 
 func TestCreateTaskAssignsWorker(t *testing.T) {
 	f := setup(t)
-	text, err := f.tm.CreateTask(f.leadCaller(), "Parser $ref", "Doar local", "Rook")
+	text, err := f.tm.CreateTask(f.leadCaller(), "Parser $ref", "Doar local", "Rook", "")
 	if err != nil || text != "Created T-1 for Rook. They will receive it automatically." {
 		t.Fatalf("%q %v", text, err)
 	}
@@ -29,7 +29,7 @@ func TestCreateTaskAssignsWorker(t *testing.T) {
 
 func TestCreateTaskAssigneeLoose(t *testing.T) {
 	f := setup(t)
-	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "  rook "); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "  rook ", ""); err != nil {
 		t.Fatal(err)
 	}
 	if task := f.wantStatus(t, 1, store.StatusQueued); task.AssigneeID != f.rook.ID {
@@ -39,16 +39,16 @@ func TestCreateTaskAssigneeLoose(t *testing.T) {
 
 func TestCreateTaskErrors(t *testing.T) {
 	f := setup(t)
-	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "Nimeni"); err == nil || !strings.Contains(err.Error(), "Rook, Vera") {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "Nimeni", ""); err == nil || !strings.Contains(err.Error(), "Rook, Vera") {
 		t.Errorf("worker necunoscut: %v", err)
 	}
-	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "Lead"); err == nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "Lead", ""); err == nil {
 		t.Error("task asignat lead-ului trebuia refuzat")
 	}
-	if _, err := f.tm.CreateTask(f.leadCaller(), "  ", "", "Rook"); err == nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "  ", "", "Rook", ""); err == nil {
 		t.Error("titlu gol trebuia refuzat")
 	}
-	if _, err := f.tm.CreateTask(f.workerCaller(f.rook, 0), "A", "", "Vera"); err == nil {
+	if _, err := f.tm.CreateTask(f.workerCaller(f.rook, 0), "A", "", "Vera", ""); err == nil {
 		t.Error("un worker nu poate crea task-uri")
 	}
 	if tasks, _ := f.st.ListTasks(f.p.ID); len(tasks) != 0 {
@@ -197,18 +197,18 @@ func TestCreateTaskDirectReportsOnly(t *testing.T) {
 	f := setup(t)
 	sub := f.agent(t, "Sub", &f.lead, nil)
 	wes := f.agent(t, "Wes", &sub, nil)
-	_, err := f.tm.CreateTask(f.leadCaller(), "A", "", "Wes")
+	_, err := f.tm.CreateTask(f.leadCaller(), "A", "", "Wes", "")
 	if err == nil || !strings.Contains(err.Error(), `"Wes" is not on your direct team. Your direct team: Rook, Vera, Sub`) {
 		t.Fatalf("worker indirect: %v", err)
 	}
 	// flag vechi: Rook a fost lider cand a pornit run-ul, dar acum nu mai are copii
 	stale := mcp.Caller{ProjectID: f.p.ID, AgentID: f.rook.ID, IsLead: true, HasParent: true}
-	if _, err := f.tm.CreateTask(stale, "A", "", "Vera"); err == nil || !strings.Contains(err.Error(), "only a lead") {
+	if _, err := f.tm.CreateTask(stale, "A", "", "Vera", ""); err == nil || !strings.Contains(err.Error(), "only a lead") {
 		t.Fatalf("lider fara copii: %v", err)
 	}
 	parent := f.task(t, "Import", sub, store.StatusInProgress)
 	sc := mcp.Caller{ProjectID: f.p.ID, AgentID: sub.ID, IsLead: true, HasParent: true, TaskID: parent.ID}
-	if _, err := f.tm.CreateTask(sc, "Parser", "", "wes"); err != nil {
+	if _, err := f.tm.CreateTask(sc, "Parser", "", "wes", ""); err != nil {
 		t.Fatal(err)
 	}
 	got := f.wantStatus(t, 2, store.StatusQueued)
@@ -217,7 +217,7 @@ func TestCreateTaskDirectReportsOnly(t *testing.T) {
 	}
 	// run de notificari (fara task), dar cu un singur task in lucru: tot sub-task al lui
 	sc.TaskID = 0
-	f.tm.CreateTask(sc, "Lexer", "", "Wes")
+	f.tm.CreateTask(sc, "Lexer", "", "Wes", "")
 	if got := f.wantStatus(t, 3, store.StatusQueued); got.ParentTaskID == nil || *got.ParentTaskID != parent.ID {
 		t.Fatalf("T-3 parinte: %+v", got.ParentTaskID)
 	}
@@ -437,7 +437,7 @@ func TestCreateTaskAmbiguousParent(t *testing.T) {
 	f.task(t, "Unu", sub, store.StatusInProgress)
 	f.task(t, "Doi", sub, store.StatusInProgress)
 	sc := mcp.Caller{ProjectID: f.p.ID, AgentID: sub.ID, IsLead: true, HasParent: true} // run de notificari
-	text, err := f.tm.CreateTask(sc, "Parser", "", "Wes")
+	text, err := f.tm.CreateTask(sc, "Parser", "", "Wes", "")
 	if err != nil || text != "Created T-3 for Wes. They will receive it automatically. Created without a parent task: you have several tasks in progress." {
 		t.Fatalf("%q %v", text, err)
 	}

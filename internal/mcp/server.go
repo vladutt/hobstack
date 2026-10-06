@@ -41,7 +41,7 @@ type AddAgentInput struct {
 // rezultat cu isError, deci trebuie sa fie mesaje clare pentru el.
 type Backend interface {
 	Resolve(token string) (Caller, bool)
-	CreateTask(c Caller, title, description, assignee string) (string, error)
+	CreateTask(c Caller, title, description, assignee, continues string) (string, error)
 	ListTasks(c Caller, status string) (string, error)
 	AcceptTask(c Caller, task, note string) (string, error)
 	SendBack(c Caller, task, feedback string) (string, error)
@@ -158,7 +158,7 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 	var err error
 	switch p.Name {
 	case "create_task":
-		text, err = s.backend.CreateTask(c, arg("title"), arg("description"), arg("assignee"))
+		text, err = s.backend.CreateTask(c, arg("title"), arg("description"), arg("assignee"), arg("continues"))
 	case "list_tasks":
 		text, err = s.backend.ListTasks(c, arg("status"))
 	case "accept_task":

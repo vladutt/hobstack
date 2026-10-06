@@ -30,7 +30,7 @@ func TestRequestedFromChat(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	run := f.fs.last(t, f.lead)
-	if _, err := f.tm.CreateTask(f.caller(t, run), "Share", "do it", "Rook"); err != nil {
+	if _, err := f.tm.CreateTask(f.caller(t, run), "Share", "do it", "Rook", ""); err != nil {
 		t.Fatal(err)
 	}
 	task := f.wantStatus(t, 1, store.StatusQueued)
@@ -58,7 +58,7 @@ func TestNoRequestedFromTaskRun(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	run := f.fs.last(t, f.rook) // run pe task
-	if _, err := f.tm.CreateTask(f.caller(t, run), "Part", "", wes.Name); err != nil {
+	if _, err := f.tm.CreateTask(f.caller(t, run), "Part", "", wes.Name, ""); err != nil {
 		t.Fatal(err)
 	}
 	sub := f.wantStatus(t, 2, store.StatusQueued)
@@ -79,7 +79,7 @@ func TestRequestedOnlyWithUserMessage(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	run := f.fs.last(t, f.lead)
-	if _, err := f.tm.CreateTask(f.caller(t, run), "Follow-up", "", "Rook"); err != nil {
+	if _, err := f.tm.CreateTask(f.caller(t, run), "Follow-up", "", "Rook", ""); err != nil {
 		t.Fatal(err)
 	}
 	task := f.wantStatus(t, 1, store.StatusQueued)
@@ -92,7 +92,7 @@ func TestRequestedOnlyWithUserMessage(t *testing.T) {
 func TestNoRequestedFromQuestionReply(t *testing.T) {
 	f := setup(t)
 	run := replyRun(t, f, true)
-	if _, err := f.tm.CreateTask(f.caller(t, run), "Share", "do it", "Rook"); err != nil {
+	if _, err := f.tm.CreateTask(f.caller(t, run), "Share", "do it", "Rook", ""); err != nil {
 		t.Fatal(err)
 	}
 	task := f.wantStatus(t, 1, store.StatusQueued)

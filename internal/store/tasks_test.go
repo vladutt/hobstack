@@ -285,3 +285,35 @@ func TestRequeueClearsNudgedAt(t *testing.T) {
 		}
 	}
 }
+
+// thread_id: firul de lucru se salveaza la creare, se citeste inapoi si devine
+// NULL cand task-ul care a pornit firul e sters.
+func TestTaskThreadID(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	start := Task{ProjectID: p.ID, Title: "Audit", AssigneeID: w.ID}
+	if err := s.CreateTask(&start); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetTask(start.ID); got.ThreadID != nil {
+		t.Fatalf("task fara fir: %v", *got.ThreadID)
+	}
+	next := Task{ProjectID: p.ID, Title: "Fix", AssigneeID: w.ID, ThreadID: &start.ID}
+	if err := s.CreateTask(&next); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetTask(next.ID)
+	if err != nil || got.ThreadID == nil || *got.ThreadID != start.ID {
+		t.Fatalf("thread_id = %v, %v", got.ThreadID, err)
+	}
+	if list, _ := s.ListTasks(p.ID); len(list) != 2 || list[1].ThreadID == nil || *list[1].ThreadID != start.ID {
+		t.Fatalf("ListTasks: %+v", list)
+	}
+	if _, err := s.db.Exec(`DELETE FROM tasks WHERE id = ?`, start.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetTask(next.ID); got.ThreadID != nil {
+		t.Fatalf("dupa stergere thread_id = %v", *got.ThreadID)
+	}
+}

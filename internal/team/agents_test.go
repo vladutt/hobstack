@@ -286,7 +286,7 @@ func TestSoloRootAddsAndDelegates(t *testing.T) {
 		t.Fatal(err)
 	}
 	// acelasi Caller (flag-urile de la pornirea run-ului): create_task citeste echipa din DB
-	if _, err := f.tm.CreateTask(c, "Write tests", "", "Quinn"); err != nil {
+	if _, err := f.tm.CreateTask(c, "Write tests", "", "Quinn", ""); err != nil {
 		t.Fatalf("create_task pentru agentul nou: %v", err)
 	}
 }

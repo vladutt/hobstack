@@ -11,6 +11,9 @@ func schema(required []string, props map[string]any) map[string]any {
 	return map[string]any{"type": "object", "properties": props, "required": required}
 }
 
+// continuesArg: argumentul optional continues al lui create_task (fir de lucru, doar afisare)
+const continuesArg = "Optional: the task this continues (e.g. T-85), so it is grouped with it on the board"
+
 func str(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
 }
@@ -23,6 +26,7 @@ var leadTools = []Tool{
 			"title":       str("Short, clear title"),
 			"description": str("What needs to be done, acceptance criteria, relevant files"),
 			"assignee":    str("The worker's name, exactly as in the team list"),
+			"continues":   str(continuesArg),
 		}),
 	},
 	{
@@ -62,6 +66,7 @@ var createTaskInStages = Tool{
 		"title":       str("Short, clear title"),
 		"description": str("What needs to be done, acceptance criteria, relevant files"),
 		"assignee":    str("Optional: an agent from the first stage to take it first; empty = the first free agent"),
+		"continues":   str(continuesArg),
 	}),
 }
 

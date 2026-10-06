@@ -27,11 +27,11 @@ func TestStageCreateAndFirstFree(t *testing.T) {
 	f, wes, stages := stagesFixture(t)
 	lc := f.leadCaller()
 	for _, title := range []string{"A", "B"} {
-		if _, err := f.tm.CreateTask(lc, title, "", ""); err != nil {
+		if _, err := f.tm.CreateTask(lc, title, "", "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := f.tm.CreateTask(lc, "C", "", "Vera"); err == nil || !strings.Contains(err.Error(), "is not in stage Dev") {
+	if _, err := f.tm.CreateTask(lc, "C", "", "Vera", ""); err == nil || !strings.Contains(err.Error(), "is not in stage Dev") {
 		t.Fatalf("assignee din alta etapa: %v", err)
 	}
 	mustReconcile(t, f)
@@ -69,7 +69,7 @@ func TestStageWithoutAgentsWaits(t *testing.T) {
 	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Gol", Kind: store.KindWork}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	n := f.fs.count()
@@ -93,14 +93,14 @@ func TestRootWithoutChildrenCreatesInStages(t *testing.T) {
 	if !c.IsLead {
 		t.Fatal("radacina dintr-un proiect cu etape trebuia sa primeasca create_task")
 	}
-	if _, err := f.tm.CreateTask(c, "A", "", ""); err != nil {
+	if _, err := f.tm.CreateTask(c, "A", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestStageFullFlow(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "", "Rook"); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "", "Rook", ""); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)
@@ -155,7 +155,7 @@ func TestStageFullFlow(t *testing.T) {
 
 func TestStageRejectLimitBlocks(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
 	for i := 0; i < MaxSendBacks; i++ {
 		// il aducem direct in QA, in lucru la Vera
 		task, _ := f.st.GetTaskByNumber(f.p.ID, 1)
@@ -202,7 +202,7 @@ func TestUserTaskDecidedByUser(t *testing.T) {
 
 func TestStageRunWithoutReportGoesToLead(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "")
 	mustReconcile(t, f)
 	rook1 := f.fs.last(t, f.rook)
 	f.fs.finish(rook1.ID, runner.Outcome{Status: "done", Result: "am uitat de raport"})
@@ -233,7 +233,7 @@ func mustAgents(t *testing.T, f *fixture) []store.Agent {
 // sa ia task-ul de la Vera.
 func TestStageOldRunEndDoesNotStealTask(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "")
 	mustReconcile(t, f)
 	rook1 := f.fs.last(t, f.rook)
 	if _, err := f.tm.ReportDone(f.caller(t, rook1), "", "gata"); err != nil {
@@ -269,7 +269,7 @@ func TestLeadTurnListsStages(t *testing.T) {
 // (altfel dispare de pe board si nu se mai poate debloca)
 func TestBlockedAfterFinalSendBackKeepsStage(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
 	task, _ := f.st.GetTaskByNumber(f.p.ID, 1)
 	task.StageID, task.Status, task.ReviewStage, task.SendBacks = nil, store.StatusReview, store.StageLead, MaxSendBacks-1
 	f.st.SaveTask(&task)
@@ -304,7 +304,7 @@ func TestDetachedStageAgentDoesNotWork(t *testing.T) {
 	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{solo.ID}}}); err != nil {
 		t.Fatal(err)
 	}
-	f.tm.CreateTask(f.leadCaller(), "A", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
 	n := f.fs.count()
 	mustReconcile(t, f)
 	f.wantStatus(t, 1, store.StatusQueued)

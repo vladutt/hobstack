@@ -29,7 +29,7 @@ func (t *Team) recordRequest(c mcp.Caller, task store.Task, leadName string) {
 	}
 }
 
-func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (string, error) {
+func (t *Team) CreateTask(c mcp.Caller, title, description, assignee, continues string) (string, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
 
@@ -43,7 +43,7 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 		return "", err
 	}
 	if len(stages) > 0 {
-		return t.createStageTask(c, agents, stages, title, description, assignee)
+		return t.createStageTask(c, agents, stages, title, description, assignee, continues)
 	}
 	children := store.Children(c.AgentID, agents)
 	if len(children) == 0 {
@@ -69,12 +69,16 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 		return "", errors.New("your agent no longer exists")
 	}
 
+	threadID, err := t.threadFor(c.ProjectID, continues)
+	if err != nil {
+		return "", err
+	}
 	parentID, ambiguous, err := t.parentTaskFor(c)
 	if err != nil {
 		return "", err
 	}
 	task := store.Task{ProjectID: c.ProjectID, Title: title, Description: strings.TrimSpace(description),
-		AssigneeID: w.ID, CreatorID: &lead.ID, ParentTaskID: parentID}
+		AssigneeID: w.ID, CreatorID: &lead.ID, ParentTaskID: parentID, ThreadID: threadID}
 	if err := t.st.CreateTask(&task); err != nil {
 		return "", err
 	}
@@ -95,7 +99,7 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee string) (st
 // createStageTask: intr-un proiect cu etape task-ul intra in prima etapa;
 // assignee e optional si trebuie sa fie din acea etapa. Poate crea orice lider
 // sau radacina (etapele decid cine lucreaza). Se apeleaza cu t.work blocat.
-func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []store.Stage, title, description, assignee string) (string, error) {
+func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []store.Stage, title, description, assignee, continues string) (string, error) {
 	lead, ok := store.FindAgent(agents, c.AgentID)
 	if !ok {
 		return "", errors.New("your agent no longer exists")
@@ -121,12 +125,16 @@ func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []stor
 		assigned = "Assigned to " + w.Name
 		to = w.Name
 	}
+	threadID, err := t.threadFor(c.ProjectID, continues)
+	if err != nil {
+		return "", err
+	}
 	parentID, _, err := t.parentTaskFor(c)
 	if err != nil {
 		return "", err
 	}
 	task := store.Task{ProjectID: c.ProjectID, Title: title, Description: strings.TrimSpace(description),
-		AssigneeID: who, CreatorID: &lead.ID, ParentTaskID: parentID, StageID: &first.ID}
+		AssigneeID: who, CreatorID: &lead.ID, ParentTaskID: parentID, StageID: &first.ID, ThreadID: threadID}
 	if err := t.st.CreateTask(&task); err != nil {
 		return "", err
 	}
@@ -146,6 +154,50 @@ func isChild(children []store.Agent, id int64) bool {
 		}
 	}
 	return false
+}
+
+// threadFor gaseste firul de lucru pentru continues ("T-85", "t-85" sau "85"):
+// urca pe ParentTaskID pana la radacina arborelui task-ului, apoi ia firul
+// radacinii (daca e deja un follow-up) sau radacina insasi. continues gol = fara fir.
+// Doar afisare: nicio decizie nu citeste thread_id.
+func (t *Team) threadFor(projectID int64, continues string) (*int64, error) {
+	ref := strings.TrimSpace(continues)
+	if ref == "" {
+		return nil, nil
+	}
+	notOurs := fmt.Errorf("%q is not a task of this project", ref)
+	n, err := strconv.Atoi(strings.TrimPrefix(strings.TrimPrefix(ref, "T-"), "t-"))
+	if err != nil {
+		return nil, notOurs
+	}
+	// cautarea e pe proiectul apelantului: un task din alt proiect nu e gasit
+	task, err := t.st.GetTaskByNumber(projectID, n)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, notOurs
+	}
+	if err != nil {
+		return nil, err
+	}
+	root := task
+	seen := map[int64]bool{root.ID: true}
+	for root.ParentTaskID != nil {
+		p, err := t.st.GetTask(*root.ParentTaskID)
+		if errors.Is(err, store.ErrNotFound) {
+			break // parinte sters: radacina e ultimul gasit
+		}
+		if err != nil {
+			return nil, err
+		}
+		if seen[p.ID] {
+			break // ciclu (date stricate): ne oprim
+		}
+		seen[p.ID] = true
+		root = p
+	}
+	if root.ThreadID != nil {
+		return root.ThreadID, nil
+	}
+	return &root.ID, nil
 }
 
 // parentTaskFor alege task-ul din care se sparge un sub-task nou: task-ul

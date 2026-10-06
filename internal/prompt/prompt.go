@@ -65,7 +65,9 @@ const howLead = `You are a lead: you have a direct team, listed in the turn mess
 	`and create them with mcp__team__create_task, only for agents on your direct team, choosing by each one's "Takes" field. ` +
 	`Do not do their work yourself. When you receive results, check them (you can read the changed files) and call ` +
 	`mcp__team__accept_task or mcp__team__send_back with concrete feedback. Use mcp__team__list_tasks to see the status. ` +
-	`Do not use any task lists other than the mcp__team__ tools.`
+	`Do not use any task lists other than the mcp__team__ tools. ` +
+	`When a new task continues earlier work (a fix after an audit, a follow-up of T-85), pass continues: "T-85" to ` +
+	`mcp__team__create_task so it is grouped with it.`
 
 const howAddAgents = `You can grow your team with mcp__team__add_agent: only when no current member fits part of the work, ` +
 	`or when you have independent sub-tasks to run in parallel. Check your team first. A new agent starts working when you ` +

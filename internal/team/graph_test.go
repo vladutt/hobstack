@@ -44,7 +44,7 @@ func TestGraphFullFlow(t *testing.T) {
 	f.tm.UserMessage(f.lead.ID, "Fa importul", nil)
 	mustReconcile(t, f)
 	lead1 := f.fs.last(t, f.lead)
-	if _, err := f.tm.CreateTask(f.caller(t, lead1), "Import", "", "Sub"); err != nil {
+	if _, err := f.tm.CreateTask(f.caller(t, lead1), "Import", "", "Sub", ""); err != nil {
 		t.Fatal(err)
 	}
 	f.fs.finish(lead1.ID, ok("s-lead"))
@@ -56,7 +56,7 @@ func TestGraphFullFlow(t *testing.T) {
 	if !sc.IsLead || !sc.HasParent || sc.IsReviewer || !strings.Contains(turn(sub1), "Task T-1: Import") {
 		t.Fatalf("sub1: %+v\n%s", sc, turn(sub1))
 	}
-	if _, err := f.tm.CreateTask(sc, "Parser", "", "Wes"); err != nil {
+	if _, err := f.tm.CreateTask(sc, "Parser", "", "Wes", ""); err != nil {
 		t.Fatal(err)
 	}
 	f.fs.finish(sub1.ID, runner.Outcome{Status: "done", SessionID: "s-sub", Result: "Am delegat."})
@@ -127,7 +127,7 @@ func TestCreateTaskRefusedOutsideDirectTeamInRun(t *testing.T) {
 	f.agent(t, "Wes", &sub, nil)
 	f.tm.UserMessage(f.lead.ID, "Fa importul", nil)
 	mustReconcile(t, f)
-	if _, err := f.tm.CreateTask(f.caller(t, f.fs.last(t, f.lead)), "A", "", "Wes"); err == nil {
+	if _, err := f.tm.CreateTask(f.caller(t, f.fs.last(t, f.lead)), "A", "", "Wes", ""); err == nil {
 		t.Fatal("coordonatorul nu poate da task direct lui Wes")
 	}
 }
