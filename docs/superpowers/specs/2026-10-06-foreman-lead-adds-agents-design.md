@@ -51,8 +51,7 @@ Agentul nou:
 
 - `ParentID` = liderul care cheama; `FolderID` = folderul liderului; fara reviewer; `Detached = false`;
 - `CreatedBy` = liderul;
-- pozitia pe canvas: sub lider (`PosX` = al liderului + 220 * k, `PosY` = al liderului + 160, unde k = cati agenti
-  are deja liderul); daca liderul nu are pozitie, `nil` (canvas-ul il aseaza ca azi).
+- pozitia pe canvas: `nil` (canvas-ul il aseaza automat, ca pe agentii din wizard).
 
 **Creare directa sau cu aprobare.** Directa daca:
 
@@ -73,7 +72,7 @@ Alte refuzuri (mesaje in engleza, intoarse ca eroare de tool):
 
 - nume ocupat (agent existent sau cerere deschisa a oricui din proiect cu acelasi nume): `an agent named "X" already exists`;
 - tool peste ale liderului: `you can only give tools you have yourself: shell` (lista celor in plus);
-- model necunoscut: `unknown model "X"`.
+- model necunoscut: `unknown model: X`.
 
 ### `remove_agent`
 
@@ -137,10 +136,12 @@ Toate sub `t.work`, ca `AskUser`. Dupa orice schimbare:
 - evenimente SSE `agent` si `project`.
 
 **Aprobare:** re-valideaza totul (intre timp numele s-a putut ocupa, limita s-a putut umple, liderul si-a putut pierde
-un tool); la eroare cererea ramane deschisa si UI-ul arata eroarea (409). La succes: `CreateAgent` +
+un tool sau rolul); la eroare (`team.AgentRequestError`) cererea ramane deschisa si UI-ul arata eroarea (409). La succes: `CreateAgent` +
 `CloseAgentRequest(approved, &id)` in aceeasi tranzactie.
 
-**Mesajul catre lider** (ca la `closeQuestion`, prin `addUserMessage`, apoi Kick):
+**Mesajul catre lider**: o nota in thread-ul lui (`t.note(..., delivered=false)`, apoi Kick), NU prin
+`addUserMessage`: un mesaj cu autor utilizatorul ar face run-ul urmator sa para pornit din chat, iar liderul ar
+putea adauga direct, fara aprobare.
 
 - `The user approved your request: "X" is now on your team. Give it work with create_task.`
 - `The user dismissed your request to add "X". Continue with your current team.`
@@ -169,10 +170,11 @@ Prompt-ul liderilor si al radacinilor se schimba, deci hash-ul lor: la urmatorul
 
 ## UI
 
-- **"Needs you"** (proiect si agentul lider, ca intrebarile): card `<Lead> wants to add <Name>` cu rolul, modelul,
+- **"Needs you"** (banda proiectului, langa cererile de acces): card `<Lead> wants to add <Name>` cu rolul, modelul,
   tool-urile, motivul, instructiunile restranse (Show more) si **Approve** / **Dismiss**. Eroarea de la approve apare
   ca toast, cardul ramane.
-- **Canvas / panoul agentului:** eticheta mica `Added by <Lead>` pe agentii cu `createdBy`.
+- **Panoul agentului:** linia `Added by <Lead>` sus, pe agentii cu `createdBy`. **Canvas:** acelasi text ca
+  tooltip (`<title>`) pe nod; liniile nodului raman cum sunt.
 - Fara alte schimbari: agentii adaugati se editeaza, muta, leaga si sterg ca oricare altii.
 
 ## Teste
