@@ -66,7 +66,7 @@ type activeRun struct {
 	taskID    int64
 	token     string
 	request   *store.Message // ultimul mesaj al utilizatorului livrat la pornire (doar run-urile de chat)
-	answering bool           // run-ul a primit o intrebare din alt proiect: nu poate intreba la randul lui (anti-bucla)
+	questions []int64        // intrebarile din alte proiecte livrate run-ului: nu poate intreba la randul lui (anti-bucla), iar la final se inchid
 }
 
 // setRequest retine mesajul utilizatorului care a pornit run-ul activ al agentului.
@@ -79,12 +79,12 @@ func (t *Team) setRequest(agentID int64, m store.Message) {
 	}
 }
 
-// setAnswering retine ca run-ul activ al agentului a primit o intrebare dintr-un proiect legat.
-func (t *Team) setAnswering(agentID int64) {
+// addQuestions retine intrebarile (id-urile cererilor) livrate run-ului activ al agentului.
+func (t *Team) addQuestions(agentID int64, ids []int64) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if ar, ok := t.active[agentID]; ok {
-		ar.answering = true
+		ar.questions = append(ar.questions, ids...)
 		t.active[agentID] = ar
 	}
 }
@@ -94,16 +94,19 @@ func (t *Team) answeringOf(agentID int64, runID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	ar, ok := t.active[agentID]
-	return ok && ar.runID == runID && ar.answering
+	return ok && ar.runID == runID && len(ar.questions) > 0
 }
 
-// markAnswering: dupa ce run-ul a pornit cu notele date, retine daca printre ele e o intrebare primita.
+// markAnswering: dupa ce run-ul a pornit cu notele date, retine intrebarile primite printre ele.
 func (t *Team) markAnswering(agentID int64, notes []store.Message) {
+	var ids []int64
 	for _, n := range notes {
 		if n.RequestID != nil {
-			t.setAnswering(agentID)
-			return
+			ids = append(ids, *n.RequestID)
 		}
+	}
+	if len(ids) > 0 {
+		t.addQuestions(agentID, ids)
 	}
 }
 

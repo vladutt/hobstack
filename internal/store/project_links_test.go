@@ -85,8 +85,8 @@ func TestProjectRequestLifecycle(t *testing.T) {
 	if q.Ref() != "Q-"+itoa(q.ID) {
 		t.Fatalf("ref: %s", q.Ref())
 	}
-	if n, _ := s.CountOpenQuestionsFrom(l1.ID); n != 1 {
-		t.Fatalf("open = %d", n)
+	if open, _ := s.OpenQuestionsFrom(l1.ID); len(open) != 1 || open[0].ID != q.ID {
+		t.Fatalf("open = %+v", open)
 	}
 	if err := s.TransitionProjectRequest(q.ID, ReqOpen, ReqAnswered, "JSON", nil); err != nil {
 		t.Fatal(err)
@@ -101,8 +101,8 @@ func TestProjectRequestLifecycle(t *testing.T) {
 	if err := s.TransitionProjectRequest(9999, ReqOpen, ReqClosed, "", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("inexistenta: %v", err)
 	}
-	if n, _ := s.CountOpenQuestionsFrom(l1.ID); n != 0 {
-		t.Fatalf("dupa raspuns = %d", n)
+	if open, _ := s.OpenQuestionsFrom(l1.ID); len(open) != 0 {
+		t.Fatalf("dupa raspuns = %+v", open)
 	}
 
 	w := ProjectRequest{Kind: RequestWork, FromProject: p1.ID, FromAgent: &l1.ID, ToProject: p2.ID, Title: "Add /export", Text: "CSV", Status: ReqPending}

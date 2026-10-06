@@ -9,11 +9,15 @@ import (
 	"unicode/utf8"
 
 	"foreman/internal/mcp"
+	"foreman/internal/runner"
 	"foreman/internal/store"
 )
 
 // MaxOpenQuestions: cate intrebari fara raspuns poate avea un agent catre alte proiecte.
 const MaxOpenQuestions = 3
+
+// MaxAnswer: lungimea maxima a unui raspuns (incape intreg in nota catre cel care a intrebat).
+const MaxAnswer = 3800
 
 // ProjectRequestError: cererea nu mai poate fi aprobata (de ex. legatura a fost stearsa).
 type ProjectRequestError string
@@ -135,12 +139,16 @@ func (t *Team) AskProject(c mcp.Caller, project, question string) (string, error
 	if err != nil {
 		return "", errors.New("your agent no longer exists")
 	}
-	n, err := t.st.CountOpenQuestionsFrom(asker.ID)
+	open, err := t.st.OpenQuestionsFrom(asker.ID)
 	if err != nil {
 		return "", err
 	}
-	if n >= MaxOpenQuestions {
-		return "", fmt.Errorf("you already have %d open questions to other projects; wait for the answers", MaxOpenQuestions)
+	if len(open) >= MaxOpenQuestions {
+		refs := make([]string, len(open))
+		for i, q := range open {
+			refs[i] = q.Ref()
+		}
+		return "", fmt.Errorf("you already have %d open questions to other projects (%s); wait for the answers", len(open), strings.Join(refs, ", "))
 	}
 	root, ok, err := t.rootOf(target.ID)
 	if err != nil {
@@ -187,8 +195,8 @@ func (t *Team) ReplyToProject(c mcp.Caller, request, answer string) (string, err
 	if answer == "" {
 		return "", errors.New("answer is required")
 	}
-	if utf8.RuneCountInString(answer) > 10000 {
-		return "", errors.New("the answer is too long: at most 10000 characters")
+	if utf8.RuneCountInString(answer) > MaxAnswer {
+		return "", fmt.Errorf("the answer is too long: at most %d characters", MaxAnswer)
 	}
 	agents, err := t.st.ListAgents(c.ProjectID)
 	if err != nil {
@@ -211,19 +219,58 @@ func (t *Team) ReplyToProject(c mcp.Caller, request, answer string) (string, err
 	if r.Status != store.ReqOpen {
 		return "", fmt.Errorf("%s is already closed (%s)", r.Ref(), r.Status)
 	}
-	if err := t.st.TransitionProjectRequest(r.ID, store.ReqOpen, store.ReqAnswered, answer, nil); err != nil {
+	if err := t.answerQuestion(r, answer); err != nil {
 		return "", err
+	}
+	return fmt.Sprintf("Answer sent for %s.", r.Ref()), nil
+}
+
+// answerQuestion marcheaza intrebarea (open) raspunsa si ii trimite raspunsul
+// celui care a intrebat. Se cheama cu t.work tinut.
+func (t *Team) answerQuestion(r store.ProjectRequest, answer string) error {
+	if err := t.st.TransitionProjectRequest(r.ID, store.ReqOpen, store.ReqAnswered, answer, nil); err != nil {
+		return err
 	}
 	r.Status, r.Answer = store.ReqAnswered, answer
 	if r.FromAgent != nil {
 		// cererea e deja raspunsa: eroarea nu se intoarce (o reincercare ar primi "already closed"), doar se logheaza
-		if err := t.note(r.FromProject, *r.FromAgent, clip(fmt.Sprintf("Answer from %s to %s: %s", t.projectName(c.ProjectID), r.Ref(), answer)), false); err != nil {
+		if err := t.note(r.FromProject, *r.FromAgent, clip(fmt.Sprintf("Answer from %s to %s: %s", t.projectName(r.ToProject), r.Ref(), answer)), false); err != nil {
 			log.Printf("reply %s: note to asker: %v", r.Ref(), err)
 		}
 		t.Kick(r.FromProject)
 	}
 	t.emitRequest(r)
-	return fmt.Sprintf("Answer sent for %s.", r.Ref()), nil
+	return nil
+}
+
+// settleQuestions: la finalul unui run, intrebarile primite in el si ramase
+// deschise (radacina nu a chemat reply_to_project) primesc ca raspuns textul
+// final al run-ului; fara text, se inchid. Altfel ar ramane deschise pentru
+// totdeauna si ar bloca limita celui care a intrebat. Se cheama cu t.work tinut.
+func (t *Team) settleQuestions(ar activeRun, o runner.Outcome) {
+	answer := strings.TrimSpace(o.Result)
+	if r := []rune(answer); len(r) > MaxAnswer {
+		answer = string(r[:MaxAnswer])
+	}
+	for _, id := range ar.questions {
+		r, err := t.st.GetProjectRequest(id)
+		if err != nil {
+			if !errors.Is(err, store.ErrNotFound) {
+				log.Printf("run %s: question %d: %v", o.RunID, id, err)
+			}
+			continue
+		}
+		if r.Status != store.ReqOpen {
+			continue // deja raspunsa cu reply_to_project, sau inchisa
+		}
+		if answer == "" {
+			t.closeOpenRequest(r, "its root did not answer")
+			continue
+		}
+		if err := t.answerQuestion(r, answer); err != nil {
+			log.Printf("run %s: answer %s: %v", o.RunID, r.Ref(), err)
+		}
+	}
 }
 
 // RequestProjectWork e tool-ul request_project_work: direct intr-un run pornit
@@ -405,8 +452,9 @@ func (t *Team) deliverRequest(task store.Task) error {
 }
 
 // finishRequestedTask: radacina livreaza cu report_done un task cerut de un
-// proiect legat. Nu are sef, deci task-ul trece direct in Done. Cu t.work tinut.
-func (t *Team) finishRequestedTask(task *store.Task, root store.Agent, summary string) (string, error) {
+// proiect legat. Nu are sef: cu reviewer, task-ul trece pe la el (livrarea se
+// face cand ajunge in Done, din afterDone); fara, direct in Done. Cu t.work tinut.
+func (t *Team) finishRequestedTask(task *store.Task, root store.Agent, agents []store.Agent, summary string) (string, error) {
 	subs, err := t.st.Subtasks(task.ID)
 	if err != nil {
 		return "", err
@@ -426,6 +474,16 @@ func (t *Team) finishRequestedTask(task *store.Task, root store.Agent, summary s
 	}
 	from := t.projectName(r.FromProject)
 	task.Result = summary
+	if root.ReviewerID != nil {
+		if who, ok := store.FindAgent(agents, *root.ReviewerID); ok {
+			if _, err := t.toReview(task, root, agents, root.Name+" finished "+task.Ref(), reportedNote(root, summary)); err != nil {
+				return "", err
+			}
+			t.note(task.ProjectID, root.ID, "Reported "+task.Ref(), true)
+			t.Kick(task.ProjectID)
+			return fmt.Sprintf("%s is in Review. %s will check it; the report goes back to %s when it is accepted.", task.Ref(), who.Name, from), nil
+		}
+	}
 	markDone(task)
 	if err := t.st.SaveTask(task); err != nil {
 		return "", err

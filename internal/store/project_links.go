@@ -207,11 +207,9 @@ func (s *Store) CountPendingWork(toProject int64) (int, error) {
 	return n, err
 }
 
-// CountOpenQuestionsFrom: intrebarile fara raspuns trimise de agent altor proiecte.
-func (s *Store) CountOpenQuestionsFrom(agentID int64) (int, error) {
-	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM project_requests WHERE from_agent = ? AND kind = 'question' AND status = 'open'`, agentID).Scan(&n)
-	return n, err
+// OpenQuestionsFrom: intrebarile fara raspuns trimise de agent altor proiecte, in ordinea id-urilor.
+func (s *Store) OpenQuestionsFrom(agentID int64) ([]ProjectRequest, error) {
+	return s.queryProjectRequests(`from_agent = ? AND kind = 'question' AND status = 'open'`, agentID)
 }
 
 // OpenRequestsBetween: intrebarile deschise si cererile neaprobate dintre doua proiecte, in ambele sensuri.

@@ -170,9 +170,13 @@ func (t *Team) userCreateTask(projectID int64, title, description string, agentI
 		return store.Task{}, err
 	}
 	t.taskMsg(task, "created", actor, to, created, briefBody(task.Title, task.Description))
-	t.taskEvent(task, "assigned", actorUser, assigned)
+	t.taskEvent(task, "assigned", actor, assigned)
 	if a, ok := store.FindAgent(agents, task.AssigneeID); ok && task.StageID == nil {
-		t.note(projectID, a.ID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), title), true)
+		text := fmt.Sprintf("%s assigned by the user: %s", task.Ref(), title)
+		if origin.request != nil {
+			text = fmt.Sprintf("%s requested by %s (%s): %s. When it is done, call report_done on it.", task.Ref(), origin.from, origin.by, title)
+		}
+		t.note(projectID, a.ID, text, true)
 	}
 	t.emit(projectID, "task", task)
 	t.Kick(projectID)

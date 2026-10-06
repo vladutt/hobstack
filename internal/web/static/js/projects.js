@@ -230,7 +230,7 @@ function linksSection(projectId, initial) {
   refresh();
   return el("section", { class: "section" },
     el("h2", {}, "Linked projects"),
-    el("p", { class: "hint" }, "Agents of linked projects can ask each other questions; leads can request work, which you approve in Needs you."),
+    el("p", { class: "hint" }, "Agents of linked projects can ask each other questions; leads can request work, which you approve in Needs you. Linking or unlinking restarts the agents' Claude sessions on their next run."),
     list,
     el("div", { class: "link-add" }, select, addBtn));
 }

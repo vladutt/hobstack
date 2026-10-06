@@ -102,7 +102,7 @@ func TestAskProjectRefusals(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := f.tm.AskProject(c, "Backend", "q"); err == nil || !strings.Contains(err.Error(), "already have 3 open questions") {
+	if _, err := f.tm.AskProject(c, "Backend", "q"); err == nil || !strings.Contains(err.Error(), "you already have 3 open questions to other projects (Q-1, Q-2, Q-3); wait for the answers") {
 		t.Fatalf("limita: %v", err)
 	}
 	// un worker din Backend nu raspunde in numele proiectului
@@ -241,6 +241,14 @@ func TestRequestWorkNeedsApproval(t *testing.T) {
 	}
 	if !f.hasMessage(f.lead.ID, "Backend accepted "+r.Ref()+" (task "+task.Ref()+" there).") {
 		t.Fatal("nota la lider")
+	}
+	// radacina Backend afla cine a cerut task-ul (nu "assigned by the user")
+	if !f.hasMessage(broot.ID, task.Ref()+" requested by ApiUnit (Lead): Add /export. When it is done, call report_done on it.") ||
+		f.hasMessage(broot.ID, "assigned by the user") {
+		t.Fatal("nota la radacina tinta")
+	}
+	if !hasEvent(t, f, task.ID, "assigned", "ApiUnit", "Assigned to Lead") {
+		t.Fatal("pasul assigned")
 	}
 	// dublu-click
 	if err := f.tm.ApproveProjectRequest(reqs[0].ID); !errors.Is(err, store.ErrConflict) {
@@ -485,6 +493,129 @@ func TestUnlinkKeepsApprovedRequests(t *testing.T) {
 	r, _ = f.st.GetProjectRequest(r.ID)
 	if r.Status != store.ReqDone || !f.hasMessage(f.lead.ID, "Backend finished "+r.Ref()+": Endpoint /export added") {
 		t.Fatalf("livrare dupa unlink: %+v", r)
+	}
+}
+
+// questionRun: Rook intreaba Backend, iar radacina Backend primeste intrebarea intr-un run de note.
+func questionRun(t *testing.T, f *fixture) (store.Project, store.Agent, runner.Spec, store.ProjectRequest) {
+	t.Helper()
+	bp, broot := linked(t, f)
+	if _, err := f.tm.AskProject(f.workerCaller(f.rook, 0), "Backend", "Which format?"); err != nil {
+		t.Fatal(err)
+	}
+	note := lastMessage(t, f, broot.ID)
+	if err := f.tm.Reconcile(bp.ID); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := f.st.GetProjectRequest(*note.RequestID)
+	return bp, broot, f.fs.last(t, broot), r
+}
+
+func TestQuestionAnsweredByRunReply(t *testing.T) {
+	f := setup(t)
+	_, _, run, r := questionRun(t, f)
+	// radacina raspunde in textul run-ului, fara reply_to_project
+	f.fs.finish(run.ID, runner.Outcome{Status: "done", Result: "  JSON  "})
+	r, _ = f.st.GetProjectRequest(r.ID)
+	if r.Status != store.ReqAnswered || r.Answer != "JSON" {
+		t.Fatalf("%+v", r)
+	}
+	ans := lastMessage(t, f, f.rook.ID)
+	if ans.Delivered || ans.Text != "Answer from Backend to "+r.Ref()+": JSON" {
+		t.Fatalf("raspunsul: %+v", ans)
+	}
+}
+
+func TestQuestionClosedWhenRunFailsSilently(t *testing.T) {
+	f := setup(t)
+	_, _, run, r := questionRun(t, f)
+	f.fs.finish(run.ID, runner.Outcome{Status: store.RunFailed, Error: "boom"})
+	r, _ = f.st.GetProjectRequest(r.ID)
+	if r.Status != store.ReqClosed {
+		t.Fatalf("%+v", r)
+	}
+	if !f.hasMessage(f.rook.ID, r.Ref()+" to Backend was closed: its root did not answer.") {
+		t.Fatal("nota la cel care a intrebat")
+	}
+	// limita nu mai blocheaza: intrebarea inchisa nu se mai numara
+	if n, _ := f.st.OpenQuestionsFrom(f.rook.ID); len(n) != 0 {
+		t.Fatalf("deschise: %+v", n)
+	}
+}
+
+func TestQuestionAnsweredByToolNotTouchedAtRunEnd(t *testing.T) {
+	f := setup(t)
+	_, _, run, r := questionRun(t, f)
+	if _, err := f.tm.ReplyToProject(f.caller(t, run), r.Ref(), "XML"); err != nil {
+		t.Fatal(err)
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "done", Result: "Answered Q with XML"})
+	r, _ = f.st.GetProjectRequest(r.ID)
+	if r.Status != store.ReqAnswered || r.Answer != "XML" {
+		t.Fatalf("%+v", r)
+	}
+	if f.hasMessage(f.rook.ID, "Answered Q with XML") {
+		t.Fatal("raspunsul din tool nu trebuia dublat")
+	}
+}
+
+func TestReplyToProjectMaxLength(t *testing.T) {
+	f := setup(t)
+	bp, broot, run, r := questionRun(t, f)
+	if _, err := f.tm.ReplyToProject(rootCaller(bp, broot), r.Ref(), strings.Repeat("x", 3801)); err == nil ||
+		err.Error() != "the answer is too long: at most 3800 characters" {
+		t.Fatalf("%v", err)
+	}
+	if _, err := f.tm.ReplyToProject(rootCaller(bp, broot), r.Ref(), strings.Repeat("x", 3800)); err != nil {
+		t.Fatalf("3800: %v", err)
+	}
+	if strings.Contains(lastMessage(t, f, f.rook.ID).Text, "[...]") {
+		t.Fatal("raspunsul de 3800 nu trebuia taiat")
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
+}
+
+func TestRootReportDoneGoesThroughReviewer(t *testing.T) {
+	f := setup(t)
+	bp, broot, task, r := approvedTask(t, f, f.leadCaller())
+	rev := store.Agent{ProjectID: bp.ID, Name: "Rhea", Role: "Reviewer", Model: "haiku", ParentID: &broot.ID}
+	if err := f.st.CreateAgent(&rev); err != nil {
+		t.Fatal(err)
+	}
+	broot.ReviewerID = &rev.ID
+	if err := f.st.UpdateAgent(broot); err != nil {
+		t.Fatal(err)
+	}
+	rc := mcp.Caller{ProjectID: bp.ID, AgentID: broot.ID, TaskID: task.ID, IsRoot: true, FromRequest: true}
+	text, err := f.tm.ReportDone(rc, "", "Endpoint /export added")
+	want := task.Ref() + " is in Review. Rhea will check it; the report goes back to ApiUnit when it is accepted."
+	if err != nil || text != want {
+		t.Fatalf("%q %v", text, err)
+	}
+	got, _ := f.st.GetTask(task.ID)
+	if got.Status != store.StatusReview || got.ReviewStage != store.StageReviewer || got.Result != "Endpoint /export added" {
+		t.Fatalf("%+v", got)
+	}
+	if r, _ = f.st.GetProjectRequest(r.ID); r.Status != store.ReqApproved {
+		t.Fatalf("cererea inca in lucru: %+v", r)
+	}
+	if !f.hasMessage(rev.ID, "Check it with review_approve or review_reject: Endpoint /export added") {
+		t.Fatal("nota la reviewer")
+	}
+	// reviewer-ul aproba: task-ul utilizatorului (creat din cerere) merge la decizia lui
+	rvc := mcp.Caller{ProjectID: bp.ID, AgentID: rev.ID, HasParent: true, IsReviewer: true}
+	if text, err := f.tm.ReviewApprove(rvc, task.Ref(), ""); err != nil || !strings.Contains(text, "went to the user for a decision") {
+		t.Fatalf("%q %v", text, err)
+	}
+	if r, _ = f.st.GetProjectRequest(r.ID); r.Status != store.ReqApproved {
+		t.Fatalf("inca nelivrata: %+v", r)
+	}
+	if err := f.tm.UserDecide(task.ID, true, ""); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	r, _ = f.st.GetProjectRequest(r.ID)
+	if r.Status != store.ReqDone || !f.hasMessage(f.lead.ID, "Backend finished "+r.Ref()+": Endpoint /export added") {
+		t.Fatalf("livrare dupa review: %+v", r)
 	}
 }
 

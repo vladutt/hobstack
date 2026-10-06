@@ -196,7 +196,7 @@ var replyToProjectTool = Tool{
 	Description: "Answers a question a linked project asked your project (it arrives as a message with a reference like Q-7).",
 	InputSchema: schema([]string{"request", "answer"}, map[string]any{
 		"request": str("The question's reference, e.g. Q-7"),
-		"answer":  str("Your answer"),
+		"answer":  str("Your answer, at most 3800 characters"),
 	}),
 }
 

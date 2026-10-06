@@ -811,9 +811,9 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 		t.note(c.ProjectID, worker.ID, "Finished "+task.Ref()+" in its stage", true)
 		return t.advance(&task, stages, agents, worker.Name, reportedNote(worker, summary), t.autonomyOf(c.ProjectID))
 	}
-	// radacina livreaza munca ceruta de un proiect legat: nu are sef, task-ul trece direct in Done
+	// radacina livreaza munca ceruta de un proiect legat: nu are sef, trece pe la reviewer sau direct in Done
 	if worker.ParentID == nil && task.RequestID != nil {
-		return t.finishRequestedTask(&task, worker, summary)
+		return t.finishRequestedTask(&task, worker, agents, summary)
 	}
 	if worker.ParentID == nil {
 		return "", errors.New("you report directly to the user: write the summary in your reply, without report_done")

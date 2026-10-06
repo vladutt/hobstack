@@ -52,12 +52,20 @@ inexistent: `"X" is not a linked project. Linked projects: A, B` (sau `This proj
 3. Raspuns catre cel care intreaba: `Question sent to Backend as Q-7. The answer arrives as a message; continue meanwhile.`
    Daca proiectul tinta e pe pauza, in plus: ` Backend is paused: it answers when the user starts it.`
 4. `reply_to_project(request, answer)`: `request` accepta `Q-7` sau `7`. Doar radacina proiectului tinta, doar pe o
-   intrebare `open` adresata proiectului ei; raspuns 1..10000 caractere. Cererea devine `answered`, iar cel care a
+   intrebare `open` adresata proiectului ei; raspuns 1..3800 caractere (incape intreg in nota). Cererea devine `answered`, iar cel care a
    intrebat primeste o nota nelivrata (il trezeste): `Answer from Backend to Q-7: <raspuns>`.
 5. **Anti-bucla:** un run in care s-a livrat cel putin o nota cu o intrebare primita din alt proiect nu poate chema
    `ask_project`: `you are answering a question from another project; answer with what you know, or say you don't know`.
    Se tine in memorie pe run-ul activ (ca `request` din `activeRun`), din `messages.request_id` al notelor livrate.
 6. Pe pauza, nota asteapta (pe pauza ruleaza doar agentii carora le-a scris utilizatorul), ca orice nota.
+7. **Finalul run-ului care a primit intrebarea:** run-ul activ tine id-urile intrebarilor livrate
+   (`activeRun.questions`). Cand se termina (oricum s-ar termina), fiecare intrebare ramasa `open` (radacina nu a
+   chemat `reply_to_project`) primeste ca raspuns textul final al run-ului (trimmed, taiat la 3800 caractere), exact
+   ca prin `reply_to_project` (`answered`, nota `Answer from Backend to Q-7: <text>`). Fara text final (de ex. run
+   esuat), intrebarea devine `closed`, cu nota `Q-7 to Backend was closed: its root did not answer.` Intrebarile
+   raspunse deja prin tool nu se ating. Asa nicio intrebare nu ramane deschisa pentru totdeauna.
+8. Eroarea de limita listeaza intrebarile deschise:
+   `you already have 3 open questions to other projects (Q-4, Q-7, Q-9); wait for the answers`.
 
 ## Cereri de lucru (`kind = work`)
 
@@ -72,12 +80,17 @@ inexistent: `"X" is not a linked project. Linked projects: A, B` (sau `This proj
 4. **Approve** (sau creare directa): in proiectul tinta se creeaza un task obisnuit asignat radacinii, cu
    `tasks.request_id`, titlul si descrierea cererii (descrierea primeste la final
    `\n\nRequested by Frontend (Lead) as W-3.`). Istoricul task-ului: pasul `created` cu textul
-   `Requested by Frontend (Lead)` (actor = numele proiectului sursa). Cererea devine `approved`, `to_task` = task-ul.
+   `Requested by Frontend (Lead)` (actor = numele proiectului sursa; la fel pasul `assigned`). Radacina tinta primeste
+   nota `T-12 requested by Frontend (Lead): <titlu>. When it is done, call report_done on it.` Cererea devine `approved`, `to_task` = task-ul.
    Cel care a cerut primeste o nota: `Backend accepted W-3 (task T-12 there).` (doar la aprobare; la directa raspunsul
    tool-ului ajunge).
 5. **Dismiss:** cererea devine `dismissed`; nota la cel care a cerut: `The user dismissed your request W-3 to Backend.`
 6. **Livrare:** radacina tinta, intr-un run pe acel task, cheama `report_done(summary)` (are tool-ul chiar fara sef,
-   `Caller.FromRequest`). Task-ul trece direct in Done (nu exista lider deasupra), cererea devine `done` cu
+   `Caller.FromRequest`). Daca radacina are reviewer, task-ul (cu `result = summary`) trece prin review ca orice
+   raport (`toReview`): raspunsul tool-ului e `T-12 is in Review. Rhea will check it; the report goes back to
+   Frontend when it is accepted.`, iar livrarea de mai jos se face cand task-ul ajunge in Done, din `afterDone`
+   (dupa reviewer decide utilizatorul, sau Done automat in Full autonomy). Fara reviewer, task-ul trece direct in
+   Done (nu exista lider deasupra), cererea devine `done` cu
    `answer = summary`, iar cel care a cerut primeste o nota nelivrata:
    `Backend finished W-3: <summary>` (plus ` (your task T-4)` daca cererea a venit dintr-un run pe un task).
    Sub-task-urile radacinii merg ca de obicei; radacina raporteaza cand le are gata.

@@ -166,6 +166,8 @@ func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
 	if err := t.recordOutcome(ar, agentID, hash, o); err != nil {
 		log.Printf("finishing run %s: %v", o.RunID, err)
 	}
+	// intrebarile primite in run si ramase deschise primesc raspunsul final al run-ului (sau se inchid)
+	t.settleQuestions(ar, o)
 	t.emit(ar.projectID, "agent", map[string]int64{"id": agentID})
 	t.Kick(ar.projectID)
 }
