@@ -248,3 +248,27 @@ func TestSystemAddAgents(t *testing.T) {
 		t.Fatal("workerul nu afla de add_agent")
 	}
 }
+
+func TestSystemLinked(t *testing.T) {
+	p := store.Project{Name: "P", Goal: "G"}
+	lead := store.Agent{ID: 1, Name: "Lead"}
+	worker := store.Agent{ID: 2, Name: "Rook", ParentID: ptrID(1)}
+	team := []store.Agent{lead, worker}
+	ll := LinksFor(lead, team)
+	if s := System(p, lead, ll); strings.Contains(s, "list_linked_projects") {
+		t.Fatal("fara legaturi nu apare nimic")
+	}
+	ll.Linked = true
+	s := System(p, lead, ll)
+	for _, want := range []string{"mcp__team__list_linked_projects", "mcp__team__ask_project", "mcp__team__request_project_work", "mcp__team__reply_to_project"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("radacina/liderul trebuie sa afle de %s:\n%s", want, s)
+		}
+	}
+	wl := LinksFor(worker, team)
+	wl.Linked = true
+	s = System(p, worker, wl)
+	if !strings.Contains(s, "mcp__team__ask_project") || strings.Contains(s, "request_project_work") || strings.Contains(s, "reply_to_project") {
+		t.Fatalf("workerul doar intreaba:\n%s", s)
+	}
+}

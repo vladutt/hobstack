@@ -59,7 +59,9 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	}
 	hasLinks := len(linkedProjects) > 0 // proiectul are legaturi: agentii primesc tool-urile pentru proiecte legate
 
-	system := prompt.System(p, a, prompt.LinksFor(a, agents))
+	pl := prompt.LinksFor(a, agents)
+	pl.Linked = hasLinks // hasLinks e calculat mai sus din linkedProjects
+	system := prompt.System(p, a, pl)
 	// Claude tine sesiunile pe cwd, deci un alt folder de lucru inseamna alta sesiune.
 	hash := prompt.Hash(home.Path + "\n" + system)
 	// Claude retine system prompt-ul de la inceputul sesiunii. Daca s-a schimbat

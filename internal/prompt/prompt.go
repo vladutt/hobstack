@@ -18,6 +18,7 @@ type Links struct {
 	IsLead       bool
 	IsReviewer   bool
 	CanAddAgents bool // lider sau radacina: are add_agent / remove_agent
+	Linked       bool // proiectul are legaturi cu alte proiecte (se seteaza in team/run.go)
 }
 
 // LinksFor calculeaza Links din lista echipei. Merge si pentru un agent nou
@@ -69,6 +70,16 @@ const howLead = `You are a lead: you have a direct team, listed in the turn mess
 const howAddAgents = `You can grow your team with mcp__team__add_agent: only when no current member fits part of the work, ` +
 	`or when you have independent sub-tasks to run in parallel. Check your team first. A new agent starts working when you ` +
 	`give it a task with mcp__team__create_task. When an agent you added has no more work, remove it with mcp__team__remove_agent.`
+
+const howLinked = `This project is linked with other projects. Use mcp__team__list_linked_projects to see them. ` +
+	`To ask one of them something, use mcp__team__ask_project; the answer arrives later as a message. ` +
+	`Only ask what your own team cannot answer.`
+
+const howLinkedLead = `To have a linked project do work for you, use mcp__team__request_project_work.`
+
+const howLinkedRoot = `Questions from linked projects arrive as messages with a reference like Q-7: answer each with ` +
+	`mcp__team__reply_to_project. Work requested by a linked project arrives as a task: when it is done, call ` +
+	`mcp__team__report_done on it.`
 
 const howSubLead = `When you receive a task from your boss, break it into subtasks for your team and stop without calling report_done. ` +
 	`When the task comes back to you with all subtasks done, check the result and call mcp__team__report_done ` +
@@ -169,6 +180,15 @@ func System(p store.Project, a store.Agent, l Links) string {
 	}
 	if l.CanAddAgents {
 		how = append(how, howAddAgents)
+	}
+	if l.Linked {
+		how = append(how, howLinked)
+		if l.CanAddAgents {
+			how = append(how, howLinkedLead)
+		}
+		if isRoot {
+			how = append(how, howLinkedRoot)
+		}
 	}
 	if l.IsReviewer {
 		how = append(how, howReviewer)
