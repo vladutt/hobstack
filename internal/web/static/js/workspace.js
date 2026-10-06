@@ -428,7 +428,7 @@ export async function workspaceView(root, projectId, route) {
         el("div", { class: "actions" }, el("h1", {}, p.name), pill(p.status),
           p.autonomy ? el("span", { class: "pill pill-auto", title: "Agents don't ask you questions" }, "Autonomous") : null),
         p.goal && el("p", { class: "muted clamp" }, "Goal: " + p.goal),
-        p.paused && el("p", { class: "hint" }, "The team is paused. Messages stay queued until you start it.")),
+        p.paused && el("p", { class: "hint" }, "The team is paused: agents answer your messages but don't pick up tasks until you start it.")),
       el("div", { class: "head-actions" },
         el("div", { class: "actions" },
           el("a", { class: "btn", href: `#/p/${projectId}/edit` }, "Project instructions"),
@@ -788,7 +788,7 @@ export async function workspaceView(root, projectId, route) {
       }, "New chat"));
     input.placeholder = a.detached ? "Link the agent to message it" : isLead ? `Write to ${a.name}...` : `Message ${a.name}`;
     input.disabled = sendBtn.disabled = clip.disabled = !!a.detached;
-    note.textContent = state.project.paused ? "The team is paused: the message waits until you start it." : "";
+    note.textContent = state.project.paused ? "The team is paused: agents answer your messages but don't pick up tasks until you start it." : "";
   }
 
   // ---------- thread ----------

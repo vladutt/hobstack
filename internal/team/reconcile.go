@@ -65,7 +65,8 @@ func (t *Team) Run(ctx context.Context) {
 //  2. altfel, un agent inactiv cu mesaje nelivrate primeste un run de notificari.
 //
 // max_parallel se aplica doar agentilor care au sef; radacinile vorbesc cu
-// utilizatorul si pornesc mereu. E sigur de apelat oricand si de oricate ori.
+// utilizatorul si pornesc mereu. Pe pauza porneste doar run-urile de chat ale
+// agentilor carora le-a scris utilizatorul. E sigur de apelat oricand si de oricate ori.
 func (t *Team) Reconcile(projectID int64) error {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -76,9 +77,6 @@ func (t *Team) Reconcile(projectID int64) error {
 	}
 	if err != nil {
 		return err
-	}
-	if p.Paused {
-		return nil
 	}
 	agents, err := t.st.ListAgents(projectID)
 	if err != nil || len(agents) == 0 {
@@ -122,14 +120,8 @@ func (t *Team) Reconcile(projectID int64) error {
 
 	// failed devine true daca un run nu a pornit: proiectul e pe pauza si ne oprim
 	failed := false
-	notifyRun := func(a store.Agent) error {
-		if t.isActive(a.ID) || full(a) {
-			return nil
-		}
-		notes, err := t.st.Undelivered(a.ID)
-		if err != nil || len(notes) == 0 {
-			return err
-		}
+	// notesRun porneste un run de notificari care livreaza notes
+	notesRun := func(a store.Agent, notes []store.Message) error {
 		turn := prompt.NotifyTurn(ctxFor(a, 0), t.texts(p.ID, notes))
 		if err := t.startRun(p, a, agents, 0, turn); err != nil {
 			failed = true
@@ -146,6 +138,38 @@ func (t *Team) Reconcile(projectID int64) error {
 			return err
 		}
 		started(a)
+		return nil
+	}
+	notifyRun := func(a store.Agent) error {
+		if t.isActive(a.ID) || full(a) {
+			return nil
+		}
+		notes, err := t.st.Undelivered(a.ID)
+		if err != nil || len(notes) == 0 {
+			return err
+		}
+		return notesRun(a, notes)
+	}
+
+	// pe pauza raspund doar agentii carora le-a scris utilizatorul (chat): fara task-uri
+	// din board, fara decizii si fara run-uri pornite doar de notele altor agenti.
+	// max_parallel nu se aplica: conversatia a cerut-o utilizatorul.
+	if p.Paused {
+		for _, a := range agents {
+			if t.isActive(a.ID) {
+				continue
+			}
+			notes, err := t.st.Undelivered(a.ID)
+			if err != nil {
+				return err
+			}
+			if !slices.ContainsFunc(notes, func(m store.Message) bool { return m.Author == store.AuthorUser }) {
+				continue
+			}
+			if err := notesRun(a, notes); err != nil || failed {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -353,8 +377,9 @@ func (t *Team) startFailed(p store.Project, notify, a store.Agent, cause error) 
 	return nil
 }
 
-// Stop opreste echipa: pauza, procesele active sunt oprite, task-urile in lucru
-// revin in Queued. Procesele se opresc asincron; finish vine dupa.
+// Stop opreste echipa: pauza, procesele active sunt oprite (in afara de conversatiile
+// pornite de un mesaj al utilizatorului), task-urile in lucru revin in Queued.
+// Procesele se opresc asincron; finish vine dupa.
 func (t *Team) Stop(projectID int64) error {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -365,7 +390,8 @@ func (t *Team) Stop(projectID int64) error {
 	t.mu.Lock()
 	var ids []string
 	for _, ar := range t.active {
-		if ar.projectID == projectID {
+		// o conversatie pornita de utilizator (request) se termina; Stop opreste munca din board
+		if ar.projectID == projectID && ar.request == nil {
 			ids = append(ids, ar.runID)
 		}
 	}
