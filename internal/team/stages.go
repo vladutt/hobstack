@@ -329,7 +329,8 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 		}
 		t.taskMsg(task, "user_accepted", actorUser, agentName(agents, task.AssigneeID), "You accepted", "Accepted")
 		t.emit(task.ProjectID, "task", task)
-		// task-ul e deja Done: livreaza raportul unei cereri dintr-un proiect legat
+		// task-ul e deja Done: afterDone trezeste parintele unui sub-task acceptat si livreaza
+		// raportul unei cereri dintr-un proiect legat, ca pe celelalte drumuri de accept
 		if err := t.afterDone(task); err != nil {
 			log.Printf("after accept %s: %v", task.Ref(), err)
 		}

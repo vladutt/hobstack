@@ -337,7 +337,9 @@ func (t *Team) ApproveProjectRequest(id int64) error {
 		return err
 	}
 	if r.FromAgent != nil {
-		t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("%s accepted %s (task %s there).", t.projectName(r.ToProject), r.Ref(), task.Ref()), false)
+		if err := t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("%s accepted %s (task %s there).", t.projectName(r.ToProject), r.Ref(), task.Ref()), false); err != nil {
+			log.Printf("approve %s: note to requester: %v", r.Ref(), err)
+		}
 		t.Kick(r.FromProject)
 	}
 	return nil
@@ -359,7 +361,9 @@ func (t *Team) DismissProjectRequest(id int64) error {
 	}
 	r.Status = store.ReqDismissed
 	if r.FromAgent != nil {
-		t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("The user dismissed your request %s to %s.", r.Ref(), t.projectName(r.ToProject)), false)
+		if err := t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("The user dismissed your request %s to %s.", r.Ref(), t.projectName(r.ToProject)), false); err != nil {
+			log.Printf("dismiss %s: note to requester: %v", r.Ref(), err)
+		}
 		t.Kick(r.FromProject)
 	}
 	t.emitRequest(r)
@@ -391,7 +395,9 @@ func (t *Team) deliverRequest(task store.Task) error {
 				text += fmt.Sprintf(" (your task %s)", ft.Ref())
 			}
 		}
-		t.note(r.FromProject, *r.FromAgent, clip(text), false)
+		if err := t.note(r.FromProject, *r.FromAgent, clip(text), false); err != nil {
+			log.Printf("deliver %s: note to requester: %v", r.Ref(), err)
+		}
 		t.Kick(r.FromProject)
 	}
 	t.emitRequest(r)
@@ -425,7 +431,9 @@ func (t *Team) finishRequestedTask(task *store.Task, root store.Agent, summary s
 		return "", err
 	}
 	t.taskMsg(*task, "reported", root.Name, from, root.Name+" reported it done", summary)
-	t.note(task.ProjectID, root.ID, "Reported "+task.Ref()+" to "+from, true)
+	if err := t.note(task.ProjectID, root.ID, "Reported "+task.Ref()+" to "+from, true); err != nil {
+		log.Printf("finish %s: note: %v", task.Ref(), err)
+	}
 	t.emit(task.ProjectID, "task", *task)
 	if err := t.afterDone(*task); err != nil {
 		log.Printf("after report %s: %v", task.Ref(), err)
@@ -480,7 +488,9 @@ func (t *Team) closeOpenRequest(r store.ProjectRequest, why string) {
 	}
 	r.Status = to
 	if r.FromAgent != nil {
-		t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("%s to %s was closed: %s.", r.Ref(), t.projectName(r.ToProject), why), false)
+		if err := t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("%s to %s was closed: %s.", r.Ref(), t.projectName(r.ToProject), why), false); err != nil {
+			log.Printf("close %s: note to requester: %v", r.Ref(), err)
+		}
 		t.Kick(r.FromProject)
 	}
 	t.emitRequest(r)

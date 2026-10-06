@@ -466,4 +466,26 @@ func TestBeforeDeleteProjectNotifies(t *testing.T) {
 	}
 }
 
+func TestUnlinkKeepsApprovedRequests(t *testing.T) {
+	f := setup(t)
+	lt := f.task(t, "Export page", f.lead, store.StatusInProgress)
+	c := f.leadCaller()
+	c.TaskID = lt.ID
+	bp, broot, task, r := approvedTask(t, f, c)
+	if err := f.tm.UnlinkProjects(f.p.ID, bp.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ = f.st.GetProjectRequest(r.ID); r.Status != store.ReqApproved {
+		t.Fatalf("cererea aprobata trebuia sa ramana: %+v", r)
+	}
+	rc := mcp.Caller{ProjectID: bp.ID, AgentID: broot.ID, TaskID: task.ID, IsRoot: true, FromRequest: true}
+	if _, err := f.tm.ReportDone(rc, "", "Endpoint /export added"); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = f.st.GetProjectRequest(r.ID)
+	if r.Status != store.ReqDone || !f.hasMessage(f.lead.ID, "Backend finished "+r.Ref()+": Endpoint /export added") {
+		t.Fatalf("livrare dupa unlink: %+v", r)
+	}
+}
+
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
