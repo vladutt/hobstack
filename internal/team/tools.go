@@ -470,6 +470,12 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 // run pe task, cu lista sub-task-urilor, si il raporteaza in sus; finalul
 // run-ului (recordOutcome) trateaza orice iesire. Se apeleaza cu t.work blocat.
 func (t *Team) afterDone(task store.Task) error {
+	// un task cerut de un proiect legat isi trimite raportul inapoi, pe orice drum ar ajunge in Done
+	if task.RequestID != nil {
+		if err := t.deliverRequest(task); err != nil {
+			log.Printf("deliver %s: %v", task.Ref(), err)
+		}
+	}
 	if task.ParentTaskID == nil {
 		return nil
 	}
@@ -804,6 +810,10 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 		task.Result = summary
 		t.note(c.ProjectID, worker.ID, "Finished "+task.Ref()+" in its stage", true)
 		return t.advance(&task, stages, agents, worker.Name, reportedNote(worker, summary), t.autonomyOf(c.ProjectID))
+	}
+	// radacina livreaza munca ceruta de un proiect legat: nu are sef, task-ul trece direct in Done
+	if worker.ParentID == nil && task.RequestID != nil {
+		return t.finishRequestedTask(&task, worker, summary)
 	}
 	if worker.ParentID == nil {
 		return "", errors.New("you report directly to the user: write the summary in your reply, without report_done")

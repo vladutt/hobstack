@@ -226,7 +226,262 @@ func (t *Team) ReplyToProject(c mcp.Caller, request, answer string) (string, err
 	return fmt.Sprintf("Answer sent for %s.", r.Ref()), nil
 }
 
-// RequestProjectWork: stub pana la Task 4.
+// RequestProjectWork e tool-ul request_project_work: direct intr-un run pornit
+// din chat-ul utilizatorului, altfel o cerere in "Needs you" la proiectul tinta.
 func (t *Team) RequestProjectWork(c mcp.Caller, project, title, description string) (string, error) {
-	return "", errors.New("not available yet")
+	t.work.Lock()
+	defer t.work.Unlock()
+	agents, err := t.st.ListAgents(c.ProjectID)
+	if err != nil {
+		return "", err
+	}
+	lead, ok := store.FindAgent(agents, c.AgentID)
+	if !ok {
+		return "", errors.New("your agent no longer exists")
+	}
+	if !canAddAgents(lead, agents) {
+		return "", errors.New("only a lead or an agent that reports to the user can request work from another project")
+	}
+	title, description = strings.TrimSpace(title), strings.TrimSpace(description)
+	switch {
+	case title == "":
+		return "", errors.New("title is required")
+	case utf8.RuneCountInString(title) > 200:
+		return "", errors.New("title: at most 200 characters")
+	case utf8.RuneCountInString(description) > 10000:
+		return "", errors.New("description: at most 10000 characters")
+	}
+	target, err := t.linkedTarget(c.ProjectID, project)
+	if err != nil {
+		return "", err
+	}
+	if _, ok, err := t.rootOf(target.ID); err != nil {
+		return "", err
+	} else if !ok {
+		return "", fmt.Errorf("%q has no root agent to receive it", target.Name)
+	}
+	leadID := lead.ID
+	r := store.ProjectRequest{Kind: store.RequestWork, FromProject: c.ProjectID, FromAgent: &leadID,
+		ToProject: target.ID, Title: title, Text: description, Status: store.ReqPending}
+	if c.TaskID != 0 {
+		id := c.TaskID
+		r.FromTask = &id
+	}
+	if err := t.st.AddProjectRequest(&r); err != nil {
+		return "", err
+	}
+	// doar o cerere scrisa de utilizator in chat merge direct (Full autonomy nu)
+	if _, fromChat := t.requestOf(c.AgentID, c.RunID); fromChat {
+		task, err := t.startRequestedWork(&r)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s got your request as %s (task %s). You will get its report as a message.", target.Name, r.Ref(), task.Ref()), nil
+	}
+	t.emitRequest(r)
+	return fmt.Sprintf("Request %s sent to %s; the user approves it first. You will get a message either way.", r.Ref(), target.Name), nil
+}
+
+// startRequestedWork creeaza task-ul cererii in proiectul tinta (pentru radacina,
+// sau in prima etapa) si marcheaza cererea aprobata. Se cheama cu t.work tinut.
+func (t *Team) startRequestedWork(r *store.ProjectRequest) (store.Task, error) {
+	root, ok, err := t.rootOf(r.ToProject)
+	if err != nil {
+		return store.Task{}, err
+	}
+	if !ok {
+		return store.Task{}, ProjectRequestError(fmt.Sprintf("%s has no root agent to receive it", t.projectName(r.ToProject)))
+	}
+	stages, err := t.st.ListStages(r.ToProject)
+	if err != nil {
+		return store.Task{}, err
+	}
+	agentID := root.ID
+	if len(stages) > 0 {
+		agentID = 0 // intra in prima etapa, ca un task din board
+	}
+	from, by := t.projectName(r.FromProject), t.agentNameOf(r.FromAgent)
+	desc := strings.TrimSpace(r.Text + fmt.Sprintf("\n\nRequested by %s (%s) as %s.", from, by, r.Ref()))
+	task, err := t.userCreateTask(r.ToProject, r.Title, desc, agentID, taskOrigin{request: r, from: from, by: by})
+	if err != nil {
+		return store.Task{}, err
+	}
+	if err := t.st.TransitionProjectRequest(r.ID, store.ReqPending, store.ReqApproved, "", &task.ID); err != nil {
+		return store.Task{}, err
+	}
+	r.Status, r.ToTask = store.ReqApproved, &task.ID
+	t.emitRequest(*r)
+	return task, nil
+}
+
+// ApproveProjectRequest: utilizatorul aproba o cerere de lucru din "Needs you".
+func (t *Team) ApproveProjectRequest(id int64) error {
+	t.work.Lock()
+	defer t.work.Unlock()
+	r, err := t.st.GetProjectRequest(id)
+	if err != nil {
+		return err
+	}
+	if r.Kind != store.RequestWork || r.Status != store.ReqPending {
+		return store.ErrConflict
+	}
+	linked, err := t.st.AreLinked(r.FromProject, r.ToProject)
+	if err != nil {
+		return err
+	}
+	if !linked {
+		return ProjectRequestError("the projects are no longer linked")
+	}
+	task, err := t.startRequestedWork(&r)
+	if err != nil {
+		return err
+	}
+	if r.FromAgent != nil {
+		t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("%s accepted %s (task %s there).", t.projectName(r.ToProject), r.Ref(), task.Ref()), false)
+		t.Kick(r.FromProject)
+	}
+	return nil
+}
+
+// DismissProjectRequest: utilizatorul respinge o cerere de lucru.
+func (t *Team) DismissProjectRequest(id int64) error {
+	t.work.Lock()
+	defer t.work.Unlock()
+	r, err := t.st.GetProjectRequest(id)
+	if err != nil {
+		return err
+	}
+	if r.Kind != store.RequestWork {
+		return store.ErrConflict
+	}
+	if err := t.st.TransitionProjectRequest(r.ID, store.ReqPending, store.ReqDismissed, "", nil); err != nil {
+		return err
+	}
+	r.Status = store.ReqDismissed
+	if r.FromAgent != nil {
+		t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("The user dismissed your request %s to %s.", r.Ref(), t.projectName(r.ToProject)), false)
+		t.Kick(r.FromProject)
+	}
+	t.emitRequest(r)
+	return nil
+}
+
+// deliverRequest: un task cerut de un proiect legat a ajuns in Done; raportul
+// pleaca inapoi la cel care a cerut. Se cheama din afterDone, cu t.work tinut.
+func (t *Team) deliverRequest(task store.Task) error {
+	r, err := t.st.GetProjectRequest(*task.RequestID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if r.Status != store.ReqApproved {
+		return nil
+	}
+	report := orDefault(strings.TrimSpace(task.Result), "(no report)")
+	if err := t.st.TransitionProjectRequest(r.ID, store.ReqApproved, store.ReqDone, report, nil); err != nil {
+		return err
+	}
+	r.Status, r.Answer = store.ReqDone, report
+	if r.FromAgent != nil {
+		text := fmt.Sprintf("%s finished %s: %s", t.projectName(task.ProjectID), r.Ref(), report)
+		if r.FromTask != nil {
+			if ft, err := t.st.GetTask(*r.FromTask); err == nil {
+				text += fmt.Sprintf(" (your task %s)", ft.Ref())
+			}
+		}
+		t.note(r.FromProject, *r.FromAgent, clip(text), false)
+		t.Kick(r.FromProject)
+	}
+	t.emitRequest(r)
+	return nil
+}
+
+// finishRequestedTask: radacina livreaza cu report_done un task cerut de un
+// proiect legat. Nu are sef, deci task-ul trece direct in Done. Cu t.work tinut.
+func (t *Team) finishRequestedTask(task *store.Task, root store.Agent, summary string) (string, error) {
+	subs, err := t.st.Subtasks(task.ID)
+	if err != nil {
+		return "", err
+	}
+	var open []string
+	for _, s := range subs {
+		if s.Status != store.StatusDone {
+			open = append(open, s.Ref())
+		}
+	}
+	if len(open) > 0 {
+		return "", fmt.Errorf("%s still has open subtasks: %s. Report after they are done.", task.Ref(), strings.Join(open, ", "))
+	}
+	r, err := t.st.GetProjectRequest(*task.RequestID)
+	if err != nil {
+		return "", err
+	}
+	from := t.projectName(r.FromProject)
+	task.Result = summary
+	markDone(task)
+	if err := t.st.SaveTask(task); err != nil {
+		return "", err
+	}
+	t.taskMsg(*task, "reported", root.Name, from, root.Name+" reported it done", summary)
+	t.note(task.ProjectID, root.ID, "Reported "+task.Ref()+" to "+from, true)
+	t.emit(task.ProjectID, "task", *task)
+	if err := t.afterDone(*task); err != nil {
+		log.Printf("after report %s: %v", task.Ref(), err)
+	}
+	t.Kick(task.ProjectID)
+	return fmt.Sprintf("%s is Done; the report went back to %s.", task.Ref(), from), nil
+}
+
+// UnlinkProjects sterge legatura; intrebarile deschise se inchid, cererile
+// neaprobate se resping, iar cei care au cerut afla. Cererile aprobate continua.
+func (t *Team) UnlinkProjects(a, b int64) error {
+	t.work.Lock()
+	defer t.work.Unlock()
+	reqs, err := t.st.OpenRequestsBetween(a, b)
+	if err != nil {
+		return err
+	}
+	if err := t.st.UnlinkProjects(a, b); err != nil {
+		return err
+	}
+	for _, r := range reqs {
+		t.closeOpenRequest(r, "the projects are no longer linked")
+	}
+	return nil
+}
+
+// BeforeDeleteProject anunta pe cei care asteptau ceva de la proiect (intrebari,
+// cereri neaprobate sau in lucru); se cheama inainte de stergerea proiectului.
+func (t *Team) BeforeDeleteProject(id int64) error {
+	t.work.Lock()
+	defer t.work.Unlock()
+	reqs, err := t.st.OpenRequestsTo(id)
+	if err != nil {
+		return err
+	}
+	for _, r := range reqs {
+		t.closeOpenRequest(r, "the project was deleted")
+	}
+	return nil
+}
+
+// closeOpenRequest inchide o cerere care inca astepta (open/approved -> closed,
+// pending -> dismissed) si ii spune celui care a cerut de ce. Cu t.work tinut.
+func (t *Team) closeOpenRequest(r store.ProjectRequest, why string) {
+	to := store.ReqClosed
+	if r.Status == store.ReqPending {
+		to = store.ReqDismissed
+	}
+	if err := t.st.TransitionProjectRequest(r.ID, r.Status, to, "", nil); err != nil {
+		log.Printf("close %s: %v", r.Ref(), err)
+		return
+	}
+	r.Status = to
+	if r.FromAgent != nil {
+		t.note(r.FromProject, *r.FromAgent, fmt.Sprintf("%s to %s was closed: %s.", r.Ref(), t.projectName(r.ToProject), why), false)
+		t.Kick(r.FromProject)
+	}
+	t.emitRequest(r)
 }

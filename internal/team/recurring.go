@@ -154,7 +154,7 @@ func (t *Team) RunRecurringNow(id int64) (store.Task, error) {
 			return store.Task{}, RecurringError("choose an agent first: the recurring task has no assignee")
 		}
 	}
-	task, err := t.userCreateTask(r.ProjectID, r.Title, r.Description, derefID(r.AssigneeID), &r)
+	task, err := t.userCreateTask(r.ProjectID, r.Title, r.Description, derefID(r.AssigneeID), taskOrigin{recurring: &r})
 	if err != nil {
 		return store.Task{}, err
 	}
@@ -194,7 +194,7 @@ func (t *Team) runRecurring(id int64, now time.Time, scheduled bool) error {
 			r.Enabled, r.LastNote = false, "Turned off: choose an agent (no assignee and the project has no stages)"
 			break
 		}
-		task, err := t.userCreateTask(r.ProjectID, r.Title, r.Description, derefID(r.AssigneeID), &r)
+		task, err := t.userCreateTask(r.ProjectID, r.Title, r.Description, derefID(r.AssigneeID), taskOrigin{recurring: &r})
 		if err != nil {
 			r.LastNote = "Could not create the task: " + strings.TrimSuffix(err.Error(), ".")
 		} else {

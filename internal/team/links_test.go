@@ -205,6 +205,265 @@ func TestAskProjectAntiLoopInTaskRun(t *testing.T) {
 	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
 }
 
-var _ = errors.Is // folosit in testele din Task 4
+func TestRequestWorkNeedsApproval(t *testing.T) {
+	f := setup(t)
+	bp, broot := linked(t, f)
+	autonomous(t, f) // Full autonomy nu face cererea directa
+	text, err := f.tm.RequestProjectWork(f.leadCaller(), "Backend", "Add /export", "CSV with id and name")
+	if err != nil || !strings.Contains(text, "sent to Backend; the user approves it first") {
+		t.Fatalf("%q %v", text, err)
+	}
+	reqs, _ := f.st.ListPendingWork(bp.ID)
+	if len(reqs) != 1 || reqs[0].Title != "Add /export" || reqs[0].Status != store.ReqPending {
+		t.Fatalf("%+v", reqs)
+	}
+	if tasks, _ := f.st.ListTasks(bp.ID); len(tasks) != 0 {
+		t.Fatal("fara aprobare nu exista task")
+	}
+	if err := f.tm.ApproveProjectRequest(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	tasks, _ := f.st.ListTasks(bp.ID)
+	if len(tasks) != 1 {
+		t.Fatalf("un task: %+v", tasks)
+	}
+	task := tasks[0]
+	if task.AssigneeID != broot.ID || task.RequestID == nil || *task.RequestID != reqs[0].ID || task.Title != "Add /export" ||
+		!strings.HasSuffix(task.Description, "Requested by ApiUnit (Lead) as "+reqs[0].Ref()+".") {
+		t.Fatalf("task: %+v", task)
+	}
+	if !hasEvent(t, f, task.ID, "created", "ApiUnit", "Requested by ApiUnit (Lead)") {
+		t.Fatal("pasul created")
+	}
+	r, _ := f.st.GetProjectRequest(reqs[0].ID)
+	if r.Status != store.ReqApproved || r.ToTask == nil || *r.ToTask != task.ID {
+		t.Fatalf("%+v", r)
+	}
+	if !f.hasMessage(f.lead.ID, "Backend accepted "+r.Ref()+" (task "+task.Ref()+" there).") {
+		t.Fatal("nota la lider")
+	}
+	// dublu-click
+	if err := f.tm.ApproveProjectRequest(reqs[0].ID); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("a doua aprobare: %v", err)
+	}
+}
+
+func TestRequestWorkDirectFromChat(t *testing.T) {
+	f := setup(t)
+	bp, _ := linked(t, f)
+	if _, err := f.tm.UserMessage(f.lead.ID, "ask Backend to add /export", nil); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	run := f.fs.last(t, f.lead)
+	text, err := f.tm.RequestProjectWork(f.caller(t, run), "Backend", "Add /export", "")
+	if err != nil || !strings.Contains(text, "Backend got your request as W-") || !strings.Contains(text, "(task T-1)") {
+		t.Fatalf("%q %v", text, err)
+	}
+	if tasks, _ := f.st.ListTasks(bp.ID); len(tasks) != 1 {
+		t.Fatalf("task direct: %+v", tasks)
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
+}
+
+func TestRequestWorkNotDirectAfterQuestionReply(t *testing.T) {
+	f := setup(t)
+	bp, _ := linked(t, f)
+	if _, err := f.tm.AskUser(f.leadCaller(), "Which DB?", nil); err != nil {
+		t.Fatal(err)
+	}
+	qs, _ := f.st.ListOpenQuestions(f.p.ID)
+	if err := f.tm.DismissQuestion(qs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	run := f.fs.last(t, f.lead)
+	text, err := f.tm.RequestProjectWork(f.caller(t, run), "Backend", "Add /export", "")
+	if err != nil || !strings.Contains(text, "the user approves it first") {
+		t.Fatalf("%q %v", text, err)
+	}
+	if tasks, _ := f.st.ListTasks(bp.ID); len(tasks) != 0 {
+		t.Fatal("un raspuns la ask_user nu e cerere din chat")
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
+}
+
+func TestRequestWorkRefusals(t *testing.T) {
+	f := setup(t)
+	linked(t, f)
+	if _, err := f.tm.RequestProjectWork(f.workerCaller(f.rook, 0), "Backend", "x", ""); err == nil || !strings.Contains(err.Error(), "only a lead") {
+		t.Fatalf("worker: %v", err)
+	}
+	if _, err := f.tm.RequestProjectWork(f.leadCaller(), "Backend", " ", ""); err == nil || !strings.Contains(err.Error(), "title is required") {
+		t.Fatalf("titlu: %v", err)
+	}
+	if _, err := f.tm.RequestProjectWork(f.leadCaller(), "Backend", strings.Repeat("x", 201), ""); err == nil || !strings.Contains(err.Error(), "at most 200") {
+		t.Fatalf("titlu lung: %v", err)
+	}
+	if _, err := f.tm.RequestProjectWork(f.leadCaller(), "Nope", "x", ""); err == nil || !strings.Contains(err.Error(), "is not a linked project") {
+		t.Fatalf("nelegat: %v", err)
+	}
+}
+
+// approvedTask face o cerere, o aproba si intoarce task-ul din Backend (pus In progress, ca intr-un run pe el).
+func approvedTask(t *testing.T, f *fixture, c mcp.Caller) (store.Project, store.Agent, store.Task, store.ProjectRequest) {
+	t.Helper()
+	bp, broot := linked(t, f)
+	if _, err := f.tm.RequestProjectWork(c, "Backend", "Add /export", "CSV"); err != nil {
+		t.Fatal(err)
+	}
+	reqs, _ := f.st.ListPendingWork(bp.ID)
+	if err := f.tm.ApproveProjectRequest(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	tasks, _ := f.st.ListTasks(bp.ID)
+	task := tasks[0]
+	task.Status = store.StatusInProgress
+	if err := f.st.SaveTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := f.st.GetProjectRequest(reqs[0].ID)
+	return bp, broot, task, r
+}
+
+func TestRootReportDoneDelivers(t *testing.T) {
+	f := setup(t)
+	lt := f.task(t, "Export page", f.lead, store.StatusInProgress)
+	c := f.leadCaller()
+	c.TaskID = lt.ID
+	bp, broot, task, r := approvedTask(t, f, c)
+	rc := mcp.Caller{ProjectID: bp.ID, AgentID: broot.ID, TaskID: task.ID, IsRoot: true, FromRequest: true}
+	text, err := f.tm.ReportDone(rc, "", "Endpoint /export added")
+	if err != nil || !strings.Contains(text, task.Ref()+" is Done; the report went back to ApiUnit.") {
+		t.Fatalf("%q %v", text, err)
+	}
+	got, _ := f.st.GetTask(task.ID)
+	if got.Status != store.StatusDone || got.Result != "Endpoint /export added" {
+		t.Fatalf("%+v", got)
+	}
+	r, _ = f.st.GetProjectRequest(r.ID)
+	if r.Status != store.ReqDone || r.Answer != "Endpoint /export added" {
+		t.Fatalf("%+v", r)
+	}
+	want := "Backend finished " + r.Ref() + ": Endpoint /export added (your task " + lt.Ref() + ")"
+	if !f.hasMessage(f.lead.ID, want) {
+		t.Fatalf("nota la lider: %q", want)
+	}
+}
+
+func TestRootReportDoneWaitsForSubtasks(t *testing.T) {
+	f := setup(t)
+	bp, broot, task, _ := approvedTask(t, f, f.leadCaller())
+	sub := store.Task{ProjectID: bp.ID, Title: "part", AssigneeID: broot.ID, ParentTaskID: &task.ID}
+	if err := f.st.CreateTask(&sub); err != nil {
+		t.Fatal(err)
+	}
+	rc := mcp.Caller{ProjectID: bp.ID, AgentID: broot.ID, TaskID: task.ID, IsRoot: true, FromRequest: true}
+	if _, err := f.tm.ReportDone(rc, "", "x"); err == nil || !strings.Contains(err.Error(), "still has open subtasks") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestUserAcceptDeliversToo(t *testing.T) {
+	f := setup(t)
+	_, _, task, r := approvedTask(t, f, f.leadCaller())
+	// radacina a terminat fara report_done: task-ul e in Review la utilizator, care il accepta
+	task.Status, task.ReviewStage, task.Result = store.StatusReview, store.StageLead, "Done without report_done"
+	if err := f.st.SaveTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.UserDecide(task.ID, true, ""); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	r, _ = f.st.GetProjectRequest(r.ID)
+	if r.Status != store.ReqDone || !f.hasMessage(f.lead.ID, "Backend finished "+r.Ref()+": Done without report_done") {
+		t.Fatalf("livrare la accept: %+v", r)
+	}
+}
+
+func TestRequestWorkStagedTarget(t *testing.T) {
+	f := setup(t)
+	bp, broot := linked(t, f)
+	if _, err := f.st.SaveStages(bp.ID, []store.Stage{{Name: "Build", Kind: "work", AgentIDs: []int64{broot.ID}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.RequestProjectWork(f.leadCaller(), "Backend", "Add /export", ""); err != nil {
+		t.Fatal(err)
+	}
+	reqs, _ := f.st.ListPendingWork(bp.ID)
+	if err := f.tm.ApproveProjectRequest(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	tasks, _ := f.st.ListTasks(bp.ID)
+	if len(tasks) != 1 || tasks[0].StageID == nil || tasks[0].RequestID == nil {
+		t.Fatalf("task in prima etapa: %+v", tasks)
+	}
+}
+
+func TestDismissProjectRequest(t *testing.T) {
+	f := setup(t)
+	bp, _ := linked(t, f)
+	f.tm.RequestProjectWork(f.leadCaller(), "Backend", "Add /export", "")
+	reqs, _ := f.st.ListPendingWork(bp.ID)
+	if err := f.tm.DismissProjectRequest(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if !f.hasMessage(f.lead.ID, "The user dismissed your request "+reqs[0].Ref()+" to Backend.") {
+		t.Fatal("nota la lider")
+	}
+	if err := f.tm.DismissProjectRequest(reqs[0].ID); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("a doua oara: %v", err)
+	}
+}
+
+func TestApproveAfterUnlink(t *testing.T) {
+	f := setup(t)
+	bp, _ := linked(t, f)
+	f.tm.RequestProjectWork(f.leadCaller(), "Backend", "Add /export", "")
+	reqs, _ := f.st.ListPendingWork(bp.ID)
+	// legatura stearsa direct din store (fara ciclul de viata): aprobarea trebuie refuzata
+	if err := f.st.UnlinkProjects(f.p.ID, bp.ID); err != nil {
+		t.Fatal(err)
+	}
+	var pre ProjectRequestError
+	if err := f.tm.ApproveProjectRequest(reqs[0].ID); !errors.As(err, &pre) {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestUnlinkClosesOpenRequests(t *testing.T) {
+	f := setup(t)
+	bp, _ := linked(t, f)
+	f.tm.AskProject(f.workerCaller(f.rook, 0), "Backend", "Which format?")
+	f.tm.RequestProjectWork(f.leadCaller(), "Backend", "Add /export", "")
+	if err := f.tm.UnlinkProjects(bp.ID, f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := f.st.AreLinked(f.p.ID, bp.ID); ok {
+		t.Fatal("legatura trebuia stearsa")
+	}
+	if !f.hasMessage(f.rook.ID, "to Backend was closed: the projects are no longer linked.") ||
+		!f.hasMessage(f.lead.ID, "to Backend was closed: the projects are no longer linked.") {
+		t.Fatal("notele")
+	}
+	if n, _ := f.st.CountPendingWork(bp.ID); n != 0 {
+		t.Fatal("cererea neaprobata trebuia respinsa")
+	}
+	if err := f.tm.UnlinkProjects(bp.ID, f.p.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("a doua oara: %v", err)
+	}
+}
+
+func TestBeforeDeleteProjectNotifies(t *testing.T) {
+	f := setup(t)
+	bp, _ := linked(t, f)
+	f.tm.AskProject(f.workerCaller(f.rook, 0), "Backend", "Which format?")
+	if err := f.tm.BeforeDeleteProject(bp.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !f.hasMessage(f.rook.ID, "to Backend was closed: the project was deleted.") {
+		t.Fatal("nota")
+	}
+}
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
