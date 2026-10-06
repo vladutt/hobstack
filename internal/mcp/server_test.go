@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +57,16 @@ func (f *fakeBackend) AskUser(c Caller, question string, options []string) (stri
 	return "ok", f.err
 }
 
+func (f *fakeBackend) AddAgent(c Caller, in AddAgentInput) (string, error) {
+	f.calls = append(f.calls, fmt.Sprintf("add_agent|%s|%s|%s|%v|%v|%s", in.Name, in.Role, in.Model, in.Tools, in.ToolsSet, in.Reason))
+	return "ok", f.err
+}
+
+func (f *fakeBackend) RemoveAgent(c Caller, name string) (string, error) {
+	f.calls = append(f.calls, "remove_agent|"+name)
+	return "ok", f.err
+}
+
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 	t.Helper()
 	fb := &fakeBackend{callers: map[string]Caller{
@@ -68,6 +79,8 @@ func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 		"stagework":  {ProjectID: 1, AgentID: 6, TaskID: 9, StageKind: "work"},
 		"stagelead":  {ProjectID: 1, AgentID: 8, IsLead: true, HasStages: true},
 		"stagecheck": {ProjectID: 1, AgentID: 7, TaskID: 9, StageKind: "check"},
+		"leadadd":    {ProjectID: 1, AgentID: 10, IsLead: true, CanAddAgents: true},
+		"rootsolo":   {ProjectID: 1, AgentID: 11, CanAddAgents: true},
 	}}
 	mux := http.NewServeMux()
 	srv := NewServer(fb)
@@ -353,5 +366,50 @@ func TestAskUserTool(t *testing.T) {
 	_, resp = rpc(t, ts, "setup", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ask_user","arguments":{"question":"Q?"}}}`)
 	if _, isErr := toolText(t, resp); !isErr {
 		t.Fatal("setup nu are voie la ask_user")
+	}
+}
+
+func TestAddAgentTools(t *testing.T) {
+	_, ts := setup(t)
+	names := func(token string) string {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+		var out []string
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			out = append(out, tool.(map[string]any)["name"].(string))
+		}
+		return strings.Join(out, ",")
+	}
+	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,ask_user" {
+		t.Fatalf("leadadd: %s", got)
+	}
+	// radacina fara echipa: create_task + list_tasks ca sa-i dea de lucru agentului nou, fara accept/send_back
+	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,ask_user" {
+		t.Fatalf("rootsolo: %s", got)
+	}
+	for _, token := range []string{"worker", "sublead", "setup"} {
+		if got := names(token); strings.Contains(got, "add_agent") {
+			t.Fatalf("%s nu are voie la add_agent: %s", token, got)
+		}
+	}
+}
+
+func TestCallAddAgent(t *testing.T) {
+	fb, ts := setup(t)
+	_, resp := rpc(t, ts, "leadadd", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add_agent","arguments":{"name":"Quinn","role":"QA","model":"haiku","tools":["write","git"],"reason":"tests"}}}`)
+	if _, isErr := toolText(t, resp); isErr || fb.calls[0] != "add_agent|Quinn|QA|haiku|[write git]|true|tests" {
+		t.Fatalf("%v %v", resp, fb.calls)
+	}
+	// fara tools: ToolsSet false (backend-ul alege implicitul)
+	rpc(t, ts, "rootsolo", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"add_agent","arguments":{"name":"Ivo","role":"Dev","reason":"x"}}}`)
+	if fb.calls[1] != "add_agent|Ivo|Dev||[]|false|x" {
+		t.Fatalf("%v", fb.calls)
+	}
+	rpc(t, ts, "leadadd", `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"remove_agent","arguments":{"name":"Quinn"}}}`)
+	if fb.calls[2] != "remove_agent|Quinn" {
+		t.Fatalf("%v", fb.calls)
+	}
+	_, resp = rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"add_agent","arguments":{"name":"X"}}}`)
+	if _, isErr := toolText(t, resp); !isErr || len(fb.calls) != 3 {
+		t.Fatal("un worker nu poate chema add_agent")
 	}
 }

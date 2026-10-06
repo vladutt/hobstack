@@ -146,6 +146,36 @@ var askUserTool = Tool{
 	}),
 }
 
+var addAgentTools = []Tool{
+	{
+		Name: "add_agent",
+		Description: "Adds a new agent to your direct team. Use it only when no current member fits part of the work, or to run " +
+			"independent sub-tasks in parallel. Depending on the project, the agent is added at once or the user approves it first; " +
+			"the result tells you which. A new agent starts working when you give it a task with create_task.",
+		InputSchema: schema([]string{"name", "role", "instructions", "reason"}, map[string]any{
+			"name":            str("Short, unique name, e.g. Quinn"),
+			"role":            str("The role, e.g. QA Engineer"),
+			"instructions":    str("How it works and what it never does"),
+			"background":      str("Optional: what it knows about this project"),
+			"done_definition": str("Optional: what it hands over when it finishes"),
+			"model":           map[string]any{"type": "string", "enum": []string{"opus", "sonnet", "haiku"}, "description": "Optional: the Claude model (default sonnet)"},
+			"tools": map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string", "enum": []string{"write", "shell", "git", "web"}},
+				"description": "Optional: only tools you have yourself (default write)",
+			},
+			"reason": str("One sentence: why the team needs this agent (the user sees it)"),
+		}),
+	},
+	{
+		Name:        "remove_agent",
+		Description: "Removes from your team an agent you added, once it has no open tasks. It stays on the canvas, detached, with its history.",
+		InputSchema: schema([]string{"name"}, map[string]any{
+			"name": str("The agent's name"),
+		}),
+	},
+}
+
 // toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
 // Orice agent al echipei primeste ask_user; analistul din wizard nu.
 func toolsFor(c Caller) []Tool {
@@ -158,6 +188,13 @@ func toolsFor(c Caller) []Tool {
 		if c.HasStages {
 			out[0] = createTaskInStages
 		}
+	}
+	if c.CanAddAgents {
+		// o radacina fara echipa primeste create_task / list_tasks ca sa-i dea de lucru agentului nou in acelasi run
+		if !c.IsLead {
+			out = append(out, leadTools[0], leadTools[1])
+		}
+		out = append(out, addAgentTools...)
 	}
 	if c.HasParent {
 		out = append(out, reportTool)

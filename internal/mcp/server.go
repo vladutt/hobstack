@@ -13,16 +13,25 @@ import (
 
 // Caller identifica agentul care apeleaza, pe baza token-ului din URL.
 type Caller struct {
-	ProjectID  int64
-	AgentID    int64
-	RunID      string
-	TaskID     int64  // 0 = run fara task
-	IsLead     bool   // are agenti direct sub el
-	HasParent  bool   // are sef, deci raporteaza cu report_done
-	IsReviewer bool   // verifica munca cuiva
-	SetupID    string // != "" = analistul din wizard; vede doar propose_setup
-	StageKind  string // etapa task-ului curent: "work", "check" sau "" (fara etape)
-	HasStages  bool   // proiectul are etape: la create_task assignee e optional
+	ProjectID    int64
+	AgentID      int64
+	RunID        string
+	TaskID       int64  // 0 = run fara task
+	IsLead       bool   // are agenti direct sub el
+	HasParent    bool   // are sef, deci raporteaza cu report_done
+	IsReviewer   bool   // verifica munca cuiva
+	SetupID      string // != "" = analistul din wizard; vede doar propose_setup
+	StageKind    string // etapa task-ului curent: "work", "check" sau "" (fara etape)
+	HasStages    bool   // proiectul are etape: la create_task assignee e optional
+	CanAddAgents bool   // lider sau radacina: add_agent / remove_agent
+}
+
+// AddAgentInput sunt argumentele lui add_agent. ToolsSet spune daca agentul a
+// trimis "tools" (chiar gol); fara el, backend-ul alege tool-urile implicite.
+type AddAgentInput struct {
+	Name, Role, Model, Background, Instructions, DoneDef, Reason string
+	Tools                                                        []string
+	ToolsSet                                                     bool
 }
 
 // Backend face munca propriu-zisa. Erorile intoarse ajung la agent ca
@@ -38,6 +47,8 @@ type Backend interface {
 	ReviewReject(c Caller, task, feedback string) (string, error)
 	ProposeSetup(c Caller, args json.RawMessage) (string, error)
 	AskUser(c Caller, question string, options []string) (string, error)
+	AddAgent(c Caller, in AddAgentInput) (string, error)
+	RemoveAgent(c Caller, name string) (string, error)
 }
 
 type Server struct {
@@ -155,6 +166,15 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		text, err = s.backend.ReviewReject(c, arg("task"), arg("feedback"))
 	case "ask_user":
 		text, err = s.backend.AskUser(c, arg("question"), argList(p.Arguments, "options"))
+	case "add_agent":
+		_, toolsSet := p.Arguments["tools"]
+		text, err = s.backend.AddAgent(c, AddAgentInput{
+			Name: arg("name"), Role: arg("role"), Model: arg("model"), Background: arg("background"),
+			Instructions: arg("instructions"), DoneDef: arg("done_definition"), Reason: arg("reason"),
+			Tools: argList(p.Arguments, "tools"), ToolsSet: toolsSet,
+		})
+	case "remove_agent":
+		text, err = s.backend.RemoveAgent(c, arg("name"))
 	case "propose_setup":
 		raw, _ := json.Marshal(p.Arguments)
 		text, err = s.backend.ProposeSetup(c, raw)
