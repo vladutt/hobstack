@@ -112,6 +112,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/questions/{id}/dismiss", s.dismissQuestion)
 	mux.HandleFunc("POST /api/access/{id}/dismiss", s.dismissAccess)
 	mux.HandleFunc("POST /api/access/{id}/enable-shell", s.enableShell)
+	mux.HandleFunc("GET /api/projects/{id}/links", s.listLinks)
+	mux.HandleFunc("POST /api/projects/{id}/links", s.createLink)
+	mux.HandleFunc("DELETE /api/projects/{id}/links/{other}", s.deleteLink)
+	mux.HandleFunc("POST /api/project-requests/{id}/approve", s.approveProjectRequest)
+	mux.HandleFunc("POST /api/project-requests/{id}/dismiss", s.dismissProjectRequest)
 	mux.HandleFunc("POST /api/agent-requests/{id}/approve", s.approveAgentRequest)
 	mux.HandleFunc("POST /api/agent-requests/{id}/dismiss", s.dismissAgentRequest)
 	mux.HandleFunc("POST /api/tasks/{id}/assign", s.assignTask)
@@ -181,6 +186,7 @@ func fail(w http.ResponseWriter, err error) {
 	var re team.RecurringError
 	var ae team.AssignError
 	var are team.AgentRequestError
+	var pre team.ProjectRequestError
 	switch {
 	case errors.As(err, &br):
 		writeErr(w, http.StatusBadRequest, br.Error())
@@ -190,6 +196,10 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusBadRequest, le.Error())
 	case errors.As(err, &are):
 		writeErr(w, http.StatusConflict, are.Error())
+	case errors.As(err, &pre):
+		writeErr(w, http.StatusConflict, pre.Error())
+	case errors.Is(err, store.ErrSameProject):
+		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
 	case errors.Is(err, team.ErrNotBlocked), errors.Is(err, team.ErrNotStuck), errors.Is(err, team.ErrAgentBusy):

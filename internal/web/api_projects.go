@@ -180,6 +180,8 @@ type projectCard struct {
 	AccessRequests int `json:"accessRequests"`
 	// AgentRequests: cereri deschise ale liderilor de a adauga agenti
 	AgentRequests int `json:"agentRequests"`
+	// WorkRequests: cereri de lucru de la proiecte legate, in asteptarea aprobarii
+	WorkRequests int `json:"workRequests"`
 }
 
 type agentView struct {
@@ -193,7 +195,8 @@ type agentView struct {
 // taskView: task-ul plus numarul de fisiere modificate de agenti pe el.
 type taskView struct {
 	store.Task
-	FilesChanged int `json:"filesChanged"`
+	FilesChanged int    `json:"filesChanged"`
+	FromProject  string `json:"fromProject"` // proiectul care a cerut task-ul ("" = nimeni)
 }
 
 type projectDetail struct {
@@ -217,6 +220,10 @@ type projectDetail struct {
 	AgentRequests []agentRequestView `json:"agentRequests"`
 	// Recurring: sarcinile recurente ale proiectului (mereu non-nil)
 	Recurring []recurringView `json:"recurring"`
+	// Links: proiectele legate (mereu non-nil)
+	Links []linkView `json:"links"`
+	// WorkRequests: cererile de lucru in asteptare de la proiecte legate (mereu non-nil)
+	WorkRequests []workRequestView `json:"workRequests"`
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -239,6 +246,9 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 		return projectCard{}, nil, nil, nil, err
 	}
 	if c.AgentRequests, err = s.st.CountOpenAgentRequests(p.ID); err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	if c.WorkRequests, err = s.st.CountPendingWork(p.ID); err != nil {
 		return projectCard{}, nil, nil, nil, err
 	}
 	for _, a := range agents {
@@ -335,11 +345,38 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	links, err := s.linkViews(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	workReqs, err := s.workRequestViews(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	views := make([]taskView, len(tasks))
+	fromProject := map[int64]string{} // cache: id proiect sursa -> nume
 	for i, t := range tasks {
 		views[i] = taskView{Task: t, FilesChanged: changed[t.ID]}
+		if t.RequestID == nil {
+			continue
+		}
+		// erorile de citire lasa campul gol
+		req, err := s.st.GetProjectRequest(*t.RequestID)
+		if err != nil {
+			continue
+		}
+		name, ok := fromProject[req.FromProject]
+		if !ok {
+			if fp, err := s.st.GetProject(req.FromProject); err == nil {
+				name = fp.Name
+			}
+			fromProject[req.FromProject] = name
+		}
+		views[i].FromProject = name
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring, Links: links, WorkRequests: workReqs}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)
@@ -456,6 +493,10 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.team.ProjectActive(id) {
 		writeErr(w, http.StatusConflict, "the team is working now; stop the team before deleting the project")
+		return
+	}
+	if err := s.team.BeforeDeleteProject(id); err != nil {
+		fail(w, err)
 		return
 	}
 	if err := s.st.DeleteProject(id); err != nil {
