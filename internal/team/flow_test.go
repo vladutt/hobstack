@@ -88,3 +88,16 @@ func TestRequestedOnlyWithUserMessage(t *testing.T) {
 	}
 	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
 }
+
+func TestNoRequestedFromQuestionReply(t *testing.T) {
+	f := setup(t)
+	run := replyRun(t, f, true)
+	if _, err := f.tm.CreateTask(f.caller(t, run), "Share", "do it", "Rook"); err != nil {
+		t.Fatal(err)
+	}
+	task := f.wantStatus(t, 1, store.StatusQueued)
+	if req := eventsOfKind(t, f, task.ID, "requested"); len(req) != 0 {
+		t.Fatalf("raspunsul la intrebare nu e cerere din chat: %+v", req)
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
+}

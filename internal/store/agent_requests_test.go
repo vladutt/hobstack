@@ -107,7 +107,7 @@ func TestCountAddedBy(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	newAgent(t, s, p.ID, "Manual", &lead.ID) // creat de utilizator: nu se numara
+	manual := newAgent(t, s, p.ID, "Manual", &lead.ID) // creat de utilizator: nu se numara
 	newRequest(t, s, p.ID, lead.ID, "R1")
 	closed := newRequest(t, s, p.ID, lead.ID, "R2")
 	s.DismissAgentRequest(closed.ID)
@@ -122,5 +122,14 @@ func TestCountAddedBy(t *testing.T) {
 	}
 	if n, _ := s.CountAddedBy(lead.ID); n != 2 {
 		t.Fatalf("dupa detasare = %d, vreau 2", n)
+	}
+	// un agent mutat de utilizator sub alt agent nu mai e in echipa directa a liderului
+	a2, _ := s.FindAgentByName(p.ID, "A2")
+	a2.ParentID = &manual.ID
+	if err := s.UpdateAgent(a2); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := s.CountAddedBy(lead.ID); n != 1 {
+		t.Fatalf("dupa mutare = %d, vreau 1", n)
 	}
 }

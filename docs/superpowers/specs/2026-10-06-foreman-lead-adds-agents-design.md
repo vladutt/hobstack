@@ -58,6 +58,10 @@ Agentul nou:
 - proiectul are Full autonomy pornit (`t.autonomyOf`), sau
 - run-ul liderului a pornit dintr-un mesaj al utilizatorului (`t.requestOf(c.AgentID, c.RunID)` gaseste mesajul).
 
+Raspunsurile la intrebarile `ask_user` (Answer sau Dismiss) NU conteaza ca cerere din chat: sunt mesaje ale
+utilizatorului (arata la fel in chat si se livreaza la fel), dar marcate `messages.reply = 1` (migrarea 016), iar
+`notesRun` le sare cand alege mesajul care a pornit run-ul. Deci nici nu dau pasul "requested" in Flow.
+
 Altfel se creeaza o cerere in "Needs you" (vezi Store).
 
 Raspunsuri catre lider:
@@ -65,12 +69,14 @@ Raspunsuri catre lider:
 - direct: `Agent "X" added to your team. Give it work with create_task.`
 - cerere: `Request sent to the user. You will get a message when it is approved or dismissed; continue with your current work meanwhile.`
 
-**Limita:** agentii activi creati de lider (`created_by` = lider si `detached = 0`) + cererile lui deschise <= 6.
+**Limita:** agentii creati de lider care sunt inca direct sub el (`created_by` = lider, `parent_id` = lider si
+`detached = 0`) + cererile lui deschise <= 6.
 Peste: `you already have 6 agents you added (or requested); remove one with remove_agent first`.
 
 Alte refuzuri (mesaje in engleza, intoarse ca eroare de tool):
 
-- nume ocupat (agent existent sau cerere deschisa a oricui din proiect cu acelasi nume): `an agent named "X" already exists`;
+- nume ocupat de un agent existent: `an agent named "X" already exists`;
+- nume ocupat de o cerere deschisa (a oricui din proiect): `an agent named "X" is already waiting for approval`;
 - tool peste ale liderului: `you can only give tools you have yourself: shell` (lista celor in plus);
 - model necunoscut: `unknown model: X`.
 
@@ -79,7 +85,7 @@ Alte refuzuri (mesaje in engleza, intoarse ca eroare de tool):
 Camp: `name`. Conditii:
 
 - agentul exista in proiect si are `created_by` = liderul care cheama; altfel `you can only remove agents you added`;
-- nu e deja detasat; altfel `"X" is not on the team`;
+- e inca direct sub lider (nu e detasat si utilizatorul nu l-a mutat sub alt agent); altfel `"X" is not on your team`;
 - nu are task-uri asignate care nu sunt Done; altfel `"X" still has open tasks: T-12, T-15`;
 - nu are echipa proprie si nu e reviewer pentru nimeni (utilizatorul l-ar fi putut lega asa din canvas); altfel
   `"X" has its own team or reviews someone; ask the user to change it`.
@@ -118,7 +124,7 @@ AgentID *int64; CreatedAt time.Time; ClosedAt *time.Time}`.
 
 Functii: `CreateAgentRequest(*AgentRequest) error`, `GetAgentRequest(id)`, `ListOpenAgentRequests(projectID)`
 (dupa id, non-nil), `CountOpenAgentRequests(projectID)`, `CloseAgentRequest(id, status string, agentID *int64) error`
-(doar din `open`; altfel `ErrConflict`), `CountAddedBy(leadID) (int, error)` (agenti activi + cereri deschise).
+(doar din `open`; altfel `ErrConflict`), `CountAddedBy(leadID) (int, error)` (agenti inca direct sub lider + cereri deschise).
 
 ## Team
 
@@ -133,7 +139,7 @@ Fisier nou `internal/team/agents.go`:
 Toate sub `t.work`, ca `AskUser`. Dupa orice schimbare:
 
 - `t.LinksChanged(projectID)` (re-calculeaza rolurile, Kick);
-- evenimente SSE `agent` si `project`.
+- evenimente SSE `agent` (agent creat sau detasat) si `agent_request` (cerere noua sau inchisa).
 
 **Aprobare:** re-valideaza totul (intre timp numele s-a putut ocupa, limita s-a putut umple, liderul si-a putut pierde
 un tool sau rolul); la eroare (`team.AgentRequestError`) cererea ramane deschisa si UI-ul arata eroarea (409). La succes: `CreateAgent` +
@@ -143,7 +149,9 @@ un tool sau rolul); la eroare (`team.AgentRequestError`) cererea ramane deschisa
 `addUserMessage`: un mesaj cu autor utilizatorul ar face run-ul urmator sa para pornit din chat, iar liderul ar
 putea adauga direct, fara aprobare.
 
-- `The user approved your request: "X" is now on your team. Give it work with create_task.`
+- `The user approved your request. ` + acelasi text ca la creare directa (`addedText`: `Agent "X" added to your team.
+  Give it work with create_task.`, sau, intr-un proiect cu etape, indicatia ca utilizatorul trebuie sa-l adauge intr-o
+  etapa).
 - `The user dismissed your request to add "X". Continue with your current team.`
 
 **Istoricul task-ului:** daca `c.TaskID != 0`, in `task_events`: `Requested agent "X"`, `Added agent "X"`,

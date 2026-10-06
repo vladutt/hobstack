@@ -307,7 +307,11 @@ func (t *Team) ApproveAgentRequest(id int64) error {
 	if err != nil {
 		return err
 	}
-	return t.LinksChanged(projectID)
+	// aprobarea e deja salvata: o eroare la recalculare doar se logheaza (ca la add_agent)
+	if err := t.LinksChanged(projectID); err != nil {
+		log.Printf("approve agent request: %v", err)
+	}
+	return nil
 }
 
 func (t *Team) approveAgentRequest(id int64) (int64, error) {
@@ -348,7 +352,8 @@ func (t *Team) approveAgentRequest(id int64) (int64, error) {
 		return 0, err
 	}
 	// nota (eveniment), nu mesaj al utilizatorului: run-ul urmator nu trebuie sa para pornit din chat
-	t.note(r.ProjectID, lead.ID, fmt.Sprintf("The user approved your request: %q is now on your team. Give it work with create_task.", a.Name), false)
+	// acelasi text ca la add_agent direct (inclusiv indicatia pentru proiectele cu etape)
+	t.note(r.ProjectID, lead.ID, "The user approved your request. "+t.addedText(r.ProjectID, a.Name), false)
 	if r.TaskID != nil {
 		if task := t.callerTask(*r.TaskID); task != nil {
 			t.taskEvent(*task, "agent_approved", actorUser, fmt.Sprintf("Approved agent %q", a.Name))

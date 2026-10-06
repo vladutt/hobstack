@@ -163,7 +163,7 @@ func TestApproveAgentRequest(t *testing.T) {
 	// nota catre lider e eveniment, nu mesaj al utilizatorului (altfel run-ul urmator ar parea pornit din chat)
 	msgs, _ := f.st.ListMessages(f.lead.ID)
 	last := msgs[len(msgs)-1]
-	if !strings.Contains(last.Text, `approved your request: "Quinn"`) || last.Kind != store.KindEvent || last.Author == store.AuthorUser || last.Delivered {
+	if !strings.Contains(last.Text, `The user approved your request. Agent "Quinn" added to your team. Give it work with create_task.`) || last.Kind != store.KindEvent || last.Author == store.AuthorUser || last.Delivered {
 		t.Fatalf("nota: %+v", last)
 	}
 	if !hasEvent(t, f, task.ID, "agent_requested", f.lead.Name, `Requested agent "Quinn"`) ||
@@ -301,5 +301,71 @@ func TestAddAgentWithStagesSaysSo(t *testing.T) {
 	text, err := f.tm.AddAgent(f.leadCaller(), quinn())
 	if err != nil || !strings.Contains(text, "add it to a stage") {
 		t.Fatalf("%q %v", text, err)
+	}
+}
+
+func TestApproveWithStagesSaysSo(t *testing.T) {
+	f := setup(t)
+	withTools(t, f, "write")
+	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Build", Kind: "work", AgentIDs: []int64{f.rook.ID}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.AddAgent(f.leadCaller(), quinn()); err != nil {
+		t.Fatal(err)
+	}
+	reqs, _ := f.st.ListOpenAgentRequests(f.p.ID)
+	if err := f.tm.ApproveAgentRequest(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := f.st.ListMessages(f.lead.ID)
+	last := msgs[len(msgs)-1]
+	if !strings.Contains(last.Text, "The user approved your request.") || !strings.Contains(last.Text, "add it to a stage") || last.Kind != store.KindEvent {
+		t.Fatalf("nota: %+v", last)
+	}
+}
+
+// replyRun: liderul intreaba (fara task), utilizatorul raspunde sau inchide intrebarea,
+// iar run-ul care livreaza raspunsul nu conteaza ca cerere din chat.
+func replyRun(t *testing.T, f *fixture, answer bool) runner.Spec {
+	t.Helper()
+	if _, err := f.tm.AskUser(mcp.Caller{ProjectID: f.p.ID, AgentID: f.lead.ID, RunID: "r"}, "Which DB?", nil); err != nil {
+		t.Fatal(err)
+	}
+	id := openQuestionIDs(t, f)[0]
+	var err error
+	if answer {
+		err = f.tm.AnswerQuestion(id, "Postgres")
+	} else {
+		err = f.tm.DismissQuestion(id)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	return f.fs.last(t, f.lead)
+}
+
+func TestAddAgentAfterQuestionReplyNeedsApproval(t *testing.T) {
+	for _, answer := range []bool{false, true} {
+		f := setup(t)
+		withTools(t, f, "write")
+		run := replyRun(t, f, answer)
+		text, err := f.tm.AddAgent(f.caller(t, run), quinn())
+		if err != nil || !strings.Contains(text, "Request sent to the user") {
+			t.Fatalf("answer=%v: %q %v", answer, text, err)
+		}
+		if _, err := f.st.FindAgentByName(f.p.ID, "Quinn"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("answer=%v: raspunsul la intrebare nu e cerere din chat", answer)
+		}
+		if reqs, _ := f.st.ListOpenAgentRequests(f.p.ID); len(reqs) != 1 {
+			t.Fatalf("answer=%v: %+v", answer, reqs)
+		}
+		// raspunsul ramane in thread ca mesaj al utilizatorului, livrat
+		msgs, _ := f.st.ListMessages(f.lead.ID)
+		last := msgs[len(msgs)-1]
+		if last.Kind != store.KindMsg || last.Author != store.AuthorUser || !last.Delivered || !last.Reply {
+			t.Fatalf("answer=%v: %+v", answer, last)
+		}
+		f.fs.finish(run.ID, runner.Outcome{Status: "done"})
 	}
 }

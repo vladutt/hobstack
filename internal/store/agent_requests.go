@@ -127,12 +127,12 @@ func (s *Store) OpenAgentRequestNamed(projectID int64, name string) (bool, error
 }
 
 // CountAddedBy numara ce ocupa din limita unui lider: agentii adaugati de el
-// care sunt inca in echipa (nedetasati) plus cererile lui deschise.
+// care sunt inca direct sub el (nedetasati, nemutati) plus cererile lui deschise.
 func (s *Store) CountAddedBy(leadID int64) (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT
-		(SELECT COUNT(*) FROM agents WHERE created_by = ? AND detached = 0) +
-		(SELECT COUNT(*) FROM agent_requests WHERE lead_id = ? AND status = 'open')`, leadID, leadID).Scan(&n)
+		(SELECT COUNT(*) FROM agents WHERE created_by = ? AND parent_id = ? AND detached = 0) +
+		(SELECT COUNT(*) FROM agent_requests WHERE lead_id = ? AND status = 'open')`, leadID, leadID, leadID).Scan(&n)
 	return n, err
 }
 

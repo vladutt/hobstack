@@ -128,8 +128,9 @@ func (t *Team) Reconcile(projectID int64) error {
 			return t.startFailed(p, notify, a, err)
 		}
 		// ultimul mesaj al utilizatorului: din el pot porni task-uri (pasul "requested" din Flow)
+		// si agenti fara aprobare; raspunsurile la intrebari (Reply) nu sunt cereri din chat
 		for i := len(notes) - 1; i >= 0; i-- {
-			if notes[i].Author == store.AuthorUser {
+			if notes[i].Author == store.AuthorUser && !notes[i].Reply {
 				t.setRequest(a.ID, notes[i])
 				break
 			}
@@ -605,7 +606,7 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 		t.work.Unlock()
 		return store.Message{}, err
 	}
-	m, err := t.addUserMessage(a, text, attachmentIDs)
+	m, err := t.addUserMessage(a, text, attachmentIDs, false)
 	t.work.Unlock()
 	if err != nil {
 		return store.Message{}, err
@@ -615,9 +616,10 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 }
 
 // addUserMessage salveaza mesajul utilizatorului si anunta seful agentului.
-// Apelantul tine t.work si face Kick dupa ce il elibereaza.
-func (t *Team) addUserMessage(a store.Agent, text string, attachmentIDs []int64) (store.Message, error) {
-	m := store.Message{ProjectID: a.ProjectID, AgentID: a.ID, Kind: store.KindMsg, Author: store.AuthorUser, Text: text, Delivered: false}
+// Apelantul tine t.work si face Kick dupa ce il elibereaza. reply=true marcheaza
+// raspunsul la o intrebare ask_user: arata la fel in chat, dar nu e cerere din chat.
+func (t *Team) addUserMessage(a store.Agent, text string, attachmentIDs []int64, reply bool) (store.Message, error) {
+	m := store.Message{ProjectID: a.ProjectID, AgentID: a.ID, Kind: store.KindMsg, Author: store.AuthorUser, Text: text, Reply: reply}
 	if err := t.st.AddMessage(&m); err != nil {
 		return store.Message{}, err
 	}
@@ -683,7 +685,7 @@ func (t *Team) closeQuestion(id int64, status, answer string) error {
 		t.work.Unlock()
 		return err
 	}
-	if _, err := t.addUserMessage(a, clip(msg), nil); err != nil {
+	if _, err := t.addUserMessage(a, clip(msg), nil, true); err != nil {
 		t.work.Unlock()
 		return err
 	}
