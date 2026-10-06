@@ -1,0 +1,199 @@
+package team
+
+import (
+	"errors"
+	"strconv"
+	"strings"
+	"testing"
+
+	"foreman/internal/mcp"
+	"foreman/internal/runner"
+	"foreman/internal/store"
+)
+
+// linked creeaza proiectul Backend (cu radacina lui, "Lead") si il leaga de proiectul fixture-ului.
+func linked(t *testing.T, f *fixture) (store.Project, store.Agent) {
+	t.Helper()
+	p := store.Project{Name: "Backend", Goal: "Serve the API", Workdir: t.TempDir(), MaxParallel: 2}
+	root, err := f.st.CreateProject(&p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.LinkProjects(f.p.ID, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	return p, root
+}
+
+func rootCaller(p store.Project, root store.Agent) mcp.Caller {
+	return mcp.Caller{ProjectID: p.ID, AgentID: root.ID, IsRoot: true, CanAddAgents: true, HasLinks: true}
+}
+
+func lastMessage(t *testing.T, f *fixture, agentID int64) store.Message {
+	t.Helper()
+	msgs, err := f.st.ListMessages(agentID)
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("niciun mesaj: %v", err)
+	}
+	return msgs[len(msgs)-1]
+}
+
+func TestListLinkedProjects(t *testing.T) {
+	f := setup(t)
+	if text, err := f.tm.ListLinkedProjects(f.leadCaller()); err != nil || text != "This project has no linked projects." {
+		t.Fatalf("%q %v", text, err)
+	}
+	linked(t, f)
+	text, err := f.tm.ListLinkedProjects(f.leadCaller())
+	if err != nil || !strings.Contains(text, "Backend (root: Lead): Serve the API") {
+		t.Fatalf("%q %v", text, err)
+	}
+}
+
+func TestAskProjectAndReply(t *testing.T) {
+	f := setup(t)
+	bp, broot := linked(t, f)
+	c := f.workerCaller(f.rook, 0)
+	text, err := f.tm.AskProject(c, "backend", "Which format does /users return?")
+	if err != nil || !strings.Contains(text, "Question sent to Backend as Q-") || strings.Contains(text, "paused") {
+		t.Fatalf("%q %v", text, err)
+	}
+	note := lastMessage(t, f, broot.ID)
+	if note.Kind != store.KindEvent || note.Author == store.AuthorUser || note.Delivered || note.RequestID == nil ||
+		!strings.Contains(note.Text, "Question from ApiUnit (Rook) [Q-") || !strings.Contains(note.Text, "Which format does /users return?") {
+		t.Fatalf("nota la radacina: %+v", note)
+	}
+	ref := "Q-" + itoa(*note.RequestID)
+	reply, err := f.tm.ReplyToProject(rootCaller(bp, broot), strings.ToLower(ref), "JSON with id and name")
+	if err != nil || !strings.Contains(reply, "Answer sent for "+ref) {
+		t.Fatalf("%q %v", reply, err)
+	}
+	ans := lastMessage(t, f, f.rook.ID)
+	if ans.Kind != store.KindEvent || ans.Delivered || ans.Text != "Answer from Backend to "+ref+": JSON with id and name" {
+		t.Fatalf("raspunsul: %+v", ans)
+	}
+	r, _ := f.st.GetProjectRequest(*note.RequestID)
+	if r.Status != store.ReqAnswered || r.Answer != "JSON with id and name" {
+		t.Fatalf("%+v", r)
+	}
+	if _, err := f.tm.ReplyToProject(rootCaller(bp, broot), ref, "again"); err == nil || !strings.Contains(err.Error(), "already closed") {
+		t.Fatalf("a doua oara: %v", err)
+	}
+}
+
+func TestAskProjectRefusals(t *testing.T) {
+	f := setup(t)
+	c := f.workerCaller(f.rook, 0)
+	if _, err := f.tm.AskProject(c, "Backend", "?"); err == nil || !strings.Contains(err.Error(), "no linked projects") {
+		t.Fatalf("fara legaturi: %v", err)
+	}
+	bp, broot := linked(t, f)
+	if _, err := f.tm.AskProject(c, "Nope", "?"); err == nil || !strings.Contains(err.Error(), `"Nope" is not a linked project. Linked projects: Backend`) {
+		t.Fatalf("nelegat: %v", err)
+	}
+	if _, err := f.tm.AskProject(c, "Backend", "  "); err == nil || !strings.Contains(err.Error(), "question is required") {
+		t.Fatalf("goala: %v", err)
+	}
+	if _, err := f.tm.AskProject(c, "Backend", strings.Repeat("x", 2001)); err == nil || !strings.Contains(err.Error(), "at most 2000") {
+		t.Fatalf("lunga: %v", err)
+	}
+	for i := 0; i < MaxOpenQuestions; i++ {
+		if _, err := f.tm.AskProject(c, "Backend", "q"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.tm.AskProject(c, "Backend", "q"); err == nil || !strings.Contains(err.Error(), "already have 3 open questions") {
+		t.Fatalf("limita: %v", err)
+	}
+	// un worker din Backend nu raspunde in numele proiectului
+	w := store.Agent{ProjectID: bp.ID, Name: "Ivo", Role: "Dev", Model: "haiku", ParentID: &broot.ID}
+	if err := f.st.CreateAgent(&w); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.ReplyToProject(mcp.Caller{ProjectID: bp.ID, AgentID: w.ID, HasParent: true}, "Q-1", "x"); err == nil ||
+		!strings.Contains(err.Error(), "only the root agent") {
+		t.Fatalf("worker: %v", err)
+	}
+	// o intrebare a altui proiect
+	if _, err := f.tm.ReplyToProject(f.leadCaller(), "Q-1", "x"); err == nil || !strings.Contains(err.Error(), "is not a question to this project") {
+		t.Fatalf("alt proiect: %v", err)
+	}
+	if _, err := f.tm.ReplyToProject(rootCaller(bp, broot), "W-x", "x"); err == nil || !strings.Contains(err.Error(), "invalid reference") {
+		t.Fatalf("referinta: %v", err)
+	}
+}
+
+func TestAskProjectNoRoot(t *testing.T) {
+	f := setup(t)
+	_, broot := linked(t, f)
+	broot.Detached = true
+	if err := f.st.UpdateAgent(broot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.AskProject(f.workerCaller(f.rook, 0), "Backend", "?"); err == nil || !strings.Contains(err.Error(), `"Backend" has no root agent to receive it`) {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestAskProjectPausedTarget(t *testing.T) {
+	f := setup(t)
+	bp, _ := linked(t, f)
+	if err := f.st.SetPaused(bp.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	text, err := f.tm.AskProject(f.workerCaller(f.rook, 0), "Backend", "?")
+	if err != nil || !strings.Contains(text, "Backend is paused: it answers when the user starts it.") {
+		t.Fatalf("%q %v", text, err)
+	}
+}
+
+func TestAskProjectAntiLoop(t *testing.T) {
+	f := setup(t)
+	bp, broot := linked(t, f)
+	if _, err := f.tm.AskProject(f.workerCaller(f.rook, 0), "Backend", "Which format?"); err != nil {
+		t.Fatal(err)
+	}
+	// radacina Backend primeste intrebarea intr-un run de note
+	if err := f.tm.Reconcile(bp.ID); err != nil {
+		t.Fatal(err)
+	}
+	run := f.fs.last(t, broot)
+	c := f.caller(t, run)
+	if !c.HasLinks || !c.IsRoot {
+		t.Fatalf("flag-uri: %+v", c)
+	}
+	if _, err := f.tm.AskProject(c, "ApiUnit", "and you?"); err == nil || !strings.Contains(err.Error(), "you are answering a question from another project") {
+		t.Fatalf("anti-bucla: %v", err)
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
+	// un run nou, fara intrebari primite, poate intreba
+	if _, err := f.tm.AskProject(rootCaller(bp, broot), "ApiUnit", "ok now?"); err != nil {
+		t.Fatalf("fara intrebare primita: %v", err)
+	}
+}
+
+func TestAskProjectAntiLoopInTaskRun(t *testing.T) {
+	f := setup(t)
+	bp, broot := linked(t, f)
+	// radacina Backend are un task in coada: intrebarea ii ajunge in run-ul pe task
+	task := store.Task{ProjectID: bp.ID, Title: "Something", AssigneeID: broot.ID, ByUser: true}
+	if err := f.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.AskProject(f.workerCaller(f.rook, 0), "Backend", "Which format?"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.Reconcile(bp.ID); err != nil {
+		t.Fatal(err)
+	}
+	run := f.fs.last(t, broot)
+	c := f.caller(t, run)
+	if _, err := f.tm.AskProject(c, "ApiUnit", "and you?"); err == nil || !strings.Contains(err.Error(), "you are answering") {
+		t.Fatalf("anti-bucla in run pe task: %v (task run %d)", err, c.TaskID)
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
+}
+
+var _ = errors.Is // folosit in testele din Task 4
+
+func itoa(n int64) string { return strconv.FormatInt(n, 10) }

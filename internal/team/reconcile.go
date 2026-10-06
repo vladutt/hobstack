@@ -135,6 +135,7 @@ func (t *Team) Reconcile(projectID int64) error {
 				break
 			}
 		}
+		t.markAnswering(a.ID, notes)
 		if err := t.delivered(p.ID, notes); err != nil {
 			return err
 		}
@@ -258,6 +259,7 @@ func (t *Team) Reconcile(projectID int64) error {
 			return t.startFailed(p, notify, a, err)
 		}
 		t.taskEvent(*task, "started", a.Name, a.Name+" started working")
+		t.markAnswering(a.ID, msgs)
 		if err := t.delivered(p.ID, msgs); err != nil {
 			return err
 		}

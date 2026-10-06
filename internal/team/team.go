@@ -66,6 +66,7 @@ type activeRun struct {
 	taskID    int64
 	token     string
 	request   *store.Message // ultimul mesaj al utilizatorului livrat la pornire (doar run-urile de chat)
+	answering bool           // run-ul a primit o intrebare din alt proiect: nu poate intreba la randul lui (anti-bucla)
 }
 
 // setRequest retine mesajul utilizatorului care a pornit run-ul activ al agentului.
@@ -75,6 +76,34 @@ func (t *Team) setRequest(agentID int64, m store.Message) {
 	if ar, ok := t.active[agentID]; ok {
 		ar.request = &m
 		t.active[agentID] = ar
+	}
+}
+
+// setAnswering retine ca run-ul activ al agentului a primit o intrebare dintr-un proiect legat.
+func (t *Team) setAnswering(agentID int64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if ar, ok := t.active[agentID]; ok {
+		ar.answering = true
+		t.active[agentID] = ar
+	}
+}
+
+// answeringOf: run-ul runID al agentului (inca activ) a primit o intrebare dintr-un proiect legat.
+func (t *Team) answeringOf(agentID int64, runID string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	ar, ok := t.active[agentID]
+	return ok && ar.runID == runID && ar.answering
+}
+
+// markAnswering: dupa ce run-ul a pornit cu notele date, retine daca printre ele e o intrebare primita.
+func (t *Team) markAnswering(agentID int64, notes []store.Message) {
+	for _, n := range notes {
+		if n.RequestID != nil {
+			t.setAnswering(agentID)
+			return
+		}
 	}
 }
 
