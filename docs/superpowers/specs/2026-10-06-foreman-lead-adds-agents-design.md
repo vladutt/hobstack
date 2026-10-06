@@ -5,7 +5,7 @@ Status: design aprobat in chat.
 
 ## Scop
 
-Un lider (agent cu echipa directa, sau radacina intr-un proiect cu etape) isi poate mari echipa singur:
+Un lider (agent cu echipa directa) sau o radacina (chiar fara echipa) isi poate mari echipa singur:
 
 - cand ii lipseste un specialist pentru o parte din task (agent permanent);
 - cand vrea mai multe "maini" pentru sub-task-uri independente, pe care le scoate dupa (agenti temporari);
@@ -18,8 +18,18 @@ seteaza reviewer, nu adauga agenti in etape, nu sterge definitiv agenti.
 
 ## Tool-uri MCP
 
-Doar pentru lideri (`Caller.IsLead`, deci si radacinile din proiectele cu etape). Se adauga in `leadTools`
-(`internal/mcp/tools.go`), si in varianta cu etape.
+Pentru lideri si pentru radacini, chiar fara echipa. `mcp.Caller` primeste `CanAddAgents bool`, calculat in
+`team/run.go` ca `isLead || roles.IsRoot` (radacina = fara sef si nelegata). `toolsFor` (`internal/mcp/tools.go`):
+
+- `CanAddAgents` -> `add_agent`, `remove_agent`;
+- `CanAddAgents && !IsLead` (radacina fara echipa) -> in plus `create_task` si `list_tasks`, ca sa-i poata da de lucru
+  agentului nou in acelasi run (lista de tool-uri se fixeaza la pornirea run-ului). `create_task` verifica deja la
+  apel ca asignatul e in echipa directa, din baza de date, deci agentul abia creat e acceptat.
+
+`IsLead` ramane neschimbat (decizii, `accept_task`, `send_back`); un lider care si-a scos toata echipa ramane radacina
+sau sub-lider: daca e radacina pastreaza `add_agent`, daca are sef il pierde (devine worker obisnuit).
+
+Cand se spune mai jos "liderul", inseamna agentul care cheama tool-ul.
 
 ### `add_agent`
 
@@ -140,13 +150,13 @@ un tool); la eroare cererea ramane deschisa si UI-ul arata eroarea (409). La suc
 
 ## Prompt
 
-`internal/prompt`: pentru lideri, un paragraf nou in prompt-ul de sistem:
+`internal/prompt`: pentru agentii cu `add_agent` (lideri si radacini), un paragraf nou in prompt-ul de sistem:
 
 > You can grow your team with add_agent: only when no current member fits part of the work, or when you have
 > independent sub-tasks to run in parallel. Check your team first. A new agent starts working when you give it a task
 > with create_task. When an agent you added has no more work, remove it with remove_agent.
 
-Prompt-ul liderilor se schimba, deci hash-ul lor: la urmatorul run fiecare lider porneste o sesiune Claude noua
+Prompt-ul liderilor si al radacinilor se schimba, deci hash-ul lor: la urmatorul run fiecare porneste o sesiune Claude noua
 (comportamentul existent la orice schimbare de prompt).
 
 ## Web
@@ -176,7 +186,9 @@ Prompt-ul liderilor se schimba, deci hash-ul lor: la urmatorul run fiecare lider
   - refuzuri: tool peste ale liderului, limita de 6 (inclusiv cereri deschise), nume duplicat (agent si cerere);
   - remove_agent: doar agentii proprii, refuz cu task-uri deschise, refuz cu echipa/reviewer, detasare;
   - evenimentele din `task_events`.
-- mcp: `add_agent` / `remove_agent` doar la lideri (si in proiectele cu etape la radacini).
+- mcp: `add_agent` / `remove_agent` la lideri si radacini, nu la workeri cu sef; radacina fara echipa primeste si
+  `create_task` / `list_tasks`, dar nu `accept_task` / `send_back`.
+- team: o radacina fara echipa adauga un agent (direct) si ii creeaza un task in acelasi run (acelasi `Caller`).
 - web: approve / dismiss (204, 404, 409).
 - UI: `node --check` pe copii `.mjs`; screenshot-uri cu Chrome headless prin CDP pentru cardul din "Needs you" si
   eticheta de pe canvas.
@@ -185,5 +197,5 @@ Prompt-ul liderilor se schimba, deci hash-ul lor: la urmatorul run fiecare lider
 ## CLAUDE.md
 
 In sectiunea Stare: `Gata (liderul adauga agenti, spec in docs/superpowers/specs/2026-10-06-foreman-lead-adds-agents-design.md):
-tool-urile MCP add_agent / remove_agent pentru lideri; agentul intra sub lider, cu tool-uri din ale liderului, max 6
+tool-urile MCP add_agent / remove_agent pentru lideri si radacini (si fara echipa); agentul intra sub lider, cu tool-uri din ale liderului, max 6
 adaugati; direct cu Full autonomy sau la cererea utilizatorului din chat, altfel aprobare in "Needs you"; remove = detasare.`
