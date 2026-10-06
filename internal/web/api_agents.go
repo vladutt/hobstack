@@ -6,12 +6,11 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"slices"
 	"strings"
 
-	"foreman/internal/models"
 	"foreman/internal/prompt"
 	"foreman/internal/store"
+	"foreman/internal/team"
 )
 
 type agentInput struct {
@@ -31,23 +30,7 @@ type agentInput struct {
 
 // apply valideaza input-ul si il copiaza in agent (fara proiect si pozitie; legaturile se valideaza in store).
 func (in agentInput) apply(a *store.Agent) error {
-	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		return badRequest("agent name is required")
-	}
-	if !models.Valid(in.Model) {
-		return badRequest("unknown model: " + in.Model)
-	}
-	tools := []string{}
-	for _, tool := range in.Tools {
-		if !slices.Contains(prompt.ValidTools, tool) {
-			return badRequest("unknown tool: " + tool)
-		}
-		if !slices.Contains(tools, tool) {
-			tools = append(tools, tool)
-		}
-	}
-	a.Name, a.Role, a.Model, a.Tools = name, strings.TrimSpace(in.Role), in.Model, tools
+	a.Name, a.Role, a.Model, a.Tools = strings.TrimSpace(in.Name), strings.TrimSpace(in.Role), in.Model, in.Tools
 	a.Background = strings.TrimSpace(in.Background)
 	a.Instructions = strings.TrimSpace(in.Instructions)
 	a.DoneDef = strings.TrimSpace(in.DoneDef)
@@ -55,17 +38,9 @@ func (in agentInput) apply(a *store.Agent) error {
 	a.ParentID, a.ReviewerID = in.ParentID, in.ReviewerID
 	a.FolderID = in.FolderID // un folder din alt proiect: LinkError din store, 400
 	a.Detached = in.Detached && in.ParentID == nil
-	for _, err := range []error{
-		maxLen("agent name", a.Name, 40),
-		maxLen("role", a.Role, 80),
-		maxLen("background", a.Background, 10000),
-		maxLen("instructions", a.Instructions, 10000),
-		maxLen("definition of done", a.DoneDef, 4000),
-		maxLen("responsibilities", a.Responsibilities, 2000),
-	} {
-		if err != nil {
-			return err
-		}
+	// validarea comuna cu add_agent (nume, model, tools fara duplicate, lungimi)
+	if err := team.CheckAgentFields(a); err != nil {
+		return badRequest(err.Error())
 	}
 	return nil
 }

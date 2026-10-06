@@ -178,6 +178,8 @@ type projectCard struct {
 	StuckTasks int `json:"stuckTasks"`
 	// AccessRequests: cereri de acces deschise (un tool refuzat unui agent)
 	AccessRequests int `json:"accessRequests"`
+	// AgentRequests: cereri deschise ale liderilor de a adauga agenti
+	AgentRequests int `json:"agentRequests"`
 }
 
 type agentView struct {
@@ -211,6 +213,8 @@ type projectDetail struct {
 	Stuck []team.StuckTask `json:"stuck"`
 	// Access: cererile de acces deschise (mereu non-nil)
 	Access []accessView `json:"access"`
+	// AgentRequests: cererile add_agent deschise (mereu non-nil)
+	AgentRequests []agentRequestView `json:"agentRequests"`
 	// Recurring: sarcinile recurente ale proiectului (mereu non-nil)
 	Recurring []recurringView `json:"recurring"`
 }
@@ -232,6 +236,9 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 		return projectCard{}, nil, nil, nil, err
 	}
 	if c.AccessRequests, err = s.st.CountOpenAccessRequests(p.ID); err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	if c.AgentRequests, err = s.st.CountOpenAgentRequests(p.ID); err != nil {
 		return projectCard{}, nil, nil, nil, err
 	}
 	for _, a := range agents {
@@ -313,6 +320,11 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	agentReqs, err := s.agentRequestViews(p.ID, agents, tasks)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	recurring, err := s.recurringViews(p.ID)
 	if err != nil {
 		fail(w, err)
@@ -327,7 +339,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	for i, t := range tasks {
 		views[i] = taskView{Task: t, FilesChanged: changed[t.ID]}
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, Recurring: recurring}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)
