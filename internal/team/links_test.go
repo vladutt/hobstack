@@ -166,10 +166,21 @@ func TestAskProjectAntiLoop(t *testing.T) {
 		t.Fatalf("anti-bucla: %v", err)
 	}
 	f.fs.finish(run.ID, runner.Outcome{Status: "done"})
-	// un run nou, fara intrebari primite, poate intreba
-	if _, err := f.tm.AskProject(rootCaller(bp, broot), "ApiUnit", "ok now?"); err != nil {
+	// un run nou, real, pornit de o nota fara intrebare, poate intreba
+	if err := f.tm.note(bp.ID, broot.ID, "hello", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.Reconcile(bp.ID); err != nil {
+		t.Fatal(err)
+	}
+	run2 := f.fs.last(t, broot)
+	if run2.ID == run.ID {
+		t.Fatal("nu s-a pornit un run nou")
+	}
+	if _, err := f.tm.AskProject(f.caller(t, run2), "ApiUnit", "ok now?"); err != nil {
 		t.Fatalf("fara intrebare primita: %v", err)
 	}
+	f.fs.finish(run2.ID, runner.Outcome{Status: "done"})
 }
 
 func TestAskProjectAntiLoopInTaskRun(t *testing.T) {

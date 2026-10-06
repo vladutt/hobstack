@@ -3,6 +3,7 @@ package team
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -215,7 +216,10 @@ func (t *Team) ReplyToProject(c mcp.Caller, request, answer string) (string, err
 	}
 	r.Status, r.Answer = store.ReqAnswered, answer
 	if r.FromAgent != nil {
-		t.note(r.FromProject, *r.FromAgent, clip(fmt.Sprintf("Answer from %s to %s: %s", t.projectName(c.ProjectID), r.Ref(), answer)), false)
+		// cererea e deja raspunsa: eroarea nu se intoarce (o reincercare ar primi "already closed"), doar se logheaza
+		if err := t.note(r.FromProject, *r.FromAgent, clip(fmt.Sprintf("Answer from %s to %s: %s", t.projectName(c.ProjectID), r.Ref(), answer)), false); err != nil {
+			log.Printf("reply %s: note to asker: %v", r.Ref(), err)
+		}
 		t.Kick(r.FromProject)
 	}
 	t.emitRequest(r)
