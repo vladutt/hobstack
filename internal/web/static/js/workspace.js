@@ -12,6 +12,9 @@ import { accessBox } from "./access.js";
 import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 
+const SUB_STATUS = {
+  queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done",
+};
 const COLUMNS = [
   { title: "Queued", statuses: ["queued"] },
   { title: "In progress", statuses: ["in_progress"] },
@@ -115,7 +118,7 @@ export async function workspaceView(root, projectId, route) {
   const boardTools = el("div", { class: "actions" }); // + Task, Recurring, Coloane
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
   const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter by folder" });
-  const doneOpen = new Set(); // grupurile din Done desfasurate (id-ul radacinii); raman la refresh
+  const subsOpen = new Set(); // grupurile desfasurate pe board (id-ul radacinii); raman la refresh
   let boardPanel = null; // "stages" | "task" | "recurring" | null
   let recurring = null; // panoul Recurring cand e deschis ({ el, update })
   const boardHint = el("p", { class: "hint board-hint" }, "Every project is different: set up your own columns (work stages) with the Columns button.");
@@ -514,8 +517,10 @@ export async function workspaceView(root, projectId, route) {
     }, label);
     folderChips.replaceChildren(chip(null, "All"), ...folders.map((f) => chip(f.id, f.name)));
     // task-urile fara agent apar mereu; celelalte dupa folderul agentului
-    const tasks = p.tasks.filter((t) => !state.folderFilter || !t.assigneeId ||
-      folderOf(p, byId.get(t.assigneeId))?.id === state.folderFilter);
+    const passes = (t) => !state.folderFilter || !t.assigneeId ||
+      folderOf(p, byId.get(t.assigneeId))?.id === state.folderFilter;
+    // pe board stau doar radacinile; o radacina ramane daca ea sau un descendent trece filtrul
+    const groups = taskGroups(p.tasks).filter((g) => passes(g.root) || g.subs.some((s) => passes(s.task)));
     count.textContent = `${p.done} of ${p.total} done`;
     // replaceChildren nu ignora false (el() da): filtram noi
     // butoanele deschid si inchid panoul lor (editorul de coloane sau formularul de task)
@@ -526,26 +531,27 @@ export async function workspaceView(root, projectId, route) {
     boardTools.replaceChildren(toggle("task", "+ Task", toggleTaskForm), toggle("recurring", "Recurring", toggleRecurring), toggle("stages", "Columns", toggleStages));
     if (!stages.length) {
       board.className = "board";
-      board.replaceChildren(...COLUMNS.map((c) => column(c.title, tasks.filter((t) => c.statuses.includes(t.status)), byId, null, c.statuses.includes("done"))));
+      board.replaceChildren(...COLUMNS.map((c) => column(c.title, groups.filter((g) => c.statuses.includes(g.root.status)), byId)));
       boardHint.hidden = false;
       return;
     }
     boardHint.hidden = true;
     board.className = "board stages-board";
-    const inStage = (s) => tasks.filter((t) => t.stageId === s.id && t.status !== "review" && t.status !== "done");
+    const open = (g) => g.root.status !== "review" && g.root.status !== "done";
+    const inStage = (s) => groups.filter((g) => g.root.stageId === s.id && open(g));
     // task-uri fara etapa inca deschise (create inainte de coloane): altfel n-ar aparea nicaieri
-    const loose = tasks.filter((t) => !t.stageId && t.status !== "review" && t.status !== "done");
+    const loose = groups.filter((g) => !g.root.stageId && open(g));
     board.replaceChildren(
       ...(loose.length ? [column("No stage", loose, byId)] : []),
       ...stages.map((s) => column(s.name, inStage(s), byId, s)),
-      column("With lead", tasks.filter((t) => t.status === "review"), byId),
-      column("Done", tasks.filter((t) => t.status === "done"), byId, null, true));
+      column("With lead", groups.filter((g) => g.root.status === "review"), byId),
+      column("Done", groups.filter((g) => g.root.status === "done"), byId));
   }
 
-  // column: o coloana a board-ului; grouped (coloana Done) pune sub-task-urile sub radacina lor
-  function column(title, items, byId, stage, grouped) {
+  // column: o coloana a board-ului; items sunt grupuri (radacina + descendentii ei)
+  function column(title, items, byId, stage) {
     const agents = stage ? stage.agentIds.map((id) => byId.get(id)).filter(Boolean) : [];
-    const cards = grouped ? doneGroups(items).map((g) => doneCard(g, byId)) : items.map((t) => taskCard(t, byId.get(t.assigneeId), byId));
+    const cards = items.map((g) => groupCard(g, byId));
     return el("div", { class: "col" },
       el("div", { class: "col-head" },
         el("span", {}, title, stage?.kind === "check" && el("span", { class: "tag col-kind" }, "check")),
@@ -555,15 +561,15 @@ export async function workspaceView(root, projectId, route) {
       cards);
   }
 
-  // doneGroups: in Done, un task al carui parinte e tot Done intra sub cel mai de sus
-  // stramos Done (radacina grupului); un sub-task Done cu parintele inca deschis ramane
-  // card separat. Intoarce [{ root, subs: [{ task, depth }] }] in ordinea task-urilor primite.
-  function doneGroups(items) {
-    const done = new Set(items.map((t) => t.id));
-    const kids = new Map(); // parinte -> sub-task-urile lui Done
+  // taskGroups: radacinile board-ului (fara parinte, cu parinte lipsa sau in ciclu) si toti
+  // descendentii lor, la orice adancime. Intoarce [{ root, subs: [{ task, depth }] }] in
+  // ordinea task-urilor primite.
+  function taskGroups(tasks) {
+    const ids = new Set(tasks.map((t) => t.id));
+    const kids = new Map(); // parinte -> copiii lui
     const tops = [];
-    for (const t of items) {
-      if (t.parentTaskId && t.parentTaskId !== t.id && done.has(t.parentTaskId)) {
+    for (const t of tasks) {
+      if (t.parentTaskId && t.parentTaskId !== t.id && ids.has(t.parentTaskId)) {
         if (!kids.has(t.parentTaskId)) kids.set(t.parentTaskId, []);
         kids.get(t.parentTaskId).push(t);
       } else {
@@ -586,42 +592,51 @@ export async function workspaceView(root, projectId, route) {
       return { root, subs };
     };
     const groups = tops.map(group);
-    // ciclu in parent_task_id (date stricate): ce n-a fost atins ramane card separat
-    for (const t of items) if (!seen.has(t.id)) groups.push(group(t));
+    // ciclu in parent_task_id (date stricate): ce n-a fost atins devine radacina, ca sa nu pierdem task-ul
+    for (const t of tasks) if (!seen.has(t.id)) groups.push(group(t));
     return groups;
   }
 
-  // doneCard: cardul radacinii plus "▸ N subtasks", care desfasoara sub-task-urile ca randuri
-  // compacte; click pe un rand deschide modala task-ului (ca un card)
-  function doneCard(g, byId) {
+  // groupCard: cardul radacinii plus "▸ 3/5 subtasks done", care desfasoara descendentii ca
+  // randuri compacte; click pe un rand deschide modala task-ului (ca un card)
+  function groupCard(g, byId) {
     const card = taskCard(g.root, byId.get(g.root.assigneeId), byId);
     if (!g.subs.length) return card;
     const n = g.subs.length;
-    const label = (open) => `${open ? "▾" : "▸"} ${n} ${n === 1 ? "subtask" : "subtasks"}`;
-    const listId = `done-subs-${g.root.id}`;
-    const list = el("ul", { class: "done-subs", id: listId, hidden: !doneOpen.has(g.root.id) },
+    const done = g.subs.filter((s) => s.task.status === "done").length;
+    const label = (open) => `${open ? "\u25be" : "\u25b8"} ${done}/${n} ${n === 1 ? "subtask" : "subtasks"} done`;
+    // cine asteapta utilizatorul: blocat, review decis de el sau task nemiscat
+    const decides = state.project.userDecides || [];
+    const stuck = state.project.stuck || [];
+    const needs = g.subs.filter(({ task }) => task.status === "blocked" || decides.includes(task.id) ||
+      stuck.some((s) => s.taskId === task.id)).length;
+    const listId = `task-subs-${g.root.id}`;
+    const list = el("ul", { class: "task-subs", id: listId, hidden: !subsOpen.has(g.root.id) },
       g.subs.map(({ task, depth }) => {
         const who = byId.get(task.assigneeId);
         return el("li", { style: `--depth:${depth}` },
           el("button", {
-            type: "button", class: "done-sub", "data-task-id": task.id,
+            type: "button", class: "task-sub", "data-sub-id": task.id,
             onclick: () => { location.hash = `#/p/${projectId}/tasks/${task.id}`; },
           },
             el("span", { class: "task-id" }, ref(task)),
-            el("span", { class: "done-sub-title" }, task.title),
-            who ? el("span", { class: "hint" }, who.name) : null));
+            el("span", { class: "task-sub-title" }, task.title),
+            who ? el("span", { class: "hint" }, who.name) : null,
+            el("span", { class: `pill pill-task-${task.status}` }, SUB_STATUS[task.status] || task.status)));
       }));
     const btn = el("button", {
-      type: "button", class: "done-toggle", "aria-controls": listId, "aria-expanded": String(doneOpen.has(g.root.id)),
+      type: "button", class: "subs-toggle", "aria-controls": listId, "aria-expanded": String(subsOpen.has(g.root.id)),
       onclick: () => {
-        if (doneOpen.has(g.root.id)) doneOpen.delete(g.root.id); else doneOpen.add(g.root.id);
-        const open = doneOpen.has(g.root.id);
+        if (subsOpen.has(g.root.id)) subsOpen.delete(g.root.id); else subsOpen.add(g.root.id);
+        const open = subsOpen.has(g.root.id);
         list.hidden = !open;
         btn.setAttribute("aria-expanded", String(open));
         btn.textContent = label(open);
       },
-    }, label(doneOpen.has(g.root.id)));
-    return el("div", { class: "done-group" }, card, btn, list);
+    }, label(subsOpen.has(g.root.id)));
+    const head = el("div", { class: "subs-head" }, btn,
+      needs ? el("span", { class: "badge-needs" }, `${needs} ${needs === 1 ? "needs" : "need"} you`) : null);
+    return el("div", { class: "task-group" }, card, head, list);
   }
 
   // boardPanel: ce e deschis deasupra board-ului: null, "stages", "task" sau "recurring"

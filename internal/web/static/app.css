@@ -532,18 +532,22 @@ a.flow-head:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px
 .flow-child { list-style: none; min-width: 0; }
 @media (max-width: 560px) { .flow-steps { padding-left: 6px; } .flow-task { padding: 6px 8px; } }
 
-/* grupurile din coloana Done: sub-task-urile sub radacina lor */
-.done-group { display: grid; gap: 4px; min-width: 0; }
-.done-toggle { justify-self: start; background: none; border: 0; padding: 2px 6px; border-radius: 6px; color: var(--muted); font: 12px var(--sans); cursor: pointer; }
-.done-toggle:hover { color: var(--text); }
-.done-toggle:focus-visible, .done-sub:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
-.done-subs { list-style: none; margin: 0 0 0 8px; padding: 0 0 0 8px; border-left: 2px solid var(--line); display: grid; gap: 2px; min-width: 0; }
-.done-subs[hidden] { display: none; }
-.done-subs li { padding-left: calc(var(--depth, 0) * 12px); min-width: 0; }
-.done-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; width: 100%; background: none; border: 0; padding: 4px 6px; border-radius: 6px; text-align: left; color: var(--soft); font: 12px/1.4 var(--sans); cursor: pointer; min-width: 0; }
-.done-sub:hover { background: var(--card-2); color: var(--text); }
-.done-sub-title { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
-.done-sub .hint { margin-left: auto; }
+/* grupurile de pe board: sub-task-urile sub radacina lor */
+.task-group { display: grid; gap: 4px; min-width: 0; }
+.subs-toggle { justify-self: start; background: none; border: 0; padding: 2px 6px; border-radius: 6px; color: var(--muted); font: 12px var(--sans); cursor: pointer; }
+.subs-toggle:hover { color: var(--text); }
+.subs-toggle:focus-visible, .task-sub:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+.task-subs { list-style: none; margin: 0 0 0 8px; padding: 0 0 0 8px; border-left: 2px solid var(--line); display: grid; gap: 2px; min-width: 0; }
+.task-subs[hidden] { display: none; }
+.task-subs li { padding-left: calc(var(--depth, 0) * 12px); min-width: 0; }
+.task-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; width: 100%; background: none; border: 0; padding: 4px 6px; border-radius: 6px; text-align: left; color: var(--soft); font: 12px/1.4 var(--sans); cursor: pointer; min-width: 0; }
+.task-sub:hover { background: var(--card-2); color: var(--text); }
+.task-sub-title { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
+.task-sub .hint { margin-left: auto; }
+.task-sub .pill { height: 18px; padding: 0 7px; font-size: 11px; }
+.subs-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; min-width: 0; }
+.subs-head .subs-toggle { white-space: nowrap; }
+.badge-needs { font-size: 11px; font-weight: 600; color: var(--amber); white-space: nowrap; }
 
 /* proiecte legate */
 .task-from { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; overflow-wrap: anywhere; }
