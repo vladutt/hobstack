@@ -73,6 +73,10 @@ Gata (liderul adauga agenti, spec in docs/superpowers/specs/2026-10-06-foreman-l
 tool-urile MCP add_agent / remove_agent pentru lideri si radacini (si fara echipa); agentul intra sub lider, cu
 tool-uri din ale liderului, max 6 adaugati; direct cu Full autonomy sau la cererea utilizatorului din chat, altfel
 aprobare in "Needs you" (agent_requests); remove = detasare.
+Gata (proiecte legate, spec in docs/superpowers/specs/2026-10-06-foreman-project-links-design.md): utilizatorul leaga
+proiecte (fara sens); agentii pun intrebari radacinii proiectului legat (ask_project / reply_to_project, max 3 deschise,
+anti-bucla) si liderii cer munca (request_project_work: task pentru radacina tinta, aprobat in "Needs you" la tinta,
+direct doar la cererea utilizatorului din chat); raportul se intoarce la Done (afterDone).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"

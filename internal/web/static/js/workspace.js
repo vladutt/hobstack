@@ -1,3 +1,4 @@
+import { workRequestBox } from "./project-requests.js";
 import { api, upload } from "./api.js";
 import { el, avatar, pill, toast, clock, kindOf, agentBody, folderOf, field } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
@@ -87,8 +88,9 @@ export async function workspaceView(root, projectId, route) {
   const stuckList = el("div", { class: "needs-stuck" });
   const accessList = el("div", { class: "needs-access" });
   const agentReqList = el("div", { class: "needs-agent-requests" });
+  const workReqList = el("div", { class: "needs-work-requests" });
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
-    needsTitle, questionsBox, stuckList, accessList, agentReqList);
+    needsTitle, questionsBox, stuckList, accessList, agentReqList, workReqList);
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
   const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
@@ -96,6 +98,7 @@ export async function workspaceView(root, projectId, route) {
   let questionsKey = null; // id-urile intrebarilor desenate ultima data in banda
   let stuckKey = null;     // id-urile task-urilor blocate desenate ultima data
   let agentReqKey = null;  // id-urile cererilor de agent desenate ultima data
+  let workReqKey = null;   // id-urile cererilor de lucru desenate ultima data
   let accessKey = null;    // id:count ale cererilor de acces desenate ultima data
   let pageHead = null;  // capul paginii desenat ultima data (inlocuit la fiecare renderHeader)
   const canvas = teamCanvas({
@@ -256,7 +259,8 @@ export async function workspaceView(root, projectId, route) {
     const stuck = state.project.stuck || [];
     const access = state.project.access || [];
     const agentReqs = state.project.agentRequests || [];
-    const total = questions.length + stuck.length + access.length + agentReqs.length;
+    const workReqs = state.project.workRequests || [];
+    const total = questions.length + stuck.length + access.length + agentReqs.length + workReqs.length;
     needsTitle.textContent = `Needs you (${total})`;
     needsBox.hidden = !total;
     const qKey = questions.map((q) => q.id).join(",");
@@ -278,6 +282,11 @@ export async function workspaceView(root, projectId, route) {
     if (rKey !== agentReqKey) {
       agentReqKey = rKey;
       agentReqList.replaceChildren(...agentReqs.map(agentReqNode));
+    }
+    const wKey = workReqs.map((r) => r.id).join(",");
+    if (wKey !== workReqKey) {
+      workReqKey = wKey;
+      workReqList.replaceChildren(...workReqs.map((r) => workRequestBox(r, { onDone: reload })));
     }
   }
 
@@ -732,7 +741,9 @@ export async function workspaceView(root, projectId, route) {
       type: "button", class: "task", "data-task-id": t.id,
       onclick: () => { location.hash = `#/p/${projectId}/tasks/${t.id}`; },
     },
-      el("span", { class: "task-title" }, el("span", { class: "task-id" }, ref(t)),
+      el("span", { class: "task-title" },
+        t.fromProject ? el("span", { class: "task-from", title: `Requested by ${t.fromProject}` }, `From ${t.fromProject}`) : null,
+        el("span", { class: "task-id" }, ref(t)),
         t.recurringId ? el("span", { class: "task-recurring", role: "img", title: "From a recurring task", "aria-label": "From a recurring task" }, "\u21bb") : null,
         t.title),
       t.description ? el("span", { class: "task-desc" }, t.description) : null,

@@ -86,7 +86,7 @@ function setupCard(s, refresh) {
 
 function projectCard(p) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi
+  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
   return el("a", { class: "card" + (asks > 0 ? " needs-you-card" : ""), href: `#/p/${p.id}` },
     el("div", { class: "card-top" }, el("span", { class: "card-title" }, p.name),
       el("span", { class: "actions" }, pill(p.status),
@@ -152,7 +152,8 @@ export async function projectFormView(root, id) {
         el("h2", {}, "Folders"),
         el("button", { type: "button", class: "btn small", onclick: () => folders.add() }, "+ Add folder")),
       el("p", { class: "hint" }, "A folder can be a repo or a plain folder. Each agent works and writes in its own folder and can read the others. The first folder is the default."),
-      folders.el)));
+      folders.el),
+    id && linksSection(id, p.links || [])));
   name.focus();
 
   async function save(e) {
@@ -181,6 +182,57 @@ export async function projectFormView(root, id) {
       toast(err.message);
     }
   }
+}
+
+// linksSection: proiectele legate (agentii lor isi pot pune intrebari si cere munca).
+// Legaturile se salveaza imediat, nu odata cu formularul.
+function linksSection(projectId, initial) {
+  let links = initial;
+  const list = el("div", { class: "link-rows" });
+  const select = el("select", {});
+  const addBtn = el("button", { type: "button", class: "btn small", onclick: add }, "Link");
+
+  async function refresh() {
+    let all = [];
+    try { all = await api("/api/projects"); } catch (err) { toast(err.message); }
+    const linked = new Set(links.map((l) => l.projectId));
+    const free = all.filter((p) => p.id !== projectId && !linked.has(p.id));
+    select.replaceChildren(el("option", { value: "" }, free.length ? "Link a project..." : "No other projects"),
+      ...free.map((p) => el("option", { value: p.id }, p.name)));
+    select.disabled = addBtn.disabled = !free.length;
+    list.replaceChildren(...(links.length ? links.map(row) : [el("p", { class: "hint" }, "No linked projects.")]));
+  }
+
+  function row(l) {
+    return el("div", { class: "link-row" },
+      el("a", { href: `#/p/${l.projectId}` }, l.name),
+      el("button", { type: "button", class: "btn small danger", onclick: () => remove(l) }, "Remove"));
+  }
+
+  async function add() {
+    if (!select.value) return;
+    try {
+      const l = await api(`/api/projects/${projectId}/links`, { method: "POST", body: { projectId: Number(select.value) } });
+      links = [...links, l];
+      await refresh();
+    } catch (err) { toast(err.message); }
+  }
+
+  async function remove(l) {
+    if (!confirm(`Unlink ${l.name}? Open questions and unapproved requests between the two projects are closed.`)) return;
+    try {
+      await api(`/api/projects/${projectId}/links/${l.projectId}`, { method: "DELETE" });
+      links = links.filter((x) => x.projectId !== l.projectId);
+      await refresh();
+    } catch (err) { toast(err.message); }
+  }
+
+  refresh();
+  return el("section", { class: "section" },
+    el("h2", {}, "Linked projects"),
+    el("p", { class: "hint" }, "Agents of linked projects can ask each other questions; leads can request work, which you approve in Needs you."),
+    list,
+    el("div", { class: "link-add" }, select, addBtn));
 }
 
 // foldersEditor: randurile Name / Path / Context din formularul proiectului.

@@ -352,7 +352,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 .needs-you[hidden] { display: none; }
 .needs-you h2 { font-size: 14px; color: var(--amber); margin: 0; }
 /* sub-containerele (intrebari, blocate) nu sunt cutii: casetele lor stau direct in grila benzii */
-.needs-questions, .needs-stuck, .needs-access, .needs-agent-requests { display: contents; }
+.needs-questions, .needs-stuck, .needs-access, .needs-agent-requests, .needs-work-requests { display: contents; }
 .question { border: 1px solid var(--amber); background: var(--amber-bg); border-radius: 10px; padding: 12px; display: grid; gap: 8px; }
 .question-head { font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .question-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -544,3 +544,10 @@ a.flow-head:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px
 .done-sub:hover { background: var(--card-2); color: var(--text); }
 .done-sub-title { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
 .done-sub .hint { margin-left: auto; }
+
+/* proiecte legate */
+.task-from { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; overflow-wrap: anywhere; }
+.link-rows { display: grid; gap: 6px; margin-bottom: 10px; }
+.link-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; background: var(--card-2); min-width: 0; }
+.link-add { display: flex; gap: 10px; align-items: center; }
+.link-add select { flex: 1 1 auto; min-width: 0; }
