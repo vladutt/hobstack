@@ -67,20 +67,43 @@ func (f *fakeBackend) RemoveAgent(c Caller, name string) (string, error) {
 	return "ok", f.err
 }
 
+func (f *fakeBackend) ListLinkedProjects(c Caller) (string, error) {
+	f.calls = append(f.calls, "list_linked_projects")
+	return "Linked projects: Backend", f.err
+}
+
+func (f *fakeBackend) AskProject(c Caller, project, question string) (string, error) {
+	f.calls = append(f.calls, "ask_project|"+project+"|"+question)
+	return "ok", f.err
+}
+
+func (f *fakeBackend) ReplyToProject(c Caller, request, answer string) (string, error) {
+	f.calls = append(f.calls, "reply_to_project|"+request+"|"+answer)
+	return "ok", f.err
+}
+
+func (f *fakeBackend) RequestProjectWork(c Caller, project, title, description string) (string, error) {
+	f.calls = append(f.calls, "request_project_work|"+project+"|"+title+"|"+description)
+	return "ok", f.err
+}
+
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 	t.Helper()
 	fb := &fakeBackend{callers: map[string]Caller{
-		"lead":       {ProjectID: 1, AgentID: 1, IsLead: true},
-		"worker":     {ProjectID: 1, AgentID: 2, TaskID: 5, HasParent: true},
-		"sublead":    {ProjectID: 1, AgentID: 3, IsLead: true, HasParent: true},
-		"reviewer":   {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
-		"solo":       {ProjectID: 1, AgentID: 5},
-		"setup":      {SetupID: "s1"},
-		"stagework":  {ProjectID: 1, AgentID: 6, TaskID: 9, StageKind: "work"},
-		"stagelead":  {ProjectID: 1, AgentID: 8, IsLead: true, HasStages: true},
-		"stagecheck": {ProjectID: 1, AgentID: 7, TaskID: 9, StageKind: "check"},
-		"leadadd":    {ProjectID: 1, AgentID: 10, IsLead: true, CanAddAgents: true},
-		"rootsolo":   {ProjectID: 1, AgentID: 11, CanAddAgents: true},
+		"lead":         {ProjectID: 1, AgentID: 1, IsLead: true},
+		"worker":       {ProjectID: 1, AgentID: 2, TaskID: 5, HasParent: true},
+		"sublead":      {ProjectID: 1, AgentID: 3, IsLead: true, HasParent: true},
+		"reviewer":     {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
+		"solo":         {ProjectID: 1, AgentID: 5},
+		"setup":        {SetupID: "s1"},
+		"stagework":    {ProjectID: 1, AgentID: 6, TaskID: 9, StageKind: "work"},
+		"stagelead":    {ProjectID: 1, AgentID: 8, IsLead: true, HasStages: true},
+		"stagecheck":   {ProjectID: 1, AgentID: 7, TaskID: 9, StageKind: "check"},
+		"leadadd":      {ProjectID: 1, AgentID: 10, IsLead: true, CanAddAgents: true},
+		"rootsolo":     {ProjectID: 1, AgentID: 11, CanAddAgents: true},
+		"linkedworker": {ProjectID: 1, AgentID: 20, HasParent: true, HasLinks: true},
+		"linkedlead":   {ProjectID: 1, AgentID: 21, IsLead: true, CanAddAgents: true, IsRoot: true, HasLinks: true},
+		"rootfromreq":  {ProjectID: 1, AgentID: 22, IsRoot: true, CanAddAgents: true, TaskID: 9, FromRequest: true},
 	}}
 	mux := http.NewServeMux()
 	srv := NewServer(fb)
@@ -411,5 +434,59 @@ func TestCallAddAgent(t *testing.T) {
 	_, resp = rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"add_agent","arguments":{"name":"X"}}}`)
 	if _, isErr := toolText(t, resp); !isErr || len(fb.calls) != 3 {
 		t.Fatal("un worker nu poate chema add_agent")
+	}
+}
+
+func TestLinkedProjectTools(t *testing.T) {
+	_, ts := setup(t)
+	names := func(token string) string {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+		var out []string
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			out = append(out, tool.(map[string]any)["name"].(string))
+		}
+		return strings.Join(out, ",")
+	}
+	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,ask_user" {
+		t.Fatalf("linkedworker: %s", got)
+	}
+	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_linked_projects,ask_project,reply_to_project,request_project_work,ask_user" {
+		t.Fatalf("linkedlead: %s", got)
+	}
+	// radacina intr-un run pe un task venit din alt proiect: report_done chiar fara sef
+	if got := names("rootfromreq"); !strings.Contains(got, "report_done") || strings.Contains(got, "ask_project") {
+		t.Fatalf("rootfromreq: %s", got)
+	}
+	for _, token := range []string{"lead", "worker", "setup"} {
+		if got := names(token); strings.Contains(got, "ask_project") {
+			t.Fatalf("%s fara legaturi nu are ask_project: %s", token, got)
+		}
+	}
+}
+
+func TestCallLinkedProjectTools(t *testing.T) {
+	fb, ts := setup(t)
+	calls := []string{
+		`{"name":"list_linked_projects","arguments":{}}`,
+		`{"name":"ask_project","arguments":{"project":"Backend","question":"Which format?"}}`,
+		`{"name":"reply_to_project","arguments":{"request":"Q-7","answer":"JSON"}}`,
+		`{"name":"request_project_work","arguments":{"project":"Backend","title":"Add /export","description":"CSV"}}`,
+	}
+	for i, c := range calls {
+		_, resp := rpc(t, ts, "linkedlead", fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":%s}`, i+3, c))
+		if _, isErr := toolText(t, resp); isErr {
+			t.Fatalf("%s: %v", c, resp)
+		}
+	}
+	want := "list_linked_projects,ask_project|Backend|Which format?,reply_to_project|Q-7|JSON,request_project_work|Backend|Add /export|CSV"
+	if got := strings.Join(fb.calls, ","); got != want {
+		t.Fatalf("%s", got)
+	}
+	// un worker nu poate cere munca si nu raspunde in numele proiectului
+	for _, c := range calls[2:] {
+		_, resp := rpc(t, ts, "linkedworker", `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":`+c+`}`)
+		if _, isErr := toolText(t, resp); !isErr {
+			t.Fatalf("worker: %s", c)
+		}
 	}
 }

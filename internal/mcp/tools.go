@@ -176,6 +176,40 @@ var addAgentTools = []Tool{
 	},
 }
 
+var linkedProjectsTool = Tool{
+	Name:        "list_linked_projects",
+	Description: "Lists the projects linked with yours: name, goal and root agent. Questions and work requests go to their root agent.",
+	InputSchema: schema([]string{}, map[string]any{}),
+}
+
+var askProjectTool = Tool{
+	Name:        "ask_project",
+	Description: "Asks a linked project a question; its root agent answers. The answer arrives later as a message, so continue meanwhile. Only ask what your own team cannot answer.",
+	InputSchema: schema([]string{"project", "question"}, map[string]any{
+		"project":  str("The linked project's name, exactly as in list_linked_projects"),
+		"question": str("The question, clear and self-contained"),
+	}),
+}
+
+var replyToProjectTool = Tool{
+	Name:        "reply_to_project",
+	Description: "Answers a question a linked project asked your project (it arrives as a message with a reference like Q-7).",
+	InputSchema: schema([]string{"request", "answer"}, map[string]any{
+		"request": str("The question's reference, e.g. Q-7"),
+		"answer":  str("Your answer"),
+	}),
+}
+
+var requestWorkTool = Tool{
+	Name:        "request_project_work",
+	Description: "Asks a linked project to do work for you. It becomes a task for its root agent (usually after the user approves it); its report comes back to you as a message.",
+	InputSchema: schema([]string{"project", "title"}, map[string]any{
+		"project":     str("The linked project's name, exactly as in list_linked_projects"),
+		"title":       str("Short, clear title"),
+		"description": str("What is needed, acceptance criteria, how you will use it"),
+	}),
+}
+
 // toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
 // Orice agent al echipei primeste ask_user; analistul din wizard nu.
 func toolsFor(c Caller) []Tool {
@@ -216,6 +250,20 @@ func toolsFor(c Caller) []Tool {
 	}
 	if c.StageKind == "check" && !has("review_approve") {
 		out = append(out, reviewTools...)
+	}
+	// proiecte legate: intrebari pentru toti, raspunsuri pentru radacini, cereri de lucru pentru lideri
+	if c.HasLinks {
+		out = append(out, linkedProjectsTool, askProjectTool)
+		if c.IsRoot {
+			out = append(out, replyToProjectTool)
+		}
+		if c.CanAddAgents {
+			out = append(out, requestWorkTool)
+		}
+	}
+	// radacina livreaza cu report_done munca ceruta de un proiect legat
+	if c.FromRequest && !has(reportTool.Name) {
+		out = append(out, reportTool)
 	}
 	out = append(out, askUserTool)
 	return out

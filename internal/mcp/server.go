@@ -24,6 +24,9 @@ type Caller struct {
 	StageKind    string // etapa task-ului curent: "work", "check" sau "" (fara etape)
 	HasStages    bool   // proiectul are etape: la create_task assignee e optional
 	CanAddAgents bool   // lider sau radacina: add_agent / remove_agent
+	HasLinks     bool   // proiectul are legaturi cu alte proiecte
+	IsRoot       bool   // raporteaza utilizatorului: primeste intrebarile proiectelor legate
+	FromRequest  bool   // run pe un task cerut de un proiect legat: are report_done chiar fara sef
 }
 
 // AddAgentInput sunt argumentele lui add_agent. ToolsSet spune daca agentul a
@@ -49,6 +52,10 @@ type Backend interface {
 	AskUser(c Caller, question string, options []string) (string, error)
 	AddAgent(c Caller, in AddAgentInput) (string, error)
 	RemoveAgent(c Caller, name string) (string, error)
+	ListLinkedProjects(c Caller) (string, error)
+	AskProject(c Caller, project, question string) (string, error)
+	ReplyToProject(c Caller, request, answer string) (string, error)
+	RequestProjectWork(c Caller, project, title, description string) (string, error)
 }
 
 type Server struct {
@@ -175,6 +182,14 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		})
 	case "remove_agent":
 		text, err = s.backend.RemoveAgent(c, arg("name"))
+	case "list_linked_projects":
+		text, err = s.backend.ListLinkedProjects(c)
+	case "ask_project":
+		text, err = s.backend.AskProject(c, arg("project"), arg("question"))
+	case "reply_to_project":
+		text, err = s.backend.ReplyToProject(c, arg("request"), arg("answer"))
+	case "request_project_work":
+		text, err = s.backend.RequestProjectWork(c, arg("project"), arg("title"), arg("description"))
 	case "propose_setup":
 		raw, _ := json.Marshal(p.Arguments)
 		text, err = s.backend.ProposeSetup(c, raw)

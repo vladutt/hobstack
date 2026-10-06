@@ -53,6 +53,12 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 	}
 
+	linkedProjects, err := t.st.LinkedProjects(p.ID)
+	if err != nil {
+		return err
+	}
+	hasLinks := len(linkedProjects) > 0 // proiectul are legaturi: agentii primesc tool-urile pentru proiecte legate
+
 	system := prompt.System(p, a, prompt.LinksFor(a, agents))
 	// Claude tine sesiunile pe cwd, deci un alt folder de lucru inseamna alta sesiune.
 	hash := prompt.Hash(home.Path + "\n" + system)
@@ -71,6 +77,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 
 	roles := store.RolesOf(a, agents)
 	stageKind := ""
+	fromRequest := false
 	stages, err := t.st.ListStages(p.ID)
 	if err != nil {
 		return err
@@ -80,13 +87,14 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 			if i := stageIndex(stages, task.StageID); i >= 0 {
 				stageKind = stages[i].Kind
 			}
+			fromRequest = task.RequestID != nil
 		}
 	}
 	// intr-un proiect cu etape, radacinile creeaza task-uri chiar fara copii
 	isLead := roles.IsLead || (len(stages) > 0 && roles.IsRoot)
 	t.mu.Lock()
 	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
-		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0, CanAddAgents: isLead || roles.IsRoot}
+		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0, CanAddAgents: isLead || roles.IsRoot, HasLinks: hasLinks, IsRoot: roles.IsRoot, FromRequest: fromRequest}
 	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
 	t.mu.Unlock()
 
