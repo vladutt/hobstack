@@ -8,6 +8,7 @@ import { recurringPanel } from "./recurring.js";
 import { questionBox } from "./questions.js";
 import { stuckBox, refreshStuckAges } from "./stuck.js";
 import { accessBox } from "./access.js";
+import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 
 const COLUMNS = [
@@ -85,14 +86,16 @@ export async function workspaceView(root, projectId, route) {
   const questionsBox = el("div", { class: "needs-questions" });
   const stuckList = el("div", { class: "needs-stuck" });
   const accessList = el("div", { class: "needs-access" });
+  const agentReqList = el("div", { class: "needs-agent-requests" });
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
-    needsTitle, questionsBox, stuckList, accessList);
+    needsTitle, questionsBox, stuckList, accessList, agentReqList);
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
   const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
   let keepPanel = false; // urmatorul update() pastreaza panoul ales (vezi openChat)
   let questionsKey = null; // id-urile intrebarilor desenate ultima data in banda
   let stuckKey = null;     // id-urile task-urilor blocate desenate ultima data
+  let agentReqKey = null;  // id-urile cererilor de agent desenate ultima data
   let accessKey = null;    // id:count ale cererilor de acces desenate ultima data
   let pageHead = null;  // capul paginii desenat ultima data (inlocuit la fiecare renderHeader)
   const canvas = teamCanvas({
@@ -215,6 +218,14 @@ export async function workspaceView(root, projectId, route) {
     });
   }
 
+  // agentReqNode: caseta unei cereri add_agent (un lider vrea un agent nou)
+  function agentReqNode(r) {
+    return agentRequestBox(r, {
+      lead: state.project.agents.find((a) => a.id === r.leadId),
+      onDone: reload,
+    });
+  }
+
   // accessNode: caseta unei cereri de acces (un tool refuzat unui agent)
   function accessNode(r) {
     return accessBox(r, {
@@ -244,7 +255,8 @@ export async function workspaceView(root, projectId, route) {
     const questions = state.project.questions || [];
     const stuck = state.project.stuck || [];
     const access = state.project.access || [];
-    const total = questions.length + stuck.length + access.length;
+    const agentReqs = state.project.agentRequests || [];
+    const total = questions.length + stuck.length + access.length + agentReqs.length;
     needsTitle.textContent = `Needs you (${total})`;
     needsBox.hidden = !total;
     const qKey = questions.map((q) => q.id).join(",");
@@ -261,6 +273,11 @@ export async function workspaceView(root, projectId, route) {
     if (aKey !== accessKey) {
       accessKey = aKey;
       accessList.replaceChildren(...access.map(accessNode));
+    }
+    const rKey = agentReqs.map((r) => r.id).join(",");
+    if (rKey !== agentReqKey) {
+      agentReqKey = rKey;
+      agentReqList.replaceChildren(...agentReqs.map(agentReqNode));
     }
   }
 

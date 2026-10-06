@@ -214,6 +214,8 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
     del.addEventListener("pointerdown", (e) => e.stopPropagation()); // nu porneste mutarea nodului
     del.addEventListener("click", (e) => { e.stopPropagation(); onDelete(a.id); });
     const g = svg("g", { class: "node" + (a.detached ? " detached" : ""), "data-agent": a.id, transform: `translate(${p.x} ${p.y})` },
+      // tooltip: agentul a fost adaugat de un lider
+      a.createdBy ? svg("title", {}, "Added by " + (project.agents.find((x) => x.id === a.createdBy)?.name || "a lead")) : null,
       svg("g", { "clip-path": "url(#node-clip)" },
         svg("rect", { class: "card", width: NODE_W, height: NODE_H, rx: 10 }),
         svg("circle", { class: "avatar-c " + kindOf(a), cx: 24, cy: 32, r: 14 }),

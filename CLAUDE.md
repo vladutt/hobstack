@@ -69,6 +69,10 @@ Pachet: internal/schedule.
 Gata (Flow, spec in docs/superpowers/specs/2026-10-03-foreman-task-flow-design.md): tab-ul Flow din modala de task arata
 arborele de delegare de la radacina (store.TaskFlow, GET /api/tasks/{id}/flow), cu pasii din task_events si sub-task-urile
 intercalate; pasul "requested" leaga task-ul de mesajul din chat care l-a pornit (activeRun.request, doar in memorie).
+Gata (liderul adauga agenti, spec in docs/superpowers/specs/2026-10-06-foreman-lead-adds-agents-design.md):
+tool-urile MCP add_agent / remove_agent pentru lideri si radacini (si fara echipa); agentul intra sub lider, cu
+tool-uri din ale liderului, max 6 adaugati; direct cu Full autonomy sau la cererea utilizatorului din chat, altfel
+aprobare in "Needs you" (agent_requests); remove = detasare.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"

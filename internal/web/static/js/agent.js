@@ -27,6 +27,8 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
     const id = Number(folderSelect.value);
     return id === folders[0].id ? null : id;
   };
+  // agentul a fost adaugat de un lider prin add_agent
+  const addedBy = a.createdBy ? project.agents.find((x) => x.id === a.createdBy) : null;
   const idOf = (sel) => (sel.value && sel.value !== "none" ? Number(sel.value) : null);
 
   const name = el("input", { type: "text", value: a.name, placeholder: "e.g. Rook", required: true, maxlength: 40 });
@@ -60,6 +62,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
   let dirty = false;
   const saveBtn = el("button", { type: "submit", class: "btn primary" }, "Save");
   const form = el("form", { class: "agent-editor", onsubmit: save },
+    addedBy ? el("p", { class: "hint" }, `Added by ${addedBy.name}`) : null,
     field("Name", name, "The lead assigns tasks by this name."),
     field("Role", role),
     field("Model", model, "\"Latest\" moves to new versions automatically. Fable: most capable; Opus: very capable; Sonnet: balanced; Haiku: fast and cheap."),
