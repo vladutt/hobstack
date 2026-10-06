@@ -25,16 +25,17 @@ type Message struct {
 	Reply     bool      `json:"reply"` // raspuns la o intrebare ask_user, nu cerere din chat
 	CreatedAt time.Time `json:"createdAt"`
 
+	RequestID   *int64       `json:"requestId"`   // nota cu o intrebare primita din alt proiect (anti-bucla); nil = altfel
 	Attachments []Attachment `json:"attachments"` // mereu non-nil
 }
 
-const messageCols = `id, project_id, agent_id, kind, author, text, run_id, delivered, reply, created_at`
+const messageCols = `id, project_id, agent_id, kind, author, text, run_id, delivered, reply, created_at, request_id`
 
 func scanMessage(sc scanner) (Message, error) {
 	var m Message
 	var run sql.NullString
 	var created string
-	if err := sc.Scan(&m.ID, &m.ProjectID, &m.AgentID, &m.Kind, &m.Author, &m.Text, &run, &m.Delivered, &m.Reply, &created); err != nil {
+	if err := sc.Scan(&m.ID, &m.ProjectID, &m.AgentID, &m.Kind, &m.Author, &m.Text, &run, &m.Delivered, &m.Reply, &created, &m.RequestID); err != nil {
 		return Message{}, err
 	}
 	m.RunID = run.String
@@ -49,8 +50,8 @@ func (s *Store) AddMessage(m *Message) error {
 	if m.RunID != "" {
 		run = m.RunID
 	}
-	res, err := s.db.Exec(`INSERT INTO messages (project_id, agent_id, kind, author, text, run_id, delivered, reply, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, m.ProjectID, m.AgentID, m.Kind, m.Author, m.Text, run, m.Delivered, m.Reply, ts)
+	res, err := s.db.Exec(`INSERT INTO messages (project_id, agent_id, kind, author, text, run_id, delivered, reply, request_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, m.ProjectID, m.AgentID, m.Kind, m.Author, m.Text, run, m.Delivered, m.Reply, nullPtr(m.RequestID), ts)
 	if err != nil {
 		return err
 	}
