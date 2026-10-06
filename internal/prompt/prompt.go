@@ -14,16 +14,17 @@ import (
 
 // Links descrie locul agentului in echipa; intra in system prompt.
 type Links struct {
-	BossName   string // "" = raporteaza utilizatorului
-	IsLead     bool
-	IsReviewer bool
+	BossName     string // "" = raporteaza utilizatorului
+	IsLead       bool
+	IsReviewer   bool
+	CanAddAgents bool // lider sau radacina: are add_agent / remove_agent
 }
 
 // LinksFor calculeaza Links din lista echipei. Merge si pentru un agent nou
 // (ID 0): atunci doar BossName poate fi setat.
 func LinksFor(a store.Agent, team []store.Agent) Links {
 	r := store.RolesOf(a, team)
-	l := Links{IsLead: r.IsLead, IsReviewer: r.IsReviewer}
+	l := Links{IsLead: r.IsLead, IsReviewer: r.IsReviewer, CanAddAgents: r.IsLead || r.IsRoot}
 	if a.ParentID != nil {
 		if boss, ok := store.FindAgent(team, *a.ParentID); ok {
 			l.BossName = boss.Name
@@ -64,6 +65,10 @@ const howLead = `You are a lead: you have a direct team, listed in the turn mess
 	`Do not do their work yourself. When you receive results, check them (you can read the changed files) and call ` +
 	`mcp__team__accept_task or mcp__team__send_back with concrete feedback. Use mcp__team__list_tasks to see the status. ` +
 	`Do not use any task lists other than the mcp__team__ tools.`
+
+const howAddAgents = `You can grow your team with mcp__team__add_agent: only when no current member fits part of the work, ` +
+	`or when you have independent sub-tasks to run in parallel. Check your team first. A new agent starts working when you ` +
+	`give it a task with mcp__team__create_task. When an agent you added has no more work, remove it with mcp__team__remove_agent.`
 
 const howSubLead = `When you receive a task from your boss, break it into subtasks for your team and stop without calling report_done. ` +
 	`When the task comes back to you with all subtasks done, check the result and call mcp__team__report_done ` +
@@ -161,6 +166,9 @@ func System(p store.Project, a store.Agent, l Links) string {
 		} else {
 			how = append(how, howWorker)
 		}
+	}
+	if l.CanAddAgents {
+		how = append(how, howAddAgents)
 	}
 	if l.IsReviewer {
 		how = append(how, howReviewer)

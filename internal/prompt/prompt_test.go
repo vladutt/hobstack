@@ -11,6 +11,8 @@ import (
 
 var proj = store.Project{Name: "ApiUnit", Goal: "Import din OpenAPI 3.1", Context: "Stack: PHP 8.3"}
 
+func ptrID(v int64) *int64 { return &v }
+
 func TestSystemRoles(t *testing.T) {
 	a := store.Agent{Name: "Sub", Role: "Tech Lead", Background: "Stie Laravel.", DoneDef: "rezumat si fisiere schimbate"}
 	cases := []struct {
@@ -70,8 +72,8 @@ func TestLinksFor(t *testing.T) {
 		a    store.Agent
 		want Links
 	}{
-		"coordonator": {lead, Links{IsLead: true, IsReviewer: true}},
-		"sub-lider":   {sub, Links{BossName: "Atlas", IsLead: true}},
+		"coordonator": {lead, Links{IsLead: true, IsReviewer: true, CanAddAgents: true}},
+		"sub-lider":   {sub, Links{BossName: "Atlas", IsLead: true, CanAddAgents: true}},
 		"worker":      {wes, Links{BossName: "Sub"}},
 		"agent nou":   {store.Agent{ParentID: &two}, Links{BossName: "Sub"}},
 	}
@@ -221,5 +223,28 @@ func TestSystemAutonomy(t *testing.T) {
 	}
 	if got := System(auto, a, Links{BossName: "Boss"}); !strings.Contains(got, "call mcp__team__report_done explaining it") {
 		t.Errorf("worker-ul autonom tot raporteaza problemele liderului:\n%s", got)
+	}
+}
+
+func TestSystemAddAgents(t *testing.T) {
+	p := store.Project{Name: "P", Goal: "G"}
+	lead := store.Agent{ID: 1, Name: "Lead"}
+	worker := store.Agent{ID: 2, Name: "Rook", ParentID: ptrID(1)}
+	team := []store.Agent{lead, worker}
+	if l := LinksFor(lead, team); !l.CanAddAgents {
+		t.Fatal("radacina/liderul poate adauga agenti")
+	}
+	if l := LinksFor(worker, team); l.CanAddAgents {
+		t.Fatal("un worker cu sef nu poate")
+	}
+	solo := store.Agent{ID: 3, Name: "Solo"}
+	if l := LinksFor(solo, []store.Agent{solo}); !l.CanAddAgents {
+		t.Fatal("radacina fara echipa poate")
+	}
+	if s := System(p, lead, LinksFor(lead, team)); !strings.Contains(s, "mcp__team__add_agent") || !strings.Contains(s, "mcp__team__remove_agent") {
+		t.Fatalf("liderul trebuie sa afle de add_agent:\n%s", s)
+	}
+	if s := System(p, worker, LinksFor(worker, team)); strings.Contains(s, "add_agent") {
+		t.Fatal("workerul nu afla de add_agent")
 	}
 }
