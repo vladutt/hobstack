@@ -120,6 +120,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks/{id}", s.getTask)
 	mux.HandleFunc("GET /api/tasks/{id}/changes", s.getTaskChanges)
 	mux.HandleFunc("GET /api/tasks/{id}/flow", s.getTaskFlow)
+	mux.HandleFunc("GET /api/tasks/{id}/files", s.getTaskFiles)
+	mux.HandleFunc("GET /api/task-files/{id}", s.serveTaskFile)
 	mux.HandleFunc("POST /api/tasks/{id}/decide", s.decideTask)
 	mux.HandleFunc("POST /api/questions/{id}/answer", s.answerQuestion)
 	mux.HandleFunc("POST /api/questions/{id}/dismiss", s.dismissQuestion)

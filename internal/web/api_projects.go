@@ -209,6 +209,7 @@ type agentView struct {
 type taskView struct {
 	store.Task
 	FilesChanged int    `json:"filesChanged"`
+	Attachments  int    `json:"attachments"` // cai distincte predate pe task (report_done files)
 	FromProject  string `json:"fromProject"` // proiectul care a cerut task-ul ("" = nimeni)
 }
 
@@ -382,6 +383,11 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	attached, err := s.st.CountTaskFiles(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	links, err := s.linkViews(p.ID)
 	if err != nil {
 		fail(w, err)
@@ -400,7 +406,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	views := make([]taskView, len(tasks))
 	fromProject := map[int64]string{} // cache: id proiect sursa -> nume
 	for i, t := range tasks {
-		views[i] = taskView{Task: t, FilesChanged: changed[t.ID]}
+		views[i] = taskView{Task: t, FilesChanged: changed[t.ID], Attachments: attached[t.ID]}
 		if t.RequestID == nil {
 			continue
 		}

@@ -81,6 +81,11 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	filesCount, err := s.st.CountTaskFilesTree(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	runMsgs, err := s.st.ListTaskRunMessages(id)
 	if err != nil {
 		fail(w, err)
@@ -131,6 +136,7 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		"task":      task, "events": slim, "assignee": assignee, "stage": stage,
 		"conversation": conv, "working": working, "workingAgentId": workingID,
 		"changesCount": changesCount, // fingerprint ieftin pentru tab-ul Changes
+		"filesCount":   filesCount,   // fingerprint ieftin pentru tab-ul Files (task + sub-task-uri)
 		"usage":        usage,        // run-uri, cost, tokeni si timp de lucru (coloana din dreapta a modalei)
 
 	})
