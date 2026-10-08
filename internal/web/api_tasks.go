@@ -83,6 +83,11 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	usage, err := s.st.TaskUsage(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	working, workingID := "", int64(0)
 	if s.team.WorkingOn(id, task.AssigneeID) {
 		working, workingID = assignee, task.AssigneeID
@@ -106,6 +111,7 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		"task":      task, "events": slim, "assignee": assignee, "stage": stage,
 		"conversation": conv, "working": working, "workingAgentId": workingID,
 		"changesCount": changesCount, // fingerprint ieftin pentru tab-ul Changes
+		"usage":        usage,        // run-uri, cost, tokeni si timp de lucru (coloana din dreapta a modalei)
 
 	})
 }

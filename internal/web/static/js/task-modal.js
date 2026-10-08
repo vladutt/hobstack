@@ -23,7 +23,7 @@ const LONG_TEXT = 600;
 // - initialTab: tab-ul de pornire (ex. "flow"); lipsa = alegere automata la primul raspuns.
 // - flowOpen: Set cu pasii Flow desfasurati, preluat de la modala inlocuita (vezi flowView).
 // Intoarce { el, taskId, refresh(project), tab(), flowOpen, destroy() }.
-export function taskModal({ projectId, taskId, project, onClose, actions, initialTab = null, flowOpen }) {
+export function taskModal({ projectId, taskId, project, info = {}, onClose, actions, initialTab = null, flowOpen }) {
   let data = null;        // ultimul raspuns GET /api/tasks/{id}
   let seq = 0;            // numarul ultimei cereri: un raspuns vechi nu suprascrie unul nou
   let destroyed = false;
@@ -243,6 +243,13 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
     row("Files", data.changesCount ? el("span", { class: "side-value" },
       el("button", { type: "button", class: "link-btn", onclick: () => setTab("changes") }, filesLabel())) : null);
     if (t.sendBacks) row("Sent back", el("span", { class: "side-value" }, `${t.sendBacks}\u00d7`));
+    // consumul run-urilor de pe task (toti agentii care au lucrat pe el)
+    const u = data.usage || {};
+    const modelOf = (id) => (info.models || []).find((m) => m.id === id)?.label.replace(/ \(latest\)$/, "") || id;
+    row("Model", agent?.model ? el("span", { class: "side-value" }, modelOf(agent.model)) : null);
+    row("Duration", u.seconds > 0 ? el("span", { class: "side-value", title: `${u.runs} ${u.runs === 1 ? "run" : "runs"}; time the agents spent working` }, duration(u.seconds)) : null);
+    row("Cost", u.costUsd > 0 ? el("span", { class: "side-value side-cost" }, `$${u.costUsd.toFixed(2)}`,
+      u.tokens > 0 ? el("span", { class: "hint" }, `${compactTokens(u.tokens)} tokens`) : null) : null);
     const when = (iso) => {
       const d = new Date(iso);
       return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${clock(iso)}`;
@@ -515,4 +522,19 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
       overlay.remove();
     },
   };
+}
+
+// duration: 45 s, 23 min, 1 h 05 min
+function duration(sec) {
+  if (sec < 60) return `${sec} s`;
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+}
+
+// compactTokens: 1234567 -> "1.2M"
+function compactTokens(n) {
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return Math.round(n / 1e3) + "k";
+  return String(n);
 }

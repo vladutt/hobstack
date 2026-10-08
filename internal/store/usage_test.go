@@ -94,3 +94,27 @@ func TestProjectActivity(t *testing.T) {
 		t.Fatalf("activity = %v", got)
 	}
 }
+
+func TestTaskUsage(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	task := Task{ProjectID: p.ID, Title: "x", AssigneeID: lead.ID, CreatorID: &lead.ID}
+	if err := s.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	for i, r := range []struct {
+		cost   float64
+		tokens int64
+		mins   int
+	}{{1, 100, 5}, {0.5, -1, 10}} {
+		start := time.Date(2026, 10, 8, 10, 0, 0, 0, time.UTC)
+		if _, err := s.db.Exec(`INSERT INTO runs (id, agent_id, task_id, status, started_at, ended_at, cost_usd, tokens) VALUES (?, ?, ?, 'done', ?, ?, ?, ?)`,
+			fmt.Sprint("t", i), lead.ID, task.ID, start.Format(time.RFC3339Nano), start.Add(time.Duration(r.mins)*time.Minute).Format(time.RFC3339Nano), r.cost, r.tokens); err != nil {
+			t.Fatal(err)
+		}
+	}
+	u, err := s.TaskUsage(task.ID)
+	if err != nil || u.Runs != 2 || u.CostUSD != 1.5 || u.Tokens != 100 || u.Seconds != 900 {
+		t.Fatalf("%+v %v", u, err)
+	}
+}

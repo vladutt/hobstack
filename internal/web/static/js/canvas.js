@@ -40,7 +40,7 @@ function modelShort(id) {
 // link e {parentId, detached}: sub un agent, legat de "Tu" sau nelegat.
 // onDelete(id): butonul x de pe nod.
 const UNLINKED = { parentId: null, detached: true };
-export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) {
+export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete, onAdd }) {
   let project = { agents: [] };
   let selectedId = null;
   let selectedLink = null;   // "p:<id>" sau "r:<id>"
@@ -60,11 +60,30 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
   const fullBtn = el("button", { type: "button", class: "btn small canvas-full-toggle", onclick: () => setFull(!wrap.classList.contains("full")) }, "Full screen");
   const legend = (cls, label) => el("span", { class: "legend-item" },
     svg("svg", { width: 28, height: 8, "aria-hidden": "true" }, svg("line", { x1: 1, y1: 4, x2: 27, y2: 4, class: "edge " + cls })), label);
-  const addBtn = el("button", { type: "button", class: "btn small primary", onclick: () => onCreate(null, UNLINKED) }, "+ Agent");
-  const bar = el("div", { class: "canvas-bar" }, legend("delegate", "Delegation"), legend("review", "Review"),
+  // "+ Agent" deschide pagina de agent nou (onAdd); fara ea, un agent nelegat pe canvas
+  const addBtn = el("button", { type: "button", class: "btn small primary", onclick: () => (onAdd ? onAdd() : onCreate(null, UNLINKED)) }, "+ Agent");
+  const bar = el("div", { class: "canvas-bar" }, legend("delegate", "reports to"), legend("review", "reviewed by"),
     el("span", { class: "grow" }), deleteBtn, fullBtn, addBtn);
-  const tip = el("span", { class: "canvas-tip" }, "Drag \u25CF onto an agent to link it, or onto empty space to create a new agent under it \u00b7 double-click empty space = detached agent \u00b7 x on a line deletes it");
-  const wrap = el("div", { class: "canvas-wrap", tabindex: "0" }, bar, svgEl, tip);
+  // zoom: 1 = tot graful incape; pan = deplasarea centrului, in unitati SVG
+  let zoom = 1, panX = 0, panY = 0;
+  let fitBox = null; // [x, y, w, h]: viewBox-ul la zoom 1
+  const zoomLabel = el("span", { class: "zoom-label" }, "100%");
+  const zoomBtn = (label, aria, fn) => el("button", { type: "button", class: "zoom-btn", "aria-label": aria, title: aria, onclick: fn }, label);
+  const zoomBar = el("div", { class: "canvas-zoom" },
+    zoomBtn("\u2212", "Zoom out", () => setZoom(zoom / 1.25)), zoomLabel,
+    zoomBtn("+", "Zoom in", () => setZoom(zoom * 1.25)),
+    zoomBtn("Fit", "Fit the whole team", () => { panX = panY = 0; setZoom(1); }));
+  // "How a task travels": drumul unui task prin echipa reala; se poate ascunde (tinut minte)
+  const travel = el("div", { class: "canvas-travel" });
+  let travelHidden = false;
+  try { travelHidden = localStorage.getItem("foreman-travel") === "0"; } catch {}
+  const travelToggle = el("button", { type: "button", class: "btn ghost small travel-toggle", onclick: () => setTravel(!travelHidden) });
+  function setTravel(hidden) {
+    travelHidden = hidden;
+    try { localStorage.setItem("foreman-travel", hidden ? "0" : "1"); } catch {}
+    draw(); // si incadrarea: panoul deschis tine loc jos
+  }
+  const wrap = el("div", { class: "canvas-wrap", tabindex: "0" }, bar, svgEl, travel, zoomBar);
 
   function setFull(on) {
     wrap.classList.toggle("full", on);
@@ -165,14 +184,19 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
       bx1 = Math.max(bx1, p.x + NODE_W); by1 = Math.max(by1, p.y + NODE_H);
     }
     bx0 -= 32; by0 -= 32; bx1 += 32; by1 += 32;
-    const vw = Math.max(bx1 - bx0, width), vh = Math.max(by1 - by0, height);
-    let minX = (bx0 + bx1) / 2 - vw / 2, minY = by0, maxX = minX + vw, maxY = minY + vh;
+    // la aceeasi marime a canvas-ului cutia doar creste, ca o mutare sa nu rescaleze restul
     if (lastView && lastView.width === width && lastView.height === height) {
       const [a, b, c, d] = lastView.box;
-      minX = Math.min(minX, a); minY = Math.min(minY, b); maxX = Math.max(maxX, c); maxY = Math.max(maxY, d);
+      bx0 = Math.min(bx0, a); by0 = Math.min(by0, b); bx1 = Math.max(bx1, c); by1 = Math.max(by1, d);
     }
-    lastView = { width, height, box: [minX, minY, maxX, maxY] };
-    svgEl.setAttribute("viewBox", `${minX} ${minY} ${maxX - minX} ${maxY - minY}`);
+    lastView = { width, height, box: [bx0, by0, bx1, by1] };
+    // viewBox-ul are proportiile canvas-ului; un graf mic nu se mareste (s >= 1), iar jos
+    // ramane loc pentru panoul "How a task travels", ca sa nu acopere noduri
+    drawTravel();
+    const reserve = travel.hidden || travel.classList.contains("collapsed") ? 0 : travel.offsetHeight + 24;
+    const s = Math.max(1, (bx1 - bx0) / width, (by1 - by0) / Math.max(120, height - reserve));
+    fitBox = [(bx0 + bx1) / 2 - (width * s) / 2, by0, width * s, height * s];
+    applyView();
 
     const defs = svg("defs", {},
       svg("marker", { id: "arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
@@ -426,6 +450,87 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
     if (!agent) return;
     // fara sef, agentul ramane nelegat (nu devine automat lider sub "Tu")
     saveLinks(agent, kind === "p" ? UNLINKED : { reviewerId: null });
+  }
+
+  // ---------- zoom si deplasare ----------
+  function applyView() {
+    if (!fitBox) return;
+    const [x, y, w, h] = fitBox;
+    const vw = w / zoom, vh = h / zoom;
+    // la zoom 1 graful sta sus (ca inainte); mai aproape, centrul + deplasarea
+    const cx = x + w / 2 + panX, cy = zoom === 1 ? y + vh / 2 + panY : y + h / 2 + panY;
+    svgEl.setAttribute("viewBox", `${cx - vw / 2} ${cy - vh / 2} ${vw} ${vh}`);
+    zoomLabel.textContent = Math.round(zoom * 100) + "%";
+  }
+  function setZoom(z) {
+    zoom = Math.min(4, Math.max(0.4, z));
+    if (Math.abs(zoom - 1) < 0.01) zoom = 1;
+    closeMenu();
+    applyView();
+  }
+  // tras de gol = deplasare; un click fara miscare ramane click (deselectare, dublu-click)
+  svgEl.addEventListener("pointerdown", (e) => {
+    if (e.target !== svgEl || e.button !== 0 || busy) return;
+    const start = { x: e.clientX, y: e.clientY, panX, panY };
+    const scale = svgEl.viewBox.baseVal.width / (svgEl.clientWidth || 1);
+    let moved = false;
+    const move = (ev) => {
+      const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+      if (!moved && Math.hypot(dx, dy) < DRAG_PX) return;
+      moved = true;
+      svgEl.classList.add("panning");
+      panX = start.panX - dx * scale;
+      panY = start.panY - dy * scale;
+      applyView();
+    };
+    const up = () => {
+      svgEl.removeEventListener("pointermove", move);
+      svgEl.removeEventListener("pointerup", up);
+      svgEl.removeEventListener("pointercancel", up);
+      svgEl.classList.remove("panning");
+    };
+    svgEl.setPointerCapture(e.pointerId);
+    svgEl.addEventListener("pointermove", move);
+    svgEl.addEventListener("pointerup", up);
+    svgEl.addEventListener("pointercancel", up);
+  });
+  // Ctrl/Cmd + rotita = zoom (rotita simpla ramane derularea paginii)
+  svgEl.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+  }, { passive: false });
+
+  // drawTravel: You -> goal -> radacina -> task -> un agent -> done -> reviewer-ul lui -> radacina -> Done
+  function drawTravel() {
+    const agents = project.agents || [];
+    const byId = new Map(agents.map((a) => [a.id, a]));
+    const roots = agents.filter((a) => !a.parentId && !a.detached);
+    const root = roots[0];
+    const worker = agents.find((a) => a.parentId && byId.get(a.parentId)?.id === root?.id && a.reviewerId) ||
+      agents.find((a) => a.parentId === root?.id);
+    if (!root || !worker || travelHidden) {
+      travel.hidden = !root || !worker;
+      travelToggle.textContent = "How a task travels";
+      travel.replaceChildren(travelToggle);
+      travel.classList.add("collapsed");
+      return;
+    }
+    travel.hidden = false;
+    travel.classList.remove("collapsed");
+    const chip = (a) => el("span", { class: "travel-chip" }, el("span", { class: "dot", style: `background:${toneOf(a.name, kindOf(a))[0]}` }), a.name);
+    const step = (t, cls = "") => el("span", { class: "travel-step " + cls }, t);
+    const reviewer = byId.get(worker.reviewerId);
+    travelToggle.textContent = "\u00d7";
+    travelToggle.setAttribute("aria-label", "Hide");
+    travel.replaceChildren(
+      el("div", { class: "travel-head" }, el("strong", {}, "How a task travels"), travelToggle),
+      el("div", { class: "travel-path" },
+        el("span", { class: "travel-chip" }, "You"), step("\u2192 goal \u2192"), chip(root), step("\u2192 task \u2192"), chip(worker), step("\u2192 done \u2192"),
+        reviewer ? [chip(reviewer), step("approves \u2192", "ok")] : null,
+        chip(root), step("accepts \u2192 Done")),
+      el("p", {}, `${reviewer ? "Rejected reviews go back to the assignee with notes. " : ""}Questions go up the solid line; only ${roots.map((a) => a.name).join(", ")} ${roots.length === 1 ? "talks" : "talk"} to you.`),
+      el("p", { class: "travel-tip" }, "Drag \u25CF onto an agent to link it, or onto empty space for a new agent under it \u00b7 double-click empty space = detached agent \u00b7 drag empty space to move around."));
   }
 
   // ---------- evenimente pe canvas ----------

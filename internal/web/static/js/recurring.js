@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { el, field, toast, clock } from "./ui.js";
+import { el, toast, clock, avatar, kindOf as kindOf_ } from "./ui.js";
 
 // Etichetele starilor unui task (pentru link-ul spre ultimul task creat).
 const STATUS = {
@@ -65,7 +65,6 @@ export function recurringPanel({ projectId, project, assignable, onClose, onChan
 
   function renderList(p) {
     current = p;
-    newBtn.hidden = false;
     const list = p.recurring || [];
     if (!list.length) {
       body.replaceChildren(el("p", { class: "hint" },
@@ -102,71 +101,134 @@ export function recurringPanel({ projectId, project, assignable, onClose, onChan
     })));
   }
 
-  // openForm: formularul pentru o sarcina noua (r = null) sau pentru editare, in locul listei
+  // openForm: formularul pentru o sarcina noua (r = null) sau pentru editare, intr-o
+  // fereastra peste board: in stanga formularul, in dreapta cum apare cardul, urmatoarele
+  // rulari si sarcinile recurente existente.
   function openForm(r) {
     editing = true;
-    newBtn.hidden = true;
     const first = firstStage();
     const choices = assignable(first?.id);
-    const s = r ? r.schedule : { kind: "daily", everyHours: 1, at: "09:00", weekdays: WEEKDAYS };
+    const s = r ? r.schedule : { kind: "weekly", everyHours: 1, at: "09:00", weekdays: WEEKDAYS };
 
-    const title = el("input", { type: "text", maxlength: 200, required: true, value: r ? r.title : "", placeholder: "e.g. Check dependencies for updates" });
-    const description = el("textarea", { rows: 3, value: r ? r.description : "", placeholder: "What the agent should do each time (optional)" });
+    const title = el("input", { type: "text", maxlength: 200, required: true, value: r ? r.title : "", placeholder: "e.g. Check dependencies for updates", "aria-label": "Title" });
+    const description = el("textarea", { rows: 3, value: r ? r.description : "", placeholder: "e.g. Run composer outdated and npm outdated. Open one task per package with a major bump; apply patch bumps, run tests, report.", "aria-label": "What the agent should do each time" });
     const assigned = r?.assigneeId || 0;
     // fara etape nu exista optiunea "" (prima etapa): implicit primul agent
-    const who = el("select", { value: assigned ? String(assigned) : first ? "" : String(choices[0]?.id ?? "") },
+    const who = el("select", { value: assigned ? String(assigned) : first ? "" : String(choices[0]?.id ?? ""), "aria-label": "Assignee" },
       first ? el("option", { value: "" }, `First free agent in ${first.name}`) : null,
       choices.map((a) => el("option", { value: a.id }, a.name + (a.role ? " · " + a.role : ""))),
       // asignatul nu mai e printre optiuni: il pastram selectat
       assigned && !choices.some((a) => a.id === assigned) ? el("option", { value: assigned }, r.assignee || "?") : null);
 
-    // programul: trei variante, doar controalele celei alese sunt active
-    const group = `rec-kind-${++formSeq}`;
-    const radio = (kind) => el("input", { type: "radio", name: group, value: kind, checked: s.kind === kind, onchange: sync });
-    const rHours = radio("every_hours"), rDaily = radio("daily"), rWeekly = radio("weekly");
-    const hours = el("input", { type: "number", min: 1, max: 24, value: s.everyHours || 1, "aria-label": "Hours" });
-    const dailyAt = el("input", { type: "time", value: s.kind === "daily" ? s.at : "09:00", "aria-label": "Daily time" });
-    const weeklyAt = el("input", { type: "time", value: s.kind === "weekly" ? s.at : "09:00", "aria-label": "Weekly time" });
+    // programul: "Every [day | weekday | selected days | N hours] at [ora]" + zilele
     let mask = s.kind === "weekly" ? s.weekdays : WEEKDAYS;
+    const every = el("select", { class: "rec-every", "aria-label": "Repeat" },
+      el("option", { value: "daily" }, "day"),
+      el("option", { value: "weekday" }, "weekday"),
+      el("option", { value: "weekly" }, "selected days"),
+      el("option", { value: "every_hours" }, "few hours"));
+    every.value = s.kind === "weekly" ? (s.weekdays === WEEKDAYS ? "weekday" : "weekly") : s.kind;
+    const hours = el("input", { type: "number", min: 1, max: 24, value: s.everyHours || 1, class: "rec-hours", "aria-label": "Hours" });
+    const at = el("input", { type: "time", value: s.at || "09:00", "aria-label": "Time" });
     const dayBtns = DAYS.map((d) => {
-      const b = el("button", { type: "button", class: "btn small", "aria-pressed": String(!!(mask & d.bit)), onclick: () => {
+      const b = el("button", { type: "button", class: "rec-day", title: d.label, "aria-label": d.label, onclick: () => {
         mask ^= d.bit;
-        b.setAttribute("aria-pressed", String(!!(mask & d.bit)));
-      } }, d.label);
+        if (every.value === "weekday" || every.value === "daily") every.value = "weekly";
+        sync();
+      } }, d.label.charAt(0));
+      b.bit = d.bit;
       return b;
     });
-    const kindOf = () => (rHours.checked ? "every_hours" : rWeekly.checked ? "weekly" : "daily");
+    const hoursBox = el("span", { class: "rec-inline" }, hours, "hours");
+    const atBox = el("span", { class: "rec-inline" }, "at", at);
+    const days = el("div", { class: "rec-days", role: "group", "aria-label": "Days" }, dayBtns);
+    const summary = el("span", { class: "rec-summary" });
+    const kindOf = () => (every.value === "every_hours" ? "every_hours" : every.value === "daily" ? "daily" : "weekly");
+    const maskOf = () => (every.value === "weekday" ? WEEKDAYS : every.value === "daily" ? 127 : mask);
     function sync() {
       const k = kindOf();
-      hours.disabled = k !== "every_hours";
-      dailyAt.disabled = k !== "daily";
-      weeklyAt.disabled = k !== "weekly";
-      for (const b of dayBtns) b.disabled = k !== "weekly";
+      hoursBox.hidden = k !== "every_hours";
+      atBox.hidden = k === "every_hours";
+      days.hidden = k === "every_hours";
+      for (const b of dayBtns) b.setAttribute("aria-pressed", String(!!(maskOf() & b.bit)));
+      summary.textContent = scheduleText(k, maskOf(), at.value, Number(hours.value) || 1);
+      drawSide();
     }
-    sync();
+    every.addEventListener("change", () => { if (every.value === "weekly" && !mask) mask = WEEKDAYS; sync(); });
+    for (const n of [hours, at]) n.addEventListener("input", sync);
 
     const auto = el("input", { type: "checkbox", checked: r ? r.autoAccept : false });
-    const saveBtn = el("button", { type: "submit", class: "btn primary" }, "Save");
+    const saveBtn = el("button", { type: "submit", class: "btn primary" }, r ? "Save changes" : "Create recurring task");
+    const runNow = r ? el("button", { type: "button", class: "btn ghost", onclick: () => run(async () => {
+      const task = await api(`/api/recurring/${r.id}/run`, { method: "POST" });
+      toast("Created T-" + task.number, "ok");
+    }) }, "Run once now") : null;
+
+    const card = el("div", { class: "rec-preview" });
+    const nextList = el("div", { class: "rec-next" });
+    const others = el("div", { class: "rec-others" });
+    for (const n of [title, who]) n.addEventListener(n.tagName === "SELECT" ? "change" : "input", drawSide);
+
     const form = el("form", { class: "rec-form", onsubmit: submit },
-      el("h3", {}, r ? "Edit recurring task" : "New recurring task"),
-      field("Title", title), field("Description", description),
-      field("Assignee", who),
-      el("fieldset", { class: "rec-schedule" },
-        el("legend", {}, "Schedule"),
-        el("label", { class: "rec-opt" }, rHours, "Every", hours, "hours"),
-        el("label", { class: "rec-opt" }, rDaily, "Daily at", dailyAt),
-        el("label", { class: "rec-opt" }, rWeekly, "Weekly on",
-          el("span", { class: "rec-days", role: "group", "aria-label": "Days" }, dayBtns), weeklyAt)),
+      el("div", { class: "rec-form-head" }, el("h3", {}, r ? "Edit recurring task" : "New recurring task"),
+        el("span", { class: "np-dim" }, `· creates a card in ${first ? first.name : "Queued"} on a schedule`)),
+      el("div", { class: "field" }, el("label", { class: "label" }, "Title"), title),
+      el("div", { class: "field" }, el("label", { class: "label" }, "What the agent should do each time"), description),
+      el("div", { class: "field" }, el("label", { class: "label" }, "Assignee"), who,
+        el("span", { class: "hint" }, first ? "Or leave it to the first free agent in the stage." : "The agent picks it up when the card appears.")),
       el("div", { class: "field" },
-        el("label", { class: "check" }, auto, "Accept automatically when done"),
-        el("span", { class: "hint" }, "Skips your Accept / Send back. Questions and blocked tasks still reach you.")),
-      el("div", { class: "actions" }, el("span", { class: "grow" }),
-        el("button", { type: "button", class: "btn", onclick: back }, "Cancel"), saveBtn));
-    body.replaceChildren(form);
+        el("span", { class: "label" }, "When"),
+        el("div", { class: "rec-when" }, "Every", every, hoursBox, atBox),
+        days,
+        el("div", { class: "rec-sum-row" }, summary, el("span", { class: "np-dim" }, " · " + (Intl.DateTimeFormat().resolvedOptions().timeZone || "local time")))),
+      el("label", { class: "check" }, auto, el("span", {}, "Accept automatically when done ",
+        el("span", { class: "np-dim" }, "· skips your Accept / Send back; questions and blocked tasks still reach you"))),
+      el("p", { class: "hint" }, "A run is skipped while the card from the previous one is still open."),
+      el("div", { class: "actions" }, saveBtn, runNow, el("span", { class: "grow" }),
+        el("button", { type: "button", class: "btn ghost", onclick: close }, "Cancel")));
+    const dialog = el("div", { class: "modal rec-modal", role: "dialog", "aria-modal": "true", "aria-label": r ? "Edit recurring task" : "New recurring task", tabindex: "-1" },
+      el("div", { class: "rec-modal-main" }, form),
+      el("aside", { class: "rec-modal-side" },
+        el("span", { class: "na-cap" }, `Appears in ${first ? first.name : "Queued"} as`), card,
+        el("span", { class: "na-cap" }, "Next runs"), nextList,
+        el("div", { class: "rec-others-box" }, others)));
+    const overlay = el("div", { class: "modal-overlay" }, dialog);
+    let downOnOverlay = false;
+    overlay.addEventListener("mousedown", (e) => { downOnOverlay = e.target === overlay; });
+    overlay.addEventListener("click", (e) => { if (downOnOverlay && e.target === overlay) close(); });
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); close(); } };
+    document.addEventListener("keydown", onKey);
+    document.body.append(overlay);
+    sync();
     title.focus();
 
-    // back: inchide formularul si arata lista proiectului curent
-    function back() {
+    // drawSide: cardul de pe board, urmatoarele 3 rulari si sarcinile existente
+    function drawSide() {
+      const agent = current.agents.find((a) => String(a.id) === who.value);
+      card.replaceChildren(
+        el("span", { class: "label-tag recurring" }, "↻ recurring"),
+        el("strong", {}, title.value.trim() || "Untitled"),
+        el("span", { class: "rec-preview-foot" }, el("span", { class: "task-id" }, r ? `R-${r.id}` : "R-new"),
+          el("span", { class: "grow" }), agent ? avatar(agent.name, kindOf_(agent), 24) : el("span", { class: "avatar empty", style: "--size:24px" })));
+      const runs = nextRuns(kindOf(), maskOf(), at.value, Number(hours.value) || 1, 3);
+      nextList.replaceChildren(...(runs.length ? runs.map((d) => el("div", { class: "rec-next-row" },
+        el("span", {}, d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })),
+        el("span", { class: "task-id" }, clock(d.toISOString()))))
+        : [el("p", { class: "hint" }, "Pick at least one day.")]));
+      const list = (current.recurring || []).filter((x) => x.id !== r?.id);
+      others.replaceChildren(...(list.length ? [
+        el("span", { class: "na-cap" }, `Existing · ${list.length}`),
+        ...list.map((x) => el("div", { class: "rec-other" },
+          el("span", { class: "dot" + (x.enabled ? " on" : "") }),
+          el("strong", {}, x.title),
+          el("span", { class: "grow" }),
+          el("span", { class: "hint" }, [x.scheduleText, x.assignee, x.enabled ? "" : "paused"].filter(Boolean).join(" · "))))] : []));
+    }
+
+    // close: inchide fereastra si arata lista proiectului curent
+    function close() {
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
       editing = false;
       renderList(current);
     }
@@ -175,21 +237,21 @@ export function recurringPanel({ projectId, project, assignable, onClose, onChan
       e.preventDefault();
       if (!title.value.trim()) { toast("Title is required."); return; }
       const kind = kindOf();
-      if (kind === "weekly" && !mask) { toast("Choose at least one day."); return; }
-      const time = kind === "weekly" ? weeklyAt : dailyAt;
+      const m = maskOf();
+      if (kind === "weekly" && !m) { toast("Choose at least one day."); return; }
+      // "in fiecare zi" ramane daily pe server; zilele alese sunt weekly
       const payload = {
         title: title.value.trim(), description: description.value.trim(),
         assigneeId: Number(who.value) || 0, autoAccept: auto.checked, enabled: r ? r.enabled : true,
         schedule: { kind, everyHours: kind === "every_hours" ? Number(hours.value) || 0 : 0,
-          at: kind === "every_hours" ? "" : time.value, weekdays: kind === "weekly" ? mask : 0 },
+          at: kind === "every_hours" ? "" : at.value, weekdays: kind === "weekly" ? m : 0 },
       };
       saveBtn.disabled = true;
       try {
         if (r) await api(`/api/recurring/${r.id}`, { method: "PUT", body: payload });
         else await api(`/api/projects/${projectId}/recurring`, { method: "POST", body: payload });
-        editing = false;
+        close();
         await onChanged();
-        if (!editing) renderList(current);
       } catch (err) {
         toast(err.message);
         saveBtn.disabled = false;
@@ -205,4 +267,36 @@ export function recurringPanel({ projectId, project, assignable, onClose, onChan
       if (!editing) renderList(p);
     },
   };
+}
+
+
+// scheduleText: "Monday to Friday at 09:00", "Every day at 09:00", "Every 3 hours"
+function scheduleText(kind, mask, at, hours) {
+  if (kind === "every_hours") return hours === 1 ? "Every hour" : `Every ${hours} hours`;
+  if (kind === "daily" || mask === 127) return `Every day at ${at}`;
+  if (mask === WEEKDAYS) return `Monday to Friday at ${at}`;
+  const names = DAYS.filter((d) => mask & d.bit).map((d) => d.label);
+  return names.length ? `${names.join(", ")} at ${at}` : "No days selected";
+}
+
+// nextRuns: urmatoarele n rulari dupa acum, in ora locala (doar pentru previzualizare;
+// serverul isi calculeaza singur programul)
+function nextRuns(kind, mask, at, hours, n) {
+  const out = [];
+  const now = new Date();
+  if (kind === "every_hours") {
+    const d = new Date(now);
+    d.setMinutes(0, 0, 0);
+    while (out.length < n) { d.setHours(d.getHours() + hours); out.push(new Date(d)); }
+    return out;
+  }
+  const [h, m] = (at || "09:00").split(":").map(Number);
+  const d = new Date(now);
+  d.setHours(h, m, 0, 0);
+  if (d <= now) d.setDate(d.getDate() + 1);
+  for (let i = 0; i < 14 && out.length < n; i++) {
+    if (kind === "daily" || mask & (1 << d.getDay())) out.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
 }

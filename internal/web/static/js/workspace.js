@@ -71,6 +71,8 @@ export async function workspaceView(root, projectId, route) {
     selected: null,   // agentul selectat (chat si detalii)
     seen: new Set(),  // id-urile mesajelor afisate in thread
     folderFilter: null, // id-ul folderului filtrat pe board; null = toate
+    mine: false,        // doar task-urile create de utilizator (din board / recurente)
+    agentFilter: null,  // doar task-urile unui agent; null = toti
     liveRunId: null,
     liveStream: null,
     pending: [],      // fisiere alese pentru urmatorul mesaj
@@ -132,6 +134,7 @@ export async function workspaceView(root, projectId, route) {
     onChanged: () => reload(),
     onCreate: (pos, link) => createAgent(pos, link),
     onDelete: (id) => deleteAgent(id),
+    onAdd: () => { location.hash = `#/p/${projectId}/agents/new` + (state.selected ? `?parent=${state.selected}` : ""); },
   });
   // in capul panoului din dreapta alegi cu cine vorbesti (tab-uri cu agentii)
   const strip = el("div", { class: "team-strip", role: "group", "aria-label": "Team" });
@@ -192,7 +195,8 @@ export async function workspaceView(root, projectId, route) {
   const chatQuestion = el("div", { class: "chat-question", hidden: true });
   let chatQuestionKey = null; // id-ul intrebarii desenate ultima data in chat
   const threadHint = el("div", { class: "thread-hint" });
-  const chatBox = el("div", { class: "chat" }, threadHint, thread, chatQuestion, el("div", { class: "composer" }, chips, composer, note));
+  const quick = el("div", { class: "quick-actions" }); // Ask for status, Give a task, Open T-<nr>
+  const chatBox = el("div", { class: "chat" }, threadHint, thread, chatQuestion, el("div", { class: "composer" }, chips, composer, quick, note));
   const drawerClose = el("button", {
     type: "button", class: "drawer-close", "aria-label": "Close panel", title: "Close",
     onclick: () => setDrawer(false),
@@ -519,7 +523,7 @@ export async function workspaceView(root, projectId, route) {
     const status = p.paused
       ? el("span", { class: "status-chip paused", title: "The team is paused: agents answer your messages but don't pick up tasks until you start it." },
         el("span", { class: "dot" }), "Paused")
-      : el("span", { class: "status-chip" + (working ? " live" : "") },
+      : el("span", { class: "status-chip" + (working ? " on" : "") },
         el("span", { class: "dot" + (working ? " working" : "") }),
         working ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Idle");
     // avatarele echipei: click deschide chat-ul cu agentul ales (sau radacina)
@@ -601,19 +605,35 @@ export async function workspaceView(root, projectId, route) {
     const stages = p.stages || [];
     const folders = p.folders || [];
     if (!folders.some((f) => f.id === state.folderFilter)) state.folderFilter = null;
-    folderChips.hidden = folders.length < 2;
+    if (!p.agents.some((a) => a.id === state.agentFilter)) state.agentFilter = null;
     const chip = (id, label) => el("button", {
-      type: "button", class: "seg" + (state.folderFilter === id ? " active" : ""),
+      type: "button", class: "seg" + (state.folderFilter === id && (id !== null || (!state.mine && !state.agentFilter)) ? " active" : ""),
       "aria-pressed": String(state.folderFilter === id),
-      onclick: () => { state.folderFilter = id; renderBoard(); },
+      onclick: () => { state.folderFilter = id; if (id === null) { state.mine = false; state.agentFilter = null; } renderBoard(); },
     }, label);
-    folderChips.replaceChildren(chip(null, "All tasks"), ...folders.map((f) => chip(f.id, f.name)));
+    const mineChip = el("button", {
+      type: "button", class: "seg" + (state.mine ? " active" : ""), "aria-pressed": String(state.mine),
+      title: "Tasks you created", onclick: () => { state.mine = !state.mine; renderBoard(); },
+    }, "Mine");
+    // Filter: agentul ales; meniul e un <details> nou la fiecare desenare, deci se inchide singur
+    const who = p.agents.find((a) => a.id === state.agentFilter);
+    const filter = el("details", { class: "menu board-filter" },
+      el("summary", { class: "seg" + (who ? " active" : "") }, who ? `Assignee: ${who.name}` : "Filter"),
+      el("div", { class: "menu-panel filter-panel" },
+        el("span", { class: "menu-label" }, "Assignee"),
+        [null, ...p.agents].map((a) => el("button", {
+          type: "button", class: "filter-item" + ((a?.id ?? null) === state.agentFilter ? " on" : ""),
+          onclick: () => { state.agentFilter = a ? a.id : null; renderBoard(); },
+        }, a ? [avatar(a.name, kindOf(a), 20), a.name] : "Everyone"))));
+    folderChips.replaceChildren(chip(null, "All tasks"), mineChip,
+      ...(folders.length > 1 ? folders.map((f) => chip(f.id, f.name)) : []), filter);
     pausedNote.hidden = !p.paused;
     pausedNote.replaceChildren(el("span", { class: "dot" }), "Paused: agents answer messages but don't pick up tasks. ",
       el("button", { type: "button", class: "link-btn", onclick: () => projectAction("resume") }, "Start team"));
     // task-urile fara agent apar mereu; celelalte dupa folderul agentului
-    const passes = (t) => !state.folderFilter || !t.assigneeId ||
-      folderOf(p, byId.get(t.assigneeId))?.id === state.folderFilter;
+    const passes = (t) => (!state.folderFilter || !t.assigneeId ||
+      folderOf(p, byId.get(t.assigneeId))?.id === state.folderFilter) &&
+      (!state.mine || t.byUser) && (!state.agentFilter || t.assigneeId === state.agentFilter);
     // pe board stau doar grupurile (arbore sau fir de lucru); un grup ramane daca un membru trece filtrul
     const groups = taskGroups(p.tasks).filter((g) => passes(g.root) || g.subs.some((s) => passes(s.task)));
     // in fiecare coloana, cele mai recente primele: ultima activitate din grup (radacina sau
@@ -950,7 +970,7 @@ export async function workspaceView(root, projectId, route) {
     const working = who && who.currentTask?.id === t.id && (who.status || "").toLowerCase() === "working";
     let line = null;
     if (blocked) line = el("span", { class: "task-line bad" }, "Blocked");
-    else if (working) line = el("span", { class: "task-line live" }, el("span", { class: "dot working" }), `${who.name} \u00b7 working`);
+    else if (working) line = el("span", { class: "task-line working" }, el("span", { class: "dot working" }), `${who.name} \u00b7 working`);
     else if (decides) line = el("span", { class: "task-line warn" }, "Waiting for you to decide");
     else if (stage) line = el("span", { class: "task-line warn" }, `With ${stage}`);
     const labels = [
@@ -1045,6 +1065,12 @@ export async function workspaceView(root, projectId, route) {
         ? "Direct thread. Give it goals here and it delegates to its team."
         : `Direct thread. ${boss.name} is copied on what you write.`;
     input.placeholder = a.detached ? "Link the agent to message it" : isLead ? `Write to ${a.name}...` : `Message ${a.name}...`;
+    const qa = (label, onclick, title) => el("button", { type: "button", class: "quick", onclick, title }, label);
+    quick.replaceChildren(...(a.detached ? [] : [
+      qa("Ask for status", () => sendText(`What's your status? Briefly: what you're working on, what's blocked, what's next.`), "Sends a short status question"),
+      qa("Give a task", () => giveTask(a.id), `New task assigned to ${a.name}`),
+      cur ? qa(`Open T-${cur.number}`, () => { location.hash = `#/p/${projectId}/tasks/${cur.id}`; }, cur.title) : null,
+    ].filter(Boolean)));
     input.disabled = sendBtn.disabled = clip.disabled = !!a.detached;
     note.textContent = state.project.paused ? "The team is paused: agents answer your messages but don't pick up tasks until you start it." : "";
   }
@@ -1138,6 +1164,34 @@ export async function workspaceView(root, projectId, route) {
   function scrollDown(force) {
     const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
     if (force || nearBottom) thread.scrollTop = thread.scrollHeight;
+  }
+
+  // sendText: un mesaj gata scris (actiunile rapide); campul de scris ramane cum era
+  async function sendText(text) {
+    if (!state.selected || sending) return;
+    const agentId = state.selected;
+    sending = true;
+    try {
+      const m = await api(`/api/agents/${agentId}/messages`, { method: "POST", body: { text } });
+      if (state.selected === agentId) { addMessage(m); scrollDown(true); }
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      sending = false;
+    }
+  }
+
+  // giveTask: formularul de task pe board, cu agentul deja ales
+  function giveTask(agentId) {
+    const open = () => {
+      if (boardPanel !== "task") toggleTaskForm();
+      const sel = editorSlot.querySelector("select");
+      if (sel && [...sel.options].some((o) => o.value === String(agentId))) sel.value = String(agentId);
+      editorSlot.querySelector("input")?.focus();
+    };
+    if (state.tab === "tasks") { open(); return; }
+    window.addEventListener("hashchange", open, { once: true });
+    location.hash = `#/p/${projectId}/tasks`;
   }
 
   async function send(e) {
@@ -1299,7 +1353,8 @@ export async function workspaceView(root, projectId, route) {
     stopLive();
     if (!runId) return;
     state.liveRunId = runId;
-    const box = el("div", { class: "live" }, el("div", { class: "live-head" }, `${a.name} is working now`));
+    const head = el("div", { class: "live-head" }, `${a.name} is working now`);
+    const box = el("div", { class: "live" }, head);
     thread.append(box);
     scrollDown();
     const render = liveRenderer(box);
@@ -1314,6 +1369,9 @@ export async function workspaceView(root, projectId, route) {
         return;
       }
       render(ev);
+      // capul blocului arata ultimul tool folosit ("Forge is working · Edit CLAUDE.md")
+      const tool = ev.type === "assistant" ? (ev.message?.content || []).filter((b) => b.type === "tool_use").pop() : null;
+      if (tool) head.textContent = `${a.name} is working \u00b7 ${toolLabel(tool)}`;
       scrollDown();
     };
     es.onerror = () => {
@@ -1424,4 +1482,18 @@ export async function workspaceView(root, projectId, route) {
     clearInterval(agesTimer);
   };
   return { cleanup, update };
+}
+
+// toolLabel: "editing CLAUDE.md", "running npm test", "reading app.js" (capul blocului live)
+function toolLabel(block) {
+  const i = block.input || {};
+  const file = (i.file_path || "").split("/").pop();
+  switch (block.name) {
+    case "Edit": case "MultiEdit": case "Write": return `editing ${file}`;
+    case "Read": return `reading ${file}`;
+    case "Bash": return `running ${String(i.command || "").split("\n")[0].slice(0, 60)}`;
+    case "Grep": case "Glob": return `searching ${i.pattern || ""}`.trim();
+    case "WebSearch": case "WebFetch": return "on the web";
+    default: return block.name.replace(/^mcp__team__/, "").replaceAll("_", " ");
+  }
 }

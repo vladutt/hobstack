@@ -145,3 +145,40 @@ func (s *Store) ProjectActivity(projectID int64, days int, at time.Time) ([]int,
 	}
 	return out, rows.Err()
 }
+
+// TaskUsage: ce au consumat run-urile unui task (toti agentii care au lucrat pe el).
+type TaskUsage struct {
+	Runs    int     `json:"runs"`
+	CostUSD float64 `json:"costUsd"`
+	Tokens  int64   `json:"tokens"`
+	Seconds int64   `json:"seconds"` // suma duratelor run-urilor terminate (timp de lucru, nu de asteptare)
+}
+
+func (s *Store) TaskUsage(taskID int64) (TaskUsage, error) {
+	var u TaskUsage
+	rows, err := s.db.Query(`SELECT started_at, ended_at, COALESCE(cost_usd, 0), tokens FROM runs WHERE task_id = ?`, taskID)
+	if err != nil {
+		return u, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var started string
+		var ended sql.NullString
+		var cost float64
+		var tokens int64
+		if err := rows.Scan(&started, &ended, &cost, &tokens); err != nil {
+			return u, err
+		}
+		u.Runs++
+		u.CostUSD += cost
+		if tokens > 0 {
+			u.Tokens += tokens
+		}
+		if ended.Valid {
+			if d := parseTime(ended.String).Sub(parseTime(started)); d > 0 {
+				u.Seconds += int64(d.Seconds())
+			}
+		}
+	}
+	return u, rows.Err()
+}
