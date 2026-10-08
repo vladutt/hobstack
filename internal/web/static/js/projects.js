@@ -26,7 +26,7 @@ export async function projectsView(root) {
     none.hidden = shown > 0;
   }
   root.append(
-    topbar([["Projects", null]],
+    topbar("projects",
       el("span", { class: "grow" }),
       projects.length > 5 ? search : null,
       el("a", { class: "btn ghost", href: "#/setup", title: "Pick a folder; the AI proposes the project and the team" }, "\u2726 New project with AI"),
