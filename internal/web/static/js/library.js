@@ -208,17 +208,17 @@ export async function libraryView(root, path) {
       const all = [...props, ...published];
       if (!selected || !all.some((x) => x.id === selected)) selected = all[0]?.id ?? null;
       const cur = all.find((x) => x.id === selected);
-      body.replaceChildren(head,
+      body.replaceChildren(...[head,
         el("div", { class: "lib-skills" },
           el("div", { class: "lib-grid" }, all.length ? all.map((it) => skillCard(it)) : emptyNote(items.length)),
-          cur ? skillPanel(cur) : null));
+          cur ? skillPanel(cur) : null)].filter(Boolean));
       return;
     }
-    body.replaceChildren(head,
+    body.replaceChildren(...[head,
       props.length ? el("section", { class: "lib-proposed" },
         el("h2", { class: "lib-need" }, el("span", { class: "dot-amber" }), "Proposed · needs you"),
         el("div", { class: kind === "mcp" ? "lib-cards one" : "lib-cards" }, props.map((it) => kind === "mcp" ? mcpProposal(it) : toolProposal(it)))) : null,
-      published.length ? table(published) : (props.length ? null : emptyNote(items.length)));
+      published.length ? table(published) : (props.length ? null : emptyNote(items.length))].filter(Boolean));
   }
 
   function emptyNote(any) {
@@ -381,11 +381,11 @@ export async function libraryItemView(root, id, tab) {
       box.append(el("h3", { class: "lib-h" }, "How agents use it"),
         el("p", { class: "lib-text" }, "Agents in projects that installed this skill load SKILL.md when a task matches its description."));
     } else {
-      box.append(el("h3", { class: "lib-h" }, "Connection"),
+      box.append(...[el("h3", { class: "lib-h" }, "Connection"),
         el("pre", { class: "md-pre lib-call" }, d.transport === "remote" ? d.url : commandOf(d)),
         d.transport === "remote" ? null : el("p", { class: "hint" }, "This command runs on your machine, once to test it when you publish and then whenever an agent in a project that installed it starts."),
         (d.toolNames || []).length ? el("h3", { class: "lib-h" }, "Exposes") : null,
-        (d.toolNames || []).length ? el("pre", { class: "md-pre lib-call" }, d.toolNames.join("\n")) : null);
+        (d.toolNames || []).length ? el("pre", { class: "md-pre lib-call" }, d.toolNames.join("\n")) : null].filter(Boolean));
     }
     box.append(el("h3", { class: "lib-h spaced" }, "Recent use"),
       d.recentUses.length
@@ -416,7 +416,7 @@ export async function libraryItemView(root, id, tab) {
         pre.textContent = res.ok ? await res.text() : ((await res.json().catch(() => ({}))).error || "Cannot show this file.");
       } catch (err) { pre.textContent = err.message; }
     }
-    box.append(cmdBox(d), el("p", { class: "hint" }, d.filesFrom === "proposal" ? "This is the proposed code. Nothing runs until you publish." : "Code of the latest version."), names, pre);
+    box.append(...[cmdBox(d), el("p", { class: "hint" }, d.filesFrom === "proposal" ? "This is the proposed code. Nothing runs until you publish." : "Code of the latest version."), names, pre].filter(Boolean));
     open(d.files.find((f) => f.name === d.entry)?.name || d.files.find((f) => f.name === "SKILL.md")?.name || d.files[0].name);
     return box;
   }
