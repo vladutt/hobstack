@@ -16,16 +16,17 @@ type AccessRequest struct {
 	Detail    string    `json:"detail"` // rezumat scurt al ultimei incercari
 	Prefix    string    `json:"prefix"` // prefixul regulii Ask care a refuzat comanda; "" = cerere de tool
 	Count     int       `json:"count"`
+	Dismissed bool      `json:"dismissed"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-const accessCols = `id, project_id, agent_id, task_id, tool, detail, prefix, count, created_at, updated_at`
+const accessCols = `id, project_id, agent_id, task_id, tool, detail, prefix, count, dismissed, created_at, updated_at`
 
 func scanAccessRequest(sc scanner) (AccessRequest, error) {
 	var r AccessRequest
 	var created, updated string
-	err := sc.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.TaskID, &r.Tool, &r.Detail, &r.Prefix, &r.Count, &created, &updated)
+	err := sc.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.TaskID, &r.Tool, &r.Detail, &r.Prefix, &r.Count, &r.Dismissed, &created, &updated)
 	if err != nil {
 		return AccessRequest{}, err
 	}

@@ -99,3 +99,19 @@ func TestMatchCommandSplitting(t *testing.T) {
 		}
 	}
 }
+
+func TestDenyingRule(t *testing.T) {
+	r := rules("git", store.CmdAsk, "git status", store.CmdAllow, "docker", store.CmdBlock, "git push", store.CmdAsk)
+	if m, p := DenyingRule("git status", r); m != store.CmdAsk || p != "git" {
+		t.Fatalf("%s %s", m, p)
+	}
+	if m, p := DenyingRule("git push && docker ps", r); m != store.CmdBlock || p != "docker" {
+		t.Fatalf("%s %s", m, p)
+	}
+	if m, p := DenyingRule("git push origin", r); m != store.CmdAsk || p != "git push" {
+		t.Fatalf("%s %s", m, p)
+	}
+	if m, _ := DenyingRule("ls", r); m != "" {
+		t.Fatal(m)
+	}
+}

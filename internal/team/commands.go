@@ -1,6 +1,7 @@
 package team
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,6 +11,7 @@ import (
 )
 
 var ErrNotCommandRequest = errors.New("this request is not about a command")
+var ErrRequestClosed = errors.New("this request is already closed")
 
 // EffectiveCommandRules: regulile globale cu override-urile proiectului.
 func (t *Team) EffectiveCommandRules(projectID int64) ([]store.CommandRule, error) {
@@ -58,9 +60,16 @@ func (t *Team) setProjectRule(projectID int64, prefix, mode string) error {
 func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (string, error), wake bool) error {
 	t.work.Lock()
 	r, err := t.st.GetAccessRequest(accessID)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = store.ErrNotFound
+	}
 	if err != nil {
 		t.work.Unlock()
 		return err
+	}
+	if r.Dismissed {
+		t.work.Unlock()
+		return ErrRequestClosed
 	}
 	if r.Prefix == "" {
 		t.work.Unlock()
@@ -88,7 +97,7 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 			}
 		}
 		msg := fmt.Sprintf("You may now run %q (%s by the user). Run it again if you still need it.", r.Detail, how)
-		if _, err := t.addUserMessage(a, clip(msg), nil, true, false); err != nil {
+		if _, err := t.addUserMessage(a, clip(msg), nil, true, true); err != nil {
 			t.work.Unlock()
 			return err
 		}

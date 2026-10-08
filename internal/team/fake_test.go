@@ -21,6 +21,7 @@ type fakeStarter struct {
 	specs   []runner.Spec
 	onDone  map[string]func(runner.Outcome)
 	stopped []string
+	failErr error // daca e setat, urmatorul Start esueaza cu ea
 }
 
 func newFakeStarter() *fakeStarter {
@@ -30,6 +31,11 @@ func newFakeStarter() *fakeStarter {
 func (f *fakeStarter) Start(spec runner.Spec, onDone func(runner.Outcome)) (*runner.Run, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failErr != nil {
+		err := f.failErr
+		f.failErr = nil
+		return nil, err
+	}
 	f.specs = append(f.specs, spec)
 	f.onDone[spec.ID] = onDone
 	return nil, nil

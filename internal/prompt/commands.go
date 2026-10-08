@@ -93,6 +93,28 @@ func MatchCommand(command string, rules []store.CommandRule) (mode, prefix strin
 	return mode, prefix
 }
 
+// DenyingRule: regula Ask/Block care a refuzat de fapt comanda (in claude orice deny potrivit castiga,
+// chiar daca un Allow mai lung se potriveste). Block > Ask, apoi cel mai lung prefix; "", "" daca nu e niciuna.
+func DenyingRule(command string, rules []store.CommandRule) (mode, prefix string) {
+	var deny []store.CommandRule
+	for _, r := range rules {
+		if r.Mode == store.CmdAsk || r.Mode == store.CmdBlock {
+			deny = append(deny, r)
+		}
+	}
+	rank := map[string]int{store.CmdAsk: 1, store.CmdBlock: 2}
+	for _, cmd := range splitCommand(command) {
+		r, ok := matchPart(cmd, deny)
+		if !ok {
+			continue
+		}
+		if rank[r.Mode] > rank[mode] || (r.Mode == mode && len(r.Prefix) > len(prefix)) {
+			mode, prefix = r.Mode, r.Prefix
+		}
+	}
+	return mode, prefix
+}
+
 // DenyPrefixes: prefixele Ask si Block, fara cele cu grant (Allow once), sortate.
 func DenyPrefixes(rules []store.CommandRule, granted []string) []string {
 	out := []string{}

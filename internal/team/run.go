@@ -141,6 +141,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	}
 
 	// grant-urile "Allow once" se consuma la pornirea run-ului; daca pornirea esueaza le punem la loc
+	// grant-ul merge la urmatorul run al agentului, de orice fel (acceptat)
 	granted, err := t.st.TakeCommandGrants(a.ID)
 	if err != nil {
 		log.Printf("agent %d: command grants: %v", a.ID, err)
@@ -394,6 +395,10 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		prefix := ""
 		if d.Tool == "Bash" && hasShell {
 			mode, pfx := prompt.MatchCommand(d.Detail, rules)
+			if mode != store.CmdBlock && mode != store.CmdAsk {
+				// claude a refuzat desi regula decisiva e Allow (sau lipseste): cautam deny-ul care a lucrat
+				mode, pfx = prompt.DenyingRule(d.Detail, rules)
+			}
 			if mode == store.CmdBlock {
 				t.denialEvent(task, a, d)
 				continue

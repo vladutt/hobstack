@@ -1,6 +1,7 @@
 package team
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -59,20 +60,11 @@ func TestAskDenialAllowOnceAndProject(t *testing.T) {
 	if len(pending) == 0 || !strings.Contains(pending[len(pending)-1].Text, "allowed once") {
 		t.Fatalf("Rook nu a fost trezit: %+v", pending)
 	}
-	if got, _ := f.st.GetTask(task.ID); got.Status != store.StatusQueued && got.Status != store.StatusInProgress {
+	if got, _ := f.st.GetTask(task.ID); got.Status != store.StatusQueued {
 		t.Fatalf("status = %s", got.Status)
 	}
 	if r, _ := f.st.ListOpenAccessRequests(f.p.ID); len(r) != 0 {
 		t.Fatal("cererea a ramas deschisa")
-	}
-	// grant-ul: Kick poate porni deja run-ul lui Rook (si consuma grant-ul); atunci --settings al acelui run
-	// nu are git push in deny, altfel grant-ul e inca acolo
-	if spec, ok := f.fs.lastOK(f.rook); ok {
-		if strings.Contains(argAfter(spec.Args, "--settings"), "git push") {
-			t.Fatal("run-ul de dupa Allow once are git push in deny")
-		}
-	} else if g, _ := f.st.TakeCommandGrants(f.rook.ID); len(g) != 1 || g[0] != "git push" {
-		t.Fatalf("%v", g)
 	}
 	// Allow in this project scrie regula proiectului
 	f.tm.work.Lock()
@@ -119,5 +111,80 @@ func TestBlockCommandAndNonCommandRequest(t *testing.T) {
 	reqs, _ = f.st.ListOpenAccessRequests(f.p.ID)
 	if err := f.tm.AllowCommandOnce(reqs[len(reqs)-1].ID); err != ErrNotCommandRequest {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestAllowOnceGrantLifecycle(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Ship", f.rook, store.StatusInProgress)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if err := f.tm.AllowCommandOnce(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	// a doua apasare pe aceeasi cerere nu mai face nimic
+	if err := f.tm.AllowCommandOnce(reqs[0].ID); !errors.Is(err, ErrRequestClosed) {
+		t.Fatalf("err = %v", err)
+	}
+	if err := f.tm.AllowCommandOnce(99999); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+	f.wantStatus(t, task.Number, store.StatusQueued)
+	if err := f.tm.Reconcile(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	run := f.fs.last(t, f.rook)
+	if strings.Contains(argAfter(run.Args, "--settings"), "Bash(git push:*)") {
+		t.Fatal("run-ul cu grant are git push in deny")
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone})
+	f.tm.work.Lock()
+	_, err := f.tm.addUserMessage(f.rook, "again", nil, false, false)
+	f.tm.work.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.Reconcile(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	next := f.fs.last(t, f.rook)
+	if next.ID == run.ID {
+		t.Fatal("nu a pornit al doilea run")
+	}
+	if !strings.Contains(argAfter(next.Args, "--settings"), "Bash(git push:*)") {
+		t.Fatal("grant-ul a fost doar pentru un run")
+	}
+}
+
+func TestGrantRestoredWhenStartFails(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	f.task(t, "Ship", f.rook, store.StatusQueued)
+	f.st.AddCommandGrant(f.p.ID, f.rook.ID, "git push")
+	f.fs.failErr = errors.New("boom")
+	f.tm.Reconcile(f.p.ID) // eroarea de pornire ajunge ca nota
+	g, _ := f.st.TakeCommandGrants(f.rook.ID)
+	if len(g) != 1 || g[0] != "git push" {
+		t.Fatalf("grants = %v", g)
+	}
+}
+
+func TestDenyingRuleFallback(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	f.st.SetCommandRules(f.p.ID, []store.CommandRule{{Prefix: "git", Mode: store.CmdAsk}, {Prefix: "git status", Mode: store.CmdAllow}})
+	// regula decisiva e Allow (git status), dar claude a refuzat din cauza lui "git" (Ask)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git status"}})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 1 || reqs[0].Prefix != "git" {
+		t.Fatalf("%+v", reqs)
 	}
 }
