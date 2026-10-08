@@ -3,6 +3,7 @@ import { toast } from "./ui.js";
 import { projectsView, projectFormView } from "./projects.js";
 import { workspaceView, parseWorkspaceRoute } from "./workspace.js";
 import { setupView } from "./setup.js";
+import { newProjectView } from "./new-project.js";
 
 // Rute in hash: #/, #/new, #/setup, #/setup/<id>, #/setup/folder/<proiect>/<folder>, #/p/3/edit si pagina proiectului cu tab-uri:
 // #/p/3/tasks, #/p/3/team, #/p/3/team/7, #/p/3/files.
@@ -14,7 +15,7 @@ const routes = [
   { pattern: /^#\/?$/, view: (root) => projectsView(root) },
   { pattern: /^#\/setup\/folder\/(\d+)\/(\d+)$/, view: (root, m) => setupView(root, null, { projectId: Number(m[1]), folderId: Number(m[2]) }) },
   { pattern: /^#\/setup(?:\/([0-9a-f]+))?$/, view: (root, m) => setupView(root, m[1] || null) },
-  { pattern: /^#\/new$/, view: (root) => projectFormView(root, null) },
+  { pattern: /^#\/new$/, view: (root) => newProjectView(root) },
   { pattern: /^#\/p\/(\d+)\/edit$/, view: (root, m) => projectFormView(root, Number(m[1])) },
   {
     pattern: /^#\/p\/(\d+)(\/.*)?$/,
