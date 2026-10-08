@@ -52,3 +52,8 @@ func (p Paths) Ensure() error {
 func ProjectFilesDir(projectsRoot string, id int64) string {
 	return filepath.Join(projectsRoot, strconv.FormatInt(id, 10), "files")
 }
+
+// TaskFilesDir: copiile fisierelor predate pe un task (report_done files).
+func TaskFilesDir(projectsRoot string, projectID, taskID int64) string {
+	return filepath.Join(projectsRoot, strconv.FormatInt(projectID, 10), "task-files", strconv.FormatInt(taskID, 10))
+}

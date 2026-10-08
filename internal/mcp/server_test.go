@@ -42,6 +42,10 @@ func (f *fakeBackend) LeaveForUser(c Caller, task string, items []string) (strin
 	f.calls = append(f.calls, "leave|"+task+"|"+strings.Join(items, ";"))
 	return "2 items left for the user", f.err
 }
+func (f *fakeBackend) AttachFiles(c Caller, task string, paths []string) (string, error) {
+	f.calls = append(f.calls, "attach|"+task+"|"+strings.Join(paths, ";"))
+	return "Attached 2 files.", f.err
+}
 func (f *fakeBackend) TickLeftForUser(c Caller, task string, items []int) (string, error) {
 	f.calls = append(f.calls, fmt.Sprint("tick|", task, "|", items))
 	return "ok", f.err
@@ -575,6 +579,35 @@ func TestReportDoneLeftForUser(t *testing.T) {
 	_, resp = rpc(t, ts, "worker", reportBody(`[" "]`))
 	if _, isErr := toolText(t, resp); !isErr {
 		t.Fatal("punct gol acceptat")
+	}
+}
+
+func TestReportDoneFiles(t *testing.T) {
+	fb, ts := setup(t)
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"report_done","arguments":{"summary":"done","files":["docs/a.md","b.png"]}}}`
+	_, resp := rpc(t, ts, "worker", body)
+	text, isErr := toolText(t, resp)
+	if isErr || !strings.Contains(text, "Attached 2 files.") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	if got := fb.calls[len(fb.calls)-1]; got != "attach||docs/a.md;b.png" {
+		t.Fatalf("apel = %q", got)
+	}
+	many := make([]string, 21)
+	for i := range many {
+		many[i] = fmt.Sprintf("%q", fmt.Sprint("f", i, ".md"))
+	}
+	before := len(fb.calls)
+	_, resp = rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"report_done","arguments":{"summary":"done","files":[`+strings.Join(many, ",")+`]}}}`)
+	if text, isErr := toolText(t, resp); !isErr || !strings.Contains(text, "at most 20") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	if len(fb.calls) != before {
+		t.Fatal("report_done a rulat desi files era invalid")
+	}
+	_, resp = rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"report_done","arguments":{"summary":"done","files":[" "]}}}`)
+	if _, isErr := toolText(t, resp); !isErr {
+		t.Fatal("cale goala acceptata")
 	}
 }
 

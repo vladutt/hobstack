@@ -93,6 +93,9 @@ const howLeftForUser = `If the work needs values only the user can give (a compa
 	`The user answers in the task's comments; then fill them in, tick them with mcp__team__tick_left_for_user and reply ` +
 	`with mcp__team__comment_task.`
 
+const howFiles = `When the task asks for a file as its result (a document, an image, an export), save it in your folder ` +
+	`and list its path in files when you call report_done, so the user can open it from the task.`
+
 const howWorker = `Work only on the task you received and do not change anything outside it. ` +
 	`When you finish, call mcp__team__report_done with the requested summary. ` +
 	`If something is unclear or blocked and only the user can resolve it, use mcp__team__ask_user; ` +
@@ -177,7 +180,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if l.IsLead {
 		how = append(how, howLead)
 		if !isRoot {
-			how = append(how, howSubLead, howLeftForUser)
+			how = append(how, howSubLead, howLeftForUser, howFiles)
 		}
 	} else if !isRoot {
 		if p.Autonomy {
@@ -185,7 +188,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 		} else {
 			how = append(how, howWorker)
 		}
-		how = append(how, howLeftForUser)
+		how = append(how, howLeftForUser, howFiles)
 	}
 	if l.CanAddAgents {
 		how = append(how, howAddAgents)

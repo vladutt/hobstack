@@ -108,6 +108,11 @@ Bash, MCP dupa mcp__<nume>__*, doar run-uri pe task).
 Gata (reguli pentru comenzi, spec in docs/superpowers/specs/2026-10-08-foreman-command-rules-design.md): command_rules
 (globale + override pe proiect, migrarea 023), Allow / Ask / Block pe prefixe pentru agentii cu Shell, pagina Settings;
 refuzurile pe Ask ajung in Needs you cu Allow once (command_grants) / Allow in this project / Block.
+Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
+(max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
+internal/taskfiles, doar din folderele proiectului, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
+modala (preview imagine/PDF/Markdown/text, Download, versiuni, "From subtasks"), eticheta 📎 N pe card; HTML/SVG nu
+se servesc inline (serveStored, comun cu fisierele urcate).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

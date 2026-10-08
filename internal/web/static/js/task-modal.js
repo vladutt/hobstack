@@ -3,6 +3,7 @@ import { el, avatar, clock, kindOf, toast } from "./ui.js";
 import { changesView } from "./changes.js";
 import { flowView } from "./flow.js";
 import { agentPicker } from "./agent-picker.js";
+import { taskFilesView } from "./task-files.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
@@ -32,12 +33,15 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   let descOpen = false;   // descrierea lunga ramane desfasurata la refresh
   let filesKey = null;    // ce s-a desenat ultima data in rezumatul fisierelor
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
-  let tab = initialTab;   // "conversation" | "history" | "changes" | "flow"; null = inca nealeasa (se alege la primul raspuns)
+  let tab = initialTab;   // "conversation" | "history" | "changes" | "files" | "flow"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
   let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
+  let filesCount = null;  // filesCount-ul pentru care s-a incarcat tab-ul Files (null = neincarcat)
+  let filesSeq = 0;       // ca seq, pentru cererea Files
+  const filesView = taskFilesView();
   let flowSeq = 0;        // ca seq, pentru cererea Flow
   let flowKey = null;     // ultimul raspuns Flow desenat (serializat)
   const flow = flowView({ projectId, open: flowOpen });
@@ -60,10 +64,12 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "Activity");
   const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
   const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
+  const filesPane = el("div", { id: `files-${taskId}`, role: "tabpanel", hidden: true }, filesView.el);
+  const tabFiles = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": filesPane.id, hidden: true, onclick: () => setTab("files") }, "Files");
   const flowPane = el("div", { id: `flow-${taskId}`, role: "tabpanel", hidden: true }, flow.el);
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
-    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFlow), convPane, histPane, chgPane, flowPane);
+    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFiles, tabFlow), convPane, histPane, chgPane, filesPane, flowPane);
   // formularul de comentarii: creat o singura data, ca textul scris sa nu se piarda la refresh.
   // Cand decide utilizatorul, se muta in zona de actiuni si textul lui e si feedback-ul pentru Send back.
   const commentInput = el("textarea", { rows: 2, placeholder: "Reply to the agent...", "aria-label": "Comment" });
@@ -78,6 +84,13 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       load();
     } catch (err) { toast(err.message); }
   } }, commentInput, el("button", { type: "submit", class: "btn primary small" }, "Send"));
+  // typing: deasupra comentariilor, "Vex is working…" / "Vex is writing…" cat timp agentul ruleaza pe task
+  // (doar tipul evenimentelor din stream-ul run-ului, nu continutul)
+  const typingText = el("span", {});
+  const typingLink = el("a", { class: "typing-link", hidden: true }, "Watch live");
+  const typingBox = el("div", { class: "typing", hidden: true, "aria-live": "polite" },
+    el("span", { class: "typing-dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")), typingText, typingLink);
+  let liveRunId = null, liveES = null, liveMode = "working";
   const reportBox = el("div", { class: "modal-top" });
   const filesBox = el("div", { class: "modal-top" }); // primele fisiere modificate, deasupra tab-urilor
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
@@ -200,7 +213,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     renderSide(t, agent, who, waiting, stuck, queuedInStage);
 
     // prima data scoatem "Loading..." si punem nodurile stabile
-    if (!body.contains(tabsSection)) body.replaceChildren(todoBox, topBox, reportBox, filesBox, tabsSection, commentForm);
+    if (!body.contains(tabsSection)) body.replaceChildren(todoBox, topBox, reportBox, filesBox, tabsSection, typingBox, commentForm);
+    syncTyping();
 
     const topNow = JSON.stringify([t.description, t.feedback]);
     if (topNow !== topKey) {
@@ -366,9 +380,9 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   }
 
   function applyTab() {
-    const names = ["conversation", "history", "changes", "flow"];
-    const tabs = [tabConv, tabHist, tabChg, tabFlow];
-    const panes = [convPane, histPane, chgPane, flowPane];
+    const names = ["conversation", "history", "changes", "files", "flow"];
+    const tabs = [tabConv, tabHist, tabChg, tabFiles, tabFlow];
+    const panes = [convPane, histPane, chgPane, filesPane, flowPane];
     names.forEach((n, i) => {
       const on = tab === n;
       tabs[i].setAttribute("aria-selected", String(on));
@@ -376,6 +390,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       panes[i].hidden = !on;
     });
     syncChanges();
+    syncFiles();
     syncFlow();
   }
 
@@ -397,6 +412,27 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       if (destroyed || my !== flowSeq) return;
       flowKey = null;
       flow.error(err.message);
+    }
+  }
+
+  // syncFiles: tab-ul Files apare doar cand exista fisiere (pe task sau pe sub-task-uri);
+  // /files se cere cand tab-ul e deschis si filesCount s-a schimbat
+  async function syncFiles() {
+    if (!data) return;
+    const count = data.filesCount || 0;
+    tabFiles.hidden = count === 0;
+    if (count === 0 && tab === "files") { setTab("conversation"); return; }
+    if (tab !== "files" || count === filesCount) return;
+    const my = ++filesSeq;
+    try {
+      const res = await api(`/api/tasks/${taskId}/files`);
+      if (destroyed || my !== filesSeq) return;
+      filesCount = count;
+      filesView.show(res);
+    } catch (err) {
+      if (destroyed || my !== filesSeq) return;
+      filesCount = null;
+      filesView.error(err.message);
     }
   }
 
@@ -433,6 +469,49 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       el("span", {}, ev.text)))));
   }
 
+  // syncTyping: porneste / opreste ascultarea run-ului care lucreaza pe task si actualizeaza indicatorul
+  function syncTyping() {
+    const agent = data.workingAgentId ? (project.agents || []).find((a) => a.id === data.workingAgentId) : null;
+    const runId = data.working && agent?.activeRunId ? agent.activeRunId : null;
+    if (runId !== liveRunId) {
+      liveES?.close();
+      liveES = null;
+      liveRunId = runId;
+      liveMode = "working";
+      if (runId) {
+        liveES = new EventSource(`/api/runs/${runId}/events`);
+        liveES.onmessage = (msg) => {
+          let ev;
+          try { ev = JSON.parse(msg.data); } catch { return; }
+          if (ev.type === "app_done" || ev.type === "result") { liveES?.close(); liveES = null; liveRunId = null; paintTyping(); return; }
+          if (ev.type !== "assistant") return;
+          const blocks = ev.message?.content || [];
+          if (blocks.some((b) => b.type === "tool_use")) liveMode = "working";
+          else if (blocks.some((b) => b.type === "text" && b.text.trim())) liveMode = "writing";
+          paintTyping();
+        };
+      }
+    }
+    paintTyping();
+  }
+
+  // paintTyping: textul indicatorului; dupa un comentariu al tau, pana porneste agentul, "will see your comment soon"
+  function paintTyping() {
+    const items = data.conversation || [];
+    const lastItem = items[items.length - 1];
+    let text = "";
+    if (liveRunId) text = `${data.working} is ${liveMode === "writing" ? "writing" : "working"}`;
+    else if (lastItem && lastItem.from === "You" && lastItem.kind === "comment") {
+      const who = data.todosBy || data.assignee;
+      if (who) text = `${who} will see your comment soon`;
+    }
+    typingText.textContent = text;
+    typingLink.hidden = !liveRunId || !data.workingAgentId;
+    if (data.workingAgentId) typingLink.href = `#/p/${projectId}/team/${data.workingAgentId}`;
+    typingBox.hidden = !text;
+    typingBox.classList.toggle("waiting", !liveRunId);
+  }
+
   // renderConversation: se redeseneaza doar cand se schimba numarul de elemente, ultimul
   // moment sau cine lucreaza (ca "Show more" si scroll-ul sa ramana)
   function renderConversation() {
@@ -443,11 +522,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     convKey = key;
     const nodes = items.map(bubble);
     if (!items.length && !data.working) nodes.push(el("p", { class: "hint" }, "No conversation recorded for this task."));
-    if (data.working) {
-      nodes.push(el("div", { class: "conv-working" },
-        el("span", {}, `${data.working} is working on it…`),
-        data.workingAgentId ? el("a", { href: `#/p/${projectId}/team/${data.workingAgentId}` }, "Watch live") : null));
-    }
+    // cine lucreaza acum se vede in indicatorul de deasupra comentariilor (typingBox)
     convPane.replaceChildren(...nodes);
   }
 
@@ -572,6 +647,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       destroyed = true;
       sideLater = null;
       picker.close(); // scoate si ascultatorul de click de pe document
+      liveES?.close();
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
       overlay.remove();

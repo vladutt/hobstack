@@ -57,6 +57,7 @@ type Backend interface {
 	SendBack(c Caller, task, feedback string) (string, error)
 	ReportDone(c Caller, task, summary string) (string, error)
 	LeaveForUser(c Caller, task string, items []string) (string, error)
+	AttachFiles(c Caller, task string, paths []string) (string, error)
 	TickLeftForUser(c Caller, task string, items []int) (string, error)
 	CommentTask(c Caller, task, text string) (string, error)
 	ReviewApprove(c Caller, task, note string) (string, error)
@@ -185,12 +186,25 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		if err := validLeftForUser(left); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		files := argList(p.Arguments, "files")
+		if err := validFiles(files); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		text, err = s.backend.ReportDone(c, arg("task"), arg("summary"))
 		if err == nil && len(left) > 0 {
 			// raportul a trecut: punctele se lasa pe acelasi task (task gol = task-ul curent)
 			extra, lerr := s.backend.LeaveForUser(c, arg("task"), left)
 			if lerr != nil {
 				text += " Note: the items for the user were NOT saved (" + lerr.Error() + "). Write them in your next comment_task so the user sees them: " + strings.Join(left, "; ") + "."
+			} else {
+				text += " " + extra
+			}
+		}
+		if err == nil && len(files) > 0 {
+			// fisierele se copiaza dupa raport; un esec nu anuleaza raportul
+			extra, ferr := s.backend.AttachFiles(c, arg("task"), files)
+			if ferr != nil {
+				text += " Note: the files were NOT attached (" + ferr.Error() + ")."
 			} else {
 				text += " " + extra
 			}
@@ -291,6 +305,22 @@ func validLeftForUser(items []string) error {
 		n := len([]rune(strings.TrimSpace(it)))
 		if n == 0 || n > 200 {
 			return errors.New("left_for_user: each item must be 1-200 characters")
+		}
+	}
+	return nil
+}
+
+// MaxFiles: cate fisiere poate preda un agent la un raport
+const MaxFiles = 20
+
+func validFiles(paths []string) error {
+	if len(paths) > MaxFiles {
+		return fmt.Errorf("files: at most %d files", MaxFiles)
+	}
+	for _, p := range paths {
+		n := len([]rune(strings.TrimSpace(p)))
+		if n == 0 || n > 500 {
+			return errors.New("files: each path must be 1-500 characters")
 		}
 	}
 	return nil
