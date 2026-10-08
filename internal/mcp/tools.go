@@ -166,7 +166,7 @@ var addAgentTools = []Tool{
 			"model":           map[string]any{"type": "string", "enum": []string{"opus", "sonnet", "haiku"}, "description": "Optional: the Claude model (default sonnet)"},
 			"tools": map[string]any{
 				"type":        "array",
-				"items":       map[string]any{"type": "string", "enum": []string{"write", "shell", "git", "web"}},
+				"items":       map[string]any{"type": "string", "enum": []string{"write", "shell", "packages", "git", "web"}},
 				"description": "Optional: only tools you have yourself (default write)",
 			},
 			"reason": str("One sentence: why the team needs this agent (the user sees it)"),

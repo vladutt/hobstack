@@ -114,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/questions/{id}/dismiss", s.dismissQuestion)
 	mux.HandleFunc("POST /api/access/{id}/dismiss", s.dismissAccess)
 	mux.HandleFunc("POST /api/access/{id}/enable-shell", s.enableShell)
+	mux.HandleFunc("POST /api/access/{id}/enable-packages", s.enablePackages)
 	mux.HandleFunc("GET /api/projects/{id}/links", s.listLinks)
 	mux.HandleFunc("POST /api/projects/{id}/links", s.createLink)
 	mux.HandleFunc("DELETE /api/projects/{id}/links/{other}", s.deleteLink)

@@ -25,6 +25,9 @@ type accessView struct {
 	// CanEnableShell: tool-ul refuzat e Bash, agentul nu are inca "shell" si
 	// comanda nu e in refuzurile fixe (acolo Shell nu ar ajuta)
 	CanEnableShell bool `json:"canEnableShell"`
+	// CanEnablePackages: comanda refuzata instaleaza pachete (npm install...) si
+	// agentul nu are inca "packages"
+	CanEnablePackages bool `json:"canEnablePackages"`
 }
 
 // accessViews intoarce cererile deschise ale proiectului (lista e mereu non-nil).
@@ -39,7 +42,8 @@ func (s *Server) accessViews(projectID int64, agents []store.Agent, tasks []stor
 		for _, a := range agents {
 			if a.ID == r.AgentID {
 				v.AgentName = a.Name
-				v.CanEnableShell = r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail)
+				v.CanEnableShell = r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail, a.Tools)
+				v.CanEnablePackages = r.Tool == "Bash" && !slices.Contains(a.Tools, "packages") && prompt.NeedsPackages(r.Detail)
 			}
 		}
 		if r.TaskID != nil {
@@ -81,9 +85,17 @@ func (s *Server) dismissAccess(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// enableShell adauga "shell" la tool-urile agentului (restul campurilor raman)
-// si inchide cererea.
 func (s *Server) enableShell(w http.ResponseWriter, r *http.Request) {
+	s.enableTool(w, r, "shell")
+}
+
+func (s *Server) enablePackages(w http.ResponseWriter, r *http.Request) {
+	s.enableTool(w, r, "packages")
+}
+
+// enableTool adauga tool-ul ("shell" sau "packages") la tool-urile agentului
+// (restul campurilor raman) si inchide cererea.
+func (s *Server) enableTool(w http.ResponseWriter, r *http.Request, tool string) {
 	req, err := s.getAccess(r)
 	if err != nil {
 		fail(w, err)
@@ -98,8 +110,8 @@ func (s *Server) enableShell(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if !slices.Contains(a.Tools, "shell") {
-		a.Tools = append(a.Tools, "shell")
+	if !slices.Contains(a.Tools, tool) {
+		a.Tools = append(a.Tools, tool)
 		if err := s.st.UpdateAgent(a); err != nil {
 			fail(w, err)
 			return

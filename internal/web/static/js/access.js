@@ -3,7 +3,8 @@ import { el, avatar, kindOf, toast } from "./ui.js";
 import { stuckAge } from "./stuck.js";
 
 // accessBox: un tool refuzat unui agent ("Beacon was denied Bash" + comanda).
-// Butoane: Enable Shell for <agent> (doar daca r.canEnableShell), Open <agent>, Dismiss.
+// Butoane: Enable Shell for <agent> (doar daca r.canEnableShell), Allow package installs
+// (doar daca r.canEnablePackages), Open <agent>, Dismiss.
 // onDone se cheama dupa o actiune reusita; onOpen(href, event) ca la stuckBox.
 export function accessBox(r, { agent, projectId, onDone, onOpen }) {
   const name = r.agentName || "Agent";
@@ -29,6 +30,7 @@ export function accessBox(r, { agent, projectId, onDone, onOpen }) {
       el("span", { class: "stuck-age", "data-since": r.updatedAt }, stuckAge(r.updatedAt)), " ago"),
     el("div", { class: "actions" },
       r.canEnableShell ? act(`Enable Shell for ${name}`, "btn small primary", `/api/access/${r.id}/enable-shell`) : null,
+      r.canEnablePackages ? act(`Allow package installs for ${name}`, "btn small primary", `/api/access/${r.id}/enable-packages`) : null,
       el("a", { class: "btn small", href, onclick: (e) => onOpen?.(href, e) }, `Open ${name}`),
       act("Dismiss", "btn small", `/api/access/${r.id}/dismiss`)));
 }

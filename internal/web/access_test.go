@@ -122,6 +122,39 @@ func TestAccessEnableShell(t *testing.T) {
 	}
 }
 
+func TestAccessEnablePackages(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Beacon")
+	w.Tools = []string{"write", "shell"}
+	if err := e.st.UpdateAgent(w); err != nil {
+		t.Fatal(err)
+	}
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "cd app && npm install 2>&1 | tail -8")
+	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
+	var d struct {
+		Access []struct {
+			ID                int64 `json:"id"`
+			CanEnableShell    bool  `json:"canEnableShell"`
+			CanEnablePackages bool  `json:"canEnablePackages"`
+		} `json:"access"`
+	}
+	json.Unmarshal(raw, &d)
+	if len(d.Access) != 1 || d.Access[0].CanEnableShell || !d.Access[0].CanEnablePackages {
+		t.Fatalf("%s", raw)
+	}
+	if code, raw := e.do(t, "POST", "/api/access/"+itoa(d.Access[0].ID)+"/enable-packages", nil); code != 204 {
+		t.Fatalf("enable-packages: %d %s", code, raw)
+	}
+	got, _ := e.st.GetAgent(w.ID)
+	if !slices.Equal(got.Tools, []string{"write", "shell", "packages"}) {
+		t.Fatalf("tools: %v", got.Tools)
+	}
+	if n, _ := e.st.CountOpenAccessRequests(p.ID); n != 0 {
+		t.Fatalf("a ramas deschisa: %d", n)
+	}
+}
+
 func TestUpdateProjectKeepsAutonomy(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())

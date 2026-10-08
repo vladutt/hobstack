@@ -78,6 +78,8 @@ proiecte (fara sens); agentii pun intrebari radacinii proiectului legat (ask_pro
 anti-bucla) si liderii cer munca (request_project_work: task pentru radacina tinta, aprobat in "Needs you" la tinta,
 direct doar la cererea utilizatorului din chat); raportul se intoarce la Done (afterDone).
 Gata (fire de lucru): create_task primeste continues ("T-85"); tasks.thread_id (doar afisare) leaga follow-up-urile de task-ul care a pornit munca; pe board un fir e un singur card, in coloana muncii deschise celei mai recente.
+Gata (tool-ul packages): "Install packages" per agent scoate npm install / composer require / pip install / go get
+din deny-ul fix (brew install, sudo, rm -rf, git push raman blocate); refuzurile lor apar in "Needs you" cu Allow package installs.
 Gata (redesign UI dupa mockup-urile din ../screenshots): tema ardezie rece + font Figtree (static/fonts); bara de sus (ui.topbar)
 in loc de sidebar; Proiecte ca tabel; pe proiect board-ul pe toata latimea cu "Needs you" ca prima coloana, Done cu "Show N more";
 chat-ul si detaliile agentului intr-un panou lateral care se inchide (starea in localStorage "foreman-drawer"); modala de task pe
@@ -93,6 +95,9 @@ Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"
 4. Runs & logs, Settings
 Dupa: service install, goreleaser, notificari, git worktrees.
+Idei salvate (fara spec): chat general pe orice pagina, care propune modificari cu Apply/Undo (docs/ideas/2026-10-07-general-assistant.md);
+admin self-hosted al companiei, doar limite si setari, fara comenzi pe masini (docs/ideas/2026-10-07-company-admin.md);
+plugin JetBrains subtire (UI-ul web in JCEF + deschis fisiere/diff-uri in IDE) (docs/ideas/2026-10-07-jetbrains-plugin.md).
 
 ## Conventii
 - `go vet ./...` si `go build -race` trebuie sa treaca.

@@ -138,6 +138,7 @@ export function clock(iso) {
 export const TOOLS = [
   { id: "write", label: "Write files" },
   { id: "shell", label: "Shell commands" },
+  { id: "packages", label: "Install packages (npm, composer, pip, go get)" },
   { id: "git", label: "Git: status, diff, commit, branch" },
   { id: "web", label: "Web search" },
 ];
