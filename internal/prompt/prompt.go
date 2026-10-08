@@ -87,6 +87,11 @@ const howSubLead = `When you receive a task from your boss, break it into subtas
 	`When the task comes back to you with all subtasks done, check the result and call mcp__team__report_done ` +
 	`with the summary.`
 
+const howLeftForUser = `If the work needs values only the user can give (a company name, a registration number, a contact ` +
+	`e-mail), do not stop: use a clear placeholder, list each value in left_for_user when you call report_done, and finish. ` +
+	`The user answers in the task's comments; then fill them in, tick them with mcp__team__tick_left_for_user and reply ` +
+	`with mcp__team__comment_task.`
+
 const howWorker = `Work only on the task you received and do not change anything outside it. ` +
 	`When you finish, call mcp__team__report_done with the requested summary. ` +
 	`If something is unclear or blocked and only the user can resolve it, use mcp__team__ask_user; ` +
@@ -171,7 +176,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if l.IsLead {
 		how = append(how, howLead)
 		if !isRoot {
-			how = append(how, howSubLead)
+			how = append(how, howSubLead, howLeftForUser)
 		}
 	} else if !isRoot {
 		if p.Autonomy {
@@ -179,6 +184,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 		} else {
 			how = append(how, howWorker)
 		}
+		how = append(how, howLeftForUser)
 	}
 	if l.CanAddAgents {
 		how = append(how, howAddAgents)

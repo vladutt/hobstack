@@ -188,6 +188,8 @@ type projectCard struct {
 	// Activity: run-uri pornite pe zi, ultimele 7 zile (azi ultima); Links: proiecte legate
 	Activity []int `json:"activity"`
 	Links    int   `json:"links"`
+	// FillIns: puncte lasate utilizatorului, inca deschise (intra in "N need you")
+	FillIns int `json:"fillIns"`
 }
 
 type agentView struct {
@@ -232,6 +234,8 @@ type projectDetail struct {
 	Links []linkView `json:"links"`
 	// WorkRequests: cererile de lucru in asteptare de la proiecte legate (mereu non-nil)
 	WorkRequests []workRequestView `json:"workRequests"`
+	// FillIns: task-urile cu puncte lasate utilizatorului (mereu non-nil)
+	FillIns []store.FillIn `json:"fillIns"`
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -270,6 +274,11 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 		return projectCard{}, nil, nil, nil, err
 	}
 	c.Links = len(linked)
+	fills, err := s.st.ListFillIns(p.ID)
+	if err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	c.FillIns = len(fills)
 	for _, a := range agents {
 		r := store.RolesOf(a, agents)
 		c.Team = append(c.Team, memberBrief{ID: a.ID, Name: a.Name, IsLead: r.IsLead, IsRoot: r.IsRoot})
@@ -395,7 +404,14 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		}
 		views[i].FromProject = name
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring, Links: links, WorkRequests: workReqs}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring, Links: links, WorkRequests: workReqs, FillIns: []store.FillIn{}}
+	if d.FillIns, err = s.st.ListFillIns(p.ID); err != nil {
+		fail(w, err)
+		return
+	}
+	if d.FillIns == nil {
+		d.FillIns = []store.FillIn{}
+	}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)

@@ -126,3 +126,50 @@ func plural(n int, one, many string) string {
 	}
 	return many
 }
+
+// ErrNoAssignee: asignatul task-ului nu mai exista (defensiv: baza nu lasa de obicei un agent cu task-uri sa dispara)
+var ErrNoAssignee = errors.New("the task's agent no longer exists")
+
+// UserComment: comentariul utilizatorului pe task; ajunge la asignat ca mesaj si il trezeste
+func (t *Team) UserComment(taskID int64, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" || len([]rune(text)) > 4000 {
+		return errors.New("comment: 1-4000 characters")
+	}
+	t.work.Lock()
+	task, err := t.st.GetTask(taskID)
+	if err != nil {
+		t.work.Unlock()
+		return err
+	}
+	a, err := t.st.GetAgent(task.AssigneeID)
+	if err != nil {
+		t.work.Unlock()
+		return ErrNoAssignee
+	}
+	t.taskMsg(task, "comment", actorUser, a.Name, "You commented", text)
+	msg := fmt.Sprintf("Comment from the user on %s (%s): %s\nIf it fills in something you left for them, update the work, "+
+		"tick it with mcp__team__tick_left_for_user and reply with mcp__team__comment_task.", task.Ref(), task.Title, text)
+	if _, err := t.addUserMessage(a, clip(msg), nil, true); err != nil {
+		t.work.Unlock()
+		return err
+	}
+	t.work.Unlock()
+	t.Kick(task.ProjectID)
+	return nil
+}
+
+// UserSetTodo: utilizatorul bifeaza (sau debifeaza) un punct; statusul task-ului nu se schimba
+func (t *Team) UserSetTodo(taskID int64, position int, done bool) error {
+	t.work.Lock()
+	defer t.work.Unlock()
+	task, err := t.st.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+	if err := t.st.SetTodo(taskID, position, done, actorUser); err != nil {
+		return err
+	}
+	t.emit(task.ProjectID, "task", task)
+	return nil
+}

@@ -275,3 +275,17 @@ func TestSystemLinked(t *testing.T) {
 		t.Fatalf("workerul doar intreaba:\n%s", s)
 	}
 }
+
+func TestLeftForUserInPrompt(t *testing.T) {
+	worker := System(proj, store.Agent{Name: "A"}, Links{BossName: "Atlas"})
+	sub := System(proj, store.Agent{Name: "S"}, Links{BossName: "Atlas", IsLead: true})
+	root := System(proj, store.Agent{Name: "R"}, Links{IsLead: true})
+	for name, got := range map[string]string{"worker": worker, "sub-lead": sub} {
+		if !strings.Contains(got, "left_for_user") || !strings.Contains(got, "mcp__team__tick_left_for_user") {
+			t.Fatalf("%s: lipseste regula left_for_user:\n%s", name, got)
+		}
+	}
+	if strings.Contains(root, "left_for_user") {
+		t.Fatal("radacina nu lasa puncte utilizatorului")
+	}
+}

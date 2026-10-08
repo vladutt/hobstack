@@ -134,6 +134,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/accept", s.acceptTask)
 	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)
 	mux.HandleFunc("POST /api/tasks/{id}/nudge", s.nudgeTask)
+	mux.HandleFunc("POST /api/tasks/{id}/comments", s.commentTask)
+	mux.HandleFunc("PUT /api/tasks/{id}/todos/{pos}", s.setTodo)
 
 	mux.HandleFunc("GET /api/runs/{id}/events", s.streamRun)
 

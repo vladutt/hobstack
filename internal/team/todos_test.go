@@ -57,3 +57,24 @@ func TestLeaveForUserAfterStageHandoff(t *testing.T) {
 		t.Fatal("un strain a lasat puncte")
 	}
 }
+
+func TestUserCommentWakesAssignee(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "Terms page", f.rook, store.StatusDone)
+	if err := f.tm.UserComment(task.ID, "Company is Meridian Auto SRL."); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := f.st.Undelivered(f.rook.ID)
+	if len(pending) == 0 || !strings.Contains(pending[len(pending)-1].Text, task.Ref()) {
+		t.Fatalf("mesajul nu a ajuns la Rook: %+v", pending)
+	}
+	// task Done cu puncte: bifatul nu ii schimba statusul
+	f.st.AddTodos(task.ID, []string{"VAT"})
+	if err := f.tm.UserSetTodo(task.ID, 1, true); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, task.Number, store.StatusDone)
+	if err := f.tm.UserComment(task.ID, "   "); err == nil {
+		t.Fatal("comentariu gol acceptat")
+	}
+}

@@ -1,12 +1,15 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"foreman/internal/store"
+	"foreman/internal/team"
 )
 
 // Butoanele de pe task-urile blocate: utilizatorul decide.
@@ -106,7 +109,16 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 			recurring = map[string]any{"id": rec.ID, "title": rec.Title}
 		}
 	}
+	todos, err := s.st.ListTodos(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if todos == nil {
+		todos = []store.Todo{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
+		"todos":     todos, // puncte lasate utilizatorului
 		"recurring": recurring,
 		"task":      task, "events": slim, "assignee": assignee, "stage": stage,
 		"conversation": conv, "working": working, "workingAgentId": workingID,
@@ -268,4 +280,49 @@ func groupChanges(changes []store.TaskChange) []runChangesView {
 		}
 	}
 	return runs
+}
+
+func (s *Server) commentTask(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct{ Text string }
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := s.team.UserComment(id, in.Text); err != nil {
+		if errors.Is(err, team.ErrNoAssignee) {
+			writeErr(w, http.StatusConflict, err.Error())
+			return
+		}
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) setTodo(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	pos, err := strconv.Atoi(r.PathValue("pos"))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "bad item number")
+		return
+	}
+	var in struct{ Done bool }
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := s.team.UserSetTodo(id, pos, in.Done); err != nil {
+		fail(w, err) // fail traduce store.ErrNotFound in 404
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
