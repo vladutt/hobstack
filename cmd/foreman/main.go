@@ -98,6 +98,8 @@ func start(args []string) error {
 		return fmt.Errorf("recovering state: %w", err)
 	}
 	go tm.Run(ctx)
+	// run-urile dinainte de coloana tokens: tokenii se citesc o singura data din loguri
+	go backfillTokens(st, paths.Logs)
 
 	// wizard-ul "Proiect nou cu AI": token-urile lui MCP se rezolva inaintea celor ale echipei
 	sm := setup.New(mgr, url, filepath.Join(paths.Root, "setup"))
@@ -136,6 +138,26 @@ func start(args []string) error {
 	shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shCtx)
+}
+
+// backfillTokens completeaza tokenii run-urilor vechi din logs/runs/<id>.jsonl;
+// un run fara log, fara rezultat sau cu 0 tokeni primeste -1, ca sa nu fie citit din nou.
+func backfillTokens(st *store.Store, logs string) {
+	ids, err := st.RunsWithoutTokens()
+	if err != nil {
+		log.Printf("tokens backfill: %v", err)
+		return
+	}
+	for _, id := range ids {
+		n, ok := runner.LogTokens(filepath.Join(logs, id+".jsonl"))
+		if !ok || n == 0 {
+			n = -1 // ex. "session limit": rezultat fara tokeni
+		}
+		if err := st.SetRunTokens(id, n); err != nil {
+			log.Printf("tokens backfill %s: %v", id, err)
+			return
+		}
+	}
 }
 
 func openBrowser(url string) {

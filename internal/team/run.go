@@ -176,6 +176,13 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	if err := t.st.FinishRun(o.RunID, o.Status, o.CostUSD, o.Error); err != nil {
 		return err
 	}
+	tokens := o.Tokens
+	if tokens == 0 {
+		tokens = -1 // fara rezultat (run oprit sau esuat): nu-l mai cautam in log la pornire
+	}
+	if err := t.st.SetRunTokens(o.RunID, tokens); err != nil {
+		return err
+	}
 	if o.SessionID != "" {
 		if err := t.st.SetSession(agentID, o.SessionID, hash); err != nil {
 			return err

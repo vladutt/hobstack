@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -26,5 +28,29 @@ func TestTrackerDenials(t *testing.T) {
 	d = denialsOf(`{"type":"result","is_error":true,"permission_denials":[{"tool_name":"Bash","tool_input":{"command":"` + long + `"}}]}`)
 	if len(d) != 1 || d[0].Detail != long[:120]+"..." {
 		t.Fatalf("%+v", d)
+	}
+}
+
+func TestTrackerTokens(t *testing.T) {
+	var tr tracker
+	tr.observe([]byte(`{"type":"result","total_cost_usd":0.5,"usage":{"input_tokens":8,"cache_creation_input_tokens":100,"cache_read_input_tokens":1000,"output_tokens":20}}`))
+	if o := tr.outcome("r", nil, false); o.Tokens != 1128 || o.CostUSD != 0.5 {
+		t.Fatalf("%+v", o)
+	}
+}
+
+func TestLogTokens(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "r.jsonl")
+	os.WriteFile(path, []byte(`{"type":"system"}`+"\n"+`{"type":"result","usage":{"input_tokens":1,"output_tokens":2}}`+"\n"), 0o644)
+	if n, ok := LogTokens(path); !ok || n != 3 {
+		t.Fatalf("%d %v", n, ok)
+	}
+	os.WriteFile(path, []byte(`{"type":"assistant"}`+"\n"), 0o644)
+	if _, ok := LogTokens(path); ok {
+		t.Fatal("log fara rezultat")
+	}
+	if _, ok := LogTokens(filepath.Join(dir, "lipsa.jsonl")); ok {
+		t.Fatal("log lipsa")
 	}
 }

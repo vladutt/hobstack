@@ -1,8 +1,11 @@
 package runner
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -12,6 +15,7 @@ type tracker struct {
 	sessionID string
 	result    string
 	cost      float64
+	tokens    int64
 	hasResult bool
 	isError   bool
 	errText   string
@@ -20,6 +24,43 @@ type tracker struct {
 	pending  map[string]pendingCall // tool_use-uri fara rezultat inca, dupa id
 	changes  []FileChange
 	commands []Command
+}
+
+// usage: tokenii din evenimentul "result" (cache-ul citit intra si el, ca in consum)
+type usage struct {
+	Input         int64 `json:"input_tokens"`
+	CacheCreation int64 `json:"cache_creation_input_tokens"`
+	CacheRead     int64 `json:"cache_read_input_tokens"`
+	Output        int64 `json:"output_tokens"`
+}
+
+func (u usage) total() int64 { return u.Input + u.CacheCreation + u.CacheRead + u.Output }
+
+// LogTokens citeste tokenii din ultimul "result" al unui log de run (logs/runs/<id>.jsonl).
+// ok = false daca logul lipseste sau nu are rezultat.
+func LogTokens(path string) (int64, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, false
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 64*1024*1024) // liniile cu rezultate de tool pot fi mari
+	var n int64
+	found := false
+	for sc.Scan() {
+		line := sc.Bytes()
+		if !bytes.Contains(line, []byte(`"type":"result"`)) {
+			continue
+		}
+		var ev struct {
+			Usage usage `json:"usage"`
+		}
+		if json.Unmarshal(line, &ev) == nil {
+			n, found = ev.Usage.total(), true
+		}
+	}
+	return n, found
 }
 
 // Denial e o actiune refuzata de permisiuni in run (din permission_denials).
@@ -62,6 +103,7 @@ func (t *tracker) observe(line []byte) {
 		Result            string  `json:"result"`
 		IsError           bool    `json:"is_error"`
 		Cost              float64 `json:"total_cost_usd"`
+		Usage             usage   `json:"usage"`
 		Errors            []any   `json:"errors"`
 		PermissionDenials []struct {
 			ToolName  string         `json:"tool_name"`
@@ -86,6 +128,7 @@ func (t *tracker) observe(line []byte) {
 	t.hasResult = true
 	t.result = ev.Result
 	t.cost = ev.Cost
+	t.tokens = ev.Usage.total()
 	t.isError = ev.IsError
 	t.denials = nil
 	for _, d := range ev.PermissionDenials {
@@ -108,7 +151,7 @@ func (t *tracker) observe(line []byte) {
 // outcome decide starea finala. Ordinea conteaza: oprirea manuala castiga,
 // apoi eroarea raportata de claude (ex. buget depasit), apoi codul de iesire.
 func (t *tracker) outcome(runID string, waitErr error, stopped bool) Outcome {
-	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Denials: t.denials, Changes: t.changes, Commands: t.commands}
+	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Tokens: t.tokens, Denials: t.denials, Changes: t.changes, Commands: t.commands}
 	switch {
 	case stopped:
 		o.Status, o.Error = "stopped", "stopped"

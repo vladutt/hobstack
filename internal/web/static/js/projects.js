@@ -8,9 +8,12 @@ export async function projectsView(root) {
     type: "search", class: "search", placeholder: "Search projects", "aria-label": "Search projects",
     oninput: () => filter(),
   });
-  const rows = projects.map((p) => ({ p, tr: projectRow(p) }));
+  // favoritele primele; altfel ordinea de pe server (dupa id)
+  projects.sort((a, b) => Number(b.favorite) - Number(a.favorite));
+  const peak = Math.max(1, ...projects.flatMap((p) => p.activity || [])); // aceeasi scara pe toate randurile
+  const rows = projects.map((p) => ({ p, tr: projectRow(p, peak) }));
   const tbody = el("tbody", {}, rows.map((r) => r.tr));
-  const none = el("tr", { hidden: true }, el("td", { colspan: 5, class: "hint" }, "No project matches."));
+  const none = el("tr", { hidden: true }, el("td", { colspan: 8, class: "hint" }, "No project matches."));
   tbody.append(none);
   function filter() {
     const q = search.value.trim().toLowerCase();
@@ -33,8 +36,10 @@ export async function projectsView(root) {
       projects.length
         ? el("table", { class: "ptable" },
           el("thead", {}, el("tr", {},
+            el("th", { class: "p-star-col", "aria-label": "Favorite" }, "\u2605"),
             el("th", {}, "Name"), el("th", { class: "hide-xs" }, "Lead"), el("th", { class: "hide-sm" }, "Team"),
-            el("th", {}, "Progress"), el("th", { class: "hide-sm" }, "State"))),
+            el("th", {}, "Progress"), el("th", { class: "hide-md", title: "Runs started per day, today last" }, "Activity \u00b7 7d"),
+            el("th", { class: "hide-md" }, "Links"), el("th", { class: "num hide-xs" }, "Total cost"))),
           tbody)
         : el("div", { class: "empty-state" },
           el("h2", {}, "No projects yet"),
@@ -101,23 +106,48 @@ function setupCard(s, refresh) {
     el("div", { class: "card-actions" }, buttons));
 }
 
-// projectRow: un rand din tabelul de proiecte; click oriunde pe rand deschide proiectul
-function projectRow(p) {
+// projectRow: un rand din tabelul de proiecte; click oriunde pe rand deschide proiectul.
+// peak: cea mai mare activitate zilnica din tabel (barele au aceeasi scara pe toate randurile;
+// radical, ca o zi cu 250 de run-uri sa nu faca invizibile zilele cu 5).
+function projectRow(p, peak) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
   const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
   const href = `#/p/${p.id}`;
   const lead = p.team.find((m) => m.isRoot) || p.team[0];
   const shown = p.team.slice(0, 3);
   const state = p.status === "Paused" ? "paused" : p.status === "Running" ? "running" : "idle";
+  const star = el("button", { type: "button", class: "p-star" });
+  const paintStar = () => {
+    star.textContent = p.favorite ? "\u2605" : "\u2606";
+    star.classList.toggle("on", !!p.favorite);
+    star.setAttribute("aria-pressed", String(!!p.favorite));
+    star.setAttribute("aria-label", p.favorite ? `Remove ${p.name} from favorites` : `Add ${p.name} to favorites`);
+    star.title = p.favorite ? "Favorite" : "Add to favorites";
+  };
+  star.addEventListener("click", async () => {
+    p.favorite = !p.favorite;
+    paintStar();
+    try {
+      await api(`/api/projects/${p.id}/favorite`, { method: "PUT", body: { favorite: p.favorite } });
+    } catch (err) {
+      p.favorite = !p.favorite; // inapoi la starea reala
+      paintStar();
+      toast(err.message);
+    }
+  });
+  paintStar();
+  const activity = p.activity || [];
   return el("tr", {
     class: asks > 0 ? "needs-you-row" : null,
-    onclick: (e) => { if (!e.target.closest("a")) location.hash = href; },
+    onclick: (e) => { if (!e.target.closest("a, button")) location.hash = href; },
   },
+    el("td", { class: "p-star-col" }, star),
     el("td", {}, el("div", { class: "p-name" },
       el("a", { href }, p.name,
         asks ? el("span", { class: "badge-needs-you" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null,
         p.autonomy ? el("span", { class: "badge-auto", title: "Agents don't ask you questions" }, "autonomous") : null),
-      el("span", { class: "p-sub", title: p.goal || "" }, p.goal || "No goal yet."))),
+      el("span", { class: "p-sub", title: p.goal || "" },
+        el("span", { class: `p-state ${state}` }, p.status), p.goal ? " \u00b7 " + p.goal : ""))),
     el("td", { class: "hide-xs" }, lead ? el("span", { class: "p-lead" }, avatar(lead.name, kindOf(lead), 30), lead.name) : el("span", { class: "hint" }, "\u2014")),
     el("td", { class: "hide-sm" }, p.team.length > 4
       ? el("span", { class: "avatars" }, el("span", { class: "stack" }, shown.map((m) => avatar(m.name, kindOf(m), 28)),
@@ -126,8 +156,35 @@ function projectRow(p) {
     el("td", {}, el("div", { class: "p-progress" },
       el("div", { class: "bar" }, el("div", { class: "bar-fill", style: `width:${pct}%` })),
       el("span", {}, p.total ? `${p.done}/${p.total}` : "\u2014"))),
-    el("td", { class: "hide-sm" }, el("span", { class: `p-status ${state}` },
-      el("span", { class: "dot" + (state === "running" ? " working" : "") }), p.status)));
+    el("td", { class: "hide-md" }, el("span", {
+      class: "p-activity", role: "img",
+      "aria-label": `Runs in the last 7 days: ${activity.reduce((a, b) => a + b, 0)}`,
+      title: activity.map((n, i) => `${dayLabel(6 - i)}: ${n} ${n === 1 ? "run" : "runs"}`).join("\n"),
+    }, activity.map((n) => el("span", { class: "p-day" + (n ? " on" : ""), style: n ? `height:${Math.max(4, Math.round(Math.sqrt(n / peak) * 28))}px` : null })))),
+    el("td", { class: "hide-md" }, el("span", { class: "p-links" + (p.links ? " has" : ""), title: p.links ? `${p.links} linked ${p.links === 1 ? "project" : "projects"}` : "No linked projects" }, `\u2194 ${p.links || 0}`)),
+    el("td", { class: "num hide-xs" }, p.costUsd > 0 || p.tokens > 0
+      ? el("div", { class: "p-cost" }, el("strong", {}, money(p.costUsd)), p.tokens > 0 ? el("span", {}, `${compact(p.tokens)} tokens`) : null)
+      : el("span", { class: "hint" }, "\u2014")));
+}
+
+// dayLabel: "today", "yesterday" sau data scurta, pentru zilele din activitate
+function dayLabel(ago) {
+  if (ago === 0) return "Today";
+  if (ago === 1) return "Yesterday";
+  const d = new Date();
+  d.setDate(d.getDate() - ago);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+// money: "$3,251.78"
+const money = (v) => "$" + (v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// compact: 52400000 -> "52.4M", 910000 -> "910k"
+function compact(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1e3) return Math.round(n / 1e3) + "k";
+  return String(n);
 }
 
 export async function projectFormView(root, id) {

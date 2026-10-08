@@ -861,3 +861,18 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .np-note .dot:not(.working) { background: var(--muted); }
 @media (max-width: 1040px) { .np { grid-template-columns: minmax(0, 1fr); } .np-side { position: static; } }
 @media (max-width: 640px) { .np-tiles { grid-template-columns: minmax(0, 1fr); } }
+
+/* lista de proiecte: steluta, activitatea pe 7 zile, legaturi, cost */
+.ptable .p-star-col { width: 44px; padding-right: 0; text-align: center; color: var(--muted); }
+.p-star { background: none; border: 0; padding: 4px; font-size: 20px; line-height: 1; color: var(--dim); cursor: pointer; border-radius: 6px; }
+.p-star:hover { color: var(--soft); }
+.p-star.on { color: var(--amber); }
+.p-state { color: var(--muted); }
+.p-state.running { color: var(--teal); }
+.p-activity { display: inline-flex; align-items: flex-end; gap: 4px; height: 30px; }
+.p-day { width: 14px; height: 3px; border-radius: 2px; background: #333a45; }
+.p-day.on { background: var(--teal); opacity: .85; }
+.p-cost { display: grid; justify-items: end; gap: 2px; }
+.p-cost strong { font: 650 15px var(--mono); font-variant-numeric: tabular-nums; font-variant-ligatures: none; }
+.p-cost span { font: 12.5px var(--mono); color: var(--muted); }
+@media (max-width: 1200px) { .ptable .hide-md { display: none; } }

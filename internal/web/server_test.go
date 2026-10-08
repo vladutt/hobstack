@@ -411,3 +411,31 @@ func TestModelsInInfoAndPinnedVersion(t *testing.T) {
 		t.Fatalf("alias fable: %d", code)
 	}
 }
+
+func TestFavoriteAndUsageOnProjectList(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	if code, raw := e.do(t, "PUT", "/api/projects/"+strconv.FormatInt(p.ID, 10)+"/favorite", map[string]bool{"favorite": true}); code != http.StatusNoContent {
+		t.Fatalf("favorite: %d %s", code, raw)
+	}
+	agents, _ := e.st.ListAgents(p.ID)
+	run := store.Run{ID: "run-1", AgentID: agents[0].ID}
+	e.st.CreateRun(&run)
+	e.st.FinishRun("run-1", store.RunDone, 2.5, "")
+	e.st.SetRunTokens("run-1", 4200)
+	_, raw := e.do(t, "GET", "/api/projects", nil)
+	var list []struct {
+		Favorite bool    `json:"favorite"`
+		CostUSD  float64 `json:"costUsd"`
+		Tokens   int64   `json:"tokens"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil || len(list) != 1 {
+		t.Fatalf("%v %s", err, raw)
+	}
+	if !list[0].Favorite || list[0].CostUSD != 2.5 || list[0].Tokens != 4200 {
+		t.Fatalf("%+v", list[0])
+	}
+	if code, _ := e.do(t, "PUT", "/api/projects/999/favorite", map[string]bool{"favorite": true}); code != http.StatusNotFound {
+		t.Fatalf("proiect inexistent: %d", code)
+	}
+}

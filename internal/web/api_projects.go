@@ -182,6 +182,12 @@ type projectCard struct {
 	AgentRequests int `json:"agentRequests"`
 	// WorkRequests: cereri de lucru de la proiecte legate, in asteptarea aprobarii
 	WorkRequests int `json:"workRequests"`
+	// CostUSD / Tokens: totalul run-urilor agentilor proiectului (coloana "Total cost")
+	CostUSD float64 `json:"costUsd"`
+	Tokens  int64   `json:"tokens"`
+	// Activity: run-uri pornite pe zi, ultimele 7 zile (azi ultima); Links: proiecte legate
+	Activity []int `json:"activity"`
+	Links    int   `json:"links"`
 }
 
 type agentView struct {
@@ -251,6 +257,17 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 	if c.WorkRequests, err = s.st.CountPendingWork(p.ID); err != nil {
 		return projectCard{}, nil, nil, nil, err
 	}
+	if c.CostUSD, c.Tokens, err = s.st.ProjectUsage(p.ID); err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	if c.Activity, err = s.st.ProjectActivity(p.ID, 7, s.team.Now()); err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	linked, err := s.st.LinkedProjects(p.ID)
+	if err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	c.Links = len(linked)
 	for _, a := range agents {
 		r := store.RolesOf(a, agents)
 		c.Team = append(c.Team, memberBrief{ID: a.ID, Name: a.Name, IsLead: r.IsLead, IsRoot: r.IsRoot})
@@ -525,6 +542,27 @@ func (s *Server) projectAction(w http.ResponseWriter, r *http.Request, action fu
 		return
 	}
 	if err := action(id); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// setFavorite pune sau scoate steluta unui proiect (lista de proiecte).
+func (s *Server) setFavorite(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var in struct {
+		Favorite bool `json:"favorite"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := s.st.SetFavorite(id, in.Favorite); err != nil {
 		fail(w, err)
 		return
 	}

@@ -46,6 +46,7 @@ type Outcome struct {
 	SessionID string // pentru --resume
 	Result    string // textul final al agentului
 	CostUSD   float64
+	Tokens    int64 // intrare + cache + iesire, din "usage" al rezultatului
 	Error     string
 	Denials   []Denial     // actiuni refuzate de permisiuni
 	Changes   []FileChange // fisiere modificate de agent, in ordinea rezultatelor

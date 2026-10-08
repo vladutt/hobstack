@@ -18,16 +18,17 @@ type Project struct {
 	MaxParallel int       `json:"maxParallel"`
 	Autonomy    bool      `json:"autonomy"` // full autonomy: agentii nu pun intrebari; decide radacina
 	BudgetUSD   float64   `json:"budgetUsd"`
+	Favorite    bool      `json:"favorite"` // steluta din lista de proiecte; se schimba doar prin SetFavorite
 	CreatedAt   time.Time `json:"createdAt"`
 	Folders     []Folder  `json:"folders"` // cel putin unul; primul e cel implicit
 }
 
-const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at`
+const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, favorite, created_at`
 
 func scanProject(sc scanner) (Project, error) {
 	var p Project
 	var created string
-	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &p.Autonomy, &created)
+	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &p.Autonomy, &p.Favorite, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, ErrNotFound
 	}
@@ -211,4 +212,9 @@ func (s *Store) SetPaused(id int64, paused bool) error {
 func (s *Store) PauseAll() error {
 	_, err := s.db.Exec(`UPDATE projects SET paused = 1`)
 	return err
+}
+
+// SetFavorite pune sau scoate steluta unui proiect.
+func (s *Store) SetFavorite(id int64, on bool) error {
+	return mustAffect(s.db.Exec(`UPDATE projects SET favorite = ? WHERE id = ?`, on, id))
 }

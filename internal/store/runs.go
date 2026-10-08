@@ -86,3 +86,62 @@ func (s *Store) InterruptRunning() error {
 	_, err := s.db.Exec(`UPDATE runs SET status = 'interrupted', ended_at = ? WHERE status = 'running'`, now())
 	return err
 }
+
+// SetRunTokens salveaza tokenii unui run (-1 = necunoscut, ex. log lipsa).
+func (s *Store) SetRunTokens(id string, tokens int64) error {
+	_, err := s.db.Exec(`UPDATE runs SET tokens = ? WHERE id = ?`, tokens, id)
+	return err
+}
+
+// RunsWithoutTokens: run-urile terminate al caror numar de tokeni nu a fost citit inca
+// (cele dinainte de coloana tokens); se completeaza din loguri la pornire.
+func (s *Store) RunsWithoutTokens() ([]string, error) {
+	rows, err := s.db.Query(`SELECT id FROM runs WHERE tokens = 0 AND status != 'running'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ProjectUsage: costul si tokenii tuturor run-urilor agentilor unui proiect.
+// Run-urile agentilor stersi au plecat odata cu ei, deci nu mai intra in total.
+func (s *Store) ProjectUsage(projectID int64) (costUSD float64, tokens int64, err error) {
+	err = s.db.QueryRow(`SELECT COALESCE(SUM(r.cost_usd), 0), COALESCE(SUM(MAX(r.tokens, 0)), 0)
+		FROM runs r JOIN agents a ON a.id = r.agent_id WHERE a.project_id = ?`, projectID).Scan(&costUSD, &tokens)
+	return costUSD, tokens, err
+}
+
+// ProjectActivity: cate run-uri au pornit agentii proiectului in fiecare din ultimele
+// `days` zile (ora locala), de la cea mai veche la azi. Coloana "Activity" din Proiecte.
+func (s *Store) ProjectActivity(projectID int64, days int, at time.Time) ([]int, error) {
+	out := make([]int, days)
+	today := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, at.Location())
+	from := today.AddDate(0, 0, -(days - 1))
+	rows, err := s.db.Query(`SELECT r.started_at FROM runs r JOIN agents a ON a.id = r.agent_id
+		WHERE a.project_id = ? AND r.started_at >= ?`, projectID, from.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var started string
+		if err := rows.Scan(&started); err != nil {
+			return nil, err
+		}
+		t := parseTime(started).In(at.Location())
+		day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, at.Location())
+		if i := int(day.Sub(from).Hours()/24 + 0.5); i >= 0 && i < days {
+			out[i]++
+		}
+	}
+	return out, rows.Err()
+}
