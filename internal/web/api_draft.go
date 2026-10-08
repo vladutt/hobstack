@@ -104,7 +104,11 @@ func draftBrief(p store.Project, agents []store.Agent) string {
 		if a.ParentID != nil {
 			boss = byID[*a.ParentID]
 		}
-		fmt.Fprintf(&b, "- %s (%s), reports to %s. Takes: %s\n", a.Name, a.Role, boss, a.Responsibilities)
+		review := ""
+		if a.ReviewerID != nil {
+			review = ", reviewed by " + byID[*a.ReviewerID]
+		}
+		fmt.Fprintf(&b, "- %s (%s), reports to %s%s. Takes: %s\n", a.Name, a.Role, boss, review, a.Responsibilities)
 	}
 	return b.String()
 }

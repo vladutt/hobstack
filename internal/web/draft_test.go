@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"foreman/internal/draft"
 	"foreman/internal/runner"
+	"foreman/internal/store"
 )
 
 type draftStarter struct{ specs []runner.Spec }
@@ -47,5 +49,21 @@ func TestDraftAPI(t *testing.T) {
 	}
 	if code, _ := e.do(t, "POST", "/api/drafts/"+d.ID+"/stop", nil); code != http.StatusNoContent {
 		t.Fatalf("stop: %d", code)
+	}
+}
+
+// draftBrief trece reviewer-ul fiecarui agent in prompt
+func TestDraftBriefReviewer(t *testing.T) {
+	rid := int64(2)
+	agents := []store.Agent{
+		{ID: 1, Name: "Dev", Role: "dev", ReviewerID: &rid},
+		{ID: 2, Name: "Rev", Role: "reviewer"},
+	}
+	got := draftBrief(store.Project{Name: "P"}, agents)
+	if !strings.Contains(got, "Dev (dev), reports to the user, reviewed by Rev.") {
+		t.Fatalf("lipseste reviewer-ul: %s", got)
+	}
+	if strings.Count(got, "reviewed by") != 1 {
+		t.Fatalf("reviewer pe agent fara reviewer: %s", got)
 	}
 }

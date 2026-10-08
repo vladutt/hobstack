@@ -25,6 +25,10 @@ export async function newAgentView(root, projectId, parentHint) {
   const instructions = el("input", { type: "text", maxlength: 4000, placeholder: "Conventions, tone, things to always check...", "aria-label": "Extra instructions" });
   const background = el("textarea", { rows: 3, placeholder: "Who the agent is and what it knows.", "aria-label": "Background" });
   const doneDef = el("textarea", { rows: 2, placeholder: "Summary, changed files, how to verify.", "aria-label": "Definition of done" });
+  const more = el("details", { class: "na-more" },
+    el("summary", {}, "More: background and definition of done"),
+    el("div", { class: "field" }, el("label", { class: "label" }, "Background · who it is and what it knows"), background),
+    el("div", { class: "field" }, el("label", { class: "label" }, "Definition of done · what it hands to its boss"), doneDef));
 
   // "" = Tu (radacina), "none" = nelegat, altfel id-ul sefului
   const parent = el("select", { class: "na-person", "aria-label": "Reports to" },
@@ -102,12 +106,14 @@ export async function newAgentView(root, projectId, parentHint) {
     set("name", name, p.name); set("role", role, p.role); set("takes", takes, p.responsibilities);
     set("model", model, p.model); set("instructions", instructions, p.instructions);
     set("background", background, p.background); set("doneDef", doneDef, p.doneDef);
+    // campurile din "More" sunt intr-un details inchis: il deschidem ca utilizatorul sa vada ce s-a completat
+    if ((p.background && !touched.has("background")) || (p.doneDef && !touched.has("doneDef"))) more.open = true;
     const idOf = (n) => agents.find((a) => a.name.trim().toLowerCase() === (n || "").trim().toLowerCase())?.id;
     // seful se schimba doar daca propunerea indica un agent existent; altfel ramane cel implicit
     const bossId = idOf(p.reportsTo);
     if (!touched.has("parent") && bossId != null) parent.value = String(bossId);
     if (!touched.has("reviewer") && p.reviewedBy && idOf(p.reviewedBy)) reviewer.value = String(idOf(p.reviewedBy));
-    if (!touched.has("tools") && Array.isArray(p.tools) && p.tools.length) for (const t of tools) t.box.checked = p.tools.includes(t.id);
+    if (!touched.has("tools") && Array.isArray(p.tools)) for (const t of tools) t.box.checked = p.tools.includes(t.id);
     syncFolder();
     draw();
   }
@@ -129,10 +135,7 @@ export async function newAgentView(root, projectId, parentHint) {
         el("div", { class: "field" }, el("label", { class: "label" }, "Extra instructions ", el("span", { class: "np-dim" }, "· optional")), instructions)),
       folder ? el("div", { class: "field" }, el("label", { class: "label" }, "Folder"), folder,
         el("span", { class: "hint" }, "The agent works and writes here; it can read the other folders.")) : null,
-      el("details", { class: "na-more" },
-        el("summary", {}, "More: background and definition of done"),
-        el("div", { class: "field" }, el("label", { class: "label" }, "Background · who it is and what it knows"), background),
-        el("div", { class: "field" }, el("label", { class: "label" }, "Definition of done · what it hands to its boss"), doneDef))),
+      more),
     el("aside", { class: "np-side" },
       el("section", { class: "np-card" },
         el("strong", {}, "Place in the team"),
