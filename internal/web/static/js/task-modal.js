@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { el, avatar, clock, kindOf } from "./ui.js";
+import { el, avatar, clock, kindOf, toast } from "./ui.js";
 import { changesView } from "./changes.js";
 import { flowView } from "./flow.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
@@ -53,6 +53,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const head = el("div", { class: "modal-head-main" });
   // nodurile corpului raman pe loc intre refresh-uri (scroll-ul, tab-ul, "Show more" nu se pierd);
   // se rescrie doar continutul care s-a schimbat
+  const todoBox = el("div", { class: "modal-top" });
+  let todoKey = null;     // ce s-a desenat ultima data in caseta "Left for you"
   const topBox = el("div", { class: "modal-top" });
   const convPane = el("div", { class: "conv", id: `conv-${taskId}`, role: "tabpanel", hidden: true });
   const histPane = el("div", { id: `hist-${taskId}`, role: "tabpanel", hidden: true });
@@ -64,6 +66,19 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
     el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFlow), convPane, histPane, chgPane, flowPane);
+  // formularul de comentarii: creat o singura data, ca textul scris sa nu se piarda la refresh
+  const commentInput = el("textarea", { rows: 2, placeholder: "Reply to the agent...", "aria-label": "Comment" });
+  const commentForm = el("form", { class: "comment-form", onsubmit: async (e) => {
+    e.preventDefault();
+    const text = commentInput.value.trim();
+    if (!text) return;
+    try {
+      await api(`/api/tasks/${taskId}/comments`, { method: "POST", body: { text } });
+      commentInput.value = "";
+      setTab("conversation");
+      load();
+    } catch (err) { toast(err.message); }
+  } }, commentInput, el("button", { type: "submit", class: "btn primary small" }, "Send"));
   const reportBox = el("div", { class: "modal-top" });
   const filesBox = el("div", { class: "modal-top" }); // primele fisiere modificate, deasupra tab-urilor
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
@@ -107,7 +122,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
 
   // requestClose: feedback-ul netrimis nu se pierde in tacere
   function requestClose() {
-    if (feedback.value.trim() && !confirm("Discard your feedback?")) return;
+    if ((feedback.value.trim() || commentInput.value.trim()) && !confirm("Discard your unsent text?")) return;
     onClose();
   }
 
@@ -158,7 +173,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     actionsBox.hidden = true;
     actionsBox.replaceChildren();
     actionsKey = null;
-    topKey = histKey = convKey = reportKey = flowKey = filesKey = null;
+    todoKey = topKey = histKey = convKey = reportKey = flowKey = filesKey = null;
     chgCount = null; // la urmatorul succes se reincarca tot
   }
 
@@ -179,7 +194,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     renderSide(t, agent, who, waiting, stuck, queuedInStage);
 
     // prima data scoatem "Loading..." si punem nodurile stabile
-    if (!body.contains(tabsSection)) body.replaceChildren(topBox, reportBox, filesBox, tabsSection);
+    if (!body.contains(tabsSection)) body.replaceChildren(todoBox, topBox, reportBox, filesBox, tabsSection, commentForm);
 
     const topNow = JSON.stringify([t.description, t.feedback]);
     if (topNow !== topKey) {
@@ -194,6 +209,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       ].filter(Boolean));
     }
     tabsSection.hidden = false;
+    commentInput.placeholder = `Reply to ${who || "the agent"}...`;
+    renderTodos();
     if (tab === null) tab = (data.conversation || []).length ? "conversation" : "history";
     tabConv.replaceChildren("Conversation", (data.conversation || []).length ? el("span", { class: "count" }, data.conversation.length) : null);
     renderHistory(data.events || []);
@@ -202,6 +219,31 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     renderReport();
     renderFiles();
     renderActions(t, stuck);
+  }
+
+  // renderTodos: "Left for you" cu checklist; un click bifeaza / debifeaza pe server
+  function renderTodos() {
+    const list = data.todos || [];
+    const key = JSON.stringify(list.map((x) => [x.position, x.text, !!x.doneAt]));
+    if (key === todoKey) return;
+    todoKey = key;
+    if (!list.length) { todoBox.replaceChildren(); return; }
+    const done = list.filter((x) => x.doneAt).length;
+    const who = data.assignee || "The agent";
+    todoBox.replaceChildren(el("section", { class: "left-for-you" },
+      el("div", { class: "lfy-head" }, el("span", { class: "dot", style: "background:var(--amber)" }),
+        el("strong", {}, "Left for you"), el("span", { class: "hint" }, `${who} finished the work but needs these from you.`),
+        el("span", { class: "grow" }), el("span", { class: "lfy-count" }, `${done} of ${list.length}`)),
+      el("div", { class: "lfy-list" }, list.map((x) => {
+        const box = el("input", { type: "checkbox", checked: !!x.doneAt, onchange: async () => {
+          box.disabled = true;
+          try { await api(`/api/tasks/${taskId}/todos/${x.position}`, { method: "PUT", body: { done: box.checked } }); load(); }
+          catch (err) { box.checked = !box.checked; toast(err.message); }
+          box.disabled = false;
+        } });
+        return el("label", { class: "check lfy-item" + (x.doneAt ? " done" : "") }, box, el("span", {}, x.text));
+      })),
+      el("p", { class: "hint" }, `Answer in the comments below. ${who} updates the work and ticks them off.`)));
   }
 
   // collapsible: text markdown lung, taiat la cateva randuri cu "Show more" (starea prin get/set)
@@ -257,7 +299,9 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     side.replaceChildren(
       el("div", { class: "side-status" },
         el("span", { class: `pill pill-task-${t.status}` }, STATUS[t.status] || t.status),
-        stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null),
+        stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null,
+        (data.todos || []).some((x) => !x.doneAt)
+          ? el("span", { class: "side-waiting" }, `Waiting on you \u00b7 ${(data.todos || []).filter((x) => x.doneAt).length} of ${data.todos.length}`) : null),
       el("div", { class: "side-rows" }, rows),
       el("div", { class: "side-foot" },
         el("span", {}, "Created " + when(t.createdAt)),

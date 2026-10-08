@@ -111,7 +111,7 @@ function setupCard(s, refresh) {
 // radical, ca o zi cu 250 de run-uri sa nu faca invizibile zilele cu 5).
 function projectRow(p, peak) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
+  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0) + (p.fillIns || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
   const href = `#/p/${p.id}`;
   const lead = p.team.find((m) => m.isRoot) || p.team[0];
   const shown = p.team.slice(0, 3);

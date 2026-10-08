@@ -1023,3 +1023,15 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .na-draft-ask { display: flex; align-items: center; gap: 12px; flex: 1 1 360px; }
 .na-draft-ask input { background: var(--deep); }
 .na-draft-btn { color: var(--amber); font-weight: 700; font-size: 15px; }
+
+/* "Left for you": puncte lasate utilizatorului pe un task terminat */
+.left-for-you { border: 1px solid var(--amber-line); border-radius: 14px; padding: 20px 22px; display: grid; gap: 14px; background: rgba(242, 181, 68, .03); }
+.lfy-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lfy-count { font: 600 14px var(--mono); color: var(--amber); }
+.lfy-list { display: grid; gap: 10px; }
+.lfy-item { font-size: 15px; }
+.lfy-item.done span { text-decoration: line-through; color: var(--muted); }
+.comment-form { display: flex; gap: 8px; align-items: flex-end; }
+.comment-form textarea { min-height: 48px; }
+.side-waiting { color: var(--amber); font-size: 13px; }
+.fill-in .fill-title { font-weight: 600; }

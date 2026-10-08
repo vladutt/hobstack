@@ -116,16 +116,18 @@ export async function workspaceView(root, projectId, route) {
   const needsTitle = el("h2", { class: "col-head needs-head" });
   const questionsBox = el("div", { class: "needs-questions" });
   const stuckList = el("div", { class: "needs-stuck" });
+  const fillList = el("div", { class: "needs-fill" });
   const accessList = el("div", { class: "needs-access" });
   const agentReqList = el("div", { class: "needs-agent-requests" });
   const workReqList = el("div", { class: "needs-work-requests" });
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
-    needsTitle, questionsBox, stuckList, accessList, agentReqList, workReqList);
+    needsTitle, questionsBox, fillList, stuckList, accessList, agentReqList, workReqList);
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
   const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
   let keepPanel = false; // urmatorul update() pastreaza panoul ales (vezi openChat)
   let questionsKey = null; // id-urile intrebarilor desenate ultima data in banda
+  let fillKey = null;      // task-urile "To fill in" desenate ultima data
   let stuckKey = null;     // id-urile task-urilor blocate desenate ultima data
   let agentReqKey = null;  // id-urile cererilor de agent desenate ultima data
   let workReqKey = null;   // id-urile cererilor de lucru desenate ultima data
@@ -324,6 +326,19 @@ export async function workspaceView(root, projectId, route) {
     keepPanel = true;
   }
 
+  // fillNode: card "To fill in": task terminat care mai are puncte lasate utilizatorului
+  function fillNode(f) {
+    const agent = state.project.agents.find((a) => a.id === f.agentId);
+    return el("div", { class: "question fill-in" },
+      el("div", { class: "question-head" }, el("strong", {}, `To fill in \u00b7 ${f.open}`)),
+      el("p", { class: "question-text fill-title" }, f.title),
+      f.first ? el("p", { class: "question-text hint" }, f.first) : null,
+      el("div", { class: "actions" },
+        el("span", { class: "task-id" }, `T-${f.number}`), agent ? el("span", { class: "hint" }, agent.name) : null,
+        el("span", { class: "grow" }),
+        el("a", { class: "btn small primary", href: `#/p/${projectId}/tasks/${f.taskId}` }, "Fill in")));
+  }
+
   // renderNeeds: banda "Needs you". Titlul si vizibilitatea se actualizeaza
   // mereu; intrebarile si task-urile blocate se redeseneaza fiecare doar cand
   // se schimba setul lor: reload-urile dese (SSE) ar sterge raspunsul pe care il scrii.
@@ -333,7 +348,8 @@ export async function workspaceView(root, projectId, route) {
     const access = state.project.access || [];
     const agentReqs = state.project.agentRequests || [];
     const workReqs = state.project.workRequests || [];
-    const total = questions.length + stuck.length + access.length + agentReqs.length + workReqs.length;
+    const fills = state.project.fillIns || [];
+    const total = questions.length + fills.length + stuck.length + access.length + agentReqs.length + workReqs.length;
     needsTitle.replaceChildren(el("span", {}, "Needs you"), el("span", { class: "col-count" }, total));
     needsChip.textContent = `${total} ${total === 1 ? "needs" : "need"} you`;
     needsChip.hidden = !total || state.tab === "tasks";
@@ -342,6 +358,11 @@ export async function workspaceView(root, projectId, route) {
     if (qKey !== questionsKey) {
       questionsKey = qKey;
       questionsBox.replaceChildren(...questions.map(questionNode)); // replaceChildren nativ nu aplatizeaza array-uri
+    }
+    const fKey = fills.map((f) => f.taskId + ":" + f.open).join(",");
+    if (fKey !== fillKey) {
+      fillKey = fKey;
+      fillList.replaceChildren(...fills.map(fillNode));
     }
     const sKey = stuck.map((s) => s.taskId).join(",");
     if (sKey !== stuckKey) {
@@ -1015,6 +1036,7 @@ export async function workspaceView(root, projectId, route) {
     let line = null;
     if (blocked) line = el("span", { class: "task-line bad" }, "Blocked");
     else if (working) line = el("span", { class: "task-line working" }, el("span", { class: "dot working" }), `${who.name} \u00b7 working`);
+    else if ((state.project.fillIns || []).some((f) => f.taskId === t.id)) line = el("span", { class: "task-line warn" }, "Waiting on you");
     else if (decides) line = el("span", { class: "task-line warn" }, "Waiting for you to decide");
     else if (stage) line = el("span", { class: "task-line warn" }, `With ${stage}`);
     const labels = [
