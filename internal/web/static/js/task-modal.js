@@ -209,10 +209,12 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       ].filter(Boolean));
     }
     tabsSection.hidden = false;
-    commentInput.placeholder = `Reply to ${who || "the agent"}...`;
+    // comentariile ajung la cel care a lasat punctele (poate fi alt agent decat asignatul curent)
+    const replyTo = (data.todos || []).length && data.todosBy ? data.todosBy : who;
+    commentInput.placeholder = `Reply to ${replyTo || "the agent"}...`;
     renderTodos();
     if (tab === null) tab = (data.conversation || []).length ? "conversation" : "history";
-    tabConv.replaceChildren("Conversation", (data.conversation || []).length ? el("span", { class: "count" }, data.conversation.length) : null);
+    tabConv.replaceChildren(...["Conversation", (data.conversation || []).length ? el("span", { class: "count" }, data.conversation.length) : null].filter(Boolean));
     renderHistory(data.events || []);
     renderConversation();
     applyTab();
@@ -224,12 +226,12 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   // renderTodos: "Left for you" cu checklist; un click bifeaza / debifeaza pe server
   function renderTodos() {
     const list = data.todos || [];
-    const key = JSON.stringify(list.map((x) => [x.position, x.text, !!x.doneAt]));
+    const key = JSON.stringify([data.todosBy, list.map((x) => [x.position, x.text, !!x.doneAt])]);
     if (key === todoKey) return;
     todoKey = key;
     if (!list.length) { todoBox.replaceChildren(); return; }
     const done = list.filter((x) => x.doneAt).length;
-    const who = data.assignee || "The agent";
+    const who = data.todosBy || data.assignee || "The agent";
     todoBox.replaceChildren(el("section", { class: "left-for-you" },
       el("div", { class: "lfy-head" }, el("span", { class: "dot", style: "background:var(--amber)" }),
         el("strong", {}, "Left for you"), el("span", { class: "hint" }, `${who} finished the work but needs these from you.`),

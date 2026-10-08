@@ -666,7 +666,7 @@ export async function workspaceView(root, projectId, route) {
       (!state.mine || t.byUser) && (!state.agentFilter || t.assigneeId === state.agentFilter);
     // doar in Done task-urile se grupeaza (arbore sau fir de lucru, din task-urile gata); in
     // celelalte coloane fiecare task are cardul lui, in coloana statusului sau
-    const single = (t) => ({ root: t, subs: [], follows: [], followOpen: 0 });
+    const single = (t) => ({ root: t, subs: [], follows: [] });
     const groups = [
       ...p.tasks.filter((t) => t.status !== "done").map(single),
       ...doneGroups(taskGroups(p.tasks)),
@@ -684,11 +684,7 @@ export async function workspaceView(root, projectId, route) {
       if (t.status === "review") return "lead";
       return t.stageId ? "s" + t.stageId : "loose";
     };
-    for (const g of groups) {
-      g.key = colKey(groupAt(g));
-      // grupul sta in alta coloana decat task-ul care a pornit firul: aratam cate radacini follow-up sunt deschise
-      g.openLabel = g.followOpen > 0 && g.key !== colKey(g.root) ? g.followOpen : 0;
-    }
+    for (const g of groups) g.key = colKey(g.root);
     const inCol = (key) => groups.filter((g) => g.key === key);
     count.textContent = p.total ? `${p.done} of ${p.total} done` : "No tasks yet";
     // replaceChildren nu ignora false (el() da): filtram noi
@@ -718,32 +714,25 @@ export async function workspaceView(root, projectId, route) {
 
   // doneGroups: grupurile din Done, din grupurile complete (arbore + fir): raman doar membrii gata.
   // Daca radacina nu e gata, cardul e primul membru gata (dupa numar), iar restul stau sub el.
+  // Un membru al carui parinte nu e in grup (e deschis) nu se indenteaza: adancimea ar minti.
   function doneGroups(all) {
     const out = [];
     for (const g of all) {
-      const subs = g.subs.filter((s) => s.task.status === "done");
-      if (g.root.status === "done") {
-        out.push({ ...g, subs, follows: g.follows.filter((t) => t.status === "done"), followOpen: 0 });
-        continue;
+      let subs = g.subs.filter((s) => s.task.status === "done");
+      let root = g.root;
+      let follows = g.follows.filter((t) => t.status === "done");
+      if (root.status !== "done") {
+        if (!subs.length) continue;
+        const [first, ...rest] = [...subs].sort((a, b) => a.task.number - b.task.number);
+        root = first.task;
+        subs = rest;
+        follows = [];
       }
-      if (!subs.length) continue;
-      const [first, ...rest] = [...subs].sort((a, b) => a.task.number - b.task.number);
-      out.push({ root: first.task, subs: rest.map((s) => ({ task: s.task, depth: 0 })), follows: [], followOpen: 0 });
+      const ids = new Set([root.id, ...subs.map((s) => s.task.id)]);
+      subs = subs.map((s) => (s.follow || ids.has(s.task.parentTaskId) ? s : { ...s, depth: 0 }));
+      out.push({ root, subs, follows });
     }
     return out;
-  }
-
-  // groupAt: task-ul dupa care se alege coloana grupului. Fara follow-up-uri e radacina
-  // (ca inainte). Intr-un fir: daca toate radacinile de arbore din fir (pornirea si fiecare
-  // follow-up) sunt gata, radacina (deci Done); altfel radacina deschisa cu cea mai recenta
-  // activitate. Sub-task-urile nu conteaza aici: starea lor se vede deja in radacina arborelui
-  // (un parinte care asteapta sub-task-uri ramane In progress). Deliberat: grupul trece in Done
-  // cand toate radacinile de arbore sunt gata, chiar daca un sub-task e inca deschis.
-  function groupAt(g) {
-    const open = [g.root, ...g.follows].filter((t) => t.status !== "done");
-    if (!open.length) return g.root;
-    const at = (t) => Date.parse(t.updatedAt) || 0;
-    return open.reduce((best, t) => (at(t) > at(best) || (at(t) === at(best) && t.number > best.number) ? t : best));
   }
 
   // column: o coloana a board-ului; items sunt grupuri (radacina + descendentii ei).
@@ -770,7 +759,7 @@ export async function workspaceView(root, projectId, route) {
   // taskGroups: grupurile board-ului. Intai arborii: radacinile (fara parinte, cu parinte lipsa
   // sau in ciclu) si toti descendentii lor, la orice adancime. Apoi firele de lucru: un arbore
   // a carui radacina are threadId catre alt task din proiect intra in grupul arborelui acelui
-  // task (follow-up). Intoarce [{ root, subs: [{ task, depth, follow }], follows, followOpen }]
+  // task (follow-up). Intoarce [{ root, subs: [{ task, depth, follow }], follows }]
   // in ordinea task-urilor primite; follows sunt radacinile follow-up-urilor, dupa numar.
   function taskGroups(tasks) {
     const byTask = new Map(tasks.map((t) => [t.id, t]));
@@ -844,9 +833,7 @@ export async function workspaceView(root, projectId, route) {
         subs.push({ task: f.root, depth: 0, follow: true });
         for (const s of f.subs) subs.push({ task: s.task, depth: s.depth + 1 });
       }
-      // followOpen: radacinile follow-up deschise, aceleasi care decid coloana (groupAt)
-      const followOpen = fs.filter((f) => f.root.status !== "done").length;
-      groups.push({ root: tr.root, subs, follows: fs.map((f) => f.root), followOpen });
+      groups.push({ root: tr.root, subs, follows: fs.map((f) => f.root) });
     };
     for (const tr of trees) {
       if (hostOf(tr) !== tr) continue; // e deja in grupul firului lui
@@ -857,21 +844,14 @@ export async function workspaceView(root, projectId, route) {
     return groups;
   }
 
-  // groupCard: cardul radacinii plus "▸ 3/5 subtasks done" (sau "tasks" cand grupul are
-  // follow-up-uri), care desfasoara restul membrilor ca randuri compacte; click pe un rand
-  // deschide modala task-ului (ca un card)
+  // groupCard: cardul radacinii plus "▸ 3 more done", care desfasoara restul membrilor ca randuri
+  // compacte (doar Done se grupeaza); click pe un rand deschide modala task-ului (ca un card)
   function groupCard(g, byId) {
-    const card = taskCard(g.root, byId.get(g.root.assigneeId), byId);
+    const members = new Set([g.root.id, ...g.subs.map((s) => s.task.id)]);
+    const card = taskCard(g.root, byId.get(g.root.assigneeId), byId, members);
     if (!g.subs.length) return card;
     const n = g.subs.length;
-    const done = g.subs.filter((s) => s.task.status === "done").length;
-    const word = g.follows.length ? (n === 1 ? "task" : "tasks") : (n === 1 ? "subtask" : "subtasks");
-    const label = (open) => `${open ? "\u25be" : "\u25b8"} ${done}/${n} ${word} done`;
-    // cine asteapta utilizatorul: blocat, review decis de el sau task nemiscat
-    const decides = state.project.userDecides || [];
-    const stuck = state.project.stuck || [];
-    const needs = g.subs.filter(({ task }) => task.status === "blocked" || decides.includes(task.id) ||
-      stuck.some((s) => s.taskId === task.id)).length;
+    const label = (open) => `${open ? "\u25be" : "\u25b8"} ${n} more done`;
     const listId = `task-subs-${g.root.id}`;
     const list = el("ul", { class: "task-subs", id: listId, hidden: !subsOpen.has(g.root.id) },
       g.subs.map(({ task, depth, follow }) => {
@@ -884,7 +864,7 @@ export async function workspaceView(root, projectId, route) {
           },
             el("span", { class: "task-id" }, ref(task)),
             el("span", { class: "task-sub-title" }, task.title),
-            who ? el("span", { class: "hint" }, who.workingTaskId === task.id ? el("span", { class: "dot working", title: "Working on it" }) : null, who.name) : null,
+            who ? el("span", { class: "hint" }, who.name) : null,
             el("span", { class: `pill pill-task-${task.status}` }, SUB_STATUS[task.status] || task.status)));
       }));
     const btn = el("button", {
@@ -897,9 +877,7 @@ export async function workspaceView(root, projectId, route) {
         btn.textContent = label(open);
       },
     }, label(subsOpen.has(g.root.id)));
-    const head = el("div", { class: "subs-head" }, btn,
-      g.openLabel ? el("span", { class: "badge-open", title: "Open follow-ups keep this group out of the start task's column" }, `${g.openLabel} open`) : null,
-      needs ? el("span", { class: "badge-needs" }, `${needs} ${needs === 1 ? "needs" : "need"} you`) : null);
+    const head = el("div", { class: "subs-head" }, btn);
     return el("div", { class: "task-group" }, card, head, list);
   }
 
@@ -1014,10 +992,9 @@ export async function workspaceView(root, projectId, route) {
   // recurent), titlul, o linie de stare (cine lucreaza, la cine asteapta), jos
   // T-<nr>, cine si fisierele, cu avatarul asignatului in dreapta.
   // relationTag: pe un card deschis, de cine tine task-ul (sub-task al lui T-3 / follow-up al lui T-3);
-  // in Done task-urile legate stau oricum in acelasi grup
-  function relationTag(t) {
-    if (t.status === "done") return null;
-    const of = (id) => state.project.tasks.find((x) => x.id === id);
+  // in Done etichetele apar doar cand parintele / firul nu e in grup (members = ids din grup)
+  function relationTag(t, members) {
+    const of = (id) => state.project.tasks.find((x) => x.id === id && !(t.status === "done" && members?.has(id)));
     const parent = t.parentTaskId && t.parentTaskId !== t.id ? of(t.parentTaskId) : null;
     if (parent) return el("span", { class: "label-tag", title: `Subtask of ${ref(parent)}: ${parent.title}` }, `\u21b3 ${ref(parent)}`);
     const start = t.threadId && t.threadId !== t.id ? of(t.threadId) : null;
@@ -1025,23 +1002,27 @@ export async function workspaceView(root, projectId, route) {
     return null;
   }
 
-  function taskCard(t, who, byId) {
+  function taskCard(t, who, byId, members) {
     const blocked = t.status === "blocked";
     const stage = t.status === "review" ? stageName(t, who, byId) : null;
     const waiting = t.stageId && t.status === "queued"; // in etapa, il ia primul agent liber
     const stuck = (state.project.stuck || []).some((s) => s.taskId === t.id);
     const decides = t.status === "review" && (state.project.userDecides || []).includes(t.id);
-    // workingTaskId = task-ul run-ului activ (nu primul task In progress al agentului)
-    const working = who && who.workingTaskId === t.id;
+    // workingTaskId = task-ul run-ului activ; lucreaza orice agent, nu doar asignatul
+    const worker = (state.project.agents || []).find((a) => a.workingTaskId === t.id);
+    const working = !!worker;
+    // progres pe un task deschis cu sub-task-uri (copiii directi)
+    const kids = t.status === "done" ? [] : state.project.tasks.filter((x) => x.parentTaskId === t.id && x.id !== t.id);
+    const kidsDone = kids.filter((x) => x.status === "done").length;
     let line = null;
     if (blocked) line = el("span", { class: "task-line bad" }, "Blocked");
-    else if (working) line = el("span", { class: "task-line working" }, el("span", { class: "dot working" }), `${who.name} \u00b7 working`);
+    else if (working) line = el("span", { class: "task-line working" }, el("span", { class: "dot working" }), `${worker.name} \u00b7 working`);
     else if ((state.project.fillIns || []).some((f) => f.taskId === t.id)) line = el("span", { class: "task-line warn" }, "Waiting on you");
     else if (decides) line = el("span", { class: "task-line warn" }, "Waiting for you to decide");
     else if (stage) line = el("span", { class: "task-line warn" }, `With ${stage}`);
     const labels = [
       t.fromProject ? el("span", { class: "label-tag linked", title: `Requested by ${t.fromProject}` }, `\u2194 ${t.fromProject}`) : null,
-      relationTag(t),
+      relationTag(t, members),
       t.recurringId ? el("span", { class: "label-tag recurring", title: "From a recurring task" }, "\u21bb recurring") : null,
       stuck ? el("span", { class: "label-tag stuck", title: "No one is moving this task" }, "stuck") : null,
     ].filter(Boolean);
@@ -1055,6 +1036,7 @@ export async function workspaceView(root, projectId, route) {
       line,
       el("span", { class: "task-foot" },
         el("span", { class: "task-id" }, ref(t)),
+        kids.length ? el("span", { class: "task-meta", title: "Subtasks done" }, `${kidsDone}/${kids.length} subtasks`) : null,
         waiting ? el("span", { class: "task-meta" }, "queued in stage")
           : files ? el("span", { class: "task-meta" }, files)
           : who && !working ? el("span", { class: "task-meta" }, who.name) : null,
