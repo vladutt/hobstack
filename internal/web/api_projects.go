@@ -196,6 +196,8 @@ type agentView struct {
 	Status      string      `json:"status"`
 	ActiveRunID string      `json:"activeRunId"`
 	CurrentTask *store.Task `json:"currentTask"`
+	// WorkingTaskID: task-ul run-ului activ (0 = nu lucreaza sau lucreaza fara task)
+	WorkingTaskID int64 `json:"workingTaskId"`
 }
 
 // taskView: task-ul plus numarul de fisiere modificate de agenti pe el.
@@ -404,7 +406,8 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, a := range agents {
 		status, current := s.team.AgentStatus(a, tasks)
-		d.Agents = append(d.Agents, agentView{Agent: a, Roles: store.RolesOf(a, agents), Status: status, ActiveRunID: s.team.ActiveRunID(a.ID), CurrentTask: current})
+		d.Agents = append(d.Agents, agentView{Agent: a, Roles: store.RolesOf(a, agents), Status: status, ActiveRunID: s.team.ActiveRunID(a.ID), CurrentTask: current,
+			WorkingTaskID: s.team.ActiveTaskID(a.ID)})
 	}
 	writeJSON(w, http.StatusOK, d)
 }
