@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"foreman/internal/library"
 	"foreman/internal/mcp"
@@ -34,6 +35,9 @@ func TestHelperProposeMCP(t *testing.T) {
 		case "initialize":
 			r = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "t", "version": "1"}}
 		case "tools/list":
+			if os.Getenv("FOREMAN_PROPOSE_SLEEP") != "" {
+				time.Sleep(time.Second)
+			}
 			r = map[string]any{"tools": []any{map[string]any{"name": "list_vehicles"}, map[string]any{"name": "get_vehicle"}}}
 		}
 		out, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": m.ID, "result": r})
@@ -106,6 +110,7 @@ func TestProposeLibraryRejects(t *testing.T) {
 	if entries, _ := os.ReadDir(filepath.Join(f.tm.lib.Root, "proposals")); len(entries) != 0 {
 		t.Fatalf("foldere orfane: %v", entries)
 	}
+	noStaging(t, f)
 	// fara write sau din wizard/draft: refuzat
 	c2 := c
 	c2.CanWrite = false
@@ -123,14 +128,86 @@ func TestProposeLibraryRejects(t *testing.T) {
 	_ = dir
 }
 
+// withShell da agentului si tool-ul shell (serverele MCP locale il cer).
+func withShell(t *testing.T, f *fixture, a store.Agent) {
+	t.Helper()
+	a.Tools = []string{"write", "shell"}
+	if err := f.st.UpdateAgent(a); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func noStaging(t *testing.T, f *fixture) {
+	t.Helper()
+	entries, _ := os.ReadDir(filepath.Join(f.tm.lib.Root, "proposals"))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".staging-") {
+			t.Fatalf("a ramas folder de lucru: %s", e.Name())
+		}
+	}
+}
+
+func TestProposeLocalMCPNeedsShell(t *testing.T) {
+	f, c, dir := proposeSetup(t)
+	os.WriteFile(filepath.Join(dir, "x.sh"), []byte("#!/bin/sh\ntouch "+filepath.Join(dir, "pwned")+"\n"), 0o755)
+	in := mcp.LibraryInput{Kind: "mcp", Name: "sneaky", Description: "d", Files: []string{"x.sh"}, Command: "sh", Args: []string{"${DIR}/x.sh"}}
+	_, err := f.tm.ProposeLibraryItem(c, in)
+	if err == nil || !strings.Contains(err.Error(), "needs the Shell tool") {
+		t.Fatalf("trebuia refuzat: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "pwned")); err == nil {
+		t.Fatal("scriptul a rulat")
+	}
+	if items, _ := f.st.ListLibraryItems(""); len(items) != 0 {
+		t.Fatalf("%+v", items)
+	}
+	noStaging(t, f)
+}
+
+func TestProposeNoRowWhileProbing(t *testing.T) {
+	f, c, dir := proposeSetup(t)
+	withShell(t, f, f.rook)
+	exe, _ := os.Executable()
+	os.WriteFile(filepath.Join(dir, "server.py"), []byte("x"), 0o644)
+	in := mcp.LibraryInput{Kind: "mcp", Name: "slow-one", Description: "d", Files: []string{"server.py"},
+		Command: "env", Args: []string{"FOREMAN_PROPOSE_MCP=1", "FOREMAN_PROPOSE_SLEEP=1", exe, "-test.run=TestHelperProposeMCP"}}
+	done := make(chan error, 1)
+	go func() { _, err := f.tm.ProposeLibraryItem(c, in); done <- err }()
+	deadline := time.After(800 * time.Millisecond)
+loop:
+	for {
+		select {
+		case <-deadline:
+			break loop
+		case err := <-done:
+			t.Fatalf("a terminat prea repede: %v", err)
+		default:
+			if items, _ := f.st.ListLibraryItems(""); len(items) != 0 {
+				t.Fatalf("rand vizibil in timpul probe-ului: %+v", items)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if items, _ := f.st.ListLibraryItems(""); len(items) != 1 {
+		t.Fatalf("%+v", items)
+	}
+	if fi, err := os.Stat(filepath.Join(f.tm.lib.Root, "proposals")); err != nil || !fi.IsDir() {
+		t.Fatal(err)
+	}
+	noStaging(t, f)
+}
+
 func TestProposeLibraryLocalMCP(t *testing.T) {
 	f, c, dir := proposeSetup(t)
+	withShell(t, f, f.rook)
 	// serverul de proba e binarul de test insusi; ${DIR} nu e folosit aici, dar trebuie inlocuit
 	exe, _ := os.Executable()
 	os.WriteFile(filepath.Join(dir, "server.py"), []byte("x"), 0o644)
 	in := mcp.LibraryInput{Kind: "mcp", Name: "vehicles", Description: "d", Files: []string{"server.py"},
-		Command: exe, Args: []string{"-test.run=TestHelperProposeMCP", "${DIR}"}}
-	t.Setenv("FOREMAN_PROPOSE_MCP", "1")
+		Command: "env", Args: []string{"FOREMAN_PROPOSE_MCP=1", exe, "-test.run=TestHelperProposeMCP", "${DIR}"}}
 	if _, err := f.tm.ProposeLibraryItem(c, in); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +215,7 @@ func TestProposeLibraryLocalMCP(t *testing.T) {
 	if err != nil || strings.Join(it.ToolNames, ",") != "list_vehicles,get_vehicle" || it.Transport != "local" {
 		t.Fatalf("%+v %v", it, err)
 	}
-	if it.Args[1] != "${DIR}" {
+	if it.Args[len(it.Args)-1] != "${DIR}" {
 		t.Fatalf("args se salveaza cu ${DIR}: %v", it.Args)
 	}
 
@@ -150,6 +227,7 @@ func TestProposeLibraryLocalMCP(t *testing.T) {
 	if _, err := f.st.FindLibraryItem("mcp", "dead"); err == nil {
 		t.Fatal("rand orfan")
 	}
+	noStaging(t, f)
 
 	// remote: fara fisiere, fara probe
 	in3 := mcp.LibraryInput{Kind: "mcp", Name: "remote-one", Description: "d", URL: "https://example.com/mcp", Secrets: []string{"API_TOKEN"}}

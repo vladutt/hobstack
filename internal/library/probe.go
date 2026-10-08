@@ -15,10 +15,24 @@ import (
 // ProbeMCP porneste un server MCP local, ii cere tools/list si intoarce numele tool-urilor.
 // Procesul e oprit la timeout si la intoarcere.
 func ProbeMCP(command string, args []string, env map[string]string, timeout time.Duration) ([]string, error) {
+	return ProbeMCPIn("", command, args, env, timeout)
+}
+
+// probeEnvKeys: singurele variabile mostenite de serverul de proba; restul mediului Foreman (token-uri etc.) nu ajunge la el.
+var probeEnvKeys = []string{"PATH", "HOME", "LANG", "TMPDIR", "SystemRoot", "TEMP"}
+
+// ProbeMCPIn ca ProbeMCP, dar porneste procesul in dir ("" = folderul curent) si cu mediu curatat.
+func ProbeMCPIn(dir, command string, args []string, env map[string]string, timeout time.Duration) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, command, args...) // la ctx.Done() omoara procesul
-	cmd.Env = os.Environ()
+	cmd.Dir = dir
+	cmd.Env = nil
+	for _, k := range probeEnvKeys {
+		if v, ok := os.LookupEnv(k); ok {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+	}
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

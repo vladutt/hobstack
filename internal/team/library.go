@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -82,36 +80,35 @@ func validateLibraryInput(in mcp.LibraryInput) (mcp.LibraryInput, error) {
 	return in, nil
 }
 
-// reserveProposal verifica limita si numele si insereaza randul (propus), ca sa avem un id pentru folderul propunerii.
-// Randul ocupa locul in limita cat dureaza copierea si probe-ul, deci doua propuneri paralele nu o pot depasi.
-func (t *Team) reserveProposal(c mcp.Caller, a store.Agent, in mcp.LibraryInput) (store.LibraryItem, error) {
-	t.work.Lock()
-	defer t.work.Unlock()
-	n, err := t.st.CountOpenProposals(c.ProjectID)
+// checkProposalRoom verifica limita de propuneri deschise si numele liber. Se cheama cu t.work blocat.
+func (t *Team) checkProposalRoom(projectID int64, in mcp.LibraryInput) error {
+	n, err := t.st.CountOpenProposals(projectID)
 	if err != nil {
-		return store.LibraryItem{}, err
+		return err
 	}
 	if n >= maxOpenProposals {
-		return store.LibraryItem{}, fmt.Errorf("this project already has %d proposals waiting for the user; wait for a decision before proposing more", maxOpenProposals)
+		return fmt.Errorf("this project already has %d proposals waiting for the user; wait for a decision before proposing more", maxOpenProposals)
 	}
-	it := store.LibraryItem{Kind: in.Kind, Name: in.Name, Description: in.Description, Status: store.ItemProposed,
-		SourceProjectID: c.ProjectID, SourceTaskID: c.TaskID, MadeByAgentID: a.ID, MadeBy: a.Name,
-		Needs: in.Needs, Secrets: in.Secrets, Entry: in.Entry, Command: in.Command, Args: in.Args, URL: in.URL}
-	if in.Kind == store.KindMCP {
-		it.Transport = "local"
-		if in.URL != "" {
-			it.Transport = "remote"
-		}
+	if _, err := t.st.FindLibraryItem(in.Kind, in.Name); err == nil {
+		return fmt.Errorf("the library already has a %s named %q; pick another name", in.Kind, in.Name)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return err
 	}
-	if err := t.st.AddLibraryItem(&it); errors.Is(err, store.ErrConflict) {
-		return it, fmt.Errorf("the library already has a %s named %q; pick another name", in.Kind, in.Name)
-	} else if err != nil {
-		return it, err
+	return nil
+}
+
+// clipText scurteaza un text (eroarea probe-ului poate contine tot ce scrie serverul).
+func clipText(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= n {
+		return string(r)
 	}
-	return it, nil
+	return string(r[:n]) + "..."
 }
 
 // ProposeLibraryItem: un agent cu tool-ul write propune un tool / skill / server MCP pentru Library.
+// Randul din baza apare abia la sfarsit, dupa ce fisierele sunt copiate si serverul a trecut probe-ul:
+// pana atunci propunerea exista doar intr-un folder de lucru (.staging-*), invizibil pentru utilizator.
 func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, error) {
 	if t.lib == nil {
 		return "", errors.New("the library is not available")
@@ -132,58 +129,75 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 	if err != nil {
 		return "", err
 	}
+	local := in.Kind == store.KindMCP && in.URL == ""
+	// un server local porneste un proces pe masina: asta cere Shell, nu doar write
+	if local && !slices.Contains(a.Tools, "shell") {
+		return "", errors.New("Proposing a local MCP server needs the Shell tool; ask the user to add it, or propose a remote server.")
+	}
 	home := store.HomeFolder(a, p.Folders)
 	if home.Path == "" {
 		return "", errors.New("your project has no folder")
 	}
 
-	it, err := t.reserveProposal(c, a, in)
+	// verificare rapida inainte de munca pe disc (se repeta la sfarsit, sub lock)
+	t.work.Lock()
+	err = t.checkProposalRoom(c.ProjectID, in)
+	t.work.Unlock()
 	if err != nil {
 		return "", err
 	}
-	// de aici orice esec sterge randul si folderul propunerii (fara resturi)
-	ok := false
-	defer func() {
-		if !ok {
-			_ = t.st.DeleteLibraryItem(it.ID)
-			_ = os.RemoveAll(filepath.Join(t.lib.Root, "proposals", strconv.FormatInt(it.ID, 10)))
-		}
-	}()
 
 	// copiere si probe fara t.work: probe-ul poate dura 10 s si ar bloca tot scheduler-ul
-	var dir string
+	var staging string
 	if len(in.Files) > 0 {
-		if dir, _, _, err = t.lib.CopyProposal(it.ID, home.Path, in.Files); err != nil {
+		if staging, _, _, err = t.lib.CopyStaged(home.Path, in.Files); err != nil {
 			return "", err
 		}
-	} else { // mcp remote fara fisiere: Publish are totusi nevoie de folderul propunerii
-		dir = filepath.Join(t.lib.Root, "proposals", strconv.FormatInt(it.ID, 10))
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+	} else {
+		// mcp remote fara fisiere: nu e nimic de copiat, dar Publish are nevoie de un folder al propunerii (gol)
+		if staging, err = t.lib.NewStaging(); err != nil {
 			return "", err
 		}
 	}
-	if in.Kind == store.KindMCP && in.URL == "" {
+	defer os.RemoveAll(staging) // dupa AdoptStaged nu mai exista
+
+	var toolNames []string
+	if local {
 		args := make([]string, len(in.Args))
 		for i, s := range in.Args {
-			args[i] = strings.ReplaceAll(s, "${DIR}", dir)
+			args[i] = strings.ReplaceAll(s, "${DIR}", staging)
 		}
 		// fara secrete la propunere: serverul trebuie sa raspunda la tools/list si fara ele
-		names, err := library.ProbeMCP(in.Command, args, nil, 10*time.Second)
+		toolNames, err = library.ProbeMCPIn(staging, in.Command, args, nil, 10*time.Second)
 		if err != nil {
-			return "", fmt.Errorf("the MCP server did not answer tools/list: %w", err)
-		}
-		if err := t.st.SetLibraryToolNames(it.ID, names); err != nil {
-			return "", err
+			return "", fmt.Errorf("the MCP server did not answer tools/list: %s", clipText(err.Error(), 300))
 		}
 	}
 
-	// dupa probe: randul trebuie sa existe inca (utilizatorul putea sa-l stearga)
 	t.work.Lock()
 	defer t.work.Unlock()
-	if it, err = t.st.GetLibraryItem(it.ID); err != nil {
-		return "", errors.New("the proposal was removed meanwhile")
+	if err := t.checkProposalRoom(c.ProjectID, in); err != nil { // cat a durat probe-ul, altcineva putea ocupa locul
+		return "", err
 	}
-	ok = true
+	it := store.LibraryItem{Kind: in.Kind, Name: in.Name, Description: in.Description, Status: store.ItemProposed,
+		SourceProjectID: c.ProjectID, SourceTaskID: c.TaskID, MadeByAgentID: a.ID, MadeBy: a.Name,
+		Needs: in.Needs, Secrets: in.Secrets, Entry: in.Entry, Command: in.Command, Args: in.Args, URL: in.URL,
+		ToolNames: toolNames}
+	if in.Kind == store.KindMCP {
+		it.Transport = "local"
+		if !local {
+			it.Transport = "remote"
+		}
+	}
+	if err := t.st.AddLibraryItem(&it); errors.Is(err, store.ErrConflict) {
+		return "", fmt.Errorf("the library already has a %s named %q; pick another name", in.Kind, in.Name)
+	} else if err != nil {
+		return "", err
+	}
+	if _, err := t.lib.AdoptStaged(staging, it.ID); err != nil {
+		_ = t.st.DeleteLibraryItem(it.ID)
+		return "", err
+	}
 	t.note(c.ProjectID, a.ID, fmt.Sprintf("Proposed %s %q to the library. The user decides in Needs you; keep using it in this project meanwhile.", it.Kind, it.Name), true)
 	t.emit(c.ProjectID, "library", it)
 	return fmt.Sprintf("Proposed %s to the library. The user decides in Needs you; keep using it in this project meanwhile.", it.Name), nil

@@ -47,6 +47,7 @@ func New(root string, st *store.Store) *Lib {
 	}
 	l := &Lib{Root: root, St: st, buildMus: map[int64]*sync.Mutex{}, itemMus: map[int64]*sync.Mutex{}}
 	l.sweepRunFiles()
+	l.sweepStaging()
 	return l
 }
 
@@ -100,6 +101,56 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // Fiecare cale trebuie sa fie relativa si sa ramana in srcDir: fara "..", fara cai absolute,
 // fara symlink-uri (nici pe parcurs), fara foldere, cel mult 20 de fisiere si 1 MB.
 func (l *Lib) CopyProposal(itemID int64, srcDir string, files []string) (dir string, nfiles, lines int, err error) {
+	staging, nfiles, lines, err := l.CopyStaged(srcDir, files)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	defer os.RemoveAll(staging) // dupa rename nu mai exista
+	dir = filepath.Join(l.Root, "proposals", strconv.FormatInt(itemID, 10))
+	if err := os.RemoveAll(dir); err != nil {
+		return "", 0, 0, err
+	}
+	if err := os.Rename(staging, dir); err != nil {
+		return "", 0, 0, err
+	}
+	return dir, nfiles, lines, nil
+}
+
+// AdoptStaged muta un folder din CopyStaged la locul propunerii itemului. Esueaza daca locul e ocupat.
+func (l *Lib) AdoptStaged(staging string, itemID int64) (string, error) {
+	dir := filepath.Join(l.Root, "proposals", strconv.FormatInt(itemID, 10))
+	if _, err := os.Lstat(dir); err == nil {
+		return "", errors.New("a proposal folder already exists for this item")
+	}
+	if err := os.Rename(staging, dir); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// NewStaging creeaza un folder gol de lucru (Root/proposals/.staging-*), pentru propuneri fara fisiere.
+func (l *Lib) NewStaging() (string, error) {
+	base := filepath.Join(l.Root, "proposals")
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(base, ".staging-")
+}
+
+// sweepStaging sterge folderele .staging-* ramase de peste 24h (crash).
+func (l *Lib) sweepStaging() {
+	base := filepath.Join(l.Root, "proposals")
+	entries, _ := os.ReadDir(base)
+	for _, e := range entries {
+		if fi, err := e.Info(); err == nil && strings.HasPrefix(e.Name(), ".staging-") && time.Since(fi.ModTime()) > 24*time.Hour {
+			os.RemoveAll(filepath.Join(base, e.Name()))
+		}
+	}
+}
+
+// CopyStaged face aceleasi verificari ca CopyProposal, dar scrie intr-un folder de lucru (.staging-*),
+// fara element in baza. Chemati AdoptStaged ca sa-l faceti propunerea unui item, sau stergeti-l.
+func (l *Lib) CopyStaged(srcDir string, files []string) (staging string, nfiles, lines int, err error) {
 	if len(files) == 0 {
 		return "", 0, 0, errors.New("no files to copy")
 	}
@@ -154,33 +205,23 @@ func (l *Lib) CopyProposal(itemID int64, srcDir string, files []string) (dir str
 		lines += countLines(data)
 	}
 
-	// scriem intr-un folder temporar si abia apoi inlocuim propunerea veche
-	dir = filepath.Join(l.Root, "proposals", strconv.FormatInt(itemID, 10))
-	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
-		return "", 0, 0, err
-	}
-	tmp, err := os.MkdirTemp(filepath.Dir(dir), strconv.FormatInt(itemID, 10)+".tmp-")
+	tmp, err := l.NewStaging()
 	if err != nil {
 		return "", 0, 0, err
 	}
-	defer os.RemoveAll(tmp) // dupa rename nu mai exista
 	for _, f := range list {
 		dst := filepath.Join(tmp, f.rel)
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			os.RemoveAll(tmp)
 			return "", 0, 0, err
 		}
 		if err := os.WriteFile(dst, f.data, f.mode); err != nil {
+			os.RemoveAll(tmp)
 			return "", 0, 0, err
 		}
 		_ = os.Chmod(dst, f.mode) // umask-ul nu trebuie sa ne scoata bitul de executie
 	}
-	if err := os.RemoveAll(dir); err != nil {
-		return "", 0, 0, err
-	}
-	if err := os.Rename(tmp, dir); err != nil {
-		return "", 0, 0, err
-	}
-	return dir, len(list), lines, nil
+	return tmp, len(list), lines, nil
 }
 
 // checkRel valideaza o cale relativa si o intoarce curatata.

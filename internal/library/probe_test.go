@@ -32,7 +32,14 @@ func TestHelperMCP(t *testing.T) {
 		case "initialize":
 			r = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "t", "version": "1"}}
 		case "tools/list":
-			r = map[string]any{"tools": []any{map[string]any{"name": "list_vehicles"}, map[string]any{"name": "get_vehicle"}}}
+			tools := []any{map[string]any{"name": "list_vehicles"}, map[string]any{"name": "get_vehicle"}}
+			if os.Getenv("FOREMAN_TEST_SECRET") != "" { // mediul Foreman nu trebuie sa ajunga la server
+				tools = append(tools, map[string]any{"name": "leaked_secret"})
+			}
+			if os.Getenv("FOREMAN_HELPER_EXTRA") != "" { // mediul dat explicit ajunge
+				tools = append(tools, map[string]any{"name": "extra_env"})
+			}
+			r = map[string]any{"tools": tools}
 		}
 		out, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": m.ID, "result": r})
 		fmt.Println(string(out))
@@ -51,6 +58,15 @@ func TestProbeMCP(t *testing.T) {
 	}
 	if time.Since(start) > 5*time.Second {
 		t.Fatal("procesul nu a fost oprit la timp")
+	}
+}
+
+func TestProbeMCPScrubbedEnv(t *testing.T) {
+	t.Setenv("FOREMAN_TEST_SECRET", "s3cret")
+	env := map[string]string{"FOREMAN_HELPER_MCP": "1", "FOREMAN_HELPER_EXTRA": "1"}
+	names, err := ProbeMCP(os.Args[0], []string{"-test.run=TestHelperMCP"}, env, 5*time.Second)
+	if err != nil || strings.Join(names, ",") != "list_vehicles,get_vehicle,extra_env" {
+		t.Fatalf("%v %v", names, err)
 	}
 }
 
