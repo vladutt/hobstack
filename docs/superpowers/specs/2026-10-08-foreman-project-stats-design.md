@@ -29,7 +29,8 @@ Toate limitele sunt in ora locala (`time.Local`), ca la sarcinile recurente si `
 | `30d` | 00:00 acum 29 zile | acum | zi |
 | `all` | 00:00 in ziua primului task sau run al proiectului | acum | zi (saptamana daca sunt peste 90 de zile) |
 
-Perioada precedenta = `[from - (to - from), from)`; pentru `all` nu exista (fara comparatie pe tile-uri).
+Perioada precedenta = aceeasi fereastra mutata inapoi cu 1 / 7 / 30 zile calendaristice (`[from - N zile, to - N zile)`),
+ca Today la 10:00 sa se compare cu ieri 00:00-10:00; pentru `all` nu exista (fara comparatie pe tile-uri).
 
 ## Ce arata pagina (de sus in jos)
 

@@ -443,6 +443,10 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .stats-list a { color: var(--text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .stats-list a:hover { color: var(--amber); }
 .stats-list code { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; direction: rtl; text-align: left; }
+.stats-status { height: 20px; padding: 0 8px; font-size: 11px; background: var(--card); color: var(--muted); }
+.stats-status.st-done { background: var(--teal-bg); color: var(--teal); }
+.stats-status.st-blocked { background: var(--red-bg); color: var(--red); }
+.stats-status.st-in_progress, .stats-status.st-review { background: var(--amber-bg); color: var(--amber); }
 .stats-facts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; color: var(--soft); }
 .stats-facts strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .stats-empty, .stats-error { padding: 40px 0; text-align: center; }

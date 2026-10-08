@@ -6,6 +6,7 @@ import { el, svg, toneOf } from "./ui.js";
 const RANGES = [["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["all", "All time"]];
 const PREV_LABEL = { today: "vs yesterday", "7d": "vs prev 7 days", "30d": "vs prev 30 days" };
 const RANGE_KEY = "foreman-stats-range";
+const TASK_STATUS = { queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done" };
 
 function savedRange() {
   try {
@@ -207,6 +208,7 @@ export function statsView(projectId, { agentKind }) {
     return el("ol", { class: "stats-list" }, d.topTasks.map((t) => el("li", {},
       el("a", { href: `#/p/${projectId}/tasks/${t.taskId}` }, el("span", { class: "muted" }, `T-${t.number} `), t.title),
       el("span", { class: "grow" }),
+      el("span", { class: `pill stats-status st-${t.status}` }, TASK_STATUS[t.status] || t.status),
       el("span", { class: "muted" }, `${t.runs} ${t.runs === 1 ? "run" : "runs"}`),
       el("strong", {}, money(t.costUsd)))));
   }
@@ -220,7 +222,7 @@ export function statsView(projectId, { agentKind }) {
         el("div", {}, el("strong", {}, String(t.questions)), " questions asked · ", el("strong", {}, String(t.answered)), " answered")),
       d.topFiles.length
         ? el("ol", { class: "stats-list" }, d.topFiles.map((f) => el("li", {},
-          el("code", { title: f.path }, f.path), el("span", { class: "grow" }), el("span", { class: "muted" }, `${f.changes}×`))))
+          el("code", { title: f.path }, el("bdi", { dir: "ltr" }, f.path)), el("span", { class: "grow" }), el("span", { class: "muted" }, `${f.changes}×`))))
         : null,
     ];
   }

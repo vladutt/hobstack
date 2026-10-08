@@ -72,3 +72,29 @@ func TestProjectStatsAPI(t *testing.T) {
 		t.Fatalf("proiect inexistent: %d", code)
 	}
 }
+
+// Today la 10:00 se compara cu ieri 00:00-10:00 (aceeasi parte a zilei), nu cu ieri 14:00-24:00.
+func TestStatsPrev(t *testing.T) {
+	zone := time.FixedZone("RO", 3*3600)
+	now := time.Date(2026, 10, 8, 10, 0, 0, 0, zone)
+	mid := time.Date(2026, 10, 8, 0, 0, 0, 0, zone)
+	cases := []struct {
+		name  string
+		from  time.Time
+		pfrom time.Time
+		pto   time.Time
+	}{
+		{"today", mid, mid.AddDate(0, 0, -1), now.AddDate(0, 0, -1)},
+		{"7d", mid.AddDate(0, 0, -6), mid.AddDate(0, 0, -13), now.AddDate(0, 0, -7)},
+		{"30d", mid.AddDate(0, 0, -29), mid.AddDate(0, 0, -59), now.AddDate(0, 0, -30)},
+	}
+	for _, c := range cases {
+		pfrom, pto, ok := statsPrev(c.name, c.from, now)
+		if !ok || !pfrom.Equal(c.pfrom) || !pto.Equal(c.pto) {
+			t.Errorf("%s: %v..%v %v, vrem %v..%v", c.name, pfrom, pto, ok, c.pfrom, c.pto)
+		}
+	}
+	if _, _, ok := statsPrev("all", mid, now); ok {
+		t.Error("all nu are perioada precedenta")
+	}
+}

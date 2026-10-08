@@ -39,7 +39,21 @@ func statsRange(name string, now, first time.Time) (from time.Time, bucket strin
 	return time.Time{}, "", false
 }
 
-// getProjectStats: tab-ul Stats; perioada precedenta are aceeasi lungime (lipseste la all).
+// statsPrevDays: cu cate zile calendaristice se muta fereastra pentru comparatie.
+var statsPrevDays = map[string]int{"today": 1, "7d": 7, "30d": 30}
+
+// statsPrev: perioada precedenta = aceeasi fereastra mutata inapoi cu N zile
+// calendaristice, ca Today la 10:00 sa se compare cu ieri 00:00-10:00 (nu cu ieri seara).
+// all nu are perioada precedenta.
+func statsPrev(name string, from, now time.Time) (pfrom, pto time.Time, ok bool) {
+	days, ok := statsPrevDays[name]
+	if !ok {
+		return time.Time{}, time.Time{}, false
+	}
+	return from.AddDate(0, 0, -days), now.AddDate(0, 0, -days), true
+}
+
+// getProjectStats: tab-ul Stats, cu totalurile perioadei precedente (lipsesc la all).
 func (s *Server) getProjectStats(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
@@ -72,8 +86,8 @@ func (s *Server) getProjectStats(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if name != "all" {
-		prev, err := s.st.ProjectStatsTotals(id, from.Add(-now.Sub(from)), from)
+	if pfrom, pto, ok := statsPrev(name, from, now); ok {
+		prev, err := s.st.ProjectStatsTotals(id, pfrom, pto)
 		if err != nil {
 			fail(w, err)
 			return
