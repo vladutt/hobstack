@@ -104,9 +104,12 @@ secrete), probe la Publish (30 s; fara probe pentru elementele facute de utiliza
 Tool-ul MCP propose_library_item (MCP local doar cu Shell). API + UI #/library,
 Instructions > Library cu secrete per proiect, "Recent use" pe pagina item-ului (tool ancorat pe <build>/<pid>-<hash>/bin/<nume>/ in comenzile
 Bash, MCP dupa mcp__<nume>__*, doar run-uri pe task).
+Gata (reguli pentru comenzi, spec in docs/superpowers/specs/2026-10-08-foreman-command-rules-design.md): command_rules
+(globale + override pe proiect, migrarea 023), Allow / Ask / Block pe prefixe pentru agentii cu Shell, pagina Settings;
+refuzurile pe Ask ajung in Needs you cu Allow once (command_grants) / Allow in this project / Block.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
-3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"
+3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
 4. Runs & logs, Settings
 Dupa: service install, goreleaser, notificari, git worktrees.
 Idei salvate (fara spec): chat general pe orice pagina, care propune modificari cu Apply/Undo (docs/ideas/2026-10-07-general-assistant.md);

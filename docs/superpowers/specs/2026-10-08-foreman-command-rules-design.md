@@ -1,7 +1,7 @@
 # Foreman: reguli pentru comenzi (Settings + override pe proiect + drept de apel)
 
 Data: 2026-10-08
-Status: aprobat in conversatie, de implementat.
+Status: implementat (2026-10-08).
 
 ## Scop
 

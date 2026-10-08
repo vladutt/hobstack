@@ -30,6 +30,19 @@ for example *Rook was denied Bash* with the command. Depending on the case you g
 The new tool applies from the agent's next run. Some actions are never allowed (see
 [Permissions](safety.md)). For those you only get Open and Dismiss.
 
+## Commands that need your OK
+
+When an agent runs a command whose [rule](safety.md#command-rules) is **Ask** (for example `git push`), the
+command is refused and you see *Rook wants to run* with the command. Choose:
+
+- **Allow once**: the agent may run it, in its next run only;
+- **Allow "git push" in this project**: adds an Allow rule for that command in this project;
+- **Block**: adds a Block rule for it in this project;
+- **Dismiss**: leave things as they are.
+
+After an Allow, the agent is woken up and its task goes back to the queue, so it can try again. Full
+autonomy never approves these for you.
+
 ## Stuck tasks
 
 Foreman checks every minute for tasks that nobody is moving:

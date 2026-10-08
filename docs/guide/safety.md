@@ -10,24 +10,59 @@ it appears in [Needs you](needs-you.md#access-requests) so you can decide.
 |---|---|
 | *(always)* | Reading and searching files in the project's folders and attached files; the team tools |
 | **Write files** | Creating and editing files, only in the agent's own folder |
-| **Shell commands** | Any terminal command, except the ones that are always blocked |
+| **Shell commands** | Terminal commands, following the [command rules](#command-rules) |
 | **Install packages** | `npm install`, `composer require`, `pip install`, `go get` |
 | **Git** | `git status`, `diff`, `log`, `add`, `commit`, `checkout -b` |
 | **Web search** | Web search and fetching pages |
 
-### Always blocked, for every agent
+### Command rules
 
-- `git push`, `rm -rf`, `sudo`, `brew install`;
-- package installs (`npm install`, `composer require`, `pip install`, `go get`), unless the agent has
-  **Install packages**;
-- Claude Code's own internal task lists and sub-agents. Agents coordinate through Foreman instead.
+Command rules decide what an agent with **Shell commands** may run in the terminal. Each rule is a
+command prefix with one of three modes:
+
+| Mode | What happens |
+|---|---|
+| **Allow** | The command runs. |
+| **Ask** | The command is refused and shows up in [Needs you](needs-you.md#commands-that-need-your-ok), where you can allow it. |
+| **Block** | The command is refused, and the agent is told in its instructions not to try it. |
+
+Default rules:
+
+| Command | Default |
+|---|---|
+| `git push` | Ask |
+| `rm -rf` | Ask |
+| `brew install` | Ask |
+| `sudo` | Block |
+
+Where to change them:
+
+- **Settings** (top bar): the defaults for all projects.
+- **Project settings > Commands**: for one project, set each default to Inherit, Allow, Ask or Block, or add
+  commands that exist only in that project.
+
+How matching works:
+
+- A rule matches how a command starts. The longest matching prefix wins, so `git push --force` can be
+  Block while `git push` is Ask.
+- Commands joined with `&&`, `;`, `|` or on separate lines, and commands inside `$( )`, are checked part
+  by part.
+- A longer Allow under a shorter Ask or Block cannot work, because the shorter rule still stops the
+  command. Foreman shows a warning when you set this up.
+
+Other things to know:
+
+- Rules apply only to agents that have Shell commands.
+- Claude Code's own internal task lists and sub-agents stay blocked for every agent, and cannot be
+  changed. Agents coordinate through Foreman instead.
+- Package installs (`npm install`, `composer require`, `pip install`, `go get`) are not covered by the rules:
+  they stay refused unless the agent has **Install packages**.
 
 ### Limits you should know
 
-- **Shell is powerful.** The blocks above match how a command starts. An agent with Shell commands can
-  get around them (for example `rm -fr`, or a command wrapped in `bash -c`), and it can also write
+- **Shell is powerful.** The rules match how a command starts. An agent with Shell commands can
+  get around them (for example `rm -fr`, or a command wrapped in `bash -c`, which the rules do not look inside), and it can also write
   outside its own folder through the shell. Give Shell only to agents you trust with your machine.
-  Approvals for risky actions are planned for a future version.
 - **Your global Claude settings apply.** Rules in your `~/.claude/settings.json` (for example a global
   `permissions.allow`) also apply to agents and can widen what they can do. A project's own
   `.claude/settings.json` is ignored, but its `CLAUDE.md` is read.
