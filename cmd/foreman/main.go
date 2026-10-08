@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"foreman/internal/config"
+	"foreman/internal/draft"
 	"foreman/internal/events"
 	"foreman/internal/mcp"
 	"foreman/internal/opener"
@@ -104,9 +105,12 @@ func start(args []string) error {
 
 	// wizard-ul "Proiect nou cu AI": token-urile lui MCP se rezolva inaintea celor ale echipei
 	sm := setup.New(mgr, url, filepath.Join(paths.Root, "setup"))
-	webSrv := web.New(st, tm, mgr, hub, mcp.NewServer(sm.Wrap(tm)),
+	// "Let AI draft this agent": token-urile lui se rezolva inaintea wizard-ului si a echipei
+	dm := draft.New(mgr, url, filepath.Join(paths.Root, "setup"))
+	webSrv := web.New(st, tm, mgr, hub, mcp.NewServer(dm.Wrap(sm.Wrap(tm))),
 		web.Dirs{Projects: paths.Projects, Workspaces: paths.Workspaces}, picker.Pick, picker.Available())
 	webSrv.SetSetup(sm)
+	webSrv.SetDraft(dm)
 	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
 	webSrv.SetOpener(opener.New())
 

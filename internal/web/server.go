@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"foreman/internal/config"
+	"foreman/internal/draft"
 	"foreman/internal/events"
 	"foreman/internal/models"
 	"foreman/internal/runner"
@@ -45,6 +46,7 @@ type Server struct {
 	canPick bool
 	opener  Opener          // nil = butoanele "Deschide" nu sunt disponibile
 	wizard  *wizard.Manager // nil = wizard-ul "Proiect nou cu AI" nu e disponibil
+	drafts  *draft.Manager  // nil = "Let AI draft this agent" nu e disponibil
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
@@ -54,6 +56,9 @@ func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, 
 
 // SetSetup activeaza wizard-ul "Proiect nou cu AI".
 func (s *Server) SetSetup(m *wizard.Manager) { s.wizard = m }
+
+// SetDraft activeaza "Let AI draft this agent".
+func (s *Server) SetDraft(m *draft.Manager) { s.drafts = m }
 
 func (s *Server) Handler() http.Handler {
 	static, _ := fs.Sub(staticFS, "static")
@@ -80,6 +85,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/setup/{id}/stop", s.stopSetup)
 	mux.HandleFunc("POST /api/setup/{id}/chat", s.chatSetup)
 	mux.HandleFunc("POST /api/setup/{id}/undo", s.undoSetup)
+	mux.HandleFunc("POST /api/projects/{id}/agents/draft", s.startDraft)
+	mux.HandleFunc("GET /api/drafts/{id}", s.getDraft)
+	mux.HandleFunc("POST /api/drafts/{id}/stop", s.stopDraft)
 	mux.HandleFunc("POST /api/projects/{id}/folders/{fid}/setup", s.startFolderSetup)
 	mux.HandleFunc("POST /api/projects/{id}/agents/setup", s.addAgentsFromSetup)
 	mux.HandleFunc("POST /api/projects/setup", s.createProjectFromSetup)
