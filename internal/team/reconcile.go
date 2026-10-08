@@ -428,7 +428,7 @@ func (t *Team) Resume(projectID int64) error {
 	return nil
 }
 
-// wakeForDecisions: la Resume, notificarile livrate unui run oprit s-au
+// wakeForDecisions: la Resume si la pornirea serverului, notificarile livrate unui run oprit s-au
 // pierdut. Fiecare agent care are ceva de decis primeste o nota noua:
 // reviewer-ul pentru task-urile la review, decidentul pentru cele la lider
 // sau blocate, sub-liderul pentru un task ale carui sub-task-uri sunt gata.
@@ -583,8 +583,9 @@ func hasUnfinishedSubtasks(taskID int64, tasks []store.Task) bool {
 
 // Recover aduce baza de date intr-o stare curata la pornirea serverului:
 // run-urile ramase "running" (procesele au murit odata cu serverul) devin
-// "interrupted", task-urile in lucru revin in Queued si totul e pe pauza,
-// ca nimic sa nu porneasca (si sa coste) fara stirea utilizatorului.
+// "interrupted" si task-urile in lucru revin in Queued. Pauza fiecarui proiect
+// ramane cum era (o pune doar utilizatorul, cu Stop team); proiectele sunt
+// trezite, ca bucla Run sa preia singura task-urile din coada.
 func (t *Team) Recover() error {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -596,7 +597,21 @@ func (t *Team) Recover() error {
 		return err
 	}
 	t.recordRequeued(ids)
-	return t.st.PauseAll()
+	projects, err := t.st.ListProjects()
+	if err != nil {
+		return err
+	}
+	for _, p := range projects {
+		// notificarile run-urilor oprite s-au pierdut: decidentii primesc o nota noua
+		// (pe un proiect oprit de utilizator, abia la Start team)
+		if !p.Paused {
+			if err := t.wakeForDecisions(p.ID); err != nil {
+				return err
+			}
+		}
+		t.Kick(p.ID)
+	}
+	return nil
 }
 
 // UserMessage salveaza un mesaj de la utilizator catre un agent. Agentul il

@@ -93,7 +93,8 @@ func start(args []string) error {
 	mgr := runner.NewManager(claudeBin, paths.Logs)
 	tm := team.New(st, mgr, hub, url)
 	tm.SetFilesRoot(paths.Projects)
-	// dupa un restart: run-urile vechi devin "interrupted" si totul sta pe pauza
+	// dupa un restart: run-urile vechi devin "interrupted", task-urile in lucru revin in coada
+	// si echipele pornesc singure (pauza o pune doar utilizatorul, cu Stop team)
 	if err := tm.Recover(); err != nil {
 		return fmt.Errorf("recovering state: %w", err)
 	}

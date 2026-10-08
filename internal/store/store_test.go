@@ -3,6 +3,8 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"io/fs"
 	"path/filepath"
 	"testing"
 )
@@ -60,8 +62,8 @@ func TestOpenAppliesMigrationsOnce(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
 			t.Fatal(err)
 		}
-		if v != 19 {
-			t.Fatalf("user_version = %d, vreau 19", v)
+		if v != 20 {
+			t.Fatalf("user_version = %d, vreau 20", v)
 		}
 		s.Close()
 	}
@@ -100,24 +102,24 @@ func TestUpdateAndDeleteProject(t *testing.T) {
 	}
 }
 
-func TestPauseAll(t *testing.T) {
+func TestSetPaused(t *testing.T) {
 	s := newStore(t)
 	p1, _ := newProject(t, s)
 	p2, _ := newProject(t, s)
 	if err := s.SetPaused(p1.ID, true); err != nil {
 		t.Fatal(err)
 	}
+	if p, _ := s.GetProject(p1.ID); !p.Paused {
+		t.Error("p1 trebuie sa fie pe pauza")
+	}
+	if p, _ := s.GetProject(p2.ID); p.Paused {
+		t.Error("p2 nu a fost atins")
+	}
 	if err := s.SetPaused(p1.ID, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.PauseAll(); err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range []int64{p1.ID, p2.ID} {
-		p, _ := s.GetProject(id)
-		if !p.Paused {
-			t.Errorf("proiectul %d nu e pe pauza", id)
-		}
+	if p, _ := s.GetProject(p1.ID); p.Paused {
+		t.Error("p1 trebuie sa fie pornit")
 	}
 }
 
@@ -353,5 +355,43 @@ func TestSetAgentPosition(t *testing.T) {
 	}
 	if err := s.SetAgentPosition(9999, 1, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("agent inexistent: %v", err)
+	}
+}
+
+// Migrarea 020 scoate o data toate proiectele de pe pauza: pana acum pauza o punea
+// fiecare restart, nu utilizatorul.
+func TestMigrationUnpausesProjects(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 1; n <= 19; n++ {
+		matches, _ := fs.Glob(migrations, fmt.Sprintf("migrations/%03d_*.sql", n))
+		if len(matches) != 1 {
+			t.Fatalf("migrarea %d: %v", n, matches)
+		}
+		body, _ := migrations.ReadFile(matches[0])
+		if _, err := db.Exec(string(body)); err != nil {
+			t.Fatalf("%s: %v", matches[0], err)
+		}
+	}
+	for _, q := range []string{
+		`PRAGMA user_version = 19`,
+		`INSERT INTO projects (id, name, workdir, paused, created_at) VALUES (1, 'Probe', '/tmp/probe', 1, '2026-01-01T00:00:00Z')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if p, err := s.GetProject(1); err != nil || p.Paused {
+		t.Fatalf("dupa migrare: %+v %v", p, err)
 	}
 }

@@ -25,7 +25,7 @@ Autorul e senior PHP/Laravel, incepator in Go: cod simplu, idiomatic, comentat u
 
 ## Stare
 Gata (felia 1, spec in docs/superpowers/specs/2026-09-29-foreman-slice1-design.md): proiecte, echipe,
-orchestrare prin MCP, board live, chat per agent, SQLite, pauza la pornire.
+orchestrare prin MCP, board live, chat per agent, SQLite.
 Gata (echipe ca graf, spec in docs/superpowers/specs/2026-09-29-foreman-team-graph-design.md): ierarhie cu mai multe
 radacini si sub-lideri, reviewer per agent, editor canvas.
 Gata (wizard, spec in docs/superpowers/specs/2026-09-30-foreman-setup-wizard-design.md): "Proiect nou cu AI":
@@ -85,6 +85,9 @@ doua coloane (continut + detalii); avatare colorate dupa nume (ui.toneOf, amber 
 Gata (Stats, spec in docs/superpowers/specs/2026-10-08-foreman-project-stats-design.md): tab-ul Stats pe proiect
 (Today / 7d / 30d / All): cheltuiala si tokeni pe agent si pe zi, task-uri create/terminate, mediana pana la Done,
 rata de succes a run-urilor, fisiere si comenzi, intrebari; store.ProjectStats + GET /api/projects/{id}/stats, grafice SVG in stats.js.
+Gata (fara pauza la pornire): la restart run-urile vechi devin interrupted, task-urile in lucru revin in Queued si
+echipele pornesc singure (Recover trezeste proiectele si decidentii). Pauza o pune doar utilizatorul (Stop team) sau un run
+care nu poate porni (anti-bucla); migrarea 020 a scos o data proiectele de pe pauzele puse de restarturile vechi.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"

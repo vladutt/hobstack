@@ -256,9 +256,44 @@ func TestRecover(t *testing.T) {
 		t.Fatalf("run vechi: %q", r.Status)
 	}
 	f.wantStatus(t, 1, store.StatusQueued)
-	if p, _ := f.st.GetProject(f.p.ID); !p.Paused {
-		t.Fatal("dupa Recover proiectul trebuie sa fie pe pauza")
+	if p, _ := f.st.GetProject(f.p.ID); p.Paused {
+		t.Fatal("restartul nu pune proiectul pe pauza")
 	}
+}
+
+// Dupa restart, task-urile din coada pornesc singure (fara Start team); un proiect
+// oprit de utilizator ramane oprit.
+func TestRecoverWakesProjects(t *testing.T) {
+	f := setup(t)
+	f.task(t, "A", f.rook, store.StatusQueued)
+	stopped := store.Project{Name: "Stopped", Workdir: t.TempDir()}
+	if _, err := f.st.CreateProject(&stopped); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.SetPaused(stopped.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := f.st.GetProject(stopped.ID); !p.Paused {
+		t.Fatal("proiectul oprit de utilizator trebuie sa ramana oprit")
+	}
+	// bucla Run reconciliaza proiectele trezite; aici o facem de mana
+	f.tm.mu.Lock()
+	kicked := f.tm.pending[f.p.ID]
+	f.tm.mu.Unlock()
+	if !kicked {
+		t.Fatal("Recover trebuie sa trezeasca proiectele")
+	}
+	if err := f.tm.Reconcile(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if f.fs.count() != 1 {
+		t.Fatalf("task-ul din coada trebuia preluat: %d run-uri", f.fs.count())
+	}
+	f.fs.last(t, f.rook)
+	f.wantStatus(t, 1, store.StatusInProgress)
 }
 
 func TestMissingWorkdirPausesProject(t *testing.T) {
@@ -376,4 +411,30 @@ func TestDecisionsBeforeQueue(t *testing.T) {
 		t.Fatalf("run-uri: %d, vreau doar Vera", f.fs.count())
 	}
 	f.wantStatus(t, 2, store.StatusQueued)
+}
+
+// Fara Start team dupa restart, decidentii sunt treziti chiar de Recover; un proiect
+// oprit de utilizator ii trezeste abia la Start team (Resume).
+func TestRecoverWakesDecisions(t *testing.T) {
+	f := setup(t)
+	f.task(t, "A", f.rook, store.StatusReview) // la lider
+	if err := f.tm.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	pending, _ := f.st.Undelivered(f.lead.ID)
+	if len(pending) != 1 || pending[0].Text != "The team was restarted. Waiting for your decision: T-1." {
+		t.Fatalf("lead: %+v", pending)
+	}
+
+	g := setup(t)
+	g.task(t, "B", g.rook, store.StatusReview)
+	if err := g.st.SetPaused(g.p.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.tm.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := g.st.Undelivered(g.lead.ID); len(p) != 0 {
+		t.Fatalf("proiect oprit: %+v", p)
+	}
 }

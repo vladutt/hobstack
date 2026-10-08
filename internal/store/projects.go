@@ -208,12 +208,6 @@ func (s *Store) SetPaused(id int64, paused bool) error {
 	return mustAffect(s.db.Exec(`UPDATE projects SET paused = ? WHERE id = ?`, paused, id))
 }
 
-// PauseAll pune toate proiectele pe pauza (la pornirea serverului).
-func (s *Store) PauseAll() error {
-	_, err := s.db.Exec(`UPDATE projects SET paused = 1`)
-	return err
-}
-
 // SetFavorite pune sau scoate steluta unui proiect.
 func (s *Store) SetFavorite(id int64, on bool) error {
 	return mustAffect(s.db.Exec(`UPDATE projects SET favorite = ? WHERE id = ?`, on, id))
