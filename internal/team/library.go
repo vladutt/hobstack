@@ -3,11 +3,14 @@ package team
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"slices"
+	"strings"
 
 	"foreman/internal/library"
 	"foreman/internal/mcp"
+	"foreman/internal/runner"
 	"foreman/internal/store"
 )
 
@@ -117,4 +120,51 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 		return fmt.Sprintf("Proposed %s to the library. The user tests and publishes it; keep using it in this project meanwhile.", it.Name), nil
 	}
 	return fmt.Sprintf("Proposed %s to the library. The user decides in Needs you; keep using it in this project meanwhile.", it.Name), nil
+}
+
+// recordLibraryUses noteaza ce elemente din Library a folosit run-ul: un tool daca o comanda Bash
+// contine "/bin/<nume>/" (scripturile ruleaza ca <build>/bin/<nume>/<intrare>; directorul de build
+// are hash, deci nu comparam caile intregi), un server MCP daca a apelat mcp__<nume>__*. Cel mult un
+// rand per element si run. Run-urile fara task (chat) nu se noteaza: "Recent use" arata task-uri.
+// Skill-urile nu se urmaresc (nu lasa o urma sigura in stream). Erorile se logheaza.
+func (t *Team) recordLibraryUses(ar activeRun, a store.Agent, o runner.Outcome) {
+	if ar.taskID == 0 || (len(o.Commands) == 0 && len(o.ToolUses) == 0) {
+		return
+	}
+	installs, err := t.st.ListInstalls(ar.projectID)
+	if err != nil {
+		log.Printf("agent %d: library uses: %v", a.ID, err)
+		return
+	}
+	for _, in := range installs {
+		if !in.Enabled {
+			continue
+		}
+		it, err := t.st.GetLibraryItem(in.ItemID)
+		if err != nil {
+			continue
+		}
+		used := false
+		switch it.Kind {
+		case store.KindTool:
+			for _, c := range o.Commands {
+				if strings.Contains(c.Text, "/bin/"+it.Name+"/") {
+					used = true
+					break
+				}
+			}
+		case store.KindMCP:
+			for _, n := range o.ToolUses {
+				if strings.HasPrefix(n, "mcp__"+it.Name+"__") {
+					used = true
+					break
+				}
+			}
+		}
+		if used {
+			if err := t.st.AddLibraryUse(it.ID, ar.taskID, a.ID); err != nil {
+				log.Printf("agent %d: library use: %v", a.ID, err)
+			}
+		}
+	}
 }

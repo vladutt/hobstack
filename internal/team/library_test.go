@@ -149,3 +149,43 @@ func TestRunWithoutLibraryUnchanged(t *testing.T) {
 		t.Fatal("proiect fara item-uri: fara plugin si fara sectiune")
 	}
 }
+
+// recordOutcome noteaza folosirile: un tool dupa calea /bin/<nume>/ (indiferent de hash-ul de build),
+// un server MCP dupa mcp__<nume>__*; un rand per element si run; run-urile fara task nu se noteaza.
+func TestRecordLibraryUses(t *testing.T) {
+	f := setup(t)
+	tool := store.LibraryItem{Kind: store.KindTool, Name: "pdf-offer", Description: "d", Status: store.ItemPublished, Entry: "pdf-offer.sh"}
+	mcpIt := store.LibraryItem{Kind: store.KindMCP, Name: "stock-db", Description: "d", Status: store.ItemPublished, Transport: "remote", URL: "http://example.invalid/mcp"}
+	unused := store.LibraryItem{Kind: store.KindTool, Name: "vat-calc", Description: "d", Status: store.ItemPublished, Entry: "v.sh"}
+	for _, it := range []*store.LibraryItem{&tool, &mcpIt, &unused} {
+		if err := f.st.AddLibraryItem(it); err != nil {
+			t.Fatal(err)
+		}
+		v := store.LibraryVersion{ItemID: it.ID, Version: "1.0", Dir: t.TempDir()}
+		if err := f.st.AddLibraryVersion(&v); err != nil {
+			t.Fatal(err)
+		}
+		f.st.Install(f.p.ID, it.ID, v.ID)
+	}
+	task := f.task(t, "A", f.rook, store.StatusQueued)
+	o := runner.Outcome{
+		Commands: []runner.Command{
+			{Text: "cd /x && /home/u/.foreman/library/build/1-abc123/bin/pdf-offer/pdf-offer.sh --data x", OK: true},
+			{Text: "/home/u/.foreman/library/build/1-abc123/bin/pdf-offer/run", OK: true},
+		},
+		ToolUses: []string{"Bash", "mcp__stock-db__list_vehicles", "mcp__stock-db__get_vehicle"},
+	}
+	ar := activeRun{projectID: f.p.ID, taskID: task.ID}
+	f.tm.recordLibraryUses(ar, f.rook, o)
+	for id, want := range map[int64]int{tool.ID: 1, mcpIt.ID: 1, unused.ID: 0} {
+		got, err := f.st.RecentLibraryUses(id, 10)
+		if err != nil || len(got) != want {
+			t.Fatalf("item %d: %d folosiri (vrut %d), %v", id, len(got), want, err)
+		}
+	}
+	// fara task nu se noteaza nimic
+	f.tm.recordLibraryUses(activeRun{projectID: f.p.ID}, f.rook, o)
+	if got, _ := f.st.RecentLibraryUses(tool.ID, 10); len(got) != 1 {
+		t.Fatalf("run fara task a notat: %d", len(got))
+	}
+}

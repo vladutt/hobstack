@@ -57,6 +57,7 @@ func (t *tracker) observeAssistant(line []byte) {
 		if b.Type != "tool_use" || b.ID == "" {
 			continue
 		}
+		t.toolUses = append(t.toolUses, b.Name)
 		switch b.Name {
 		case "Write", "Edit", "MultiEdit", "NotebookEdit", "Bash":
 			if t.pending == nil {

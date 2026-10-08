@@ -240,6 +240,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	}
 	t.recordDenials(ar, a, o.Denials)
 	t.recordChanges(ar, a, o)
+	t.recordLibraryUses(ar, a, o)
 	if o.Status == store.RunFailed {
 		t.note(ar.projectID, a.ID, "Run failed: "+o.Error, true)
 	}

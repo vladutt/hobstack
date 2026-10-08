@@ -167,3 +167,13 @@ func TestPatchTruncation(t *testing.T) {
 		t.Fatal("nu trebuia taiat")
 	}
 }
+
+func TestToolUses(t *testing.T) {
+	o := feed(
+		use("m1", "mcp__stock-db__list_vehicles", `{}`),
+		use("b1", "Bash", `{"command":"ls"}`),
+	)
+	if len(o.ToolUses) != 2 || o.ToolUses[0] != "mcp__stock-db__list_vehicles" || o.ToolUses[1] != "Bash" {
+		t.Fatalf("%v", o.ToolUses)
+	}
+}

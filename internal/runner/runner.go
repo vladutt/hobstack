@@ -51,6 +51,7 @@ type Outcome struct {
 	Denials   []Denial     // actiuni refuzate de permisiuni
 	Changes   []FileChange // fisiere modificate de agent, in ordinea rezultatelor
 	Commands  []Command    // comenzile Bash rulate (si cele esuate)
+	ToolUses  []string     // numele tuturor tool_use-urilor din run (ex. mcp__server__tool)
 }
 
 // Run este o singura executie `claude -p`. Tine istoricul evenimentelor in

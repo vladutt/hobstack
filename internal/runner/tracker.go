@@ -24,6 +24,7 @@ type tracker struct {
 	pending  map[string]pendingCall // tool_use-uri fara rezultat inca, dupa id
 	changes  []FileChange
 	commands []Command
+	toolUses []string // numele tool_use-urilor, in ordine (cu repetari)
 }
 
 // usage: tokenii din evenimentul "result" (cache-ul citit intra si el, ca in consum)
@@ -151,7 +152,7 @@ func (t *tracker) observe(line []byte) {
 // outcome decide starea finala. Ordinea conteaza: oprirea manuala castiga,
 // apoi eroarea raportata de claude (ex. buget depasit), apoi codul de iesire.
 func (t *tracker) outcome(runID string, waitErr error, stopped bool) Outcome {
-	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Tokens: t.tokens, Denials: t.denials, Changes: t.changes, Commands: t.commands}
+	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Tokens: t.tokens, Denials: t.denials, Changes: t.changes, Commands: t.commands, ToolUses: t.toolUses}
 	switch {
 	case stopped:
 		o.Status, o.Error = "stopped", "stopped"
