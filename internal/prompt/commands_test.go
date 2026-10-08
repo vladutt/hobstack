@@ -115,3 +115,18 @@ func TestDenyingRule(t *testing.T) {
 		t.Fatal(m)
 	}
 }
+
+func TestGrantDoesNotLiftBlock(t *testing.T) {
+	rules := []store.CommandRule{{Prefix: "git push", Mode: store.CmdAsk}, {Prefix: "sudo", Mode: store.CmdBlock}}
+	got := DenyPrefixes(rules, []string{"git push", "sudo"})
+	if len(got) != 1 || got[0] != "sudo" {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestAlwaysDeniedBashAnyDeny(t *testing.T) {
+	rules := []store.CommandRule{{Prefix: "git", Mode: store.CmdAsk}, {Prefix: "git status", Mode: store.CmdAllow}}
+	if !AlwaysDeniedBash("git status", []string{"shell"}, rules) {
+		t.Fatal("git status e refuzat de git (Ask), chiar daca git status e Allow")
+	}
+}

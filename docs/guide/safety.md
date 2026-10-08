@@ -52,7 +52,7 @@ How matching works:
 
 Other things to know:
 
-- Rules apply only to agents that have Shell commands.
+- Allow only matters for agents with Shell. Ask and Block also stop the Git tool's commands (for example git commit = Block).
 - Claude Code's own internal task lists and sub-agents stay blocked for every agent, and cannot be
   changed. Agents coordinate through Foreman instead.
 - Package installs (`npm install`, `composer require`, `pip install`, `go get`) are not covered by the rules:
@@ -63,6 +63,7 @@ Other things to know:
 - **Shell is powerful.** The rules match how a command starts. An agent with Shell commands can
   get around them (for example `rm -fr`, or a command wrapped in `bash -c`, which the rules do not look inside), and it can also write
   outside its own folder through the shell. Give Shell only to agents you trust with your machine.
+- **Shell can reach Foreman itself.** An agent with Shell can call Foreman's local API, so it could change these rules. Give Shell only to agents you trust.
 - **Your global Claude settings apply.** Rules in your `~/.claude/settings.json` (for example a global
   `permissions.allow`) also apply to agents and can widen what they can do. A project's own
   `.claude/settings.json` is ignored, but its `CLAUDE.md` is read.

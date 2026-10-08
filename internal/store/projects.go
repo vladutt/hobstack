@@ -201,11 +201,22 @@ func (s *Store) UpdateProject(p Project) error {
 // DeleteProject sterge proiectul si, in cascada, agentii, task-urile, run-urile
 // si mesajele lui. Folderul de lucru de pe disc nu e atins.
 func (s *Store) DeleteProject(id int64) error {
-	// command_rules nu are FK catre projects, deci le stergem explicit
-	if _, err := s.db.Exec(`DELETE FROM command_rules WHERE project_id = ?`, id); err != nil {
+	if id <= 0 { // 0 e cheia regulilor globale de comenzi
+		return ErrNotFound
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
 		return err
 	}
-	return mustAffect(s.db.Exec(`DELETE FROM projects WHERE id = ?`, id))
+	defer tx.Rollback()
+	if err := mustAffect(tx.Exec(`DELETE FROM projects WHERE id = ?`, id)); err != nil {
+		return err
+	}
+	// command_rules nu are FK catre projects, deci le stergem explicit, doar dupa ce proiectul exista
+	if _, err := tx.Exec(`DELETE FROM command_rules WHERE project_id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) SetPaused(id int64, paused bool) error {

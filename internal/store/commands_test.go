@@ -55,3 +55,32 @@ func TestCommandRulesAndGrants(t *testing.T) {
 		t.Fatalf("reguli ramase: %d", n)
 	}
 }
+
+func TestDeleteProjectKeepsGlobalRules(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	q, _ := newProject(t, s)
+	s.SetCommandRules(p.ID, []CommandRule{{"docker", CmdBlock}})
+	s.SetCommandRules(q.ID, []CommandRule{{"kubectl", CmdAsk}})
+	if err := s.DeleteProject(0); err != ErrNotFound {
+		t.Fatalf("err = %v", err)
+	}
+	if g, _ := s.CommandRules(0); len(g) != 4 {
+		t.Fatalf("regulile globale s-au pierdut: %+v", g)
+	}
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := s.CommandRules(p.ID); len(r) != 0 {
+		t.Fatalf("%+v", r)
+	}
+	if r, _ := s.CommandRules(q.ID); len(r) != 1 {
+		t.Fatalf("regulile altui proiect: %+v", r)
+	}
+	if g, _ := s.CommandRules(0); len(g) != 4 {
+		t.Fatalf("%+v", g)
+	}
+	if err := s.DeleteProject(99999); err != ErrNotFound {
+		t.Fatalf("err = %v", err)
+	}
+}

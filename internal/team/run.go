@@ -394,10 +394,14 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		// comanda Bash a unui agent cu shell: regulile decid (block = fara cerere, ask = cerere pe prefix)
 		prefix := ""
 		if d.Tool == "Bash" && hasShell {
-			mode, pfx := prompt.MatchCommand(d.Detail, rules)
+			cmd := d.Command // comanda intreaga; Detail e scurtat la 120 de caractere
+			if cmd == "" {
+				cmd = d.Detail
+			}
+			mode, pfx := prompt.MatchCommand(cmd, rules)
 			if mode != store.CmdBlock && mode != store.CmdAsk {
 				// claude a refuzat desi regula decisiva e Allow (sau lipseste): cautam deny-ul care a lucrat
-				mode, pfx = prompt.DenyingRule(d.Detail, rules)
+				mode, pfx = prompt.DenyingRule(cmd, rules)
 			}
 			if mode == store.CmdBlock {
 				t.denialEvent(task, a, d)

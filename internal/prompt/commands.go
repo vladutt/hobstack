@@ -115,11 +115,11 @@ func DenyingRule(command string, rules []store.CommandRule) (mode, prefix string
 	return mode, prefix
 }
 
-// DenyPrefixes: prefixele Ask si Block, fara cele cu grant (Allow once), sortate.
+// DenyPrefixes: prefixele Ask si Block, sortate. Un grant (Allow once) ridica doar un Ask, niciodata un Block.
 func DenyPrefixes(rules []store.CommandRule, granted []string) []string {
 	out := []string{}
 	for _, r := range rules {
-		if (r.Mode == store.CmdAsk || r.Mode == store.CmdBlock) && !slices.Contains(granted, r.Prefix) {
+		if r.Mode == store.CmdBlock || (r.Mode == store.CmdAsk && !slices.Contains(granted, r.Prefix)) {
 			out = append(out, r.Prefix)
 		}
 	}

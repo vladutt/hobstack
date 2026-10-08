@@ -66,9 +66,13 @@ func LogTokens(path string) (int64, bool) {
 
 // Denial e o actiune refuzata de permisiuni in run (din permission_denials).
 type Denial struct {
-	Tool   string
-	Detail string
+	Tool    string
+	Detail  string // scurtat, pentru afisare si salvare
+	Command string // comanda Bash intreaga (limitata), pentru clasificare; "" la alte tool-uri
 }
+
+// maxDenialCommand limiteaza comanda pastrata intreaga pentru clasificare.
+const maxDenialCommand = 4000
 
 // denialDetail alege din tool_input campul care spune ce a vrut agentul sa faca.
 func denialDetail(tool string, in map[string]any) string {
@@ -133,7 +137,14 @@ func (t *tracker) observe(line []byte) {
 	t.isError = ev.IsError
 	t.denials = nil
 	for _, d := range ev.PermissionDenials {
-		t.denials = append(t.denials, Denial{Tool: d.ToolName, Detail: denialDetail(d.ToolName, d.ToolInput)})
+		den := Denial{Tool: d.ToolName, Detail: denialDetail(d.ToolName, d.ToolInput)}
+		if cmd, ok := d.ToolInput["command"].(string); ok && d.ToolName == "Bash" {
+			if r := []rune(cmd); len(r) > maxDenialCommand {
+				cmd = string(r[:maxDenialCommand])
+			}
+			den.Command = cmd
+		}
+		t.denials = append(t.denials, den)
 	}
 	var errs []string
 	for _, e := range ev.Errors {

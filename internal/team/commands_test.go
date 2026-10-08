@@ -188,3 +188,108 @@ func TestDenyingRuleFallback(t *testing.T) {
 		t.Fatalf("%+v", reqs)
 	}
 }
+
+func TestDenialClassifiedOnFullCommand(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	long := strings.Repeat("echo x && ", 30) + "git push"
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: long[:120] + "...", Command: long}})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 1 || reqs[0].Prefix != "git push" {
+		t.Fatalf("%+v", reqs)
+	}
+}
+
+func TestAllowRefusedWhenRuleNoLongerAsk(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Ship", f.rook, store.StatusInProgress)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	f.st.SetCommandRules(f.p.ID, []store.CommandRule{{Prefix: "git push", Mode: store.CmdBlock}})
+	for _, act := range []func(int64) error{f.tm.AllowCommandOnce, f.tm.AllowCommandInProject} {
+		err := act(reqs[0].ID)
+		if !errors.Is(err, ErrRuleChanged) || err.Error() != "The rule for git push changed; this request is out of date." {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	if g, _ := f.st.TakeCommandGrants(f.rook.ID); len(g) != 0 {
+		t.Fatalf("grants = %v", g)
+	}
+	if open, _ := f.st.ListOpenAccessRequests(f.p.ID); len(open) != 1 {
+		t.Fatal("cererea trebuia sa ramana deschisa")
+	}
+	// grant-ul nu ridica Block-ul nici daca exista deja
+	f.st.AddCommandGrant(f.p.ID, f.rook.ID, "git push")
+	task2 := f.task(t, "Again", f.rook, store.StatusQueued)
+	_ = task2
+	f.tm.Reconcile(f.p.ID)
+	if !strings.Contains(argAfter(f.fs.last(t, f.rook).Args, "--settings"), "Bash(git push:*)") {
+		t.Fatal("Block ridicat de grant")
+	}
+}
+
+func TestAllowInProjectSweepsSamePrefix(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.vera.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	f.st.UpdateAgent(f.vera)
+	tr := f.task(t, "A", f.rook, store.StatusInProgress)
+	tv := f.task(t, "B", f.vera, store.StatusInProgress)
+	for _, c := range []struct {
+		a store.Agent
+		t store.Task
+	}{{f.rook, tr}, {f.vera, tv}} {
+		f.tm.work.Lock()
+		f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: c.t.ID}, c.a, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
+		f.tm.work.Unlock()
+	}
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 2 {
+		t.Fatalf("%+v", reqs)
+	}
+	if err := f.tm.AllowCommandInProject(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := f.st.ListOpenAccessRequests(f.p.ID); len(open) != 0 {
+		t.Fatalf("%+v", open)
+	}
+	pending, _ := f.st.Undelivered(f.vera.ID)
+	want := `You may now run commands starting with "git push" (allowed in this project by the user). Run your command again if you still need it.`
+	if len(pending) == 0 || pending[len(pending)-1].Text != want {
+		t.Fatalf("Vera nu a fost trezita: %+v", pending)
+	}
+	if got, _ := f.st.GetTask(tv.ID); got.Status != store.StatusQueued {
+		t.Fatalf("status = %s", got.Status)
+	}
+}
+
+func TestBlockInProjectDismissesSamePrefix(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.vera.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	f.st.UpdateAgent(f.vera)
+	for _, a := range []store.Agent{f.rook, f.vera} {
+		f.tm.work.Lock()
+		f.tm.recordDenials(activeRun{projectID: f.p.ID}, a, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
+		f.tm.work.Unlock()
+	}
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if err := f.tm.BlockCommandInProject(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := f.st.ListOpenAccessRequests(f.p.ID); len(open) != 0 {
+		t.Fatalf("%+v", open)
+	}
+	if p, _ := f.st.Undelivered(f.vera.ID); len(p) != 0 {
+		t.Fatalf("Block nu trezeste: %+v", p)
+	}
+}

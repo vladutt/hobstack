@@ -15,7 +15,7 @@ Autorul e senior PHP/Laravel, incepator in Go: cod simplu, idiomatic, comentat u
 - Orchestrare prin MCP: aplicatia e server MCP (/mcp/<token>); liderii creeaza si decid task-uri, agentii cu sef raporteaza,
   reviewerii aproba sau resping. Scheduler in internal/team.
 - Permisiuni doar din aplicatie: --settings inline + --setting-sources user + --permission-mode dontAsk (fara el, in -p un tool
-  nepermis blocheaza run-ul la nesfarsit, verificat cu claude 2.1.285); deny fix pe actiuni riscante si pe TaskCreate/TodoWrite/Agent.
+  nepermis blocheaza run-ul la nesfarsit, verificat cu claude 2.1.285); deny fix pe TaskCreate/TodoWrite/Agent; actiunile riscante (git push, sudo, rm -rf...) vin din regulile pentru comenzi (Settings + proiect, Allow/Ask/Block).
 - Numele aplicatiei e config.AppName ("foreman"), usor de schimbat.
 - Live output prin SSE (nu websockets). UI: HTML + JS vanilla, embedded cu `embed`.
 - Fara Docker la runtime; Docker doar pentru dev daca e nevoie.
@@ -80,7 +80,7 @@ direct doar la cererea utilizatorului din chat); raportul se intoarce la Done (a
 Gata (fire de lucru): create_task primeste continues ("T-85"); tasks.thread_id (doar afisare) leaga follow-up-urile de task-ul care a pornit munca; pe board doar Done grupeaza (arbore + fir, doar membrii gata); in celelalte coloane fiecare task are cardul lui
 (eticheta "↳ T-3" / "follow-up of T-3"), iar "working" vine din run-ul activ (agentView.workingTaskId).
 Gata (tool-ul packages): "Install packages" per agent scoate npm install / composer require / pip install / go get
-din deny-ul fix (brew install, sudo, rm -rf, git push raman blocate); refuzurile lor apar in "Needs you" cu Allow package installs.
+din deny-ul fix (regulile pentru comenzi raman valabile); refuzurile lor apar in "Needs you" cu Allow package installs.
 Gata (redesign UI dupa mockup-urile din ../screenshots): tema ardezie rece + font Figtree (static/fonts); bara de sus (ui.topbar)
 in loc de sidebar; Proiecte ca tabel; pe proiect board-ul pe toata latimea cu "Needs you" ca prima coloana, Done cu "Show N more";
 chat-ul si detaliile agentului intr-un panou lateral care se inchide (starea in localStorage "foreman-drawer"); modala de task pe

@@ -3,6 +3,7 @@ package runner
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -18,7 +19,7 @@ func TestTrackerDenials(t *testing.T) {
 		`{"tool_name":"Bash","tool_input":{"command":"ls /","description":"x"}},` +
 		`{"tool_name":"Edit","tool_input":{"file_path":"/a/b.go","old_string":"x"}},` +
 		`{"tool_name":"Foo","tool_input":{"a":1}}]}`)
-	if len(d) != 3 || d[0] != (Denial{"Bash", "ls /"}) || d[1] != (Denial{"Edit", "/a/b.go"}) || d[2] != (Denial{"Foo", `{"a":1}`}) {
+	if len(d) != 3 || d[0] != (Denial{"Bash", "ls /", "ls /"}) || d[1] != (Denial{"Edit", "/a/b.go", ""}) || d[2] != (Denial{"Foo", `{"a":1}`, ""}) {
 		t.Fatalf("%+v", d)
 	}
 	if d := denialsOf(`{"type":"result","result":"ok"}`); d != nil {
@@ -52,5 +53,14 @@ func TestLogTokens(t *testing.T) {
 	}
 	if _, ok := LogTokens(filepath.Join(dir, "lipsa.jsonl")); ok {
 		t.Fatal("log lipsa")
+	}
+}
+
+func TestDenialKeepsFullCommand(t *testing.T) {
+	long := strings.Repeat("a", 200) + " && git push"
+	line := `{"type":"result","permission_denials":[{"tool_name":"Bash","tool_input":{"command":` + strconv.Quote(long) + `}}]}`
+	d := denialsOf(line)
+	if len(d) != 1 || d[0].Command != long || !strings.HasSuffix(d[0].Detail, "...") || len([]rune(d[0].Detail)) != 123 {
+		t.Fatalf("%+v", d)
 	}
 }

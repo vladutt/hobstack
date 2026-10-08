@@ -62,8 +62,9 @@ func AlwaysDeniedBash(command string, tools []string, rules []store.CommandRule)
 	if bashMatches(command, denyFor(tools)) {
 		return true
 	}
-	mode, _ := MatchCommand(command, rules)
-	return mode == store.CmdAsk || mode == store.CmdBlock
+	// claude refuza la orice deny potrivit, chiar daca un Allow mai lung se potriveste
+	mode, _ := DenyingRule(command, rules)
+	return mode != ""
 }
 
 // NeedsPackages spune daca o comanda Bash instaleaza pachete (npm install...):
