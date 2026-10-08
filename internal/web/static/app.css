@@ -654,8 +654,6 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .conv-from { color: var(--soft); font-weight: 600; }
 .conv-text { max-width: min(100%, 640px); min-width: 0; padding: 11px 15px; border-radius: 12px; background: var(--them); overflow-wrap: anywhere; font-size: 14px; }
 .conv-msg.me .conv-text { background: var(--me); }
-.conv-working { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 14px; color: var(--teal); }
-.conv-working a { color: var(--teal); }
 
 /* tab-ul Changes */
 .changes { display: grid; gap: 14px; min-width: 0; }
@@ -1029,6 +1027,16 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .lfy-list { display: grid; gap: 10px; }
 .lfy-item { font-size: 15px; }
 .lfy-item.done span { text-decoration: line-through; color: var(--muted); }
+.typing { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 4px 2px -4px; }
+.typing[hidden], .typing-link[hidden] { display: none; }
+.typing-link { color: var(--teal); font-size: 12px; }
+.typing-dots { display: inline-flex; gap: 3px; }
+.typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--teal); animation: typing-dot 1.2s infinite ease-in-out; }
+.typing-dots i:nth-child(2) { animation-delay: .15s; }
+.typing-dots i:nth-child(3) { animation-delay: .3s; }
+.typing.waiting .typing-dots i { background: var(--dim); animation: none; }
+@keyframes typing-dot { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+@media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; } }
 .comment-form { display: flex; gap: 8px; align-items: flex-end; }
 .comment-form textarea { min-height: 48px; }
 .side-waiting { color: var(--amber); font-size: 13px; }

@@ -79,6 +79,13 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       load();
     } catch (err) { toast(err.message); }
   } }, commentInput, el("button", { type: "submit", class: "btn primary small" }, "Send"));
+  // typing: deasupra comentariilor, "Vex is working…" / "Vex is writing…" cat timp agentul ruleaza pe task
+  // (doar tipul evenimentelor din stream-ul run-ului, nu continutul)
+  const typingText = el("span", {});
+  const typingLink = el("a", { class: "typing-link", hidden: true }, "Watch live");
+  const typingBox = el("div", { class: "typing", hidden: true, "aria-live": "polite" },
+    el("span", { class: "typing-dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")), typingText, typingLink);
+  let liveRunId = null, liveES = null, liveMode = "working";
   const reportBox = el("div", { class: "modal-top" });
   const filesBox = el("div", { class: "modal-top" }); // primele fisiere modificate, deasupra tab-urilor
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
@@ -194,7 +201,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     renderSide(t, agent, who, waiting, stuck, queuedInStage);
 
     // prima data scoatem "Loading..." si punem nodurile stabile
-    if (!body.contains(tabsSection)) body.replaceChildren(todoBox, topBox, reportBox, filesBox, tabsSection, commentForm);
+    if (!body.contains(tabsSection)) body.replaceChildren(todoBox, topBox, reportBox, filesBox, tabsSection, typingBox, commentForm);
+    syncTyping();
 
     const topNow = JSON.stringify([t.description, t.feedback]);
     if (topNow !== topKey) {
@@ -418,6 +426,49 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       el("span", {}, ev.text)))));
   }
 
+  // syncTyping: porneste / opreste ascultarea run-ului care lucreaza pe task si actualizeaza indicatorul
+  function syncTyping() {
+    const agent = data.workingAgentId ? (project.agents || []).find((a) => a.id === data.workingAgentId) : null;
+    const runId = data.working && agent?.activeRunId ? agent.activeRunId : null;
+    if (runId !== liveRunId) {
+      liveES?.close();
+      liveES = null;
+      liveRunId = runId;
+      liveMode = "working";
+      if (runId) {
+        liveES = new EventSource(`/api/runs/${runId}/events`);
+        liveES.onmessage = (msg) => {
+          let ev;
+          try { ev = JSON.parse(msg.data); } catch { return; }
+          if (ev.type === "app_done" || ev.type === "result") { liveES?.close(); liveES = null; liveRunId = null; paintTyping(); return; }
+          if (ev.type !== "assistant") return;
+          const blocks = ev.message?.content || [];
+          if (blocks.some((b) => b.type === "tool_use")) liveMode = "working";
+          else if (blocks.some((b) => b.type === "text" && b.text.trim())) liveMode = "writing";
+          paintTyping();
+        };
+      }
+    }
+    paintTyping();
+  }
+
+  // paintTyping: textul indicatorului; dupa un comentariu al tau, pana porneste agentul, "will see your comment soon"
+  function paintTyping() {
+    const items = data.conversation || [];
+    const lastItem = items[items.length - 1];
+    let text = "";
+    if (liveRunId) text = `${data.working} is ${liveMode === "writing" ? "writing" : "working"}`;
+    else if (lastItem && lastItem.from === "You" && lastItem.kind === "comment") {
+      const who = data.todosBy || data.assignee;
+      if (who) text = `${who} will see your comment soon`;
+    }
+    typingText.textContent = text;
+    typingLink.hidden = !liveRunId || !data.workingAgentId;
+    if (data.workingAgentId) typingLink.href = `#/p/${projectId}/team/${data.workingAgentId}`;
+    typingBox.hidden = !text;
+    typingBox.classList.toggle("waiting", !liveRunId);
+  }
+
   // renderConversation: se redeseneaza doar cand se schimba numarul de elemente, ultimul
   // moment sau cine lucreaza (ca "Show more" si scroll-ul sa ramana)
   function renderConversation() {
@@ -428,11 +479,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     convKey = key;
     const nodes = items.map(bubble);
     if (!items.length && !data.working) nodes.push(el("p", { class: "hint" }, "No conversation recorded for this task."));
-    if (data.working) {
-      nodes.push(el("div", { class: "conv-working" },
-        el("span", {}, `${data.working} is working on it…`),
-        data.workingAgentId ? el("a", { href: `#/p/${projectId}/team/${data.workingAgentId}` }, "Watch live") : null));
-    }
+    // cine lucreaza acum se vede in indicatorul de deasupra comentariilor (typingBox)
     convPane.replaceChildren(...nodes);
   }
 
@@ -563,6 +610,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      liveES?.close();
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
       overlay.remove();
