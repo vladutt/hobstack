@@ -21,6 +21,7 @@ type Caller struct {
 	HasParent    bool   // are sef, deci raporteaza cu report_done
 	IsReviewer   bool   // verifica munca cuiva
 	SetupID      string // != "" = analistul din wizard; vede doar propose_setup
+	DraftID      string // != "" = draft-ul AI al unui agent nou; vede doar propose_agent
 	StageKind    string // etapa task-ului curent: "work", "check" sau "" (fara etape)
 	HasStages    bool   // proiectul are etape: la create_task assignee e optional
 	CanAddAgents bool   // lider sau radacina: add_agent / remove_agent
@@ -49,6 +50,7 @@ type Backend interface {
 	ReviewApprove(c Caller, task, note string) (string, error)
 	ReviewReject(c Caller, task, feedback string) (string, error)
 	ProposeSetup(c Caller, args json.RawMessage) (string, error)
+	ProposeAgent(c Caller, args json.RawMessage) (string, error)
 	AskUser(c Caller, question string, options []string) (string, error)
 	AddAgent(c Caller, in AddAgentInput) (string, error)
 	RemoveAgent(c Caller, name string) (string, error)
@@ -193,6 +195,9 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 	case "propose_setup":
 		raw, _ := json.Marshal(p.Arguments)
 		text, err = s.backend.ProposeSetup(c, raw)
+	case "propose_agent":
+		raw, _ := json.Marshal(p.Arguments)
+		text, err = s.backend.ProposeAgent(c, raw)
 	}
 	if err != nil {
 		return toolResult(err.Error(), true)

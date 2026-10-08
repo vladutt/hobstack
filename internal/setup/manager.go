@@ -653,6 +653,11 @@ func (b *backend) ProposeSetup(c mcp.Caller, args json.RawMessage) (string, erro
 	return b.m.propose(c.SetupID, args)
 }
 
+// ProposeAgent: doar draft-ul AI de agent are tool-ul (vezi internal/draft).
+func (b *backend) ProposeAgent(mcp.Caller, json.RawMessage) (string, error) {
+	return "", errors.New("propose_agent is only for agent drafts")
+}
+
 // titleFor da un titlu pentru card pana vine propunerea: numele folderului,
 // altfel prima linie din descriere, scurtata.
 func titleFor(workdirs []string, description string) string {

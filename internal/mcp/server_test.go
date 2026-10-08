@@ -52,6 +52,11 @@ func (f *fakeBackend) ProposeSetup(c Caller, args json.RawMessage) (string, erro
 	return "Proposal received.", f.err
 }
 
+func (f *fakeBackend) ProposeAgent(c Caller, args json.RawMessage) (string, error) {
+	f.calls = append(f.calls, "propose_agent|"+string(args))
+	return "ok", f.err
+}
+
 func (f *fakeBackend) AskUser(c Caller, question string, options []string) (string, error) {
 	f.calls = append(f.calls, "ask_user|"+question+"|"+strings.Join(options, ","))
 	return "ok", f.err
@@ -330,6 +335,16 @@ func TestSetupCallerSeesOnlyProposeSetup(t *testing.T) {
 	_, resp = rpc(t, ts, "lead", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"propose_setup","arguments":{}}}`)
 	if _, isErr := toolText(t, resp); !isErr {
 		t.Fatal("lead-ul nu trebuia sa poata apela propose_setup")
+	}
+}
+
+func TestDraftCallerSeesOnlyProposeAgent(t *testing.T) {
+	tools := toolsFor(Caller{DraftID: "d1"})
+	if len(tools) != 1 || tools[0].Name != "propose_agent" {
+		t.Fatalf("draft tools = %+v", tools)
+	}
+	if allowed(Caller{AgentID: 1, HasParent: true}, "propose_agent") {
+		t.Fatal("un agent al echipei nu are propose_agent")
 	}
 }
 

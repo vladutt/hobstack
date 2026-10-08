@@ -280,6 +280,11 @@ func (t *Team) ProposeSetup(mcp.Caller, json.RawMessage) (string, error) {
 	return "", errors.New("propose_setup is not available here")
 }
 
+// ProposeAgent: doar draft-ul AI de agent are tool-ul (vezi internal/draft).
+func (t *Team) ProposeAgent(mcp.Caller, json.RawMessage) (string, error) {
+	return "", errors.New("propose_agent is only for agent drafts")
+}
+
 // ErrAgentBusy: agentul are un run activ (New chat cere oprirea lui intai).
 var ErrAgentBusy = errors.New("the agent is working; stop it first")
 

@@ -98,6 +98,26 @@ var reviewTools = []Tool{
 	},
 }
 
+var proposeAgentTool = Tool{
+	Name:        "propose_agent",
+	Description: "Submits the proposed agent. Call it once, at the end. If you get an error, fix the proposal and call it again.",
+	InputSchema: schema([]string{"name", "role", "responsibilities"}, map[string]any{
+		"name":             str("Short, unique name, e.g. Herald"),
+		"role":             str("The role, e.g. E-mail & Notifications Developer"),
+		"responsibilities": str("Takes: what it is responsible for, and what it does not take"),
+		"model":            map[string]any{"type": "string", "enum": []string{"opus", "sonnet", "haiku"}, "description": "The Claude model"},
+		"reportsTo":        str("The name of its boss in the team; empty = reports to the user"),
+		"reviewedBy":       str("Optional: the name of the agent who reviews its work"),
+		"tools": map[string]any{
+			"type":  "array",
+			"items": map[string]any{"type": "string", "enum": []string{"write", "shell", "packages", "git", "web"}},
+		},
+		"instructions": str("How it works and what it never does"),
+		"background":   str("What it knows about this project"),
+		"doneDef":      str("What it hands over when it finishes"),
+	}),
+}
+
 var proposeSetupTool = Tool{
 	Name:        "propose_setup",
 	Description: "Submits the project and team proposal. Call it once, at the end. If you get an error, fix the proposal and call it again.",
@@ -218,6 +238,9 @@ var requestWorkTool = Tool{
 // toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
 // Orice agent al echipei primeste ask_user; analistul din wizard nu.
 func toolsFor(c Caller) []Tool {
+	if c.DraftID != "" {
+		return []Tool{proposeAgentTool}
+	}
 	if c.SetupID != "" {
 		return []Tool{proposeSetupTool} // analistul din wizard nu are tool-uri de echipa
 	}
