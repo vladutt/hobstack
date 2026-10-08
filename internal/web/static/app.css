@@ -219,7 +219,6 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .ws { min-height: 100vh; display: flex; flex-direction: column; }
 .ws-head { position: sticky; top: 0; z-index: 15; }
 .ws-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
-.ws.drawer-open .ws-body { grid-template-columns: minmax(0, 1fr) clamp(400px, 36vw, 580px); }
 .ws-main { min-width: 0; padding: 20px 24px 28px; display: grid; gap: 16px; align-content: start; }
 .tab-body[hidden], .team-strip[hidden], .details[hidden], .chat[hidden], .panel-tabs[hidden], .console[hidden], .paused-note[hidden] { display: none; }
 .tasks-body { display: grid; gap: 16px; min-width: 0; }
@@ -330,8 +329,10 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .card.needs-you-card { border-color: var(--amber-line); }
 
 /* ---------- panoul din dreapta (chat + detalii) ---------- */
-.console { position: sticky; top: var(--topbar-h); height: calc(100vh - var(--topbar-h)); background: var(--deep); border-left: 1px solid var(--line);
-  display: flex; flex-direction: column; min-width: 0; z-index: 10; }
+/* drawer peste pagina: nu schimba latimea board-ului / canvas-ului */
+.console { position: fixed; right: 0; top: var(--topbar-h); bottom: 0; width: min(clamp(400px, 36vw, 580px), 100vw);
+  background: var(--deep); border-left: 1px solid var(--line); box-shadow: -20px 0 50px rgba(0, 0, 0, .45);
+  display: flex; flex-direction: column; min-width: 0; z-index: 18; }
 .drawer-top { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); min-height: 52px; }
 .team-strip { display: flex; gap: 2px; overflow-x: auto; flex: 1; padding: 0 8px; scrollbar-width: none; }
 .team-strip::-webkit-scrollbar { display: none; }
@@ -376,7 +377,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 :is(.thread, .wizard, .foreman-chat) .live pre { margin: 6px 0 0; white-space: pre-wrap; font-size: 11.5px; max-height: 240px; overflow: auto; font-family: var(--mono); }
 .err { color: var(--red); }
 .composer { border-top: 1px solid var(--line); padding: 14px 20px 16px; display: grid; gap: 8px; }
-.composer form { display: flex; gap: 8px; align-items: flex-end; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }
+.composer form { display: flex; gap: 8px; align-items: center; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }
 .composer form:focus-within { border-color: var(--amber); }
 .composer textarea { min-height: 40px; height: 44px; max-height: 200px; border: 0; background: transparent; padding: 10px 8px; box-shadow: none !important; resize: none; }
 .composer .btn { height: 36px; }
@@ -777,9 +778,7 @@ a.flow-head:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px
 
 /* ---------- ecrane mai mici ---------- */
 @media (max-width: 1100px) {
-  /* panoul din dreapta trece peste board, nu langa el */
-  .ws.drawer-open .ws-body { grid-template-columns: minmax(0, 1fr); }
-  .console { position: fixed; right: 0; top: var(--topbar-h); bottom: 0; height: auto; width: min(560px, 100vw); z-index: 18; box-shadow: -20px 0 50px rgba(0, 0, 0, .45); }
+  .console { width: min(560px, 100vw); }
   .modal { grid-template-columns: minmax(0, 1fr); height: 100%; }
   .modal-side { border-left: 0; border-top: 1px solid var(--line); }
   .modal-main { overflow-y: auto; }
