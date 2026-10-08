@@ -91,15 +91,19 @@ schimbare ulterioara in repo nu schimba ce ruleaza celelalte proiecte.
 - In chat apare cardul din mockup 13 ("Share to Tool library?"), iar in "Needs you" o cerere (ca `agent_requests`).
 - Limite: 3 propuneri deschise per proiect; acelasi nume deschis o data.
 
-Pentru `mcp` local, inainte de propunere aplicatia porneste serverul o data (timeout 10 s), cere `tools/list` si
-salveaza lista + "N/N tools respond" (randul verde din mockup 11). Un server care nu raspunde nu poate fi propus.
+Pentru `mcp` local, serverul se testeaza la **Publish** (nu la propunere: comanda e aleasa de agent): aplicatia il
+porneste o data (timeout 30 s), cere `tools/list` si salveaza lista. Comanda apare pe card si pe pagina item-ului, iar
+Publish cere confirmare cu comanda exacta. Elementele create de utilizator (POST /api/library) nu se testeaza.
+Daca testul pica (la Publish sau Keep), UI arata eroarea si "Publish without test" (dupa o confirmare cu comanda),
+care trimite `{skipTest: true}`; `tool_names` ramane gol.
 
 ## Ce face utilizatorul
 
-- **Publish**: `status = published`, versiunea 1.0 (sau +0.1 la o versiune noua a aceluiasi nume). Proiectul sursa il
+- **Publish**: `status = published`, versiunea 1.0 (sau +0.1 la o versiune noua a aceluiasi nume;
+  *nu e implementat*: versionarea prin repropunere, un nume publicat nu poate fi propus din nou). Proiectul sursa il
   are instalat automat; celelalte il vad in Library si il instaleaza cu un click (din pagina item-ului sau din
   Instructions > Library). Un item cu `secrets` cere valorile la instalare ("Each project provides").
-- **Review code**: fisierele propunerii, cu diff fata de versiunea publicata (refolosim `changes.js`).
+- **Review code**: fisierele propunerii. *Nu e implementat*: diff fata de versiunea publicata.
 - **Decline** / **Keep in <project>**: ramane instalat doar in proiectul sursa (`status = declined`, install pastrat).
 - **Unpublish**: dispare din Library; proiectele care il au instalat il pastreaza la versiunea curenta, marcat.
 
@@ -112,8 +116,8 @@ salveaza lista + "N/N tools respond" (randul verde din mockup 11). Un server car
 - Tools: tabel (Tool, What it does, Made by, Version). Skills: grila de carduri + panou de previzualizare in dreapta.
   MCP: tabel (Server, Description, Runs, Tools, Made by) + cardul propunerii cu "Exposes" si "Each project provides".
 - Pagina unui item (`#/library/tools/<name>`, mockup 12): Usage / Code / Versions, "Recent use", Type, Made by,
-  Approved by, Version, Needs, Unpublish.
-- Agentul are in editorul lui o lista "Library" (ce item-uri instalate in proiect poate folosi; implicit toate).
+  Approved by (*nu e implementat*), Version, Needs, Unpublish.
+- *Nu e implementat*: lista "Library" per agent in editorul lui (ce item-uri instalate in proiect poate folosi).
 
 ## Siguranta
 

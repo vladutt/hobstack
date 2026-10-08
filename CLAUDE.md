@@ -100,8 +100,9 @@ left_for_user, tick_left_for_user, comment_task; comentariile utilizatorului tre
 Gata (Library, spec in docs/superpowers/specs/2026-10-08-foreman-library-design.md): tool-uri, skill-uri si servere MCP
 refolosite intre proiecte. Tabelele library_* (migrarea 022); pachet internal/library: propuneri copiate cu OpenRoot,
 versiuni read-only, plugin per proiect pe hash (--plugin-dir), serverele MCP prin --mcp-config (fisier 0600 cu
-secrete), probe la Publish. Tool-ul MCP propose_library_item (MCP local doar cu Shell). API + UI #/library,
-Instructions > Library cu secrete per proiect, "Recent use" pe pagina item-ului (tool dupa /bin/<nume>/ in comenzile
+secrete), probe la Publish (30 s; fara probe pentru elementele facute de utilizator; "Publish without test" dupa confirmare).
+Tool-ul MCP propose_library_item (MCP local doar cu Shell). API + UI #/library,
+Instructions > Library cu secrete per proiect, "Recent use" pe pagina item-ului (tool ancorat pe <build>/<pid>-<hash>/bin/<nume>/ in comenzile
 Bash, MCP dupa mcp__<nume>__*, doar run-uri pe task).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
