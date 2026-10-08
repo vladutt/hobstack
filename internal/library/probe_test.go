@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"foreman/internal/store"
 )
 
 // TestHelperMCP e un server MCP minimal: testul se re-porneste ca proces.
@@ -106,5 +110,54 @@ func TestProbeMCPKillsProcessTree(t *testing.T) {
 			t.Fatalf("%q a durat %v", c.script, d)
 		}
 		gone(t, c.marker)
+	}
+}
+
+// proposeMCP creeaza un item mcp local cu un fisier in propunere.
+func proposeMCP(t *testing.T, st *store.Store, lib *Lib, p store.Project, name, command string, args []string) store.LibraryItem {
+	t.Helper()
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "server.py"), []byte("x"), 0o644)
+	it := store.LibraryItem{Kind: store.KindMCP, Name: name, Description: "d", Status: store.ItemProposed, Transport: "local",
+		Command: command, Args: args, SourceProjectID: p.ID}
+	if err := st.AddLibraryItem(&it); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := lib.CopyProposal(it.ID, src, []string{"server.py"}); err != nil {
+		t.Fatal(err)
+	}
+	return it
+}
+
+func TestPublishLocalMCPProbes(t *testing.T) {
+	st, lib, _ := newEnv(t)
+	p := project(t, st)
+	it := proposeMCP(t, st, lib, p, "vehicles", "env", []string{"FOREMAN_HELPER_MCP=1", os.Args[0], "-test.run=TestHelperMCP", "${DIR}"})
+	if _, err := lib.Publish(it.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.GetLibraryItem(it.ID)
+	if strings.Join(got.ToolNames, ",") != "list_vehicles,get_vehicle" || got.Status != store.ItemPublished {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestPublishLocalMCPFailureKeepsProposal(t *testing.T) {
+	st, lib, _ := newEnv(t)
+	p := project(t, st)
+	it := proposeMCP(t, st, lib, p, "dead", "true", nil)
+	_, err := lib.Publish(it.ID, "")
+	if err == nil || !strings.Contains(err.Error(), "did not answer tools/list") {
+		t.Fatalf("%v", err)
+	}
+	got, _ := st.GetLibraryItem(it.ID)
+	if got.Status != store.ItemProposed {
+		t.Fatalf("status %s", got.Status)
+	}
+	if _, err := os.Stat(filepath.Join(lib.Root, "proposals", strconv.FormatInt(it.ID, 10), "server.py")); err != nil {
+		t.Fatal("propunerea trebuia sa ramana:", err)
+	}
+	if vs, _ := st.ListLibraryVersions(it.ID); len(vs) != 0 {
+		t.Fatal("versiune creata")
 	}
 }

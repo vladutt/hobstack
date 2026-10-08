@@ -8,9 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
-	"foreman/internal/library"
 	"foreman/internal/mcp"
 	"foreman/internal/store"
 )
@@ -97,15 +95,6 @@ func (t *Team) checkProposalRoom(projectID int64, in mcp.LibraryInput) error {
 	return nil
 }
 
-// clipText scurteaza un text (eroarea probe-ului poate contine tot ce scrie serverul).
-func clipText(s string, n int) string {
-	r := []rune(strings.TrimSpace(s))
-	if len(r) <= n {
-		return string(r)
-	}
-	return string(r[:n]) + "..."
-}
-
 // ProposeLibraryItem: un agent cu tool-ul write propune un tool / skill / server MCP pentru Library.
 // Randul din baza apare abia la sfarsit, dupa ce fisierele sunt copiate si serverul a trecut probe-ul:
 // pana atunci propunerea exista doar intr-un folder de lucru (.staging-*), invizibil pentru utilizator.
@@ -147,7 +136,8 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 		return "", err
 	}
 
-	// copiere si probe fara t.work: probe-ul poate dura 10 s si ar bloca tot scheduler-ul
+	// copiere fara t.work. Serverul MCP local NU se porneste aici (comanda e aleasa de agent): il testeaza
+	// Publish, la actiunea utilizatorului.
 	var staging string
 	if len(in.Files) > 0 {
 		if staging, _, _, err = t.lib.CopyStaged(home.Path, in.Files); err != nil {
@@ -161,19 +151,6 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 	}
 	defer os.RemoveAll(staging) // dupa AdoptStaged nu mai exista
 
-	var toolNames []string
-	if local {
-		args := make([]string, len(in.Args))
-		for i, s := range in.Args {
-			args[i] = strings.ReplaceAll(s, "${DIR}", staging)
-		}
-		// fara secrete la propunere: serverul trebuie sa raspunda la tools/list si fara ele
-		toolNames, err = library.ProbeMCPIn(staging, in.Command, args, nil, 10*time.Second)
-		if err != nil {
-			return "", fmt.Errorf("the MCP server did not answer tools/list: %s", clipText(err.Error(), 300))
-		}
-	}
-
 	t.work.Lock()
 	defer t.work.Unlock()
 	if err := t.checkProposalRoom(c.ProjectID, in); err != nil { // cat a durat probe-ul, altcineva putea ocupa locul
@@ -182,7 +159,7 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 	it := store.LibraryItem{Kind: in.Kind, Name: in.Name, Description: in.Description, Status: store.ItemProposed,
 		SourceProjectID: c.ProjectID, SourceTaskID: c.TaskID, MadeByAgentID: a.ID, MadeBy: a.Name,
 		Needs: in.Needs, Secrets: in.Secrets, Entry: in.Entry, Command: in.Command, Args: in.Args, URL: in.URL,
-		ToolNames: toolNames}
+	}
 	if in.Kind == store.KindMCP {
 		it.Transport = "local"
 		if !local {
@@ -200,5 +177,8 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 	}
 	t.note(c.ProjectID, a.ID, fmt.Sprintf("Proposed %s %q to the library. The user decides in Needs you; keep using it in this project meanwhile.", it.Kind, it.Name), true)
 	t.emit(c.ProjectID, "library", it)
+	if local {
+		return fmt.Sprintf("Proposed %s to the library. The user tests and publishes it; keep using it in this project meanwhile.", it.Name), nil
+	}
 	return fmt.Sprintf("Proposed %s to the library. The user decides in Needs you; keep using it in this project meanwhile.", it.Name), nil
 }

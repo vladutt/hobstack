@@ -319,3 +319,9 @@ func (s *Store) DeleteLibraryItem(id int64) error {
 	_, err := s.db.Exec(`DELETE FROM library_items WHERE id = ?`, id)
 	return err
 }
+
+// SetLibraryToolNames salveaza tool-urile expuse de un server MCP (rezultatul probe-ului de la Publish).
+func (s *Store) SetLibraryToolNames(id int64, names []string) error {
+	_, err := s.db.Exec(`UPDATE library_items SET tool_names = ? WHERE id = ?`, jsonList(names), id)
+	return err
+}

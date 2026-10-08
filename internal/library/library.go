@@ -116,11 +116,12 @@ func (l *Lib) CopyProposal(itemID int64, srcDir string, files []string) (dir str
 	return dir, nfiles, lines, nil
 }
 
-// AdoptStaged muta un folder din CopyStaged la locul propunerii itemului. Esueaza daca locul e ocupat.
+// AdoptStaged muta un folder din CopyStaged la locul propunerii itemului (inlocuind un folder orfan).
 func (l *Lib) AdoptStaged(staging string, itemID int64) (string, error) {
 	dir := filepath.Join(l.Root, "proposals", strconv.FormatInt(itemID, 10))
-	if _, err := os.Lstat(dir); err == nil {
-		return "", errors.New("a proposal folder already exists for this item")
+	// id-urile se pot refolosi dupa un delete (fara AUTOINCREMENT): un folder vechi cu acest id e orfan
+	if err := os.RemoveAll(dir); err != nil {
+		return "", err
 	}
 	if err := os.Rename(staging, dir); err != nil {
 		return "", err
@@ -319,6 +320,25 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 	prop := filepath.Join(l.Root, "proposals", strconv.FormatInt(itemID, 10))
 	if fi, err := os.Stat(prop); err != nil || !fi.IsDir() {
 		return store.LibraryVersion{}, errors.New("nothing to publish: no proposal files")
+	}
+	// un server MCP local se testeaza aici, la actiunea utilizatorului (nu la propunerea agentului,
+	// care ar rula o comanda aleasa de agent in afara permisiunilor lui). Fara secrete.
+	if it.Kind == store.KindMCP && it.Transport == "local" {
+		args := make([]string, len(it.Args))
+		for i, a := range it.Args {
+			args[i] = strings.ReplaceAll(a, "${DIR}", prop)
+		}
+		names, err := ProbeMCPIn(prop, it.Command, args, nil, 10*time.Second)
+		if err != nil {
+			msg := strings.TrimSpace(err.Error())
+			if r := []rune(msg); len(r) > 300 {
+				msg = string(r[:300]) + "..."
+			}
+			return store.LibraryVersion{}, errors.New("The server did not answer tools/list: " + msg)
+		}
+		if err := l.St.SetLibraryToolNames(itemID, names); err != nil {
+			return store.LibraryVersion{}, err
+		}
 	}
 	versions, err := l.St.ListLibraryVersions(itemID)
 	if err != nil {
