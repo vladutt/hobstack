@@ -266,6 +266,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .task-line.working { color: var(--teal); }
 .task-line.warn { color: var(--amber); }
 .task-line.bad { color: var(--red); }
+.task-line.idle { color: var(--muted); }
 .task-foot { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); min-height: 24px; }
 .task-foot .task-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .task-id { font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-variant-ligatures: none; white-space: nowrap; }

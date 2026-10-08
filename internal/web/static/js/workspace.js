@@ -1026,6 +1026,27 @@ export async function workspaceView(root, projectId, route) {
     return null;
   }
 
+  // idleReason: de ce nu lucreaza nimeni acum pe un task In progress (primul motiv care se aplica)
+  function idleReason(t, who, byId, kids, stuck) {
+    const p = state.project;
+    const line = (cls, text) => el("span", { class: "task-line " + cls }, text);
+    if ((p.questions || []).some((q) => q.taskId === t.id)) return line("warn", "Waiting for your answer");
+    if ((p.access || []).some((r) => r.taskId === t.id)) return line("warn", "Waiting for your permission");
+    const open = kids.filter((x) => x.status !== "done").sort((a, b) => a.number - b.number);
+    if (open.length > 1) return line("idle", `Waiting on ${open.length} subtasks`);
+    if (open.length === 1) {
+      const sub = open[0], subWho = byId.get(sub.assigneeId);
+      return line("idle", `Waiting on ${ref(sub)}` + (subWho ? ` \u00b7 ${subWho.name}` : ""));
+    }
+    if (p.paused) return line("idle", "Team paused");
+    if (who && who.workingTaskId && who.workingTaskId !== t.id) {
+      const other = p.tasks.find((x) => x.id === who.workingTaskId);
+      return line("idle", other ? `${who.name} is busy on ${ref(other)}` : `${who.name} is busy`);
+    }
+    if (stuck) return line("idle", "No one is working on it");
+    return line("idle", who ? `Waiting for ${who.name}` : "Waiting for an agent");
+  }
+
   function taskCard(t, who, byId, members) {
     const blocked = t.status === "blocked";
     const stage = t.status === "review" ? stageName(t, who, byId) : null;
@@ -1044,6 +1065,7 @@ export async function workspaceView(root, projectId, route) {
     else if ((state.project.fillIns || []).some((f) => f.taskId === t.id)) line = el("span", { class: "task-line warn" }, "Waiting on you");
     else if (decides) line = el("span", { class: "task-line warn" }, "Waiting for you to decide");
     else if (stage) line = el("span", { class: "task-line warn" }, `With ${stage}`);
+    else if (t.status === "in_progress") line = idleReason(t, who, byId, kids, stuck);
     const labels = [
       t.fromProject ? el("span", { class: "label-tag linked", title: `Requested by ${t.fromProject}` }, `\u2194 ${t.fromProject}`) : null,
       relationTag(t, members),
