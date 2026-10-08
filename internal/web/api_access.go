@@ -20,6 +20,7 @@ type accessView struct {
 	Ref       string    `json:"ref"` // T-3, gol daca refuzul n-a venit de pe un task
 	Tool      string    `json:"tool"`
 	Detail    string    `json:"detail"`
+	Prefix    string    `json:"prefix"` // gol = cerere de tool; altfel prefixul de comanda pe care il poti permite/bloca
 	Count     int       `json:"count"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	// CanEnableShell: tool-ul refuzat e Bash, agentul nu are inca "shell" si
@@ -36,14 +37,18 @@ func (s *Server) accessViews(projectID int64, agents []store.Agent, tasks []stor
 	if err != nil {
 		return nil, err
 	}
+	rules, err := s.team.EffectiveCommandRules(projectID)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]accessView, 0, len(reqs))
 	for _, r := range reqs {
-		v := accessView{ID: r.ID, AgentID: r.AgentID, TaskID: r.TaskID, Tool: r.Tool, Detail: r.Detail, Count: r.Count, UpdatedAt: r.UpdatedAt}
+		v := accessView{ID: r.ID, AgentID: r.AgentID, TaskID: r.TaskID, Tool: r.Tool, Detail: r.Detail, Prefix: r.Prefix, Count: r.Count, UpdatedAt: r.UpdatedAt}
 		for _, a := range agents {
 			if a.ID == r.AgentID {
 				v.AgentName = a.Name
-				v.CanEnableShell = r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail, a.Tools, store.DefaultCommandRules)
-				v.CanEnablePackages = r.Tool == "Bash" && !slices.Contains(a.Tools, "packages") && prompt.NeedsPackages(r.Detail)
+				v.CanEnableShell = r.Prefix == "" && r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail, a.Tools, rules)
+				v.CanEnablePackages = r.Prefix == "" && r.Tool == "Bash" && !slices.Contains(a.Tools, "packages") && prompt.NeedsPackages(r.Detail)
 			}
 		}
 		if r.TaskID != nil {
@@ -101,7 +106,7 @@ func (s *Server) enableTool(w http.ResponseWriter, r *http.Request, tool string)
 		fail(w, err)
 		return
 	}
-	if req.Tool != "Bash" {
+	if req.Tool != "Bash" || req.Prefix != "" {
 		writeErr(w, http.StatusConflict, "only shell access can be enabled from here")
 		return
 	}
