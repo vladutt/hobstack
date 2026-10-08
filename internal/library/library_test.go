@@ -428,3 +428,51 @@ func TestBuildToolMissingEntryAndBadName(t *testing.T) {
 		t.Fatal("nume nepermis acceptat")
 	}
 }
+
+// la hash identic Build nu mai copiaza nimic: nu creeaza folder temporar, iar caile tool-urilor arata in folderul existent
+func TestBuildHitCreatesNoTmp(t *testing.T) {
+	st, lib, src := newEnv(t)
+	p := project(t, st)
+	publishSkill(t, st, lib, p, "tone", "---\nname: tone\ndescription: d\n---\nx\n")
+	os.WriteFile(filepath.Join(src, "go.sh"), []byte("#!/bin/sh\necho hi\n"), 0o755)
+	tool := store.LibraryItem{Kind: store.KindTool, Name: "go", Description: "d", Status: store.ItemProposed, Entry: "go.sh"}
+	st.AddLibraryItem(&tool)
+	if _, _, _, err := lib.CopyProposal(tool.ID, src, []string{"go.sh"}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := lib.Publish(tool.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Install(p.ID, tool.ID, v.ID)
+	b1, err := lib.Build(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buildRoot := filepath.Join(lib.Root, "build")
+	before, _ := os.ReadDir(buildRoot)
+	// build-ul nu are voie sa scrie in build/: un MkdirTemp ar pica (nu merge pe windows / ca root)
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		os.Chmod(buildRoot, 0o555)
+		defer os.Chmod(buildRoot, 0o755)
+	}
+	b2, err := lib.Build(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadDir(buildRoot)
+	if b2.PluginDir != b1.PluginDir || len(before) != len(after) {
+		t.Fatalf("%v %v", before, after)
+	}
+	for path := range b2.ToolPaths {
+		if !strings.HasPrefix(path, b2.PluginDir) {
+			t.Fatalf("calea %s nu e in %s", path, b2.PluginDir)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(b2.ToolPaths) != 1 || strings.Join(b1.TurnLines, "|") != strings.Join(b2.TurnLines, "|") {
+		t.Fatalf("%v %v", b1.TurnLines, b2.TurnLines)
+	}
+}

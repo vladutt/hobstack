@@ -118,11 +118,25 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
 	t.mu.Unlock()
 
+	// URL-ul MCP in linie; cu servere din Library (secrete in env/headers) config-ul merge intr-un
+	// fisier 0600, ca secretele sa nu apara in lista de procese
+	mcpCfg := prompt.MCPConfig(t.baseURL+"/mcp/"+token, libBuild.MCPServers)
+	mcpFile := false
+	if t.lib != nil && len(libBuild.MCPServers) > 0 {
+		if path, err := t.lib.WriteMCPConfig(runID, mcpCfg); err != nil {
+			log.Printf("library mcp config for run %s: %v", runID, err)
+			libBuild.MCPServers, libBuild.Allow = nil, nil // fara servere decat sa le pun in linia de comanda
+			mcpCfg = prompt.MCPConfig(t.baseURL+"/mcp/"+token, nil)
+		} else {
+			mcpCfg, mcpFile = path, true
+		}
+	}
+
 	spec := runner.Spec{
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
 		Dir:    home.Path,
-		Args:   append(t.args(p, a, system, turn, token, resume, libBuild), extraArgs...),
+		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild), extraArgs...),
 		Prompt: turn,
 	}
 	agentID := a.ID
@@ -131,6 +145,9 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		delete(t.tokens, token)
 		delete(t.active, a.ID)
 		t.mu.Unlock()
+		if mcpFile {
+			t.lib.RemoveMCPConfig(runID)
+		}
 		t.st.FinishRun(runID, store.RunFailed, 0, err.Error())
 		return err
 	}
@@ -139,7 +156,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 }
 
 // args construieste linia de comanda pentru claude.
-func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, resume bool, lb library.Build) []string {
+func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build) []string {
 	args := []string{
 		"-p", turn,
 		"--output-format", "stream-json", "--verbose",
@@ -151,7 +168,7 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, 
 		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow),
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
-		"--mcp-config", prompt.MCPConfig(t.baseURL+"/mcp/"+token, lb.MCPServers),
+		"--mcp-config", mcpCfg,
 		"--strict-mcp-config",
 	}
 	// bugetul e optional: cu abonament Claude nu platesti per run
@@ -166,6 +183,9 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, 
 
 // finish e apelata de runner cand procesul claude s-a terminat.
 func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
+	if t.lib != nil {
+		t.lib.RemoveMCPConfig(o.RunID) // fisierul cu secrete nu mai trebuie
+	}
 	t.work.Lock()
 	defer t.work.Unlock()
 

@@ -45,7 +45,48 @@ func New(root string, st *store.Store) *Lib {
 	if abs, err := filepath.Abs(root); err == nil {
 		root = abs
 	}
-	return &Lib{Root: root, St: st, buildMus: map[int64]*sync.Mutex{}, itemMus: map[int64]*sync.Mutex{}}
+	l := &Lib{Root: root, St: st, buildMus: map[int64]*sync.Mutex{}, itemMus: map[int64]*sync.Mutex{}}
+	l.sweepRunFiles()
+	return l
+}
+
+// RunDir e folderul fisierelor --mcp-config ale run-urilor (0700): contin secrete.
+func (l *Lib) RunDir() string { return filepath.Join(l.Root, "run") }
+
+// WriteMCPConfig scrie configuratia MCP a unui run intr-un fisier 0600 si intoarce calea.
+// Secretele nu trebuie sa apara in linia de comanda (se vad cu ps).
+func (l *Lib) WriteMCPConfig(runID, cfg string) (string, error) {
+	dir := l.RunDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, runID+".mcp.json")
+	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		os.Remove(path)
+		return "", err
+	}
+	return path, nil
+}
+
+// RemoveMCPConfig sterge fisierul unui run (apelat cand run-ul se termina).
+func (l *Lib) RemoveMCPConfig(runID string) {
+	os.Remove(filepath.Join(l.RunDir(), runID+".mcp.json"))
+}
+
+// sweepRunFiles sterge fisierele ramase de la run-uri mai vechi de 24h (de ex. dupa un crash).
+func (l *Lib) sweepRunFiles() {
+	entries, err := os.ReadDir(l.RunDir())
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > 24*time.Hour {
+			os.Remove(filepath.Join(l.RunDir(), e.Name()))
+		}
+	}
 }
 
 // safeName: numele elementelor ajung in cai de pe disc, deci fara separatori sau "..".
@@ -438,11 +479,16 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 	// folderul are in nume hash-ul intrarilor: un build identic il refoloseste, unul diferit scrie alt folder,
 	// iar un folder care poate fi inca folosit de un run (--plugin-dir) nu se modifica si nu se sterge niciodata
 	final := filepath.Join(buildRoot, pid+"-"+hash)
-	tmp, err := os.MkdirTemp(buildRoot, pid+".tmp-")
-	if err != nil {
-		return out, err
+	// hash identic: folderul exista deja, deci nu mai copiem nimic (doar calculam serverele, liniile si caile)
+	hit := dirExists(final)
+	tmp := ""
+	if !hit {
+		tmp, err = os.MkdirTemp(buildRoot, pid+".tmp-")
+		if err != nil {
+			return out, err
+		}
+		defer os.RemoveAll(tmp) // dupa rename nu mai exista
 	}
-	defer os.RemoveAll(tmp) // dupa rename nu mai exista
 
 	var toolLines []string
 	pluginItems := 0
@@ -477,8 +523,10 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 				log.Printf("library: version dir %s is missing, skipping %s", ver.Dir, it.Name)
 				continue
 			}
-			if err := copyTree(ver.Dir, filepath.Join(tmp, "skills", it.Name)); err != nil {
-				return out, err
+			if !hit {
+				if err := copyTree(ver.Dir, filepath.Join(tmp, "skills", it.Name)); err != nil {
+					return out, err
+				}
 			}
 			pluginItems++
 		case store.KindTool:
@@ -486,7 +534,7 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 				log.Printf("library: version dir %s is missing, skipping %s", ver.Dir, it.Name)
 				continue
 			}
-			line, path, err := l.buildTool(tmp, final, it, ver.Dir, secrets)
+			line, path, err := l.buildTool(tmp, final, hit, it, ver.Dir, secrets)
 			if err != nil {
 				return out, err
 			}
@@ -514,7 +562,7 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 	if pluginItems == 0 {
 		return out, nil
 	}
-	if dirExists(final) {
+	if hit {
 		out.PluginDir = final // acelasi continut ca la build-ul anterior
 		return out, nil
 	}
@@ -623,7 +671,7 @@ func missingSecret(declared []string, have map[string]string) string {
 // ATENTIE: wrapper-ul cu secrete (0o700) poate fi citit de orice proces al aceluiasi utilizator, deci si de agenti;
 // e acceptat in spec (secretele nu apar totusi in prompt, in TurnLines sau in baza de date a agentilor).
 // Daca tool-ul nu poate rula, calea e "" si linia explica de ce.
-func (l *Lib) buildTool(tmp, final string, it store.LibraryItem, verDir string, secrets map[string]string) (line, path string, err error) {
+func (l *Lib) buildTool(tmp, final string, hit bool, it store.LibraryItem, verDir string, secrets map[string]string) (line, path string, err error) {
 	entry, err := checkRel(it.Entry)
 	if err != nil {
 		log.Printf("library: tool %s has a bad entry %q: %v", it.Name, it.Entry, err)
@@ -639,11 +687,13 @@ func (l *Lib) buildTool(tmp, final string, it store.LibraryItem, verDir string, 
 		return fmt.Sprintf("Library tool %s is off: its entry file %s is missing.", it.Name, entry), "", nil
 	}
 	dst := filepath.Join(tmp, "bin", it.Name)
-	if err := copyTree(verDir, dst); err != nil {
-		return "", "", err
-	}
-	if err := os.Chmod(filepath.Join(dst, entry), 0o755); err != nil {
-		return "", "", err
+	if !hit {
+		if err := copyTree(verDir, dst); err != nil {
+			return "", "", err
+		}
+		if err := os.Chmod(filepath.Join(dst, entry), 0o755); err != nil {
+			return "", "", err
+		}
 	}
 	cmdPath := filepath.Join(final, "bin", it.Name, entry)
 	if len(it.Secrets) > 0 {
@@ -656,12 +706,14 @@ func (l *Lib) buildTool(tmp, final string, it store.LibraryItem, verDir string, 
 			sb.WriteString("export " + name + "=" + shQuote(secrets[name]) + "\n")
 		}
 		sb.WriteString("exec \"$(dirname \"$0\")/\"" + shQuote(entry) + " \"$@\"\n")
-		run := filepath.Join(dst, "run")
-		if err := os.WriteFile(run, []byte(sb.String()), 0o700); err != nil {
-			return "", "", err
-		}
-		if err := os.Chmod(run, 0o700); err != nil {
-			return "", "", err
+		if !hit {
+			run := filepath.Join(dst, "run")
+			if err := os.WriteFile(run, []byte(sb.String()), 0o700); err != nil {
+				return "", "", err
+			}
+			if err := os.Chmod(run, 0o700); err != nil {
+				return "", "", err
+			}
 		}
 		cmdPath = filepath.Join(final, "bin", it.Name, "run")
 	}

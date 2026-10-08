@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"foreman/internal/library"
+	"foreman/internal/runner"
 	"foreman/internal/store"
 )
 
@@ -49,7 +51,7 @@ func TestRunGetsLibrary(t *testing.T) {
 	f.st.Install(f.p.ID, tool.ID, tv.ID)
 
 	mcpIt := store.LibraryItem{Kind: store.KindMCP, Name: "stock-db", Description: "d", Status: store.ItemPublished,
-		Transport: "remote", URL: "http://example.invalid/mcp"}
+		Transport: "remote", URL: "http://example.invalid/mcp", Secrets: []string{"AUTH_TOKEN"}}
 	if err := f.st.AddLibraryItem(&mcpIt); err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +60,9 @@ func TestRunGetsLibrary(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.st.Install(f.p.ID, mcpIt.ID, mv.ID)
+	if err := f.st.SetSecret(f.p.ID, mcpIt.ID, "AUTH_TOKEN", "s3cr3t-value"); err != nil {
+		t.Fatal(err)
+	}
 
 	f.task(t, "A", f.rook, store.StatusQueued)
 	mustReconcile(t, f)
@@ -71,12 +76,59 @@ func TestRunGetsLibrary(t *testing.T) {
 	if !strings.Contains(argValue(spec.Args, "--settings"), `"mcp__stock-db"`) {
 		t.Fatal("allow fara serverul din Library")
 	}
+	// secretele nu apar in linia de comanda: --mcp-config e o cale spre un fisier 0600
+	path := argValue(spec.Args, "--mcp-config")
+	if strings.Contains(strings.Join(spec.Args, "\n"), "s3cr3t-value") || strings.HasPrefix(path, "{") {
+		t.Fatalf("secret sau JSON inline in Args: %v", spec.Args)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mod %v", fi.Mode().Perm())
+	}
+	data, _ := os.ReadFile(path)
 	var cfg struct {
 		Servers map[string]any `json:"mcpServers"`
 	}
-	json.Unmarshal([]byte(argValue(spec.Args, "--mcp-config")), &cfg)
-	if cfg.Servers["team"] == nil || cfg.Servers["stock-db"] == nil {
-		t.Fatalf("mcp-config: %v", cfg.Servers)
+	json.Unmarshal(data, &cfg)
+	if cfg.Servers["team"] == nil || cfg.Servers["stock-db"] == nil || !strings.Contains(string(data), "s3cr3t-value") {
+		t.Fatalf("mcp-config: %s", data)
+	}
+	// la sfarsitul run-ului fisierul dispare
+	f.fs.finish(spec.ID, runner.Outcome{Status: store.RunDone})
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("fisierul a ramas: %v", err)
+	}
+}
+
+// un server MCP fara secretul cerut nu intra in config; tura explica de ce.
+func TestRunLibraryMissingSecret(t *testing.T) {
+	f := setup(t)
+	lib := library.New(filepath.Join(t.TempDir(), "library"), f.st)
+	f.tm.SetLibrary(lib)
+	it := store.LibraryItem{Kind: store.KindMCP, Name: "stock-db", Description: "d", Status: store.ItemPublished,
+		Transport: "remote", URL: "http://example.invalid/mcp", Secrets: []string{"AUTH_TOKEN"}}
+	if err := f.st.AddLibraryItem(&it); err != nil {
+		t.Fatal(err)
+	}
+	v := store.LibraryVersion{ItemID: it.ID, Version: "1.0", Dir: t.TempDir()}
+	if err := f.st.AddLibraryVersion(&v); err != nil {
+		t.Fatal(err)
+	}
+	f.st.Install(f.p.ID, it.ID, v.ID)
+	f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	spec := f.fs.last(t, f.rook)
+	if strings.Contains(argValue(spec.Args, "--mcp-config"), "stock-db") || strings.Contains(argValue(spec.Args, "--settings"), "stock-db") {
+		t.Fatalf("serverul fara secret nu trebuie pornit: %v", spec.Args)
+	}
+	if !strings.HasPrefix(argValue(spec.Args, "--mcp-config"), "{") {
+		t.Fatal("fara servere din Library config-ul ramane inline")
+	}
+	if !strings.Contains(turn(spec), "is off: missing secret AUTH_TOKEN") {
+		t.Fatalf("tura: %s", turn(spec))
 	}
 }
 
