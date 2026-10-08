@@ -75,9 +75,7 @@ func NeedsPackages(command string) bool {
 // bashMatches spune daca vreo bucata din comanda se potriveste cu o regula
 // Bash(prefix:*). Comenzile legate cu &&, ||, ; sau | se verifica pe bucati, ca in Claude Code.
 func bashMatches(command string, rules []string) bool {
-	parts := strings.FieldsFunc(command, func(r rune) bool { return r == '&' || r == '|' || r == ';' })
-	for _, part := range parts {
-		cmd := strings.Join(strings.Fields(part), " ") // spatii normalizate
+	for _, cmd := range splitCommand(command) {
 		for _, rule := range rules {
 			prefix, ok := strings.CutPrefix(rule, "Bash(")
 			if !ok {

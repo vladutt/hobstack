@@ -19,7 +19,7 @@ func TestNormalizePrefix(t *testing.T) {
 	if p, err := NormalizePrefix("  git   push "); err != nil || p != "git push" {
 		t.Fatalf("%q %v", p, err)
 	}
-	for _, bad := range []string{"", "   ", "git push; rm", "a && b", "echo $HOME", "x|y", "`id`", "a\nb", "rm *", `say "hi"`, strings.Repeat("a", 81)} {
+	for _, bad := range []string{"", "   ", "git push; rm", "a && b", "echo $HOME", "x|y", "`id`", "a\nb", "rm *", `a\b`, "x{y}", "a?", `say "hi"`, strings.Repeat("a", 81)} {
 		if _, err := NormalizePrefix(bad); err == nil {
 			t.Fatalf("acceptat: %q", bad)
 		}
@@ -76,5 +76,26 @@ func TestDenyBlockedWarnings(t *testing.T) {
 	w := RuleWarnings(eff)
 	if len(w) != 1 || !strings.Contains(w[0], "git status") || !strings.Contains(w[0], `"git"`) {
 		t.Fatalf("warnings = %v", w)
+	}
+}
+
+func TestMatchCommandSplitting(t *testing.T) {
+	eff := rules("sudo", "block", "git push", "ask", "rm -rf", "ask")
+	cases := []struct{ cmd, mode, prefix string }{
+		{"ls\nsudo rm x", "block", "sudo"},
+		{"echo $(sudo x)", "block", "sudo"},
+		{"(sudo x)", "block", "sudo"},
+		{"FOO=1 BAR=2 git push origin", "ask", "git push"},
+		{"echo `rm -rf /`", "ask", "rm -rf"},
+		{"sudo\tls", "block", "sudo"},
+	}
+	for _, c := range cases {
+		mode, prefix := MatchCommand(c.cmd, eff)
+		if mode != c.mode || prefix != c.prefix {
+			t.Errorf("%q -> %s %s, vreau %s %s", c.cmd, mode, prefix, c.mode, c.prefix)
+		}
+		if !AlwaysDeniedBash(c.cmd, nil, eff) || !bashMatches(c.cmd, []string{"Bash(" + c.prefix + ":*)"}) {
+			t.Errorf("%q: AlwaysDeniedBash / bashMatches", c.cmd)
+		}
 	}
 }

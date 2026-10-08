@@ -3,6 +3,7 @@ package prompt
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -10,12 +11,12 @@ import (
 )
 
 // forbiddenPrefixChars: caracterele de shell care ar face din prefix altceva decat inceputul unei comenzi.
-const forbiddenPrefixChars = "&|;$`()<>*\"'\n\r"
+const forbiddenPrefixChars = "&|;$`()<>*\"'\n\r\\{}[]?!#~"
 
 // NormalizePrefix curata spatiile si valideaza un prefix de comanda.
 func NormalizePrefix(p string) (string, error) {
 	if strings.ContainsAny(p, forbiddenPrefixChars) {
-		return "", fmt.Errorf("%q: use only words separated by spaces (no & | ; $ ` ( ) < > * or quotes)", strings.TrimSpace(p))
+		return "", fmt.Errorf("%q: use only words separated by spaces (no & | ; $ ` ( ) < > * ? ! # ~ \\ { } [ ] or quotes)", strings.TrimSpace(p))
 	}
 	p = strings.Join(strings.Fields(p), " ")
 	if p == "" {
@@ -48,7 +49,8 @@ func ValidateRules(rules []store.CommandRule) ([]store.CommandRule, error) {
 	return out, nil
 }
 
-// EffectiveRules: regulile globale, cu cele ale proiectului peste ele (acelasi prefix = al proiectului).
+// EffectiveRules: intrarile trebuie sa fie deja normalizate (toate caile de scriere trec prin ValidateRules).
+// Regulile globale, cu cele ale proiectului peste ele (acelasi prefix = al proiectului).
 func EffectiveRules(global, project []store.CommandRule) []store.CommandRule {
 	by := map[string]string{}
 	for _, r := range global {
@@ -83,9 +85,7 @@ func matchPart(cmd string, rules []store.CommandRule) (store.CommandRule, bool) 
 // "", "" daca nicio regula nu se potriveste.
 func MatchCommand(command string, rules []store.CommandRule) (mode, prefix string) {
 	rank := map[string]int{store.CmdAllow: 1, store.CmdAsk: 2, store.CmdBlock: 3}
-	parts := strings.FieldsFunc(command, func(r rune) bool { return r == '&' || r == '|' || r == ';' })
-	for _, part := range parts {
-		cmd := strings.Join(strings.Fields(part), " ")
+	for _, cmd := range splitCommand(command) {
 		if r, ok := matchPart(cmd, rules); ok && rank[r.Mode] > rank[mode] {
 			mode, prefix = r.Mode, r.Prefix
 		}
@@ -128,6 +128,26 @@ func RuleWarnings(rules []store.CommandRule) []string {
 			if d.Mode != store.CmdAllow && strings.HasPrefix(a.Prefix, d.Prefix+" ") {
 				out = append(out, fmt.Sprintf("%q can't be allowed while %q is %s: the shorter rule wins.", a.Prefix, d.Prefix, d.Mode))
 			}
+		}
+	}
+	return out
+}
+
+var envAssign = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=\S*$`)
+
+// splitCommand taie o comanda Bash in comenzile simple din ea (separatori: & | ; newline ( ) ` si $( ),
+// cu spatii normalizate si fara atribuirile de variabile de la inceput (FOO=1 sudo x -> "sudo x").
+func splitCommand(command string) []string {
+	command = strings.ReplaceAll(command, "$(", ";")
+	parts := strings.FieldsFunc(command, func(r rune) bool { return strings.ContainsRune("&|;\n\r()`", r) })
+	out := []string{}
+	for _, part := range parts {
+		words := strings.Fields(part)
+		for len(words) > 0 && envAssign.MatchString(words[0]) {
+			words = words[1:]
+		}
+		if len(words) > 0 {
+			out = append(out, strings.Join(words, " "))
 		}
 	}
 	return out
