@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -81,7 +82,7 @@ func TestLinksFor(t *testing.T) {
 		"agent nou":   {store.Agent{ParentID: &two}, Links{BossName: "Sub"}},
 	}
 	for name, c := range cases {
-		if got := LinksFor(c.a, team); got != c.want {
+		if got := LinksFor(c.a, team); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: %+v, vreau %+v", name, got, c.want)
 		}
 	}
@@ -145,7 +146,7 @@ func TestSettings(t *testing.T) {
 			Deny  []string `json:"deny"`
 		} `json:"permissions"`
 	}
-	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"}, "", nil)), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"}, "", nil, nil)), &cfg); err != nil {
 		t.Fatal(err)
 	}
 	allow := cfg.Permissions.Allow
@@ -159,13 +160,13 @@ func TestSettings(t *testing.T) {
 			t.Errorf("allow nu trebuia sa contina %s", not)
 		}
 	}
-	for _, want := range []string{"TaskCreate", "TodoWrite", "Agent", "Bash(git push:*)", "Bash(rm -rf:*)", "Bash(npm install:*)"} {
+	for _, want := range []string{"TaskCreate", "TodoWrite", "Agent", "Bash(npm install:*)"} {
 		if !slices.Contains(cfg.Permissions.Deny, want) {
 			t.Errorf("deny nu contine %s", want)
 		}
 	}
 	// fara tool-uri: doar citire + echipa
-	json.Unmarshal([]byte(Settings(nil, "", nil)), &cfg)
+	json.Unmarshal([]byte(Settings(nil, "", nil, nil)), &cfg)
 	if len(cfg.Permissions.Allow) != 4 {
 		t.Errorf("allow fara tool-uri = %v", cfg.Permissions.Allow)
 	}
@@ -287,5 +288,17 @@ func TestLeftForUserInPrompt(t *testing.T) {
 	}
 	if strings.Contains(root, "left_for_user") {
 		t.Fatal("radacina nu lasa puncte utilizatorului")
+	}
+}
+
+func TestSystemBlockedCommands(t *testing.T) {
+	p := store.Project{Name: "Shop"}
+	a := store.Agent{Name: "Rook", Tools: []string{"shell"}}
+	got := System(p, a, Links{BossName: "Lead", BlockedCommands: []string{"sudo", "docker"}})
+	if !strings.Contains(got, "These commands are blocked in this project; do not try them: sudo, docker.") {
+		t.Fatal(got)
+	}
+	if strings.Contains(System(p, a, Links{BossName: "Lead"}), "blocked in this project") {
+		t.Fatal("fara comenzi blocate nu apare linia")
 	}
 }

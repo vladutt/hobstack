@@ -3,6 +3,8 @@ package prompt
 import (
 	"strings"
 	"testing"
+
+	"foreman/internal/store"
 )
 
 func TestAlwaysDenied(t *testing.T) {
@@ -16,29 +18,13 @@ func TestAlwaysDenied(t *testing.T) {
 			t.Errorf("%s nu e un tool refuzat fix", tool)
 		}
 	}
-	shell := []string{"shell"}
-	for _, cmd := range []string{"git push origin main", "rm -rf build", "sudo ls", "npm install", "  npm   install x", "cd web && npm install"} {
-		if !AlwaysDeniedBash(cmd, shell) {
-			t.Errorf("%q e refuzata fix", cmd)
-		}
-	}
-	for _, cmd := range []string{"npm test", "git status", "rm file.txt", "go test ./...", "npm installer"} {
-		if AlwaysDeniedBash(cmd, shell) {
-			t.Errorf("%q nu e refuzata fix", cmd)
-		}
-	}
-	// cu "packages", instalarile trec; restul refuzurilor fixe raman
-	pkgs := []string{"shell", "packages"}
-	if AlwaysDeniedBash("cd app && npm install", pkgs) || !AlwaysDeniedBash("npm install && git push", pkgs) || !AlwaysDeniedBash("brew install jq", pkgs) {
-		t.Error("packages permite doar instalarile de pachete")
-	}
 	if !NeedsPackages("cd app && npm install 2>&1 | tail -8") || NeedsPackages("npm run build") {
 		t.Error("NeedsPackages")
 	}
 }
 
 func TestSettingsPackages(t *testing.T) {
-	without, with := Settings([]string{"shell"}, "", nil), Settings([]string{"packages"}, "", nil)
+	without, with := Settings([]string{"shell"}, "", nil, nil), Settings([]string{"packages"}, "", nil, []string{"brew install"})
 	if !strings.Contains(without, `"deny":[`) || !strings.Contains(without[strings.Index(without, `"deny"`):], "npm install") {
 		t.Errorf("fara packages, npm install e in deny: %s", without)
 	}
@@ -53,13 +39,13 @@ func TestMCPConfigExtra(t *testing.T) {
 	if !strings.Contains(got, `"team"`) || !strings.Contains(got, `"stock-db"`) || strings.Contains(got, "evil") {
 		t.Fatal(got)
 	}
-	if !strings.Contains(Settings([]string{"write"}, "/w", []string{"mcp__stock-db"}), `"mcp__stock-db"`) {
+	if !strings.Contains(Settings([]string{"write"}, "/w", []string{"mcp__stock-db"}, nil), `"mcp__stock-db"`) {
 		t.Fatal("allow-ul extra lipseste")
 	}
 }
 
 func TestSettingsExtraAllowOnlyWholeServers(t *testing.T) {
-	got := Settings(nil, "", []string{"mcp__ok", "Bash", "mcp__team__*", "mcp__x__tool", "mcp__a(b)", "mcp__*"})
+	got := Settings(nil, "", []string{"mcp__ok", "Bash", "mcp__team__*", "mcp__x__tool", "mcp__a(b)", "mcp__*"}, nil)
 	for _, bad := range []string{`"Bash"`, `mcp__x__tool`, `mcp__a(b)`, `"mcp__*"`} {
 		if strings.Contains(got, bad) {
 			t.Fatalf("allow nepermis %s: %s", bad, got)
@@ -70,5 +56,30 @@ func TestSettingsExtraAllowOnlyWholeServers(t *testing.T) {
 	}
 	if !strings.Contains(got, `"mcp__ok"`) {
 		t.Fatal(got)
+	}
+}
+
+func TestAlwaysDeniedBashWithRules(t *testing.T) {
+	eff := []store.CommandRule{{Prefix: "git push", Mode: store.CmdAsk}, {Prefix: "sudo", Mode: store.CmdBlock}}
+	if !AlwaysDeniedBash("sudo ls", []string{"shell"}, eff) || !AlwaysDeniedBash("git push", nil, eff) {
+		t.Fatal("regulile Ask/Block trebuie sa conteze")
+	}
+	if AlwaysDeniedBash("ls", nil, eff) || !AlwaysDeniedBash("npm install x", nil, eff) || AlwaysDeniedBash("npm install x", []string{"packages"}, eff) {
+		t.Fatal("pachetele raman legate de tool-ul packages")
+	}
+	if AlwaysDeniedBash("git push", nil, nil) {
+		t.Fatal("fara reguli, git push nu mai e refuzat fix")
+	}
+}
+
+func TestSettingsCommandDeny(t *testing.T) {
+	got := Settings([]string{"shell"}, "/w", nil, []string{"git push", "sudo"})
+	for _, want := range []string{`"Bash(git push:*)"`, `"Bash(sudo:*)"`, `"TaskCreate"`, `"Bash"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("lipseste %s din %s", want, got)
+		}
+	}
+	if strings.Contains(got, "rm -rf") {
+		t.Fatal("rm -rf nu mai e fix: vine doar din reguli")
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"foreman/internal/store"
 )
 
 // ValidTools sunt tool-urile pe care le poti bifa la un agent, in ordinea din UI.
@@ -30,13 +32,13 @@ var packageRules = []string{
 // alwaysAllow: citirea si tool-urile echipei sunt permise oricarui agent.
 var alwaysAllow = []string{"Read", "Glob", "Grep", "mcp__team__*"}
 
-// denyAlways blocheaza actiunile riscante (pana vin aprobarile) si tool-urile
-// interne Claude Code care se suprapun cu echipa. Fara ele, lead-ul foloseste
-// lista interna TaskCreate in loc de mcp__team__create_task (verificat 2026-09-29).
+// denyAlways blocheaza tool-urile interne Claude Code care se suprapun cu echipa.
+// Fara ele, lead-ul foloseste lista interna TaskCreate in loc de mcp__team__create_task
+// (verificat 2026-09-29). Comenzile Bash riscante (git push, sudo...) nu mai sunt aici:
+// vin din regulile de comenzi (store.CommandRule), prin cmdDeny / AlwaysDeniedBash.
 // Instalarile de pachete (packageRules) se adauga la deny doar fara tool-ul "packages".
 var denyAlways = []string{
 	"TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TodoWrite", "Agent",
-	"Bash(git push:*)", "Bash(rm -rf:*)", "Bash(sudo:*)", "Bash(brew install:*)",
 }
 
 // denyFor: refuzurile fixe pentru un agent cu tool-urile date.
@@ -53,11 +55,15 @@ func AlwaysDeniedTool(tool string) bool {
 	return !strings.HasPrefix(tool, "Bash(") && slices.Contains(denyAlways, tool)
 }
 
-// AlwaysDeniedBash spune daca o comanda Bash e refuzata de lista fixa (git push,
-// rm -rf, sudo...), chiar si cu Shell pornit. Instalarile de pachete conteaza
+// AlwaysDeniedBash spune daca o comanda Bash e refuzata chiar si cu Shell pornit:
+// de regulile Ask / Block (git push, sudo...) sau de instalarile de pachete, care conteaza
 // doar pentru un agent fara tool-ul "packages".
-func AlwaysDeniedBash(command string, tools []string) bool {
-	return bashMatches(command, denyFor(tools))
+func AlwaysDeniedBash(command string, tools []string, rules []store.CommandRule) bool {
+	if bashMatches(command, denyFor(tools)) {
+		return true
+	}
+	mode, _ := MatchCommand(command, rules)
+	return mode == store.CmdAsk || mode == store.CmdBlock
 }
 
 // NeedsPackages spune daca o comanda Bash instaleaza pachete (npm install...):
@@ -91,7 +97,8 @@ func bashMatches(command string, rules []string) bool {
 // home e folderul agentului: cu tool-ul write, scrie doar acolo ("" = oriunde).
 // extraAllow: serverele MCP din Library; se accepta doar "mcp__<server>" (tot serverul),
 // nimic cu wildcard, paranteze sau tool anume, ca Library sa nu poata largi permisiunile.
-func Settings(tools []string, home string, extraAllow []string) string {
+// cmdDeny: prefixele de comenzi refuzate (din DenyPrefixes), puse in deny ca Bash(prefix:*).
+func Settings(tools []string, home string, extraAllow, cmdDeny []string) string {
 	allow := slices.Clone(alwaysAllow)
 	for _, rule := range extraAllow {
 		if libraryServerRule.MatchString(rule) && rule != "mcp__team" {
@@ -110,8 +117,12 @@ func Settings(tools []string, home string, extraAllow []string) string {
 		}
 		allow = append(allow, toolRules[name]...)
 	}
+	deny := slices.Clone(denyFor(tools))
+	for _, p := range cmdDeny {
+		deny = append(deny, "Bash("+p+":*)")
+	}
 	b, _ := json.Marshal(map[string]any{
-		"permissions": map[string]any{"allow": allow, "deny": denyFor(tools)},
+		"permissions": map[string]any{"allow": allow, "deny": deny},
 	})
 	return string(b)
 }

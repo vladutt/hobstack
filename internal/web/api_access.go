@@ -42,7 +42,7 @@ func (s *Server) accessViews(projectID int64, agents []store.Agent, tasks []stor
 		for _, a := range agents {
 			if a.ID == r.AgentID {
 				v.AgentName = a.Name
-				v.CanEnableShell = r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail, a.Tools)
+				v.CanEnableShell = r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail, a.Tools, store.DefaultCommandRules)
 				v.CanEnablePackages = r.Tool == "Bash" && !slices.Contains(a.Tools, "packages") && prompt.NeedsPackages(r.Detail)
 			}
 		}

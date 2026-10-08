@@ -14,11 +14,12 @@ import (
 
 // Links descrie locul agentului in echipa; intra in system prompt.
 type Links struct {
-	BossName     string // "" = raporteaza utilizatorului
-	IsLead       bool
-	IsReviewer   bool
-	CanAddAgents bool // lider sau radacina: are add_agent / remove_agent
-	Linked       bool // proiectul are legaturi cu alte proiecte (se seteaza in team/run.go)
+	BlockedCommands []string // comenzile pe Block (doar agentii cu shell; setat in team/run.go)
+	BossName        string   // "" = raporteaza utilizatorului
+	IsLead          bool
+	IsReviewer      bool
+	CanAddAgents    bool // lider sau radacina: are add_agent / remove_agent
+	Linked          bool // proiectul are legaturi cu alte proiecte (se seteaza in team/run.go)
 }
 
 // LinksFor calculeaza Links din lista echipei. Merge si pentru un agent nou
@@ -212,6 +213,9 @@ func System(p store.Project, a store.Agent, l Links) string {
 		how = append(how, howAsk)
 	default:
 		how = append(how, howAsk, howAskWait)
+	}
+	if len(l.BlockedCommands) > 0 {
+		how = append(how, "These commands are blocked in this project; do not try them: "+strings.Join(l.BlockedCommands, ", ")+".")
 	}
 	section(&b, "How you work", strings.Join(how, "\n\n"))
 	return strings.TrimSpace(b.String())

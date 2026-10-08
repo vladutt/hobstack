@@ -166,7 +166,7 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string,
 		// setarile globale ale utilizatorului raman; .claude/settings.json din
 		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
 		"--setting-sources", "user",
-		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow),
+		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, prompt.DenyPrefixes(store.DefaultCommandRules, nil)),
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
 		"--mcp-config", mcpCfg,
