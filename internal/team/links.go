@@ -476,7 +476,7 @@ func (t *Team) finishRequestedTask(task *store.Task, root store.Agent, agents []
 	task.Result = summary
 	if root.ReviewerID != nil {
 		if who, ok := store.FindAgent(agents, *root.ReviewerID); ok {
-			if _, err := t.toReview(task, root, agents, root.Name+" finished "+task.Ref(), reportedNote(root, summary)); err != nil {
+			if _, err := t.toReview(task, root, agents, root.Name+" finished "+task.Ref(), reportedNote(root, summary), true); err != nil {
 				return "", err
 			}
 			t.note(task.ProjectID, root.ID, "Reported "+task.Ref(), true)

@@ -342,7 +342,7 @@ func TestReviewWithoutDeciderBlocksTask(t *testing.T) {
 	task.Result = "gata"
 	f.st.SaveTask(&task)
 	agents, _ := f.st.ListAgents(f.p.ID)
-	who, err := f.tm.toReview(&task, wes, agents, "Wes a terminat T-1", taskNote{})
+	who, err := f.tm.toReview(&task, wes, agents, "Wes a terminat T-1", taskNote{}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

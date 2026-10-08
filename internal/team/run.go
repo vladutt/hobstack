@@ -352,10 +352,14 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 			break
 		}
 		task.Result = strings.TrimSpace(o.Result)
-		// body e raportul (raspunsul final al run-ului); destinatarul il alege toReview
+		// body e raportul (raspunsul final al run-ului); destinatarul il alege toReview.
+		// O radacina (in afara etapelor) nu are voie la report_done: raspunsul ei e
+		// raportul. Oricine altcineva s-a oprit fara sa spuna ca a terminat (de ex. a
+		// intrebat ceva in text): nu se accepta automat, decide liderul sau utilizatorul.
+		reported := a.ParentID == nil && task.StageID == nil
 		ev := taskNote{kind: "reported", actor: a.Name, text: a.Name + " finished without report_done",
 			body: orDefault(task.Result, "(finished without a report)")}
-		_, err = t.toReview(&task, a, agents, fmt.Sprintf("%s finished %s without report_done", a.Name, task.Ref()), ev)
+		_, err = t.toReview(&task, a, agents, fmt.Sprintf("%s finished %s without report_done", a.Name, task.Ref()), ev, reported)
 		return err
 	}
 	if err := t.st.SaveTask(&task); err != nil {

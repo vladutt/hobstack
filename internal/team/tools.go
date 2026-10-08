@@ -391,6 +391,14 @@ func acceptText(task store.Task) string {
 	return autoAcceptText
 }
 
+// autoDone: un task fara decident trece singur in Done? Da pentru o sarcina
+// recurenta cu auto-accept si, in modul autonom, pentru un task care nu e al
+// utilizatorului. Un task creat din board ramane la utilizator chiar si in
+// modul autonom: l-a cerut el, deci e de fata sa-l decida.
+func autoDone(task store.Task, autonomous bool) bool {
+	return task.AutoAccept || (autonomous && !task.ByUser)
+}
+
 // markDone pune task-ul in Done (fara sa-l salveze), ca la accept_task.
 func markDone(task *store.Task) {
 	task.Status, task.ReviewStage, task.StageID = store.StatusDone, store.StageNone, nil
@@ -442,15 +450,18 @@ func canDecide(callerID int64, task store.Task, agents []store.Agent, autonomous
 // toReview muta un task (cu Result deja pus) in Review: la reviewer-ul
 // asignatului daca are, altfel la liderul care decide. Intoarce agentul
 // notificat (zero daca nu exista). ev (raportul) intra in istoric dupa salvare,
-// urmat de blocare daca nu poate decide nimeni. Se apeleaza cu t.work blocat.
-func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.Agent, headline string, ev taskNote) (store.Agent, error) {
+// urmat de blocare daca nu poate decide nimeni. Cu reported = false (run
+// terminat fara report_done) task-ul nu trece niciodata singur in Done, ca un
+// run esuat: fara decident ramane la utilizator. Se apeleaza cu t.work blocat.
+func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.Agent, headline string, ev taskNote, reported bool) (store.Agent, error) {
 	autonomous := t.autonomyOf(task.ProjectID)
+	auto := reported && autoDone(*task, autonomous)
 	// task dintr-o etapa terminat fara raport: la lider (sau la utilizator), in aceeasi etapa
 	if task.StageID != nil {
 		boss, ok := decider(*task, agents, autonomous)
 		task.Status, task.ReviewStage = store.StatusReview, store.StageLead
-		if !ok && (autonomous || task.AutoAccept) {
-			markDone(task) // modul autonom, nimeni deasupra: Done automat
+		if !ok && auto {
+			markDone(task) // modul autonom (sau auto-accept), nimeni deasupra: Done automat
 		}
 		if err := t.st.SaveTask(task); err != nil {
 			return store.Agent{}, err
@@ -480,11 +491,9 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		who, hasWho = decider(*task, agents, autonomous)
 	}
 	switch {
-	case !hasWho && task.AutoAccept:
-		// sarcina recurenta cu auto-accept: nu mai asteapta utilizatorul
-		markDone(task)
-	case !hasWho && autonomous:
-		// modul autonom si asignatul e radacina (nimeni deasupra): Done automat
+	case !hasWho && auto:
+		// sarcina recurenta cu auto-accept, sau modul autonom si asignatul e
+		// radacina (nimeni deasupra): nu mai asteapta utilizatorul
 		markDone(task)
 	case !hasWho && !task.ByUser:
 		// nimeni nu poate decide: nu lasam task-ul blocat in Review, decide utilizatorul
@@ -885,7 +894,7 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 	}
 
 	task.Result = summary
-	who, err := t.toReview(&task, worker, agents, worker.Name+" finished "+task.Ref(), reportedNote(worker, summary))
+	who, err := t.toReview(&task, worker, agents, worker.Name+" finished "+task.Ref(), reportedNote(worker, summary), true)
 	if err != nil {
 		return "", err
 	}
@@ -968,8 +977,10 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		t.autoAccepted(task, recurringAcceptText)
 		return fmt.Sprintf("%s was accepted automatically (recurring task).", task.Ref()), nil
 	}
-	if task.ByUser && !autonomous {
-		// creat de utilizator: dupa verificare decide el
+	boss, ok := decider(task, agents, autonomous)
+	if task.ByUser && (!autonomous || (!ok && !task.AutoAccept)) {
+		// creat de utilizator: dupa verificare decide el (si in modul autonom,
+		// cand nu-l decide o radacina, adica asignatul e chiar radacina)
 		task.ReviewStage = store.StageLead
 		if err := t.st.SaveTask(&task); err != nil {
 			return "", err
@@ -979,7 +990,6 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 		t.emit(c.ProjectID, "task", task)
 		return fmt.Sprintf("%s went to the user for a decision.", task.Ref()), nil
 	}
-	boss, ok := decider(task, agents, autonomous)
 	if !ok && autonomous {
 		// modul autonom si asignatul e radacina: nu decide nimeni, Done automat
 		markDone(&task)
@@ -987,7 +997,7 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 			return "", err
 		}
 		t.record(task, approved)
-		t.autoAccepted(task, autoAcceptText)
+		t.autoAccepted(task, acceptText(task))
 		t.note(c.ProjectID, reviewer.ID, "Approved "+task.Ref(), true)
 		return task.Ref() + " is Done: accepted automatically (full autonomy).", nil
 	}

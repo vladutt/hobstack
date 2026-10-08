@@ -585,7 +585,6 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 /* panourile de deasupra board-ului (task nou, recurente, coloane) */
 .task-form { max-width: 720px; }
 .task-form .grow { flex: 1; }
-.assign-row { display: flex; gap: 10px; align-items: center; }
 
 /* foldere de proiect */
 .folder-rows { display: grid; gap: 12px; }
@@ -630,6 +629,24 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .side-label { color: var(--muted); }
 .side-value { color: var(--text); display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; flex-wrap: wrap; }
 .side-value .hint { font-size: 13px; }
+/* asignatul din coloana modalei: buton + lista cu cautare (agent-picker.js) */
+.picker { position: relative; min-width: 0; }
+.picker-btn { background: none; border: 1px solid transparent; border-radius: 9px; padding: 3px 8px 3px 3px; margin-left: -4px; font: inherit; cursor: pointer; flex-wrap: nowrap; max-width: 100%; text-align: left; }
+.picker-btn:hover, .picker-btn[aria-expanded="true"] { background: var(--card); border-color: var(--line-2); }
+.picker-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+.picker-btn > span:not(.avatar):not(.picker-caret) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-caret { width: 0; height: 0; border: 4px solid transparent; border-top-color: var(--muted); margin: 4px 0 0 2px; flex-shrink: 0; }
+.picker-panel { position: fixed; z-index: 40; width: 250px; max-width: calc(100vw - 40px); background: var(--col); border: 1px solid var(--line-2);
+  border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); padding: 6px; display: grid; gap: 6px; }
+.picker-panel[hidden] { display: none; }
+.picker-search { height: 34px; font-size: 14px; background: var(--deep); }
+.picker-list { display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
+.picker-option { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; background: none; border: 0; border-radius: 7px; padding: 6px 8px; color: var(--text); font: 14px var(--sans); cursor: pointer; }
+.picker-option.active { background: var(--card); }
+.picker-name { display: grid; min-width: 0; flex: 1; }
+.picker-role { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-check { color: var(--amber); font-weight: 700; }
+.picker-empty { margin: 0; padding: 8px; font-size: 13px; color: var(--muted); }
 .side-value a { color: var(--text); text-decoration: none; }
 .side-value a:hover { text-decoration: underline; }
 .side-foot { margin-top: auto; padding-top: 24px; display: grid; gap: 4px; font-size: 13px; color: var(--dim); }

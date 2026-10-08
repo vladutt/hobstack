@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { el, avatar, clock, kindOf, toast } from "./ui.js";
 import { changesView } from "./changes.js";
 import { flowView } from "./flow.js";
+import { agentPicker } from "./agent-picker.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
@@ -44,9 +45,6 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   let topKey = null;      // idem pentru descriere + feedback
   let reportKey = null;   // idem pentru raport
   const expanded = new Set(); // bulele cu "Show more" deschis (cheie: tip + at + from)
-  // textarea de feedback se creeaza o singura data: textul scris ramane chiar
-  // daca zona de actiuni se reconstruieste
-  const feedback = el("textarea", { rows: 3, placeholder: "What needs to change? (needed for Send back)", "aria-label": "Feedback" });
 
   const titleId = `task-modal-title-${taskId}`;
   const closeBtn = el("button", { type: "button", class: "modal-close", "aria-label": "Close", onclick: () => requestClose() }, "×");
@@ -66,7 +64,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
     el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFlow), convPane, histPane, chgPane, flowPane);
-  // formularul de comentarii: creat o singura data, ca textul scris sa nu se piarda la refresh
+  // formularul de comentarii: creat o singura data, ca textul scris sa nu se piarda la refresh.
+  // Cand decide utilizatorul, se muta in zona de actiuni si textul lui e si feedback-ul pentru Send back.
   const commentInput = el("textarea", { rows: 2, placeholder: "Reply to the agent...", "aria-label": "Comment" });
   const commentForm = el("form", { class: "comment-form", onsubmit: async (e) => {
     e.preventDefault();
@@ -84,6 +83,13 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
   const actionsBox = el("div", { class: "modal-actions", hidden: true });
   const side = el("aside", { class: "modal-side", "aria-label": "Task details" });
+  // asignatul se schimba din coloana (Queued / Blocked); cat timp lista e deschisa
+  // coloana nu se redeseneaza, altfel s-ar pierde cautarea si focusul
+  let sideLater = null;   // redesenarea amanata cat lista e deschisa
+  const picker = agentPicker({
+    onPick: (a) => data && actions.assign(data.task, a.id),
+    onClose: () => { const f = sideLater; sideLater = null; f?.(); },
+  });
   const copyBtn = el("button", { type: "button", class: "btn ghost small", onclick: copyLink }, "Copy link");
   const dialog = el("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": titleId, tabindex: "-1" },
     el("div", { class: "modal-main" },
@@ -122,7 +128,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
 
   // requestClose: feedback-ul netrimis nu se pierde in tacere
   function requestClose() {
-    if ((feedback.value.trim() || commentInput.value.trim()) && !confirm("Discard your unsent text?")) return;
+    if (commentInput.value.trim() && !confirm("Discard your unsent text?")) return;
     onClose();
   }
 
@@ -265,6 +271,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
 
   // renderSide: coloana din dreapta: starea si cine e implicat (se redeseneaza la fiecare refresh)
   function renderSide(t, agent, who, waiting, stuck, queuedInStage) {
+    if (picker.isOpen()) { sideLater = () => renderSide(t, agent, who, waiting, stuck, queuedInStage); return; }
     const byId = new Map(project.agents.map((a) => [a.id, a]));
     const person = (name, a) => el("span", { class: "side-value" }, avatar(name, a ? kindOf(a) : "user", 26), name);
     const reviewer = agent?.reviewerId ? byId.get(agent.reviewerId) : null;
@@ -272,9 +279,17 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     const parent = t.parentTaskId ? (project.tasks || []).find((x) => x.id === t.parentTaskId) : null;
     const rows = [];
     const row = (label, value) => { if (value) rows.push(el("span", { class: "side-label" }, label), value); };
-    row("Assignee", queuedInStage
-      ? el("span", { class: "side-value hint" }, data.stage ? `queued in ${data.stage}` : "queued in stage")
-      : who ? person(who, agent) : el("span", { class: "side-value hint" }, "Unassigned"));
+    const stageText = data.stage ? `queued in ${data.stage}` : "queued in stage";
+    const canAssign = t.status === "queued" || t.status === "blocked";
+    const choices = canAssign ? actions.assignable(t.stageId) : [];
+    if (choices.length) {
+      picker.update({ label: queuedInStage ? stageText : who || "Unassigned", agent: queuedInStage ? null : agent, choices, currentId: queuedInStage ? 0 : t.assigneeId });
+      row("Assignee", picker.el);
+    } else {
+      row("Assignee", queuedInStage
+        ? el("span", { class: "side-value hint" }, stageText)
+        : who ? person(who, agent) : el("span", { class: "side-value hint" }, "Unassigned"));
+    }
     row("Reviewer", reviewer ? person(reviewer.name, reviewer) : null);
     row("Reporter", t.byUser ? person("You", null) : creator ? person(creator.name, creator) : null);
     row("Waiting on", waiting ? el("span", { class: "side-value", style: "color:var(--amber)" }, waiting) : null);
@@ -496,9 +511,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     const mine = t.status === "review" && (project.userCanDecide || []).includes(t.id);
     // byRoot: in modul autonom decide radacina asignatului; utilizatorul poate si el
     const byRoot = mine && !(project.userDecides || []).includes(t.id) ? rootName(t.assigneeId) : null;
-    const canAssign = t.status === "queued" || t.status === "blocked";
-    const choices = canAssign ? actions.assignable(t.stageId) : [];
-    const key = [t.status, mine, byRoot, stuck, t.assigneeId, choices.map((a) => a.id).join(".")].join("|");
+    const key = [t.status, mine, byRoot, stuck].join("|");
     if (key === actionsKey) return;
     actionsKey = key;
 
@@ -515,13 +528,17 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       const back = el("button", { type: "button", class: "btn small" }, "Send back");
       accept.addEventListener("click", run(accept, () => actions.decide(t, "accept", "")));
       back.addEventListener("click", run(back, async () => {
-        if (!feedback.value.trim()) { feedback.focus(); return false; }
-        const ok = await actions.decide(t, "send_back", feedback.value.trim());
-        if (ok) feedback.value = "";
+        const text = commentInput.value.trim();
+        if (!text) { commentInput.focus(); return false; }
+        const ok = await actions.decide(t, "send_back", text);
+        if (ok) commentInput.value = "";
         return ok;
       }));
-      parts.push(el("p", { class: "hint" }, byRoot ? `${byRoot} decides this; you can decide it too.` : "You decide this task."), feedback,
+      const hint = byRoot ? `${byRoot} decides this; you can decide it too.` : "You decide this task.";
+      parts.push(el("p", { class: "hint" }, `${hint} Send back sends your reply as feedback.`), commentForm,
         el("div", { class: "actions" }, accept, back));
+    } else if (!body.contains(commentForm)) {
+      body.append(commentForm); // nu mai decide utilizatorul: formularul revine sub tab-uri
     }
     if (t.status === "blocked") {
       const accept = el("button", { type: "button", class: "btn small primary" }, "Accept");
@@ -529,16 +546,6 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       accept.addEventListener("click", run(accept, () => actions.taskAction(t, "accept")));
       unblock.addEventListener("click", run(unblock, () => actions.taskAction(t, "unblock")));
       parts.push(el("div", { class: "actions" }, accept, unblock));
-    }
-    if (canAssign) {
-      const current = project.agents.find((a) => a.id === t.assigneeId);
-      parts.push(el("label", { class: "assign-row" },
-        el("span", { class: "hint" }, "Assignee"),
-        el("select", {
-          class: "select-small", value: String(t.assigneeId), "aria-label": `Assignee for T-${t.number}`,
-          onchange: (e) => actions.assign(t, Number(e.target.value)),
-        }, choices.map((a) => el("option", { value: a.id }, a.name)),
-          !choices.some((a) => a.id === t.assigneeId) ? el("option", { value: t.assigneeId }, current ? current.name : "?") : null)));
     }
     if (stuck) {
       const nudge = el("button", { type: "button", class: "btn small" }, "Nudge");
@@ -563,6 +570,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      sideLater = null;
+      picker.close(); // scoate si ascultatorul de click de pe document
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
       overlay.remove();

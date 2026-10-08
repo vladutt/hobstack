@@ -124,7 +124,9 @@ func TestAutonomyReviewerApprovedUserTaskGoesToRoot(t *testing.T) {
 	}
 }
 
-func TestAutonomyRootAssigneeAutoDone(t *testing.T) {
+// task creat din board pentru radacina: nu se accepta automat nici in modul
+// autonom (cu sau fara report_done), decide utilizatorul
+func TestAutonomyUserTaskOnRootStaysForUser(t *testing.T) {
 	f := setup(t)
 	autonomous(t, f)
 	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.lead.ID); err != nil {
@@ -132,24 +134,61 @@ func TestAutonomyRootAssigneeAutoDone(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	run := f.fs.last(t, f.lead)
-	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone, Result: "gata"})
-	task := f.wantStatus(t, 1, store.StatusDone)
-	if !hasEvent(t, f, task.ID, "accepted", actorForeman, "Accepted automatically (full autonomy)") {
-		t.Fatal("lipseste evenimentul de accept automat")
+	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone, Result: "Varianta 1 sau 2? Am nevoie de domeniu."})
+	got := f.wantStatus(t, 1, store.StatusReview)
+	if !f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) {
+		t.Fatalf("decide utilizatorul: %+v", got)
+	}
+	if hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptText) {
+		t.Fatal("fara accept automat")
 	}
 
-	// task creat de un lider sters, asignat unei radacini: tot Done automat
-	solo := f.agent(t, "Solo", nil, nil)
-	t2 := f.task(t, "B", solo, store.StatusInProgress)
-	t2.CreatorID = nil
-	t2.Result = "gata"
-	if _, err := f.tm.toReview(&t2, solo, mustAgents(t, f), "Solo a terminat", taskNote{}); err != nil {
+	// radacina cu reviewer: dupa aprobare decide utilizatorul
+	solo := f.agent(t, "Solo", nil, &f.vera)
+	if _, err := f.tm.UserCreateTask(f.p.ID, "B", "", solo.ID); err != nil {
 		t.Fatal(err)
 	}
-	f.wantStatus(t, 2, store.StatusDone)
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, solo).ID, runner.Outcome{Status: store.RunDone, Result: "gata"})
+	f.wantStatus(t, 2, store.StatusReview)
+	vc := f.workerCaller(f.vera, 0)
+	vc.IsReviewer = true
+	if text, err := f.tm.ReviewApprove(vc, "T-2", ""); err != nil || text != "T-2 went to the user for a decision." {
+		t.Fatalf("%q %v", text, err)
+	}
+	got = f.wantStatus(t, 2, store.StatusReview)
+	if !f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) {
+		t.Fatalf("dupa reviewer decide utilizatorul: %+v", got)
+	}
+}
+
+// task care nu e din board, asignat unei radacini fara decident: Done automat;
+// cu reported = false (un agent care s-a oprit fara report_done) ramane la utilizator
+func TestAutonomyRootAssigneeAutoDone(t *testing.T) {
+	f := setup(t)
+	autonomous(t, f)
+	solo := f.agent(t, "Solo", nil, nil)
+	t1 := f.task(t, "A", solo, store.StatusInProgress)
+	t1.CreatorID = nil // creat de un lider sters
+	t1.Result = "gata"
+	if _, err := f.tm.toReview(&t1, solo, mustAgents(t, f), "Solo a terminat", taskNote{}, true); err != nil {
+		t.Fatal(err)
+	}
+	got := f.wantStatus(t, 1, store.StatusDone)
+	if !hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptText) {
+		t.Fatal("lipseste evenimentul de accept automat")
+	}
 	if f.hasMessage(solo.ID, "The user decides") {
 		t.Fatal("fara nota pentru utilizator in modul autonom")
 	}
+
+	t2 := f.task(t, "B", solo, store.StatusInProgress)
+	t2.CreatorID = nil
+	t2.Result = "intrebare"
+	if _, err := f.tm.toReview(&t2, solo, mustAgents(t, f), "Solo a terminat", taskNote{}, false); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 2, store.StatusBlocked)
 }
 
 // un run esuat nu se accepta niciodata automat: fara decident ramane la utilizator
@@ -391,5 +430,43 @@ func TestAutonomyEscalatedFailedRunNotAutoDone(t *testing.T) {
 	}
 	if ok, _ := f.st.HasUndelivered(f.lead.ID); ok {
 		t.Fatal("detectorul nu impinge radacina pentru un task lasat utilizatorului")
+	}
+}
+
+// intr-o etapa, un agent care se opreste fara report_done nu e acceptat
+// automat in modul autonom, chiar daca nu are cine sa decida: ramane la utilizator
+func TestAutonomyStageRunWithoutReportNotAutoDone(t *testing.T) {
+	f := setup(t)
+	autonomous(t, f)
+	solo := f.agent(t, "Solo", nil, nil)
+	stages, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{solo.ID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: solo.ID, StageID: &stages[0].ID}
+	if err := f.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, solo).ID, runner.Outcome{Status: store.RunDone, Result: "care varianta?"})
+	got := f.wantStatus(t, 1, store.StatusReview)
+	if hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptText) {
+		t.Fatal("fara accept automat")
+	}
+}
+
+// sarcina recurenta cu auto-accept pe radacina: raspunsul radacinii e raportul,
+// deci se accepta automat ca inainte
+func TestRecurringAutoAcceptOnRoot(t *testing.T) {
+	f := setup(t)
+	r := f.recurring(t, RecurringInput{Title: "Daily", AssigneeID: f.lead.ID, Schedule: daily9, Enabled: true, AutoAccept: true}, at("2026-10-05 08:00"))
+	if _, err := f.tm.RunRecurringNow(r.ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.lead).ID, runner.Outcome{Status: store.RunDone, Result: "gata"})
+	got := f.wantStatus(t, 1, store.StatusDone)
+	if !hasEvent(t, f, got.ID, "accepted", actorForeman, recurringAcceptText) {
+		t.Fatal("lipseste acceptul automat")
 	}
 }

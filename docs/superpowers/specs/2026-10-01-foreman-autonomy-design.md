@@ -43,8 +43,14 @@ In modul autonom (proiectul are `Autonomy`), peste regulile de azi:
   radacina in loc de "utilizatorul". Radacina primeste nota obisnuita "(review)". Butoanele din board raman si ele
   active (utilizatorul poate decide oricand); `userDecides` din API nu mai include aceste task-uri.
 - **Asignatul e chiar radacina** (nimeni deasupra): la raportare, task-ul trece direct in Done; istoric
-  kind `accepted`, actor `Foreman`, text `Accepted automatically (full autonomy)`; apoi `afterDone`. (Un task
-  creat de un lider are mereu un decident, deci regula atinge doar task-urile din board asignate unei radacini.)
+  kind `accepted`, actor `Foreman`, text `Accepted automatically (full autonomy)`; apoi `afterDone`.
+  **Exceptie (2026-10-08, T-45 din Hobstack Landing):** un task creat din board (`ByUser`) nu trece singur in Done;
+  ramane in Review si decide utilizatorul (l-a cerut el, deci e de fata). Radacina raspunde de multe ori cu variante
+  sau intrebari, nu cu munca terminata. Raman cu Done automat doar task-urile fara decident care nu sunt din board
+  (ex. creatorul a fost sters) si sarcinile recurente cu auto-accept (helper `autoDone`).
+- **Run terminat fara `report_done`** de un agent care il putea chema (are sef, sau lucreaza intr-o etapa): nu se
+  accepta niciodata automat, ca un run esuat; fara decident ramane la utilizator. La o radacina in afara etapelor
+  raspunsul run-ului e raportul (radacina nu are voie la `report_done`), deci regula de mai sus se aplica normal.
 - **Task blocat** (dupa `MaxSendBacks` sau fara decident): in loc de "The user decides", radacina primeste nota
   `T-N is blocked after 3 rejections or send-backs. As the root lead in full autonomy, decide: accept_task to take it as it is, or send_back with clear feedback for one more try.`
   si poate chema `accept_task` (deja permis pe Blocked) sau `send_back` pe un task Blocked (nou, doar in modul autonom

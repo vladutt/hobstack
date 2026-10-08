@@ -259,7 +259,7 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 	}
 	boss, ok := decider(*task, agents, autonomous)
 	ev.to = whoName(boss, ok) // dupa ultima etapa: decidentul, altfel utilizatorul
-	if !ok && (autonomous || task.AutoAccept) {
+	if !ok && autoDone(*task, autonomous) {
 		markDone(task)
 		if err := t.st.SaveTask(task); err != nil {
 			return "", err
