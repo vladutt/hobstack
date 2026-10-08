@@ -220,9 +220,8 @@ export async function libraryView(root, path) {
           el("span", { class: "grow" }),
           el("span", { class: "lib-flag" }, "Proposed")),
         el("p", { class: "lib-desc" }, it.description),
-        el("p", { class: "lib-tested" }, el("span", { class: "dot-teal" }),
-          local ? "Tested when you publish"
-            : `Remote · ${it.url}`),
+        el("p", { class: "lib-tested untested" }, el("span", { class: "dot-grey" }),
+          local ? "Tested when you publish" : `Not tested \u00b7 remote ${it.url}`),
         el("div", { class: "lib-actions" }, publishButton(it, done), reviewLink(it),
           el("span", { class: "grow" }), declineButtons(it, projects, done))),
       el("div", { class: "lib-prop-col" },
