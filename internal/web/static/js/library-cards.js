@@ -7,6 +7,7 @@ import { run, chips } from "./library.js";
 // Textul vine de la agenti: doar prin el() / textContent.
 
 const KIND = { tool: "Tool", skill: "Skill", mcp: "MCP" };
+const statsCache = new Map(); // id propunere -> { files, lines }, ca sa nu recitim fisierele la fiecare redesenare
 const kindLabel = (it) => KIND[it.kind] || it.kind;
 
 // publish: POST publish cu starea "ocupat"; 422/409 apar ca toast
@@ -33,16 +34,25 @@ export function libraryProposalBox(it, { onDone }) {
 // librarySharePrompt: cardul din chat "Share to Tool library?" (mockup 13)
 export function librarySharePrompt(it, { onDone }) {
   const stats = el("span", { class: "share-stats" });
-  // fisierele propunerii nu au numar de linii in API: le numaram din continut (max 20 de fisiere)
-  api(`/api/library/${it.id}`).then(async (d) => {
+  // fisierele propunerii nu au numar de linii in API: le numaram din continut (max 20 de fisiere);
+  // daca vreunul nu se poate citi, aratam doar numarul de fisiere (nu subestimam in tacere)
+  const showStats = (st) => {
+    stats.textContent = `${st.files} ${st.files === 1 ? "file" : "files"}` + (st.lines != null ? ` \u00b7 ${st.lines} lines` : "");
+  };
+  if (statsCache.has(it.id)) showStats(statsCache.get(it.id));
+  else api(`/api/library/${it.id}`).then(async (d) => {
     const files = d.files || [];
-    stats.textContent = `${files.length} ${files.length === 1 ? "file" : "files"}`;
-    let lines = 0;
-    for (const f of files.slice(0, 20)) {
-      const text = await (await fetch(`/api/library/${it.id}/files/${f.name.split("/").map(encodeURIComponent).join("/")}`)).text();
-      lines += text ? text.replace(/\n$/, "").split("\n").length : 0;
-    }
-    if (lines) stats.textContent += ` \u00b7 ${lines} lines`;
+    const st = { files: files.length, lines: null };
+    showStats(st);
+    if (files.length > 20) return;
+    const texts = await Promise.all(files.map(async (f) => {
+      const res = await fetch(`/api/library/${it.id}/files/${f.name.split("/").map(encodeURIComponent).join("/")}`);
+      return res.ok ? res.text() : null;
+    }));
+    if (texts.some((t) => t === null)) return;
+    st.lines = texts.reduce((n, t) => n + (t ? t.replace(/\n$/, "").split("\n").length : 0), 0);
+    statsCache.set(it.id, st);
+    showStats(st);
   }).catch(() => {});
   const pub = el("button", { type: "button", class: "btn primary" }, "Publish");
   pub.addEventListener("click", () => publish(it, pub, onDone));
@@ -68,13 +78,25 @@ export function librarySharePrompt(it, { onDone }) {
 // valorile secretelor nu se afiseaza niciodata (API-ul nu le intoarce, doar "set").
 export function libraryInstalls(projectId) {
   const list = el("div", { class: "lib-installs" });
-  let rows = [];
+  const nodes = new Map(); // id element -> nodul randului
+  const queues = new Map(); // id element -> coada de PUT-uri (un singur PUT pe rand odata)
 
-  async function put(it, body) {
-    try {
-      await api(`/api/projects/${projectId}/library/${it.item.id}`, { method: "PUT", body });
-    } catch (err) { toast(err.message); }
-    await load();
+  // put: salveaza un rand si redeseneaza DOAR acel rand; celelalte randuri (cu secrete pe jumatate scrise) raman neatinse
+  function put(r, body, okMsg) {
+    const id = r.item.id;
+    const next = (queues.get(id) || Promise.resolve()).then(async () => {
+      try {
+        await api(`/api/projects/${projectId}/library/${id}`, { method: "PUT", body });
+        if (okMsg) toast(okMsg, "ok");
+      } catch (err) { toast(err.message); }
+      try {
+        const fresh = (await api(`/api/projects/${projectId}/library`)).find((x) => x.item.id === id);
+        const old = nodes.get(id);
+        if (fresh && old) { const n = row(fresh); nodes.set(id, n); old.replaceWith(n); }
+      } catch (err) { toast(err.message); }
+    });
+    queues.set(id, next);
+    return next;
   }
 
   function row(r) {
@@ -91,22 +113,34 @@ export function libraryInstalls(projectId) {
         onclick: () => put(r, { installed: true, upgrade: true }) }, `Update to ${it.version?.version || "latest"}`) : null);
     const secrets = r.installed ? (r.secrets || []).map((s) => {
       const input = el("input", { type: "password", autocomplete: "new-password",
-        placeholder: s.set ? "set · type to replace" : "not set", "aria-label": s.name });
-      const save = () => { if (input.value) put(r, { installed: true, secrets: { [s.name]: input.value } }); };
+        placeholder: s.set ? "set \u00b7 type to replace" : "not set", "aria-label": s.name });
+      const save = () => { if (input.value) put(r, { installed: true, secrets: { [s.name]: input.value } }, `${s.name} saved`); };
       input.addEventListener("change", save);
+      // Enter nu trebuie sa trimita formularul proiectului: salveaza doar secretul
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        save();
+      });
       return el("div", { class: "lib-secret" },
         el("span", { class: "lib-secret-name" }, s.name),
         el("span", { class: "lib-secret-state" + (s.set ? " set" : "") }, s.set ? "set" : "missing"),
         input,
-        s.set ? el("a", { href: "#", class: "hint", onclick: (e) => { e.preventDefault(); put(r, { installed: true, clear: [s.name] }); } }, "Clear") : null);
+        s.set ? el("a", { href: "#", class: "hint", onclick: (e) => {
+          e.preventDefault();
+          if (confirm(`Remove the saved value for ${s.name}?`)) put(r, { installed: true, clear: [s.name] });
+        } }, "Clear") : null);
     }) : [];
     return el("div", { class: "lib-install" }, head, meta, ...secrets);
   }
 
   async function load() {
+    let rows;
     try { rows = await api(`/api/projects/${projectId}/library`); }
     catch (err) { list.replaceChildren(el("p", { class: "hint" }, err.message)); return; }
-    list.replaceChildren(...(rows.length ? rows.map(row) : [el("p", { class: "hint" }, "Nothing published yet. Published tools, skills and MCP servers show up here.")]));
+    nodes.clear();
+    list.replaceChildren(...(rows.length ? rows.map((r) => { const n = row(r); nodes.set(r.item.id, n); return n; })
+      : [el("p", { class: "hint" }, "Nothing published yet. Published tools, skills and MCP servers show up here.")]));
   }
   load();
   return el("section", { class: "section" },

@@ -1170,17 +1170,16 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .share-actions .keep { color: var(--muted); }
 .lib-installs { display: grid; gap: 10px; }
 .lib-install { display: grid; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
-.lib-install:first-child { border-top: 0; }
+.lib-install:first-child { border-top: 0; padding-top: 0; }
 .lib-install .lib-name { font-family: var(--mono); }
 .lib-install-meta { display: flex; gap: 10px; align-items: center; }
 .lib-install-meta:empty { display: none; }
 .lib-secret { display: grid; grid-template-columns: minmax(80px, auto) auto 1fr auto; gap: 8px; align-items: center; margin-left: 28px; }
 .lib-secret-name { font-family: var(--mono); font-size: 12.5px; }
 .lib-secret-state { font-size: 11.5px; color: var(--amber); }
-.lib-secret-state.set { color: var(--green, #4fc3a1); }
+.lib-secret-state.set { color: var(--green); }
 .lib-secret input { min-width: 0; }
 .lib-install .toggle-row .grow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .lib-install .toggle-row .hint { flex-basis: 100%; }
 .lib-install .label-tag { width: auto; flex: none; }
 .lib-install .lib-name { font-size: 14px; }
-.lib-install:first-child { padding-top: 0; }
