@@ -13,6 +13,7 @@ import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
 import { renderMarkdown } from "./md.js";
+import { libraryProposalBox, librarySharePrompt } from "./library-cards.js";
 
 const SUB_STATUS = {
   queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done",
@@ -120,8 +121,9 @@ export async function workspaceView(root, projectId, route) {
   const accessList = el("div", { class: "needs-access" });
   const agentReqList = el("div", { class: "needs-agent-requests" });
   const workReqList = el("div", { class: "needs-work-requests" });
+  const libraryList = el("div", { class: "needs-library" });
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
-    needsTitle, questionsBox, fillList, stuckList, accessList, agentReqList, workReqList);
+    needsTitle, questionsBox, fillList, stuckList, accessList, agentReqList, workReqList, libraryList);
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
   const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
@@ -130,6 +132,7 @@ export async function workspaceView(root, projectId, route) {
   let fillKey = null;      // task-urile "To fill in" desenate ultima data
   let stuckKey = null;     // id-urile task-urilor blocate desenate ultima data
   let agentReqKey = null;  // id-urile cererilor de agent desenate ultima data
+  let libraryKey = null;   // id-urile propunerilor Library desenate ultima data
   let workReqKey = null;   // id-urile cererilor de lucru desenate ultima data
   let accessKey = null;    // id:count ale cererilor de acces desenate ultima data
   const canvas = teamCanvas({
@@ -197,10 +200,12 @@ export async function workspaceView(root, projectId, route) {
   const detailsBox = el("div", { class: "details" });
   // intrebarea deschisa a agentului selectat, deasupra campului de scris
   const chatQuestion = el("div", { class: "chat-question", hidden: true });
+  const chatShare = el("div", { class: "chat-share", hidden: true }); // propunerile Library ale agentului selectat
+  let chatShareKey = null;
   let chatQuestionKey = null; // id-ul intrebarii desenate ultima data in chat
   const threadHint = el("div", { class: "thread-hint" });
   const quick = el("div", { class: "quick-actions" }); // Ask for status, Give a task, Open T-<nr>
-  const chatBox = el("div", { class: "chat" }, threadHint, thread, chatQuestion, el("div", { class: "composer" }, chips, composer, quick, note));
+  const chatBox = el("div", { class: "chat" }, threadHint, thread, chatShare, chatQuestion, el("div", { class: "composer" }, chips, composer, quick, note));
   const drawerClose = el("button", {
     type: "button", class: "drawer-close", "aria-label": "Close panel", title: "Close",
     onclick: () => setDrawer(false),
@@ -261,6 +266,7 @@ export async function workspaceView(root, projectId, route) {
     renderBoard();
     renderConsoleHead();
     renderChatQuestion();
+    renderChatShare();
     renderNeeds();
     renderDetails();
   }
@@ -349,7 +355,8 @@ export async function workspaceView(root, projectId, route) {
     const agentReqs = state.project.agentRequests || [];
     const workReqs = state.project.workRequests || [];
     const fills = state.project.fillIns || [];
-    const total = questions.length + fills.length + stuck.length + access.length + agentReqs.length + workReqs.length;
+    const proposals = state.project.libraryProposals || [];
+    const total = proposals.length + questions.length + fills.length + stuck.length + access.length + agentReqs.length + workReqs.length;
     needsTitle.replaceChildren(el("span", {}, "Needs you"), el("span", { class: "col-count" }, total));
     needsChip.textContent = `${total} ${total === 1 ? "needs" : "need"} you`;
     needsChip.hidden = !total || state.tab === "tasks";
@@ -384,6 +391,11 @@ export async function workspaceView(root, projectId, route) {
       workReqKey = wKey;
       workReqList.replaceChildren(...workReqs.map((r) => workRequestBox(r, { onDone: reload })));
     }
+    const lKey = proposals.map((p) => p.id).join(",");
+    if (lKey !== libraryKey) {
+      libraryKey = lKey;
+      libraryList.replaceChildren(...proposals.map((p) => libraryProposalBox(p, { onDone: reload })));
+    }
   }
 
   // renderChatQuestion: intrebarea agentului selectat in chat; aceeasi regula:
@@ -395,6 +407,18 @@ export async function workspaceView(root, projectId, route) {
     chatQuestionKey = key;
     chatQuestion.hidden = !q;
     chatQuestion.replaceChildren(...(q ? [questionNode(q)] : []));
+  }
+
+  // renderChatShare: propunerile Library deschise ale agentului selectat (cardul "Share to ... library?");
+  // se redeseneaza doar cand se schimba setul (agentul sau propunerile)
+  function renderChatShare() {
+    const mine = state.selected ? (state.project.libraryProposals || []).filter((p) => p.madeByAgentId === state.selected) : [];
+    const key = state.selected + ":" + mine.map((p) => p.id).join(",");
+    if (key === chatShareKey) return;
+    chatShareKey = key;
+    chatShare.hidden = !mine.length;
+    chatShare.replaceChildren(...mine.map((p) => librarySharePrompt(p, { onDone: reload })));
+    if (mine.length) scrollDown();
   }
 
   // renderTabs: tab-ul activ al paginii si al panoului din dreapta
@@ -1140,6 +1164,7 @@ export async function workspaceView(root, projectId, route) {
     renderStrip();
     renderConsoleHead();
     renderChatQuestion();
+    renderChatShare();
     renderDetails();
     syncHash();
     if (!changed) return;

@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { el, avatar, field, toast, kindOf, clock, topbar } from "./ui.js";
+import { libraryInstalls } from "./library-cards.js";
 
 export async function projectsView(root) {
   const [projects, setups] = await Promise.all([api("/api/projects"), api("/api/setup").catch(() => [])]);
@@ -111,7 +112,7 @@ function setupCard(s, refresh) {
 // radical, ca o zi cu 250 de run-uri sa nu faca invizibile zilele cu 5).
 function projectRow(p, peak) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0) + (p.fillIns || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
+  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0) + (p.fillIns || 0) + (p.libraryProposals || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
   const href = `#/p/${p.id}`;
   const lead = p.team.find((m) => m.isRoot) || p.team[0];
   const shown = p.team.slice(0, 3);
@@ -238,7 +239,8 @@ export async function projectFormView(root, id) {
               el("span", { class: "grow" }, el("strong", {}, "Full autonomy"),
                 el("span", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."))),
             !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
-          id && linksSection(id, p.links || [])))));
+          id && linksSection(id, p.links || []),
+          id && libraryInstalls(id)))));
   name.focus();
 
   async function save(e) {

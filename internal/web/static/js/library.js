@@ -39,7 +39,7 @@ function titles(active) {
 }
 
 // busy: pune butonul pe "ocupat" cat dureaza actiunea; erorile apar ca toast (422 = mesajul de reparat)
-async function run(btn, label, fn) {
+export async function run(btn, label, fn) {
   const text = btn.textContent;
   btn.disabled = true;
   btn.classList.add("busy");
@@ -88,7 +88,7 @@ function declineButtons(it, projects, onDone) {
 
 const reviewLink = (it) => el("a", { class: "btn ghost", href: `#/library/item/${it.id}?tab=code` }, "Review code");
 
-function chips(it) {
+export function chips(it) {
   return [
     ...(it.needs || []).map((n) => el("span", { class: "chip" }, NEEDS[n] || n)),
     ...(it.secrets || []).map((s) => el("span", { class: "chip secret" }, s)),
