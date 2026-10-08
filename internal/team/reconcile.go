@@ -729,29 +729,10 @@ func (t *Team) closeQuestion(id int64, status, answer string) error {
 // la finalul run-ului). Daca agentul lucreaza la alt task, tot il punem in
 // coada: porneste dupa ce se termina run-ul curent. Se apeleaza cu t.work blocat.
 func (t *Team) requeueAnswered(q store.Question, a store.Agent) error {
-	if q.TaskID == nil || t.activeTaskID(a.ID) == *q.TaskID {
+	if q.TaskID == nil {
 		return nil
 	}
-	task, err := t.st.GetTask(*q.TaskID)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if task.Status != store.StatusInProgress || task.AssigneeID != a.ID {
-		return nil
-	}
-	waiting, err := t.st.HasOpenQuestionForTask(task.ID)
-	if err != nil || waiting {
-		return err
-	}
-	task.Status = store.StatusQueued
-	if err := t.st.SaveTask(&task); err != nil {
-		return err
-	}
-	t.emit(q.ProjectID, "task", task)
-	return nil
+	return t.requeueTaskFor(*q.TaskID, a)
 }
 
 func (t *Team) AcceptBlocked(taskID int64) error { return t.resolveBlocked(taskID, true) }

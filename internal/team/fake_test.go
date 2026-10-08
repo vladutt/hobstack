@@ -210,3 +210,16 @@ func hasFlag(args []string, flag string) bool {
 	}
 	return false
 }
+
+// lastOK intoarce ultimul run pornit pentru agent, sau false daca n-a pornit niciunul.
+func (f *fakeStarter) lastOK(a store.Agent) (runner.Spec, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := fmt.Sprintf("agent-%d", a.ID)
+	for i := len(f.specs) - 1; i >= 0; i-- {
+		if f.specs[i].Key == key {
+			return f.specs[i], true
+		}
+	}
+	return runner.Spec{}, false
+}

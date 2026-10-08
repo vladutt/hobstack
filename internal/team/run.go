@@ -78,8 +78,15 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	}
 	hasLinks := len(linkedProjects) > 0 // proiectul are legaturi: agentii primesc tool-urile pentru proiecte legate
 
+	rules, err := t.EffectiveCommandRules(p.ID)
+	if err != nil {
+		return err
+	}
 	pl := prompt.LinksFor(a, agents)
 	pl.Linked = hasLinks // hasLinks e calculat mai sus din linkedProjects
+	if slices.Contains(a.Tools, "shell") {
+		pl.BlockedCommands = prompt.BlockedPrefixes(rules)
+	}
 	system := prompt.System(p, a, pl)
 	// Claude tine sesiunile pe cwd, deci un alt folder de lucru inseamna alta sesiune.
 	hash := prompt.Hash(home.Path + "\n" + system)
@@ -133,11 +140,19 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 	}
 
+	// grant-urile "Allow once" se consuma la pornirea run-ului; daca pornirea esueaza le punem la loc
+	granted, err := t.st.TakeCommandGrants(a.ID)
+	if err != nil {
+		log.Printf("agent %d: command grants: %v", a.ID, err)
+		granted = nil
+	}
+	cmdDeny := prompt.DenyPrefixes(rules, granted)
+
 	spec := runner.Spec{
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
 		Dir:    home.Path,
-		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild), extraArgs...),
+		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild, cmdDeny), extraArgs...),
 		Prompt: turn,
 	}
 	agentID := a.ID
@@ -149,6 +164,11 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		if mcpFile {
 			t.lib.RemoveMCPConfig(runID)
 		}
+		for _, g := range granted {
+			if gerr := t.st.AddCommandGrant(p.ID, a.ID, g); gerr != nil {
+				log.Printf("agent %d: restoring command grant: %v", a.ID, gerr)
+			}
+		}
 		t.st.FinishRun(runID, store.RunFailed, 0, err.Error())
 		return err
 	}
@@ -157,7 +177,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 }
 
 // args construieste linia de comanda pentru claude.
-func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build) []string {
+func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build, cmdDeny []string) []string {
 	args := []string{
 		"-p", turn,
 		"--output-format", "stream-json", "--verbose",
@@ -166,7 +186,7 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string,
 		// setarile globale ale utilizatorului raman; .claude/settings.json din
 		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
 		"--setting-sources", "user",
-		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, prompt.DenyPrefixes(store.DefaultCommandRules, nil)),
+		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, cmdDeny),
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
 		"--mcp-config", mcpCfg,
@@ -358,6 +378,11 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 			task, tid = &tk, &tk.ID
 		}
 	}
+	rules, err := t.EffectiveCommandRules(ar.projectID)
+	if err != nil {
+		log.Printf("agent %d: command rules: %v", a.ID, err)
+	}
+	hasShell := slices.Contains(a.Tools, "shell")
 	seen := map[string]bool{}
 	recorded := false
 	for _, d := range denials {
@@ -365,26 +390,45 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		if d.Tool == "Task" || prompt.AlwaysDeniedTool(d.Tool) {
 			continue
 		}
-		if seen[d.Tool] {
+		// comanda Bash a unui agent cu shell: regulile decid (block = fara cerere, ask = cerere pe prefix)
+		prefix := ""
+		if d.Tool == "Bash" && hasShell {
+			mode, pfx := prompt.MatchCommand(d.Detail, rules)
+			if mode == store.CmdBlock {
+				t.denialEvent(task, a, d)
+				continue
+			}
+			if mode == store.CmdAsk {
+				prefix = pfx
+			}
+		}
+		key := d.Tool + "|" + prefix
+		if seen[key] {
 			continue
 		}
-		seen[d.Tool] = true
-		if err := t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail, ""); err != nil {
+		seen[key] = true
+		if err := t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail, prefix); err != nil {
 			log.Printf("agent %d: access denial: %v", a.ID, err)
 			continue
 		}
 		recorded = true
-		if task != nil {
-			text := fmt.Sprintf("%s was denied %s", a.Name, d.Tool)
-			if d.Detail != "" {
-				text += ": " + d.Detail
-			}
-			t.taskEvent(*task, "denied", a.Name, text)
-		}
+		t.denialEvent(task, a, d)
 	}
 	if recorded {
 		t.emit(ar.projectID, "access", map[string]any{"agentId": a.ID})
 	}
+}
+
+// denialEvent trece refuzul in istoricul task-ului (daca refuzul a fost pe un task).
+func (t *Team) denialEvent(task *store.Task, a store.Agent, d runner.Denial) {
+	if task == nil {
+		return
+	}
+	text := fmt.Sprintf("%s was denied %s", a.Name, d.Tool)
+	if d.Detail != "" {
+		text += ": " + d.Detail
+	}
+	t.taskEvent(*task, "denied", a.Name, text)
 }
 
 // recordChanges salveaza modificarile de fisiere si comenzile run-ului pe task
