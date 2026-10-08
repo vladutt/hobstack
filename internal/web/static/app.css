@@ -295,6 +295,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .task-sub:hover { background: var(--card); color: var(--text); }
 .task-sub-title { flex: 1 1 8em; min-width: 0; overflow-wrap: anywhere; }
 .task-sub .hint { margin-left: auto; }
+.task-sub .hint .dot { margin-right: 6px; vertical-align: 1px; }
 .task-sub .pill { height: 19px; padding: 0 7px; font-size: 11px; border-radius: 5px; }
 .badge-needs { font-size: 12px; font-weight: 600; color: var(--amber); white-space: nowrap; }
 .badge-open { font-size: 12px; font-weight: 600; color: var(--soft); white-space: nowrap; }

@@ -200,6 +200,9 @@ func (t *Team) activeTaskID(agentID int64) int64 {
 	return t.active[agentID].taskID
 }
 
+// ActiveTaskID: task-ul la care lucreaza acum agentul (0 = niciunul); pentru board.
+func (t *Team) ActiveTaskID(agentID int64) int64 { return t.activeTaskID(agentID) }
+
 // WorkingOn spune daca agentul asignat are acum un run activ pe task-ul dat.
 func (t *Team) WorkingOn(taskID, assigneeID int64) bool {
 	if taskID == 0 {

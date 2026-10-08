@@ -249,11 +249,13 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete, on
     const p = pos.get(a.id);
     const status = (a.status || "idle").toLowerCase();
     const asks = (project.questions || []).some((q) => q.agentId === a.id);
+    // task-ul run-ului activ (nu primul task In progress al agentului)
+    const workingOn = a.workingTaskId ? (project.tasks || []).find((t) => t.id === a.workingTaskId) : null;
     const [tone, ink] = toneOf(a.name, kindOf(a));
     // linia de stare: ce face agentul acum (sau de ce sta)
     const state = a.detached ? ["detached", "asks"]
       : asks ? ["needs you", "asks"]
-      : status === "working" ? [a.currentTask ? `working \u00b7 T-${a.currentTask.number}` : "working", "working"]
+      : status === "working" ? [workingOn ? `working \u00b7 T-${workingOn.number}` : "working", "working"]
       : status === "queued" ? ["queued", "queued"]
       : ["idle", "idle"];
     const folder = (project.folders || []).length > 1 ? folderOf(project, a)?.name : "";
