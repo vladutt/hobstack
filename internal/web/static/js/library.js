@@ -100,10 +100,15 @@ function chips(it) {
 export async function libraryView(root, path) {
   const kind = KIND_BY_PATH[path] || "tool";
   const cfg = KINDS[kind];
-  const [items, projectList] = await Promise.all([
-    api(`/api/library?kind=${kind}`),
-    api("/api/projects").catch(() => []),
-  ]);
+  let items, projectList;
+  try {
+    [items, projectList] = await Promise.all([
+      api(`/api/library?kind=${kind}`),
+      api("/api/projects").catch(() => []),
+    ]);
+  } catch (err) {
+    return notFound(root, `Could not load the library: ${err.message}`, cfg);
+  }
   const projects = new Map(projectList.map((p) => [p.id, p.name]));
   let filter = "all";
   let query = "";
@@ -291,10 +296,23 @@ export async function libraryView(root, path) {
   return () => { closed = true; };
 }
 
+// notFound: bara de sus + stare goala cu drum inapoi la lista
+function notFound(root, message, cfg) {
+  root.append(topbar("library"),
+    el("div", { class: "page" }, el("div", { class: "empty-state" },
+      el("h2", {}, message),
+      el("a", { class: "btn", href: `#/library/${cfg.path}` }, `Back to ${cfg.title}`))));
+}
+
 // ---------- pagina unui element ----------
 
 export async function libraryItemView(root, id, tab) {
-  const d = await api(`/api/library/${id}`);
+  let d;
+  try {
+    d = await api(`/api/library/${id}`);
+  } catch (err) {
+    return notFound(root, "Item not found", KINDS.tool);
+  }
   const cfg = KINDS[d.kind];
   let current = ["usage", "code", "versions"].includes(tab) ? tab : "usage";
   const kindWord = { tool: "Script", skill: "Skill", mcp: "MCP server" }[d.kind];
@@ -319,9 +337,11 @@ export async function libraryItemView(root, id, tab) {
   function usage() {
     const box = el("div", { class: "lib-usage" });
     if (d.kind === "tool") {
+      // aceeasi forma ca in buildTool: <build>/bin/<name>/<entry>, sau .../run cand tool-ul are secrete
+      const cmd = (d.secrets || []).length ? "run" : d.entry;
       box.append(el("h3", { class: "lib-h" }, "How agents call it"),
-        el("pre", { class: "md-pre lib-call" }, `${d.name}${d.entry ? "   # runs " + d.entry : ""}`),
-        el("p", { class: "hint" }, "Each project that installs it gets the full path in its agents' prompt. Install it in a project under Instructions › Library."));
+        el("pre", { class: "md-pre lib-call" }, `.../bin/${d.name}/${cmd} <arguments>`),
+        el("p", { class: "hint" }, "Agents get the full path in their turn message; tools with secrets run through a wrapper that adds them. Install it in a project under Instructions \u203a Library."));
     } else if (d.kind === "skill") {
       box.append(el("h3", { class: "lib-h" }, "How agents use it"),
         el("p", { class: "lib-text" }, "Agents in projects that installed this skill load SKILL.md when a task matches its description."));

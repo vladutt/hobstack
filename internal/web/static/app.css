@@ -1054,6 +1054,8 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .lib-need { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 16px; font-weight: 600; color: var(--amber); }
 .dot-amber, .dot-teal { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; }
 .dot-teal { background: var(--teal); }
+.dot-grey { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+.lib-tested.untested { color: var(--muted); }
 .lib-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
 .lib-cards.one { grid-template-columns: minmax(0, 1fr); }
 .lib-prop { border-color: var(--amber-line); gap: 10px; min-width: 0; }
@@ -1148,7 +1150,7 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
   .lib-page { padding: 20px 16px 32px; }
   .lib-item-main { padding: 20px 16px 28px; }
   .lib-item-title { font-size: 26px; }
-  .lib-table .hide-xs, .lib-table th:nth-child(2), .lib-table td:nth-child(2) { display: none; }
+  .lib-table th:nth-child(2), .lib-table td:nth-child(2) { display: none; }
   .lib-uses li { grid-template-columns: 60px minmax(0, 1fr); }
   .lib-uses li > :last-child { grid-column: 2; }
   .topbar input.search { width: 100%; }
