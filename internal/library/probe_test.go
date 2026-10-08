@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -56,5 +58,37 @@ func TestProbeMCPHugeLine(t *testing.T) {
 	// o linie de peste 1 MB trebuie sa dea eroare, nu sa umple memoria
 	if _, err := ProbeMCP("sh", []string{"-c", "head -c 3000000 /dev/zero | tr '\\0' a; sleep 5"}, nil, 3*time.Second); err == nil {
 		t.Fatal("linie uriasa acceptata")
+	}
+}
+
+// gone verifica (cu pgrep) ca nu mai exista procese cu argumentul-marcaj.
+func gone(t *testing.T, marker string) {
+	t.Helper()
+	for i := 0; i < 20; i++ {
+		if exec.Command("pgrep", "-f", marker).Run() != nil {
+			return // pgrep intoarce eroare cand nu gaseste nimic
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	exec.Command("pkill", "-f", marker).Run()
+	t.Fatalf("procese ramase: %s", marker)
+}
+
+func TestProbeMCPKillsProcessTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fara process group")
+	}
+	for _, c := range []struct{ script, marker string }{
+		{"sleep 31.123 & sleep 32.123", "sleep 3"},
+		{"sh -c 'cat >/dev/null; sleep 33.123'; true", "sleep 33.123"},
+	} {
+		start := time.Now()
+		if _, err := ProbeMCP("sh", []string{"-c", c.script}, nil, 300*time.Millisecond); err == nil {
+			t.Fatal("trebuia sa expire:", c.script)
+		}
+		if d := time.Since(start); d > 3*time.Second {
+			t.Fatalf("%q a durat %v", c.script, d)
+		}
+		gone(t, c.marker)
 	}
 }

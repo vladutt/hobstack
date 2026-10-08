@@ -22,7 +22,7 @@ func ProbeMCP(command string, args []string, env map[string]string, timeout time
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
-	cmd.WaitDelay = time.Second // nu asteptam la nesfarsit dupa pipe-uri tinute de copii
+	setProcessGroup(cmd) // la timeout se omoara tot grupul, nu doar procesul
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -34,9 +34,13 @@ func ProbeMCP(command string, args []string, env map[string]string, timeout time
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	// la timeout inchidem pipe-urile, ca Scan sa nu ramana blocat pe un copil care tine stdout deschis
+	stop := context.AfterFunc(ctx, func() { stdin.Close(); stdout.Close() })
 	defer func() {
+		stop()
+		stdin.Close()
+		_ = killTree(cmd)
 		cancel()
-		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 	}()
 

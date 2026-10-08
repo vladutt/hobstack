@@ -5,6 +5,8 @@ package library
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,9 +17,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"foreman/internal/store"
 )
@@ -32,19 +36,21 @@ type Lib struct {
 	Root string
 	St   *store.Store
 
-	mu       sync.Mutex // protejeaza harta de mai jos
-	buildMus map[int64]*sync.Mutex
+	mu       sync.Mutex            // protejeaza harta de mai jos
+	buildMus map[int64]*sync.Mutex // un build pe proiect
+	itemMus  map[int64]*sync.Mutex // o publicare pe item
 }
 
 func New(root string, st *store.Store) *Lib {
 	if abs, err := filepath.Abs(root); err == nil {
 		root = abs
 	}
-	return &Lib{Root: root, St: st, buildMus: map[int64]*sync.Mutex{}}
+	return &Lib{Root: root, St: st, buildMus: map[int64]*sync.Mutex{}, itemMus: map[int64]*sync.Mutex{}}
 }
 
 // safeName: numele elementelor ajung in cai de pe disc, deci fara separatori sau "..".
-var safeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+// Aceeasi regula ca numele globale (fara '.' sau '_').
+var safeName = regexp.MustCompile(`^[a-z][a-z0-9-]{1,39}$`)
 
 // envName: numele unui secret devine variabila de mediu.
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -64,6 +70,11 @@ func (l *Lib) CopyProposal(itemID int64, srcDir string, files []string) (dir str
 	if err != nil {
 		return "", 0, 0, fmt.Errorf("source folder: %w", err)
 	}
+	root, err := os.OpenRoot(base) // deschiderile prin root nu pot iesi din base, nici printr-un symlink schimbat intre timp
+	if err != nil {
+		return "", 0, 0, fmt.Errorf("source folder: %w", err)
+	}
+	defer root.Close()
 	type file struct {
 		rel  string
 		data []byte
@@ -85,14 +96,15 @@ func (l *Lib) CopyProposal(itemID int64, srcDir string, files []string) (dir str
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("%q: %w", raw, err)
 		}
-		total += int(fi.Size())
-		if total > maxBytes {
-			return "", 0, 0, errors.New("files are bigger than 1 MB in total")
+		if hardLinked(fi) {
+			return "", 0, 0, fmt.Errorf("%q: hard links are not allowed", raw)
 		}
-		data, err := readCapped(filepath.Join(base, rel), maxBytes)
+		// bugetul se socoteste pe octetii cititi de fapt, nu pe dimensiunea de la Lstat
+		data, err := readFile(root, rel, fi, maxBytes-total)
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("%q: %w", raw, err)
 		}
+		total += len(data)
 		mode := fs.FileMode(0o644)
 		if fi.Mode()&0o111 != 0 {
 			mode = 0o755
@@ -173,19 +185,27 @@ func lstatPath(base, rel string) (fs.FileInfo, error) {
 	return nil, errors.New("empty path")
 }
 
-// readCapped citeste cel mult max+1 octeti, ca un fisier crescut intre timp sa nu umple memoria.
-func readCapped(path string, max int64) ([]byte, error) {
-	f, err := os.Open(path)
+// readFile deschide fisierul prin root, cere sa fie acelasi fisier vazut de Lstat si il citeste
+// cel mult budget octeti (cu unul in plus, ca sa stim ca s-a depasit).
+func readFile(root *os.Root, rel string, lst fs.FileInfo, budget int) ([]byte, error) {
+	f, err := root.Open(rel)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, max+1))
+	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(data)) > max {
-		return nil, errors.New("file is bigger than 1 MB")
+	if !fi.Mode().IsRegular() || !os.SameFile(lst, fi) || hardLinked(fi) {
+		return nil, errors.New("file changed or is not a plain file")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, int64(budget)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > budget {
+		return nil, errors.New("files are bigger than 1 MB in total")
 	}
 	return data, nil
 }
@@ -201,6 +221,11 @@ func countLines(data []byte) int {
 // Publish face din propunere (peste versiunea curenta, daca exista) o versiune read-only,
 // o marcheaza publicata si o instaleaza in proiectul sursa.
 func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
+	// o singura publicare pe item: altfel doua apeluri ar alege aceeasi versiune
+	mu := l.lockFor(l.itemMus, itemID)
+	mu.Lock()
+	defer mu.Unlock()
+
 	it, err := l.St.GetLibraryItem(itemID)
 	if err != nil {
 		return store.LibraryVersion{}, err
@@ -222,29 +247,38 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 		next = nextVersion(versions[0].Version)
 		prev = versions[0].Dir
 	}
-	dest := filepath.Join(l.Root, "items", strconv.FormatInt(itemID, 10), next)
-	if err := os.RemoveAll(dest); err != nil { // ramasita dintr-o publicare esuata
+	itemDir := filepath.Join(l.Root, "items", strconv.FormatInt(itemID, 10))
+	dest := filepath.Join(itemDir, next)
+	if _, err := os.Lstat(dest); err == nil {
+		return store.LibraryVersion{}, fmt.Errorf("version folder %s already exists", dest) // nu stergem niciodata o versiune existenta
+	}
+	if err := os.MkdirAll(itemDir, 0o755); err != nil {
 		return store.LibraryVersion{}, err
 	}
-	if err := os.MkdirAll(dest, 0o755); err != nil {
+	// se construieste intr-un folder temporar si se muta la locul lui abia la sfarsit
+	tmp, err := os.MkdirTemp(itemDir, next+".tmp-")
+	if err != nil {
 		return store.LibraryVersion{}, err
 	}
-	if prev != "" {
-		if _, err := os.Stat(prev); err == nil {
-			if err := copyTree(prev, dest); err != nil {
-				return store.LibraryVersion{}, err
-			}
+	defer os.RemoveAll(tmp) // dupa rename nu mai exista
+	if prev != "" && dirExists(prev) {
+		if err := copyTree(prev, tmp); err != nil {
+			return store.LibraryVersion{}, err
 		}
 	}
-	if err := copyTree(prop, dest); err != nil {
+	if err := copyTree(prop, tmp); err != nil {
 		return store.LibraryVersion{}, err
 	}
-	nfiles, lines, err := freeze(dest)
+	nfiles, lines, err := freeze(tmp)
 	if err != nil {
+		return store.LibraryVersion{}, err
+	}
+	if err := os.Rename(tmp, dest); err != nil {
 		return store.LibraryVersion{}, err
 	}
 	v := store.LibraryVersion{ItemID: itemID, Version: next, Dir: dest, Files: nfiles, Lines: lines, Note: note}
 	if err := l.St.AddLibraryVersion(&v); err != nil {
+		os.RemoveAll(dest) // tocmai l-am creat noi, sub lock
 		return store.LibraryVersion{}, err
 	}
 	if err := l.St.SetLibraryStatus(itemID, store.ItemPublished); err != nil {
@@ -343,13 +377,15 @@ type Build struct {
 	ToolPaths  map[string]int64 // calea comenzii -> item (pentru "Recent use")
 }
 
-func (l *Lib) projectMu(id int64) *sync.Mutex {
+func (l *Lib) projectMu(id int64) *sync.Mutex { return l.lockFor(l.buildMus, id) }
+
+func (l *Lib) lockFor(set map[int64]*sync.Mutex, id int64) *sync.Mutex {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	m := l.buildMus[id]
+	m := set[id]
 	if m == nil {
 		m = &sync.Mutex{}
-		l.buildMus[id] = m
+		set[id] = m
 	}
 	return m
 }
@@ -371,7 +407,13 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 		return out, err
 	}
 	pid := strconv.FormatInt(projectID, 10)
-	final := filepath.Join(buildRoot, pid)
+	hash, err := l.inputsHash(projectID, installs)
+	if err != nil {
+		return out, err
+	}
+	// folderul are in nume hash-ul intrarilor: un build identic il refoloseste, unul diferit scrie alt folder,
+	// iar un folder care poate fi inca folosit de un run (--plugin-dir) nu se modifica si nu se sterge niciodata
+	final := filepath.Join(buildRoot, pid+"-"+hash)
 	tmp, err := os.MkdirTemp(buildRoot, pid+".tmp-")
 	if err != nil {
 		return out, err
@@ -444,10 +486,12 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 		out.TurnLines = append(append([]string{"Library tools (run them with Bash):"}, toolLines...), out.TurnLines...)
 	}
 
-	if err := os.RemoveAll(final); err != nil {
-		return out, err
-	}
+	l.cleanOld(buildRoot, pid, final)
 	if pluginItems == 0 {
+		return out, nil
+	}
+	if dirExists(final) {
+		out.PluginDir = final // acelasi continut ca la build-ul anterior
 		return out, nil
 	}
 	manifest, _ := json.Marshal(map[string]string{"name": "foreman-library", "version": "1",
@@ -461,8 +505,65 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 	if err := os.Rename(tmp, final); err != nil {
 		return out, err
 	}
+	l.cleanOld(buildRoot, pid, final)
 	out.PluginDir = final
 	return out, nil
+}
+
+// inputsHash: hash peste tot ce influenteaza continutul pluginului (instalari, versiuni, secrete, sistem).
+func (l *Lib) inputsHash(projectID int64, installs []store.LibraryInstall) (string, error) {
+	h := sha256.New()
+	fmt.Fprintf(h, "format=2 os=%s\n", runtime.GOOS)
+	for _, in := range installs { // ListInstalls vine sortat dupa item
+		fmt.Fprintf(h, "install %d %d %v\n", in.ItemID, in.VersionID, in.Enabled)
+		if !in.Enabled {
+			continue
+		}
+		it, err := l.St.GetLibraryItem(in.ItemID)
+		if err != nil {
+			continue
+		}
+		ver, _, err := l.versionOf(it.ID, in.VersionID)
+		if err != nil {
+			return "", err
+		}
+		secrets, err := l.St.Secrets(projectID, it.ID)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(h, "item %s %s %q %q present=%v\n", it.Kind, it.Name, it.Entry, it.Secrets, dirExists(ver.Dir))
+		keys := make([]string, 0, len(secrets))
+		for k := range secrets {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(h, "secret %q=%q\n", k, secrets[k])
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16], nil
+}
+
+// cleanOld sterge build-urile mai vechi ale proiectului (au wrapper-e cu secrete), dar doar cele
+// nemodificate de peste 24h, ca sa nu atingem un folder pe care il foloseste inca un run.
+func (l *Lib) cleanOld(buildRoot, pid, keep string) {
+	entries, err := os.ReadDir(buildRoot)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, pid+"-") && !strings.HasPrefix(name, pid+".tmp-") {
+			continue
+		}
+		path := filepath.Join(buildRoot, name)
+		if path == keep {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > 24*time.Hour {
+			os.RemoveAll(path)
+		}
+	}
 }
 
 // versionOf cauta versiunea printre cele ale item-ului (instalarea nu e validata de store).
@@ -508,11 +609,16 @@ func (l *Lib) buildTool(tmp, final string, it store.LibraryItem, verDir string, 
 	if len(it.Secrets) > 0 && runtime.GOOS == "windows" {
 		return fmt.Sprintf("Library tool %s is off: secrets are not supported on Windows.", it.Name), "", nil
 	}
+	if fi, err := os.Stat(filepath.Join(verDir, entry)); err != nil || !fi.Mode().IsRegular() {
+		return fmt.Sprintf("Library tool %s is off: its entry file %s is missing.", it.Name, entry), "", nil
+	}
 	dst := filepath.Join(tmp, "bin", it.Name)
 	if err := copyTree(verDir, dst); err != nil {
 		return "", "", err
 	}
-	_ = os.Chmod(filepath.Join(dst, entry), 0o755)
+	if err := os.Chmod(filepath.Join(dst, entry), 0o755); err != nil {
+		return "", "", err
+	}
 	cmdPath := filepath.Join(final, "bin", it.Name, entry)
 	if len(it.Secrets) > 0 {
 		var sb strings.Builder
@@ -535,6 +641,9 @@ func (l *Lib) buildTool(tmp, final string, it store.LibraryItem, verDir string, 
 	}
 	return fmt.Sprintf("- %s: %s — run: %s", it.Name, it.Description, cmdPath), cmdPath, nil
 }
+
+// ATENTIE: wrapper-ul cu secrete (0o700) poate fi citit de orice proces al aceluiasi utilizator, deci si de agenti;
+// e acceptat in spec (secretele nu apar totusi in prompt, in TurnLines sau in baza de date a agentilor).
 
 // shQuote pune valoarea intre '...', cu ' scapat ca '\”.
 func shQuote(s string) string {

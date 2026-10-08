@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"foreman/internal/store"
 )
@@ -197,8 +198,8 @@ func TestBuildToolWrapperAndSecrets(t *testing.T) {
 func TestBuildIgnoresForeignVersion(t *testing.T) {
 	st, lib, src := newEnv(t)
 	p := project(t, st)
-	a := addItem(t, st, store.KindSkill, "a")
-	b2 := addItem(t, st, store.KindSkill, "b")
+	a := addItem(t, st, store.KindSkill, "aa")
+	b2 := addItem(t, st, store.KindSkill, "bb")
 	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("x\n"), 0o644)
 	lib.CopyProposal(b2.ID, src, []string{"SKILL.md"})
 	vb, _ := lib.Publish(b2.ID, "")
@@ -211,7 +212,7 @@ func TestBuildIgnoresForeignVersion(t *testing.T) {
 
 func TestPublishVersionsReadOnly(t *testing.T) {
 	st, lib, src := newEnv(t)
-	it := addItem(t, st, store.KindTool, "t")
+	it := addItem(t, st, store.KindTool, "tt")
 	os.WriteFile(filepath.Join(src, "run.sh"), []byte("echo 1\n"), 0o755)
 	os.WriteFile(filepath.Join(src, "README"), []byte("r\n"), 0o644)
 	lib.CopyProposal(it.ID, src, []string{"run.sh", "README"})
@@ -246,7 +247,7 @@ func TestPublishVersionsReadOnly(t *testing.T) {
 func TestBuildConcurrent(t *testing.T) {
 	st, lib, src := newEnv(t)
 	p := project(t, st)
-	it := addItem(t, st, store.KindSkill, "s")
+	it := addItem(t, st, store.KindSkill, "ss")
 	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte("x\n"), 0o644)
 	lib.CopyProposal(it.ID, src, []string{"SKILL.md"})
 	v, _ := lib.Publish(it.ID, "")
@@ -261,10 +262,143 @@ func TestBuildConcurrent(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			if _, err := os.Stat(filepath.Join(b.PluginDir, "skills", "s", "SKILL.md")); err != nil {
+			if _, err := os.Stat(filepath.Join(b.PluginDir, "skills", "ss", "SKILL.md")); err != nil {
 				t.Error(err)
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+// publishSkill publica un skill cu un singur fisier si il instaleaza in proiect.
+func publishSkill(t *testing.T, st *store.Store, lib *Lib, p store.Project, name, body string) store.LibraryItem {
+	t.Helper()
+	src := t.TempDir()
+	os.WriteFile(filepath.Join(src, "SKILL.md"), []byte(body), 0o644)
+	it := addItem(t, st, store.KindSkill, name)
+	if _, _, _, err := lib.CopyProposal(it.ID, src, []string{"SKILL.md"}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := lib.Publish(it.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Install(p.ID, it.ID, v.ID)
+	return it
+}
+
+func TestBuildKeepsOldPluginDirAndReusesSame(t *testing.T) {
+	st, lib, _ := newEnv(t)
+	p := project(t, st)
+	publishSkill(t, st, lib, p, "one", "one\n")
+	b1, err := lib.Build(p.ID)
+	if err != nil || b1.PluginDir == "" {
+		t.Fatal(b1, err)
+	}
+	b1b, _ := lib.Build(p.ID)
+	if b1b.PluginDir != b1.PluginDir {
+		t.Fatalf("aceleasi intrari, alt folder: %s %s", b1.PluginDir, b1b.PluginDir)
+	}
+	publishSkill(t, st, lib, p, "two", "two\n")
+	b2, err := lib.Build(p.ID)
+	if err != nil || b2.PluginDir == b1.PluginDir {
+		t.Fatalf("%s %s %v", b1.PluginDir, b2.PluginDir, err)
+	}
+	// folderul vechi (posibil folosit de un run) a ramas intact
+	data, err := os.ReadFile(filepath.Join(b1.PluginDir, "skills", "one", "SKILL.md"))
+	if err != nil || string(data) != "one\n" {
+		t.Fatalf("%q %v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(b1.PluginDir, "skills", "two")); err == nil {
+		t.Fatal("folderul vechi a fost modificat")
+	}
+	// folderele vechi de peste 24h se curata la urmatorul build, cel curent ramane
+	old := time.Now().Add(-48 * time.Hour)
+	os.Chtimes(b1.PluginDir, old, old)
+	b3, _ := lib.Build(p.ID)
+	if b3.PluginDir != b2.PluginDir {
+		t.Fatal("build diferit fara schimbari")
+	}
+	if _, err := os.Stat(b1.PluginDir); err == nil {
+		t.Fatal("folderul vechi trebuia sters")
+	}
+	if _, err := os.Stat(b2.PluginDir); err != nil {
+		t.Fatal("folderul curent a fost sters")
+	}
+}
+
+func TestCopyProposalRejectsHardlinkAndEnforcesBudget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fara hardlink-uri")
+	}
+	st, lib, src := newEnv(t)
+	it := addItem(t, st, store.KindTool, "hl")
+	outside := filepath.Join(t.TempDir(), "id_rsa")
+	os.WriteFile(outside, []byte("secret\n"), 0o600)
+	if err := os.Link(outside, filepath.Join(src, "x")); err != nil {
+		t.Skip("hardlink indisponibil:", err)
+	}
+	if _, _, _, err := lib.CopyProposal(it.ID, src, []string{"x"}); err == nil {
+		t.Fatal("hardlink acceptat")
+	}
+	// bugetul de 1 MB se aplica pe octetii cititi, impartit intre fisiere
+	os.WriteFile(filepath.Join(src, "f1"), make([]byte, 700<<10), 0o644)
+	os.WriteFile(filepath.Join(src, "f2"), make([]byte, 400<<10), 0o644)
+	if _, _, _, err := lib.CopyProposal(it.ID, src, []string{"f1", "f2"}); err == nil {
+		t.Fatal("peste 1 MB in total acceptat")
+	}
+}
+
+func TestPublishConcurrentSerialized(t *testing.T) {
+	st, lib, src := newEnv(t)
+	it := addItem(t, st, store.KindTool, "cc")
+	os.WriteFile(filepath.Join(src, "run.sh"), []byte("echo 1\n"), 0o755)
+	lib.CopyProposal(it.ID, src, []string{"run.sh"})
+	var wg sync.WaitGroup
+	errs := make([]error, 4)
+	for i := range errs {
+		wg.Add(1)
+		go func() { defer wg.Done(); _, errs[i] = lib.Publish(it.ID, "") }()
+	}
+	wg.Wait()
+	ok := 0
+	for _, e := range errs {
+		if e == nil {
+			ok++
+		}
+	}
+	// propunerea se consuma o data: o singura publicare reuseste, restul primesc eroare
+	vs, _ := st.ListLibraryVersions(it.ID)
+	if ok != 1 || len(vs) != 1 {
+		t.Fatalf("ok=%d versiuni=%d %v", ok, len(vs), errs)
+	}
+	if _, err := os.Stat(filepath.Join(vs[0].Dir, "run.sh")); err != nil {
+		t.Fatal("fisierele versiunii publicate lipsesc")
+	}
+	// un folder de versiune existent nu se sterge
+	os.MkdirAll(filepath.Join(lib.Root, "items", "1", "1.1"), 0o755)
+	lib.CopyProposal(it.ID, src, []string{"run.sh"})
+	if _, err := lib.Publish(it.ID, ""); err == nil {
+		t.Fatal("destinatie existenta acceptata")
+	}
+}
+
+func TestBuildToolMissingEntryAndBadName(t *testing.T) {
+	st, lib, src := newEnv(t)
+	p := project(t, st)
+	os.WriteFile(filepath.Join(src, "a.sh"), []byte("echo\n"), 0o755)
+	it := store.LibraryItem{Kind: store.KindTool, Name: "nt", Description: "d", Status: store.ItemProposed, Entry: "gone.sh", SourceProjectID: p.ID}
+	st.AddLibraryItem(&it)
+	lib.CopyProposal(it.ID, src, []string{"a.sh"})
+	if _, err := lib.Publish(it.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	b, err := lib.Build(p.ID)
+	if err != nil || len(b.ToolPaths) != 0 || !strings.Contains(strings.Join(b.TurnLines, "\n"), "entry file gone.sh is missing") {
+		t.Fatalf("%+v %v", b, err)
+	}
+	bad := addItem(t, st, store.KindSkill, "Bad_Name")
+	if _, err := lib.Publish(bad.ID, ""); err == nil {
+		t.Fatal("nume nepermis acceptat")
+	}
 }
