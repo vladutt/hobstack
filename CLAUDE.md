@@ -90,6 +90,9 @@ rata de succes a run-urilor, fisiere si comenzi, intrebari; store.ProjectStats +
 Gata (fara pauza la pornire): la restart run-urile vechi devin interrupted, task-urile in lucru revin in Queued si
 echipele pornesc singure (Recover trezeste proiectele si decidentii). Pauza o pune doar utilizatorul (Stop team) sau un run
 care nu poate porni (anti-bucla); migrarea 020 a scos o data proiectele de pe pauzele puse de restarturile vechi.
+Gata (draft AI pentru agent nou, spec in docs/superpowers/specs/2026-10-08-foreman-agent-draft-design.md): pachetul
+internal/draft, run scurt doar citire cu tool-ul propose_agent; pagina Agent nou completeaza campurile neatinse.
+Costul nu intra in Total cost.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"
