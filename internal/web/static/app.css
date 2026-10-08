@@ -398,7 +398,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .files-body { max-width: 900px; }
 
 /* tab-ul Stats */
-.stats-body { max-width: 1200px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.stats-body { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .stats-content > * { min-width: 0; } /* tabelul lat face scroll in card, nu lateste pagina */
 .stats-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .stats-toolbar .grow { flex: 1; }
