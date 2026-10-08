@@ -28,3 +28,6 @@ func hardLinked(fi interface{ Sys() any }) bool {
 	st, ok := fi.Sys().(*syscall.Stat_t)
 	return ok && st.Nlink > 1
 }
+
+// oNonblock: la open nu blocam pe un FIFO.
+const oNonblock = syscall.O_NONBLOCK

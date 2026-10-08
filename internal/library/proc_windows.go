@@ -15,3 +15,5 @@ func killTree(cmd *exec.Cmd) error {
 
 // Pe Windows nu verificam hardlink-urile.
 func hardLinked(fi interface{ Sys() any }) bool { return false }
+
+const oNonblock = 0

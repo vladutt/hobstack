@@ -188,7 +188,8 @@ func lstatPath(base, rel string) (fs.FileInfo, error) {
 // readFile deschide fisierul prin root, cere sa fie acelasi fisier vazut de Lstat si il citeste
 // cel mult budget octeti (cu unul in plus, ca sa stim ca s-a depasit).
 func readFile(root *os.Root, rel string, lst fs.FileInfo, budget int) ([]byte, error) {
-	f, err := root.Open(rel)
+	// O_NONBLOCK: un FIFO pus in locul fisierului nu ne blocheaza la open
+	f, err := root.OpenFile(rel, os.O_RDONLY|oNonblock, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -249,11 +250,21 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 	}
 	itemDir := filepath.Join(l.Root, "items", strconv.FormatInt(itemID, 10))
 	dest := filepath.Join(itemDir, next)
-	if _, err := os.Lstat(dest); err == nil {
-		return store.LibraryVersion{}, fmt.Errorf("version folder %s already exists", dest) // nu stergem niciodata o versiune existenta
-	}
 	if err := os.MkdirAll(itemDir, 0o755); err != nil {
 		return store.LibraryVersion{}, err
+	}
+	sweepTmp(itemDir)
+	if _, err := os.Lstat(dest); err == nil {
+		// next vine din ultimul rand din baza, iar noi tinem lock-ul item-ului: un dest fara rand in baza e orfan
+		// (crash intre rename si AddLibraryVersion). Unul cu rand in baza nu se atinge.
+		for _, v := range versions {
+			if v.Dir == dest {
+				return store.LibraryVersion{}, fmt.Errorf("version folder %s already exists", dest)
+			}
+		}
+		if err := os.RemoveAll(dest); err != nil {
+			return store.LibraryVersion{}, err
+		}
 	}
 	// se construieste intr-un folder temporar si se muta la locul lui abia la sfarsit
 	tmp, err := os.MkdirTemp(itemDir, next+".tmp-")
@@ -291,6 +302,19 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 	}
 	_ = os.RemoveAll(prop)
 	return v, nil
+}
+
+// sweepTmp sterge folderele temporare de publicare ramase de peste 24h (crash).
+func sweepTmp(itemDir string) {
+	entries, _ := os.ReadDir(itemDir)
+	for _, e := range entries {
+		if !strings.Contains(e.Name(), ".tmp-") {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > 24*time.Hour {
+			os.RemoveAll(filepath.Join(itemDir, e.Name()))
+		}
+	}
 }
 
 // nextVersion: "1.0" -> "1.1".
@@ -596,6 +620,8 @@ func missingSecret(declared []string, have map[string]string) string {
 }
 
 // buildTool copiaza tool-ul in bin/<name>/ si intoarce linia pentru agent si calea comenzii.
+// ATENTIE: wrapper-ul cu secrete (0o700) poate fi citit de orice proces al aceluiasi utilizator, deci si de agenti;
+// e acceptat in spec (secretele nu apar totusi in prompt, in TurnLines sau in baza de date a agentilor).
 // Daca tool-ul nu poate rula, calea e "" si linia explica de ce.
 func (l *Lib) buildTool(tmp, final string, it store.LibraryItem, verDir string, secrets map[string]string) (line, path string, err error) {
 	entry, err := checkRel(it.Entry)
@@ -641,9 +667,6 @@ func (l *Lib) buildTool(tmp, final string, it store.LibraryItem, verDir string, 
 	}
 	return fmt.Sprintf("- %s: %s — run: %s", it.Name, it.Description, cmdPath), cmdPath, nil
 }
-
-// ATENTIE: wrapper-ul cu secrete (0o700) poate fi citit de orice proces al aceluiasi utilizator, deci si de agenti;
-// e acceptat in spec (secretele nu apar totusi in prompt, in TurnLines sau in baza de date a agentilor).
 
 // shQuote pune valoarea intre '...', cu ' scapat ca '\”.
 func shQuote(s string) string {

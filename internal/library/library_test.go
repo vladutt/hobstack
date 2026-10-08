@@ -375,11 +375,37 @@ func TestPublishConcurrentSerialized(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(vs[0].Dir, "run.sh")); err != nil {
 		t.Fatal("fisierele versiunii publicate lipsesc")
 	}
-	// un folder de versiune existent nu se sterge
-	os.MkdirAll(filepath.Join(lib.Root, "items", "1", "1.1"), 0o755)
+	// un folder de versiune cu rand in baza nu se sterge
 	lib.CopyProposal(it.ID, src, []string{"run.sh"})
+	// rand "9.1" cu folder, apoi unul mai nou "9": urmatoarea versiune calculata e "9.1", deci cu rand in baza
+	d := filepath.Join(lib.Root, "items", "1", "9.1")
+	os.MkdirAll(d, 0o755)
+	st.AddLibraryVersion(&store.LibraryVersion{ItemID: it.ID, Version: "9.1", Dir: d})
+	st.AddLibraryVersion(&store.LibraryVersion{ItemID: it.ID, Version: "9", Dir: d + "-x"})
 	if _, err := lib.Publish(it.ID, ""); err == nil {
-		t.Fatal("destinatie existenta acceptata")
+		t.Fatal("destinatie cu rand in baza acceptata")
+	}
+}
+
+func TestPublishRemovesOrphanDest(t *testing.T) {
+	st, lib, src := newEnv(t)
+	it := addItem(t, st, store.KindTool, "or")
+	os.WriteFile(filepath.Join(src, "run.sh"), []byte("echo 1\n"), 0o755)
+	lib.CopyProposal(it.ID, src, []string{"run.sh"})
+	v1, _ := lib.Publish(it.ID, "")
+	orphan := filepath.Join(lib.Root, "items", "1", "1.1")
+	os.MkdirAll(orphan, 0o755)
+	os.WriteFile(filepath.Join(orphan, "junk"), []byte("x"), 0o644)
+	lib.CopyProposal(it.ID, src, []string{"run.sh"})
+	v2, err := lib.Publish(it.ID, "")
+	if err != nil || v2.Version != "1.1" || v1.Version != "1.0" {
+		t.Fatalf("%+v %v", v2, err)
+	}
+	if _, err := os.Stat(filepath.Join(orphan, "run.sh")); err != nil {
+		t.Fatal("fisierul propunerii lipseste")
+	}
+	if _, err := os.Stat(filepath.Join(orphan, "junk")); err == nil {
+		t.Fatal("ramasita orfana")
 	}
 }
 

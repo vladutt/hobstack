@@ -79,7 +79,7 @@ func TestProbeMCPKillsProcessTree(t *testing.T) {
 		t.Skip("fara process group")
 	}
 	for _, c := range []struct{ script, marker string }{
-		{"sleep 31.123 & sleep 32.123", "sleep 3"},
+		{"sleep 31.123 & sleep 32.123", "sleep 31.123"},
 		{"sh -c 'cat >/dev/null; sleep 33.123'; true", "sleep 33.123"},
 	} {
 		start := time.Now()
