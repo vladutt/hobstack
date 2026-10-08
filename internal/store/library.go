@@ -157,10 +157,10 @@ func (s *Store) FindLibraryItem(kind, name string) (LibraryItem, error) {
 	return scanLibraryItem(s.db.QueryRow(`SELECT `+libraryItemCols+` FROM library_items WHERE kind = ? AND name = ?`, kind, name))
 }
 
-// ListLibraryItems: kind "" = toate; fara declined; propunerile primele, apoi dupa nume.
+// ListLibraryItems: kind "" = toate; fara declined si unpublished (dispar din Library); propunerile primele, apoi dupa nume.
 func (s *Store) ListLibraryItems(kind string) ([]LibraryItem, error) {
 	rows, err := s.db.Query(`SELECT `+libraryItemCols+` FROM library_items
-		WHERE status <> 'declined' AND (? = '' OR kind = ?)
+		WHERE status NOT IN ('declined', 'unpublished') AND (? = '' OR kind = ?)
 		ORDER BY status = 'proposed' DESC, name COLLATE NOCASE, id`, kind, kind)
 	if err != nil {
 		return nil, err

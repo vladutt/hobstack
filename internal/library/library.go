@@ -305,6 +305,20 @@ func countLines(data []byte) int {
 // Publish face din propunere (peste versiunea curenta, daca exista) o versiune read-only,
 // o marcheaza publicata si o instaleaza in proiectul sursa.
 func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
+	return l.publish(itemID, note, false)
+}
+
+// ErrStatus: elementul nu e in starea potrivita pentru actiune (verificat sub lock-ul item-ului).
+var ErrStatus = errors.New("the item is not in a state that allows this")
+
+// KeepInSource ("Keep in <project>"): ia un instantaneu al propunerii ca versiune, o instaleaza in proiectul sursa
+// si pune direct starea declined. Elementul nu e niciodata published (published_at ramane NULL), deci niciun alt
+// proiect nu il poate instala. Doar pentru propuneri cu proiect sursa.
+func (l *Lib) KeepInSource(itemID int64, note string) (store.LibraryVersion, error) {
+	return l.publish(itemID, note, true)
+}
+
+func (l *Lib) publish(itemID int64, note string, keep bool) (store.LibraryVersion, error) {
 	// o singura publicare pe item: altfel doua apeluri ar alege aceeasi versiune
 	mu := l.lockFor(l.itemMus, itemID)
 	mu.Lock()
@@ -313,6 +327,13 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 	it, err := l.St.GetLibraryItem(itemID)
 	if err != nil {
 		return store.LibraryVersion{}, err
+	}
+	// starea se verifica aici, sub lock: intre verificarea din API si lock putea aparea alta actiune
+	if keep && (it.Status != store.ItemProposed || it.SourceProjectID == 0) {
+		return store.LibraryVersion{}, ErrStatus
+	}
+	if !keep && it.Status != store.ItemProposed && it.Status != store.ItemPublished && !(it.Status == store.ItemDeclined && it.SourceProjectID == 0) { // ultimul: elementul unui utilizator, ascuns cat se creeaza
+		return store.LibraryVersion{}, ErrStatus
 	}
 	if !safeName.MatchString(it.Name) {
 		return store.LibraryVersion{}, fmt.Errorf("bad item name %q", it.Name)
@@ -393,6 +414,17 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 	if err := l.St.AddLibraryVersion(&v); err != nil {
 		os.RemoveAll(dest) // tocmai l-am creat noi, sub lock
 		return store.LibraryVersion{}, err
+	}
+	if keep {
+		// intai instalarea, apoi declined: la o eroare elementul ramane propus (nu published)
+		if err := l.St.Install(it.SourceProjectID, itemID, v.ID); err != nil {
+			return store.LibraryVersion{}, err
+		}
+		if err := l.St.SetLibraryStatus(itemID, store.ItemDeclined); err != nil {
+			return store.LibraryVersion{}, err
+		}
+		_ = os.RemoveAll(prop)
+		return v, nil
 	}
 	if err := l.St.SetLibraryStatus(itemID, store.ItemPublished); err != nil {
 		return store.LibraryVersion{}, err

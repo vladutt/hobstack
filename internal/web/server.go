@@ -254,8 +254,11 @@ func pathID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func decode(r *http.Request, v any) error {
-	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(v); err != nil {
+func decode(r *http.Request, v any) error { return decodeMax(r, v, 1<<20) }
+
+// decodeMax: ca decode, cu alta limita de corp.
+func decodeMax(r *http.Request, v any, max int64) error {
+	if err := json.NewDecoder(io.LimitReader(r.Body, max)).Decode(v); err != nil {
 		return badRequest("invalid JSON")
 	}
 	return nil

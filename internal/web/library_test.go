@@ -241,6 +241,9 @@ func TestLibraryDeclineKeepsInSourceProject(t *testing.T) {
 	if ins, _ := e.st.ListInstalls(src.ID); len(ins) != 1 {
 		t.Fatalf("not kept in the source: %+v", ins)
 	}
+	if got.PublishedAt != nil {
+		t.Fatalf("kept item was published: %v", got.PublishedAt)
+	}
 	// ascuns din Library, dar proiectul sursa il vede ca instalat; altele nu il pot instala
 	_, _, body := e.get(t, "/api/library")
 	if strings.Contains(string(body), "keep-me") {
@@ -465,5 +468,70 @@ func TestLibraryGuardAndUnavailable(t *testing.T) {
 	e2 := setup(t) // fara Library
 	if code, _ := e2.do(t, "GET", "/api/library", nil); code != http.StatusServiceUnavailable {
 		t.Fatalf("no library: %d", code)
+	}
+}
+
+func TestLibraryKeepFailureLeavesProposal(t *testing.T) {
+	e := setupLib(t)
+	p := e.project(t)
+	it := e.propose(t, store.KindMCP, "dead-local", p.ID, map[string]string{"x": "y"}, func(i *store.LibraryItem) {
+		i.Transport, i.Command = "local", "definitely-not-a-command-xyz"
+	})
+	code, raw := e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/decline", nil)
+	if code != 422 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	got, _ := e.st.GetLibraryItem(it.ID)
+	if got.Status != store.ItemProposed || got.PublishedAt != nil {
+		t.Fatalf("not left as a proposal: %s %v", got.Status, got.PublishedAt)
+	}
+	if ins, _ := e.st.ListInstalls(p.ID); len(ins) != 0 {
+		t.Fatalf("installed: %+v", ins)
+	}
+}
+
+func TestLibraryUnpublishedHiddenAndUpgrade(t *testing.T) {
+	e := setupLib(t)
+	p := e.project(t)
+	it := e.propose(t, store.KindSkill, "evolving", p.ID, map[string]string{"SKILL.md": "a"}, nil)
+	e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/publish", nil)
+	e.writeProposal(t, it.ID, map[string]string{"SKILL.md": "b"})
+	e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/publish", nil)
+	vs, _ := e.st.ListLibraryVersions(it.ID)
+	// source project was moved to 1.1 by the second publish? it keeps 1.0 because Install upserts: check both ways
+	path := "/api/projects/" + itoa(p.ID) + "/library/" + itoa(it.ID)
+	e.st.Install(p.ID, it.ID, vs[1].ID) // pin pe 1.0
+	if c, _ := e.do(t, "PUT", path, map[string]any{"installed": true}); c != 204 {
+		t.Fatal(c)
+	}
+	if ins, _ := e.st.ListInstalls(p.ID); ins[0].VersionID != vs[1].ID {
+		t.Fatalf("plain install moved the pin: %+v", ins)
+	}
+	if c, _ := e.do(t, "PUT", path, map[string]any{"upgrade": true}); c != 204 {
+		t.Fatal(c)
+	}
+	if ins, _ := e.st.ListInstalls(p.ID); ins[0].VersionID != vs[0].ID {
+		t.Fatalf("upgrade did not move the pin: %+v", ins)
+	}
+	e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/unpublish", nil)
+	_, _, body := e.get(t, "/api/library")
+	if strings.Contains(string(body), "evolving") {
+		t.Fatalf("unpublished item listed: %s", body)
+	}
+	_, _, body = e.get(t, "/api/projects/"+itoa(p.ID)+"/library")
+	if !strings.Contains(string(body), "evolving") {
+		t.Fatalf("installed unpublished item missing from the project: %s", body)
+	}
+	if c, _, _ := e.get(t, "/api/library/"+itoa(it.ID)); c != 200 {
+		t.Fatalf("detail: %d", c)
+	}
+}
+
+func TestLibraryCreateAcceptsOneMegabyteFile(t *testing.T) {
+	e := setupLib(t)
+	code, raw := e.do(t, "POST", "/api/library", map[string]any{"kind": "skill", "name": "big-skill", "description": "d",
+		"content": strings.Repeat("x", 1000*1000)})
+	if code != 201 {
+		t.Fatalf("%d %.200s", code, raw)
 	}
 }

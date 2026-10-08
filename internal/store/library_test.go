@@ -45,7 +45,7 @@ func TestLibraryLifecycle(t *testing.T) {
 	if ins, _ := s.ListInstalls(other.ID); len(ins) != 1 || ins[0].VersionID != v.ID {
 		t.Fatalf("%+v", ins)
 	}
-	if list, _ := s.ListLibraryItems(KindTool); len(list) != 1 {
+	if list, _ := s.ListLibraryItems(KindTool); len(list) != 0 { // unpublished dispare din lista
 		t.Fatalf("%+v", list)
 	}
 	s.Uninstall(other.ID, it.ID)

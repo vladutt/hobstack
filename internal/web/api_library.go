@@ -248,6 +248,10 @@ func idValue(s string) (int64, error) {
 
 // libraryErr: erorile pe care utilizatorul le poate repara (probe esuat, nimic de publicat) sunt 422.
 func libraryErr(w http.ResponseWriter, err error) {
+	if errors.Is(err, library.ErrStatus) {
+		writeErr(w, http.StatusConflict, "the item changed state; reload and try again")
+		return
+	}
 	var ue library.UserError
 	if errors.As(err, &ue) {
 		writeErr(w, http.StatusUnprocessableEntity, ue.Msg)
@@ -338,17 +342,19 @@ func (s *Server) declineLibraryItem(w http.ResponseWriter, r *http.Request) {
 		keep = *in.Keep && it.SourceProjectID != 0
 	}
 	if keep {
-		// Publish face versiunea si o instaleaza in proiectul sursa; apoi o ascundem din Library
-		if _, err := s.lib.Publish(id, "Kept in the project"); err != nil {
+		// instantaneu + instalare in sursa + declined, intr-un singur pas sub lock (niciodata published)
+		if _, err := s.lib.KeepInSource(id, "Kept in the project"); err != nil {
 			libraryErr(w, err)
 			return
 		}
 	} else {
 		s.lib.DiscardProposal(id)
 	}
-	if err := s.st.SetLibraryStatus(id, store.ItemDeclined); err != nil {
-		fail(w, err)
-		return
+	if !keep {
+		if err := s.st.SetLibraryStatus(id, store.ItemDeclined); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	it.Status = store.ItemDeclined
 	s.announceLibrary(it)
@@ -405,7 +411,8 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in libraryCreate
-	if err := decode(r, &in); err != nil {
+	// pana la 1 MB de fisiere, plus ghilimele si escapari JSON: limita corpului e mai mare decat cea de 1 MB
+	if err := decodeMax(r, &in, 4<<20); err != nil {
 		fail(w, err)
 		return
 	}
@@ -612,7 +619,9 @@ const maxSecretLen = 8192
 
 // putProjectLibrary instaleaza / scoate un element din proiect si salveaza secretele lui.
 //
-//	{"installed": true|false, "secrets": {"NAME": "value"}, "clear": ["NAME"]}
+//	{"installed": true|false, "secrets": {"NAME": "value"}, "clear": ["NAME"], "upgrade": true}
+//
+// "upgrade" muta pin-ul pe versiunea cea mai noua (secretele raman).
 //
 // "installed" lipsa = nu schimba instalarea (doar secretele). O valoare goala in "secrets" pastreaza secretul
 // existent (un formular lasat gol nu sterge nimic); se sterge doar cu "clear". Instalarea fixeaza versiunea
@@ -636,6 +645,7 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 		Installed *bool             `json:"installed"`
 		Secrets   map[string]string `json:"secrets"`
 		Clear     []string          `json:"clear"`
+		Upgrade   bool              `json:"upgrade"` // muta pin-ul pe versiunea cea mai noua (secretele raman)
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -706,7 +716,7 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		versionID := int64(0)
-		if cur != nil {
+		if cur != nil && !in.Upgrade {
 			versionID = cur.VersionID
 		} else {
 			vs, err := s.st.ListLibraryVersions(itemID)
@@ -748,5 +758,3 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 	s.hub.Publish(pid, "project", map[string]int64{"id": pid})
 	w.WriteHeader(http.StatusNoContent)
 }
-
-// stats ale rutei: nefolosit, pastreaza importul atomic pentru numaratori viitoare
