@@ -130,6 +130,17 @@ func within(roots []string, abs string) (root, rel string, ok bool) {
 	return "", "", false
 }
 
+// RelIn: p (absoluta) relativ la dir, doar daca e strict sub el; compara si caile rezolvate (symlink-uri).
+func RelIn(dir, p string) (string, bool) {
+	if !filepath.IsAbs(p) {
+		return "", false
+	}
+	if rel, ok := relTo(dir, p); ok {
+		return rel, true
+	}
+	return relTo(resolve(dir), resolveParent(p))
+}
+
 // resolve: calea fara symlink-uri (aceeasi cale daca nu se poate rezolva, de ex. folder sters).
 func resolve(p string) string {
 	if r, err := filepath.EvalSymlinks(p); err == nil {

@@ -110,7 +110,7 @@ Gata (reguli pentru comenzi, spec in docs/superpowers/specs/2026-10-08-foreman-c
 refuzurile pe Ask ajung in Needs you cu Allow once (command_grants) / Allow in this project / Block.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
-internal/taskfiles, doar din folderele proiectului, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
+internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
 modala (preview imagine/PDF/Markdown/text, Download, versiuni, "From subtasks"), eticheta 📎 N pe card; HTML/SVG nu
 se servesc inline (serveStored, comun cu fisierele urcate).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):

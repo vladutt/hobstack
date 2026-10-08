@@ -11,6 +11,35 @@ import (
 	"foreman/internal/taskfiles"
 )
 
+// fisierele proiectului (projects/<pid>/files, pagina Files) sunt si ele un loc pentru livrabile:
+// agentii le primesc prin --add-dir, iar calea se arata relativ la folder
+func TestAttachProjectFiles(t *testing.T) {
+	f := setup(t)
+	root := t.TempDir()
+	f.tm.SetFilesRoot(root)
+	files := config.ProjectFilesDir(root, f.p.ID)
+	if err := os.MkdirAll(filepath.Join(files, "research"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	csv := filepath.Join(files, "research", "leads.csv")
+	if err := os.WriteFile(csv, []byte("name,email\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	task := f.task(t, "Find leads", f.rook, store.StatusInProgress)
+	c := f.workerCaller(f.rook, task.ID)
+	if _, err := f.tm.ReportDone(c, "", "leads found"); err != nil {
+		t.Fatal(err)
+	}
+	text, err := f.tm.AttachFiles(c, "", []string{csv})
+	if err != nil || !strings.Contains(text, "Attached 1 file.") {
+		t.Fatalf("%q %v", text, err)
+	}
+	list, _ := f.st.ListTaskFiles(task.ID)
+	if len(list) != 1 || list[0].Path != filepath.Join("research", "leads.csv") {
+		t.Fatalf("%+v", list)
+	}
+}
+
 func TestAttachFiles(t *testing.T) {
 	f := setup(t)
 	root := t.TempDir()

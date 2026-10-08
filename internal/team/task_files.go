@@ -23,6 +23,7 @@ type attachTarget struct {
 	agent store.Agent
 	roots []string
 	home  string
+	files string // fisierele proiectului (pagina Files); caile de acolo se arata relativ
 	dest  string
 }
 
@@ -40,12 +41,15 @@ func (t *Team) attachTarget(c mcp.Caller, ref string) (attachTarget, error) {
 	if err != nil {
 		return attachTarget{}, err
 	}
-	roots := make([]string, 0, len(p.Folders))
+	roots := make([]string, 0, len(p.Folders)+1)
 	for _, f := range p.Folders {
 		roots = append(roots, f.Path)
 	}
+	// fisierele proiectului: agentii le primesc prin --add-dir si scriu des livrabilele acolo
+	files := t.filesDir(p.ID)
+	roots = append(roots, files)
 	return attachTarget{task: task, agent: a, roots: roots, home: store.HomeFolder(a, p.Folders).Path,
-		dest: config.TaskFilesDir(t.filesRoot, p.ID, task.ID)}, nil
+		files: files, dest: config.TaskFilesDir(t.filesRoot, p.ID, task.ID)}, nil
 }
 
 // AttachFiles copiaza fisierele predate la report_done si le leaga de task.
@@ -70,6 +74,10 @@ func (t *Team) AttachFiles(c mcp.Caller, ref string, paths []string) (string, er
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s (%s)", key, err))
 			continue
+		}
+		// un fisier din fisierele proiectului: "research/leads.csv", nu calea lunga din ~/.foreman
+		if rel, ok := taskfiles.RelIn(tg.files, cp.Path); ok {
+			cp.Path = rel
 		}
 		agentID := a.ID
 		tf := store.TaskFile{TaskID: task.ID, ProjectID: task.ProjectID, AgentID: &agentID, AgentName: a.Name,

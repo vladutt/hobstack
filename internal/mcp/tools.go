@@ -84,7 +84,7 @@ var reportTool = Tool{
 		"files": map[string]any{
 			"type":        "array",
 			"items":       map[string]any{"type": "string"},
-			"description": "Optional: up to 20 files you produced as the deliverable of this task (documents, images, exports), relative to your folder. They are copied and attached to the task. Do not list code you changed; it is already shown as changes.",
+			"description": "Optional: up to 20 files you produced as the deliverable of this task (documents, images, exports), relative to your folder (or absolute, e.g. in the project files folder). They are copied and attached to the task. Do not list code you changed; it is already shown as changes.",
 		},
 	}),
 }

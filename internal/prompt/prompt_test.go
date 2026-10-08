@@ -296,7 +296,7 @@ func TestFilesInPrompt(t *testing.T) {
 	sub := System(proj, store.Agent{Name: "S"}, Links{BossName: "Atlas", IsLead: true})
 	root := System(proj, store.Agent{Name: "R"}, Links{IsLead: true})
 	for name, got := range map[string]string{"worker": worker, "sub-lead": sub} {
-		if !strings.Contains(got, "list its path in files when you call report_done") {
+		if !strings.Contains(got, "list its path in files when you call report_done") || !strings.Contains(got, "or in the project files folder") {
 			t.Fatalf("%s: lipseste regula files:\n%s", name, got)
 		}
 	}

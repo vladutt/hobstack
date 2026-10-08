@@ -94,7 +94,8 @@ const howLeftForUser = `If the work needs values only the user can give (a compa
 	`with mcp__team__comment_task.`
 
 const howFiles = `When the task asks for a file as its result (a document, an image, an export), save it in your folder ` +
-	`and list its path in files when you call report_done, so the user can open it from the task.`
+	`(or in the project files folder, with its absolute path) and list its path in files when you call report_done, ` +
+	`so the user can open it from the task. Do this on every run of a recurring task too.`
 
 const howWorker = `Work only on the task you received and do not change anything outside it. ` +
 	`When you finish, call mcp__team__report_done with the requested summary. ` +

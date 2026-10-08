@@ -60,7 +60,7 @@ aplicatie; CASCADE pe `task_id` e doar pentru consistenta.
 Agentul nu trebuie sa poata "atasa" orice fisier de pe masina (de ex. `~/.ssh/id_rsa`), pentru ca UI-ul l-ar servi.
 De aceea:
 
-1. Radacinile permise = folderele proiectului (`project_folders`): folderul agentului si cele primite prin `--add-dir`.
+1. Radacinile permise = folderele proiectului (`project_folders`): folderul agentului si cele primite prin `--add-dir`, plus fisierele proiectului (`projects/<pid>/files`, pagina Files; acolo scriu des agentii livrabilele, ex. task-urile recurente), afisate relativ la acel folder.
 2. O cale relativa se rezolva fata de folderul agentului. O cale absoluta trebuie sa fie sub una din radacini;
    altfel: `outside the project folders; put deliverables in your folder`.
 3. Fisierul se deschide prin `os.OpenRoot(radacina)` cu calea relativa, ca in `internal/library`: `..` si
