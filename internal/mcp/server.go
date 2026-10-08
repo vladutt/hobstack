@@ -5,10 +5,12 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // Caller identifica agentul care apeleaza, pe baza token-ului din URL.
@@ -47,6 +49,9 @@ type Backend interface {
 	AcceptTask(c Caller, task, note string) (string, error)
 	SendBack(c Caller, task, feedback string) (string, error)
 	ReportDone(c Caller, task, summary string) (string, error)
+	LeaveForUser(c Caller, task string, items []string) (string, error)
+	TickLeftForUser(c Caller, task string, items []int) (string, error)
+	CommentTask(c Caller, task, text string) (string, error)
 	ReviewApprove(c Caller, task, note string) (string, error)
 	ReviewReject(c Caller, task, feedback string) (string, error)
 	ProposeSetup(c Caller, args json.RawMessage) (string, error)
@@ -168,7 +173,24 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 	case "send_back":
 		text, err = s.backend.SendBack(c, arg("task"), arg("feedback"))
 	case "report_done":
+		left := argList(p.Arguments, "left_for_user")
+		if err := validLeftForUser(left); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		text, err = s.backend.ReportDone(c, arg("task"), arg("summary"))
+		if err == nil && len(left) > 0 {
+			// raportul a trecut: punctele se lasa pe acelasi task (task gol = task-ul curent)
+			extra, lerr := s.backend.LeaveForUser(c, arg("task"), left)
+			if lerr != nil {
+				text += " Note: the items for the user were not saved: " + lerr.Error()
+			} else {
+				text += " " + extra
+			}
+		}
+	case "tick_left_for_user":
+		text, err = s.backend.TickLeftForUser(c, arg("task"), argInts(p.Arguments, "items"))
+	case "comment_task":
+		text, err = s.backend.CommentTask(c, arg("task"), arg("text"))
 	case "review_approve":
 		text, err = s.backend.ReviewApprove(c, arg("task"), arg("note"))
 	case "review_reject":
@@ -239,6 +261,39 @@ func argList(args map[string]any, key string) []string {
 	for _, v := range raw {
 		if s, ok := v.(string); ok {
 			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// MaxLeftForUser: cate puncte poate lasa un agent utilizatorului la un raport
+const MaxLeftForUser = 10
+
+func validLeftForUser(items []string) error {
+	if len(items) > MaxLeftForUser {
+		return fmt.Errorf("left_for_user: at most %d items", MaxLeftForUser)
+	}
+	for _, it := range items {
+		n := len([]rune(strings.TrimSpace(it)))
+		if n == 0 || n > 200 {
+			return errors.New("left_for_user: each item must be 1-200 characters")
+		}
+	}
+	return nil
+}
+
+// argInts citeste o lista de numere (JSON le aduce ca float64; "3" ca text e acceptat si el)
+func argInts(args map[string]any, key string) []int {
+	raw, _ := args[key].([]any)
+	out := []int{}
+	for _, v := range raw {
+		switch x := v.(type) {
+		case float64:
+			out = append(out, int(x))
+		case string:
+			if n, err := strconv.Atoi(strings.TrimSpace(x)); err == nil {
+				out = append(out, n)
+			}
 		}
 	}
 	return out

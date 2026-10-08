@@ -76,6 +76,11 @@ var reportTool = Tool{
 	InputSchema: schema([]string{"summary"}, map[string]any{
 		"task":    str("The task being reported, e.g. T-3. In a task run it defaults to the current task; otherwise it is required."),
 		"summary": str("The summary required by the definition of done, or the problem blocking you"),
+		"left_for_user": map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string"},
+			"description": "Optional: up to 10 values only the user can give (e.g. Company registration number), which you left as placeholders. The user answers in the task's comments.",
+		},
 	}),
 }
 
@@ -155,6 +160,24 @@ var proposeSetupTool = Tool{
 				},
 			}),
 		},
+	}),
+}
+
+var tickLeftTool = Tool{
+	Name:        "tick_left_for_user",
+	Description: "Ticks off items you left for the user (left_for_user) once you have filled them in.",
+	InputSchema: schema([]string{"task", "items"}, map[string]any{
+		"task":  str("The task, e.g. T-124"),
+		"items": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}, "description": "The item numbers, e.g. [1, 3]"},
+	}),
+}
+
+var commentTaskTool = Tool{
+	Name:        "comment_task",
+	Description: "Answers the user in a task's comments (for example after they gave you a value you left for them).",
+	InputSchema: schema([]string{"task", "text"}, map[string]any{
+		"task": str("The task, e.g. T-124"),
+		"text": str("Your reply, short"),
 	}),
 }
 
@@ -292,6 +315,10 @@ func toolsFor(c Caller) []Tool {
 	// radacina livreaza cu report_done munca ceruta de un proiect legat
 	if c.FromRequest && !has(reportTool.Name) {
 		out = append(out, reportTool)
+	}
+	// cine poate raporta poate si lasa / bifa puncte pentru utilizator si raspunde in comentarii
+	if has(reportTool.Name) {
+		out = append(out, tickLeftTool, commentTaskTool)
 	}
 	out = append(out, askUserTool)
 	return out

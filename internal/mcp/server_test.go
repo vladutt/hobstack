@@ -38,6 +38,18 @@ func (f *fakeBackend) ReportDone(c Caller, task, summary string) (string, error)
 	f.calls = append(f.calls, "report_done|"+task+"|"+summary)
 	return "ok", f.err
 }
+func (f *fakeBackend) LeaveForUser(c Caller, task string, items []string) (string, error) {
+	f.calls = append(f.calls, "leave|"+task+"|"+strings.Join(items, ";"))
+	return "2 items left for the user", f.err
+}
+func (f *fakeBackend) TickLeftForUser(c Caller, task string, items []int) (string, error) {
+	f.calls = append(f.calls, fmt.Sprint("tick|", task, "|", items))
+	return "ok", f.err
+}
+func (f *fakeBackend) CommentTask(c Caller, task, text string) (string, error) {
+	f.calls = append(f.calls, "comment|"+task+"|"+text)
+	return "ok", f.err
+}
 func (f *fakeBackend) ReviewApprove(c Caller, task, note string) (string, error) {
 	f.calls = append(f.calls, "review_approve|"+task+"|"+note)
 	return "ok", f.err
@@ -214,13 +226,13 @@ func TestToolsListByRole(t *testing.T) {
 	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,ask_user" {
 		t.Fatalf("lead: %s", got)
 	}
-	if got := strings.Join(names("worker"), ","); got != "report_done,ask_user" {
+	if got := strings.Join(names("worker"), ","); got != "report_done,tick_left_for_user,comment_task,ask_user" {
 		t.Fatalf("worker: %s", got)
 	}
-	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,ask_user" {
+	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,tick_left_for_user,comment_task,ask_user" {
 		t.Fatalf("sublead: %s", got)
 	}
-	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,ask_user" {
+	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,ask_user" {
 		t.Fatalf("reviewer: %s", got)
 	}
 	if got := strings.Join(names("solo"), ","); got != "ask_user" {
@@ -358,10 +370,10 @@ func TestStageTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("stagework"); got != "report_done,ask_user" {
+	if got := names("stagework"); got != "report_done,tick_left_for_user,comment_task,ask_user" {
 		t.Fatalf("work: %s", got)
 	}
-	if got := names("stagecheck"); got != "report_done,review_approve,review_reject,ask_user" {
+	if got := names("stagecheck"); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,ask_user" {
 		t.Fatalf("check: %s", got)
 	}
 }
@@ -484,7 +496,7 @@ func TestLinkedProjectTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,ask_user" {
+	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,ask_user" {
 		t.Fatalf("linkedworker: %s", got)
 	}
 	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_linked_projects,ask_project,reply_to_project,request_project_work,ask_user" {
@@ -525,5 +537,37 @@ func TestCallLinkedProjectTools(t *testing.T) {
 		if _, isErr := toolText(t, resp); !isErr {
 			t.Fatalf("worker: %s", c)
 		}
+	}
+}
+
+func reportBody(left string) string {
+	return `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"report_done","arguments":{"summary":"done","left_for_user":` + left + `}}}`
+}
+
+func TestReportDoneLeftForUser(t *testing.T) {
+	fb, ts := setup(t)
+	_, resp := rpc(t, ts, "worker", reportBody(`["Company name","VAT number"]`))
+	text, isErr := toolText(t, resp)
+	if isErr || !strings.Contains(text, "items left for the user") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	if got := fb.calls[len(fb.calls)-1]; got != "leave||Company name;VAT number" {
+		t.Fatalf("apel = %q", got)
+	}
+	many := make([]string, 11)
+	for i := range many {
+		many[i] = fmt.Sprintf("%q", fmt.Sprint("item ", i))
+	}
+	before := len(fb.calls)
+	_, resp = rpc(t, ts, "worker", reportBody("["+strings.Join(many, ",")+"]"))
+	if text, isErr := toolText(t, resp); !isErr || !strings.Contains(text, "at most 10") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	if len(fb.calls) != before {
+		t.Fatal("report_done a rulat desi left_for_user era invalid")
+	}
+	_, resp = rpc(t, ts, "worker", reportBody(`[" "]`))
+	if _, isErr := toolText(t, resp); !isErr {
+		t.Fatal("punct gol acceptat")
 	}
 }
