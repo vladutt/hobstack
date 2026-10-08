@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { el, avatar, field, toast, kindOf, clock, topbar } from "./ui.js";
+import { projectCommands } from "./commands.js";
 import { libraryInstalls } from "./library-cards.js";
 
 export async function projectsView(root) {
@@ -240,6 +241,7 @@ export async function projectFormView(root, id) {
                 el("span", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."))),
             !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
           id && linksSection(id, p.links || []),
+          id && projectCommands(id),
           id && libraryInstalls(id)))));
   name.focus();
 

@@ -1186,3 +1186,16 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .lib-install .toggle-row .hint { flex-basis: 100%; }
 .lib-install .label-tag { width: auto; flex: none; }
 .lib-install .lib-name { font-size: 14px; }
+
+/* reguli pentru comenzi (Settings si proiect) */
+.settings-page { max-width: 880px; margin: 0 auto; padding: 28px 24px 48px; display: grid; gap: 20px; }
+.cmd-table { display: grid; gap: 6px; }
+.cmd-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cmd-prefix { flex: 1 1 160px; font-family: var(--mono); }
+.cmd-seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.seg-btn { background: none; border: 0; padding: 5px 10px; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.seg-btn.active { background: var(--line-2); color: var(--text); }
+.cmd-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cmd-add input { max-width: 260px; }
+.cmd-warnings { color: var(--amber); font-size: 13px; margin: 0; padding-left: 18px; }
+.link-btn.danger { color: var(--red); }

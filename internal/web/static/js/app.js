@@ -5,6 +5,7 @@ import { workspaceView, parseWorkspaceRoute } from "./workspace.js";
 import { setupView } from "./setup.js";
 import { newProjectView } from "./new-project.js";
 import { newAgentView } from "./new-agent.js";
+import { settingsView } from "./settings.js";
 import { libraryView, libraryItemView } from "./library.js";
 
 // Rute in hash: #/, #/new, #/setup, #/setup/<id>, #/setup/folder/<proiect>/<folder>, #/p/3/edit si pagina proiectului cu tab-uri:
@@ -20,6 +21,7 @@ const routes = [
   { pattern: /^#\/library\/(tools|skills|mcp)$/, view: (root, m) => libraryView(root, m[1]) },
   { pattern: /^#\/library\/item\/(\d+)(?:\?tab=(\w+))?$/, view: (root, m) => libraryItemView(root, Number(m[1]), m[2]) },
   { pattern: /^#\/library\/?$/, view: () => { location.hash = "#/library/tools"; } },
+  { pattern: /^#\/settings\/?$/, view: (root) => settingsView(root) },
   { pattern: /^#\/new$/, view: (root) => newProjectView(root) },
   { pattern: /^#\/p\/(\d+)\/edit$/, view: (root, m) => projectFormView(root, Number(m[1])) },
   { pattern: /^#\/p\/(\d+)\/agents\/new(?:\?parent=(\d+))?$/, view: (root, m) => newAgentView(root, Number(m[1]), m[2] ? Number(m[2]) : null) },

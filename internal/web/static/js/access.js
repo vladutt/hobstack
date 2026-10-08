@@ -18,6 +18,21 @@ export function accessBox(r, { agent, projectId, onDone, onOpen }) {
     buttons.push(b);
     return b;
   };
+  if (r.prefix) {
+    return el("div", { class: "question access cmd-ask" },
+      el("div", { class: "question-head" }, agent ? avatar(agent.name, kindOf(agent), 20) : null,
+        el("span", { class: "label" }, "COMMAND · ASK"),
+        el("strong", {}, `${name} wants to run`),
+        r.count > 1 ? ` (${r.count}×)` : null,
+        r.ref ? ` · ${r.ref}` : null),
+      el("p", { class: "question-text" }, el("code", {}, r.detail || r.prefix), " · ",
+        el("span", { class: "stuck-age", "data-since": r.updatedAt }, stuckAge(r.updatedAt)), " ago"),
+      el("div", { class: "actions" },
+        act("Allow once", "btn small primary", `/api/access/${r.id}/allow-once`),
+        act(`Allow "${r.prefix}" in this project`, "btn small", `/api/access/${r.id}/allow-project`),
+        act("Block", "btn small", `/api/access/${r.id}/block-project`),
+        act("Dismiss", "btn small", `/api/access/${r.id}/dismiss`)));
+  }
   const href = `#/p/${projectId}/team/${r.agentId}`;
   return el("div", { class: "question access" },
     el("div", { class: "question-head" }, agent ? avatar(agent.name, kindOf(agent), 20) : null,

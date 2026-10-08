@@ -89,13 +89,13 @@ export function avatar(name, kind, size = 32) {
 
 // topbar: bara de sus a fiecarei pagini: logo, firimituri (crumbs: [text, href?]),
 // apoi ce primeste in dreapta (butoane, tab-uri).
-// crumbs poate fi si "projects" / "library": atunci in loc de firimituri apare navigatia principala.
+// crumbs poate fi si "projects" / "library" / "settings": atunci in loc de firimituri apare navigatia principala.
 export function topbar(crumbs, ...right) {
   if (typeof crumbs === "string") {
     return el("header", { class: "topbar" },
       el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "F"),
       el("nav", { class: "mainnav", "aria-label": "Main" },
-        [["projects", "Projects", "#/"], ["library", "Library", "#/library/tools"]].map(([id, label, href]) =>
+        [["projects", "Projects", "#/"], ["library", "Library", "#/library/tools"], ["settings", "Settings", "#/settings"]].map(([id, label, href]) =>
           el("a", { class: "navlink" + (id === crumbs ? " active" : ""), href, "aria-current": id === crumbs ? "page" : null }, label))),
       el("div", { class: "topbar-right" }, right));
   }
