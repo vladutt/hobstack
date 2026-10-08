@@ -44,8 +44,8 @@ func TestTodosAPI(t *testing.T) {
 	if code, raw := e.do(t, "POST", "/api/tasks/"+id+"/comments", map[string]string{"text": "Meridian Auto SRL"}); code != http.StatusNoContent {
 		t.Fatalf("%d %s", code, raw)
 	}
-	if code, _ := e.do(t, "POST", "/api/tasks/"+id+"/comments", map[string]string{"text": " "}); code == http.StatusNoContent {
-		t.Fatal("comentariu gol acceptat")
+	if code, _ := e.do(t, "POST", "/api/tasks/"+id+"/comments", map[string]string{"text": " "}); code != http.StatusBadRequest {
+		t.Fatalf("comentariu gol: %d", code)
 	}
 	if code, _ := e.do(t, "POST", "/api/tasks/99999/comments", map[string]string{"text": "x"}); code != http.StatusNotFound {
 		t.Fatalf("task lipsa: %d", code)

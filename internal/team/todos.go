@@ -130,11 +130,14 @@ func plural(n int, one, many string) string {
 // ErrNoAssignee: asignatul task-ului nu mai exista (defensiv: baza nu lasa de obicei un agent cu task-uri sa dispara)
 var ErrNoAssignee = errors.New("the task's agent no longer exists")
 
+// ErrBadComment: comentariu gol sau prea lung (400 in API)
+var ErrBadComment = errors.New("comment: 1-4000 characters")
+
 // UserComment: comentariul utilizatorului pe task; ajunge la asignat ca mesaj si il trezeste
 func (t *Team) UserComment(taskID int64, text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" || len([]rune(text)) > 4000 {
-		return errors.New("comment: 1-4000 characters")
+		return ErrBadComment
 	}
 	t.work.Lock()
 	task, err := t.st.GetTask(taskID)

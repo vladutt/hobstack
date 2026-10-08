@@ -298,6 +298,10 @@ func (s *Server) commentTask(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, err.Error())
 			return
 		}
+		if errors.Is(err, team.ErrBadComment) {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		fail(w, err)
 		return
 	}
