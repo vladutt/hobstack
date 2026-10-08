@@ -34,6 +34,10 @@ func ValidateInput(in mcp.LibraryInput, byUser bool) (mcp.LibraryInput, error) {
 	if !safeName.MatchString(in.Name) {
 		return in, errors.New("name: lowercase letters, digits and dashes, 2-40 characters, starting with a letter (e.g. pdf-offer)")
 	}
+	// "team" e serverul MCP al aplicatiei; un server din Library cu acelasi nume l-ar suprascrie
+	if in.Kind == store.KindMCP && in.Name == "team" {
+		return in, errors.New(`name: "team" is reserved for the app's own MCP server`)
+	}
 	if n := len([]rune(in.Description)); n < 1 || n > 300 {
 		return in, errors.New("description: 1-300 characters")
 	}

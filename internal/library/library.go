@@ -526,6 +526,9 @@ func freeze(dir string) (nfiles, lines int, err error) {
 	return
 }
 
+// BuildRoot: folderul cu build-urile pluginurilor (build/<proiect>-<hash>/).
+func (l *Lib) BuildRoot() string { return filepath.Join(l.Root, "build") }
+
 // Build e ce primeste un run: pluginul proiectului si ce se adauga pe linia de comanda si in tura.
 type Build struct {
 	PluginDir  string           // "" daca proiectul nu are skill-uri / tool-uri instalate

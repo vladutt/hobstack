@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"foreman/internal/library"
@@ -122,13 +125,14 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 	return fmt.Sprintf("Proposed %s to the library. The user decides in Needs you; keep using it in this project meanwhile.", it.Name), nil
 }
 
-// recordLibraryUses noteaza ce elemente din Library a folosit run-ul: un tool daca o comanda Bash
-// contine "/bin/<nume>/" (scripturile ruleaza ca <build>/bin/<nume>/<intrare>; directorul de build
-// are hash, deci nu comparam caile intregi), un server MCP daca a apelat mcp__<nume>__*. Cel mult un
-// rand per element si run. Run-urile fara task (chat) nu se noteaza: "Recent use" arata task-uri.
-// Skill-urile nu se urmaresc (nu lasa o urma sigura in stream). Erorile se logheaza.
+// recordLibraryUses noteaza ce elemente din Library a folosit run-ul. Un tool conteaza cand o comanda
+// Bash contine <build>/<proiect>-<hash>/bin/<nume>/ (build = radacina build-urilor Library, deci nu
+// potrivim copii din repo sau build-urile altor proiecte); un server MCP, cand run-ul apeleaza
+// mcp__<nume>__*. Cel mult un rand per element si task: daca ultima folosire a elementului e deja pe
+// acelasi task, nu mai adaugam (un task are mai multe run-uri). Run-urile fara task (chat) nu se noteaza:
+// "Recent use" arata task-uri. Skill-urile nu se urmaresc. Erorile se logheaza.
 func (t *Team) recordLibraryUses(ar activeRun, a store.Agent, o runner.Outcome) {
-	if ar.taskID == 0 || (len(o.Commands) == 0 && len(o.ToolUses) == 0) {
+	if t.lib == nil || ar.taskID == 0 || (len(o.Commands) == 0 && len(o.ToolUses) == 0) {
 		return
 	}
 	installs, err := t.st.ListInstalls(ar.projectID)
@@ -136,6 +140,7 @@ func (t *Team) recordLibraryUses(ar activeRun, a store.Agent, o runner.Outcome) 
 		log.Printf("agent %d: library uses: %v", a.ID, err)
 		return
 	}
+	root := t.lib.BuildRoot() + string(filepath.Separator) + strconv.FormatInt(ar.projectID, 10) + "-"
 	for _, in := range installs {
 		if !in.Enabled {
 			continue
@@ -147,8 +152,12 @@ func (t *Team) recordLibraryUses(ar activeRun, a store.Agent, o runner.Outcome) 
 		used := false
 		switch it.Kind {
 		case store.KindTool:
+			re, err := regexp.Compile(regexp.QuoteMeta(root) + `[0-9A-Za-z]+` + regexp.QuoteMeta(string(filepath.Separator)+"bin"+string(filepath.Separator)+it.Name+string(filepath.Separator)))
+			if err != nil {
+				continue
+			}
 			for _, c := range o.Commands {
-				if strings.Contains(c.Text, "/bin/"+it.Name+"/") {
+				if re.MatchString(c.Text) {
 					used = true
 					break
 				}
@@ -161,10 +170,14 @@ func (t *Team) recordLibraryUses(ar activeRun, a store.Agent, o runner.Outcome) 
 				}
 			}
 		}
-		if used {
-			if err := t.st.AddLibraryUse(it.ID, ar.taskID, a.ID); err != nil {
-				log.Printf("agent %d: library use: %v", a.ID, err)
-			}
+		if !used {
+			continue
+		}
+		if last, err := t.st.RecentLibraryUses(it.ID, 1); err == nil && len(last) == 1 && last[0].TaskID == ar.taskID {
+			continue
+		}
+		if err := t.st.AddLibraryUse(it.ID, ar.taskID, a.ID); err != nil {
+			log.Printf("agent %d: library use: %v", a.ID, err)
 		}
 	}
 }

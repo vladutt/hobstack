@@ -23,17 +23,18 @@ din bara de sus (e sub-proiectul "librarie de agenti" din CLAUDE.md, separat).
 ## Cum ajung la agenti
 
 Mecanismul e `claude --plugin-dir <dir>` (o sesiune, fara instalare globala), verificat in `claude --help` 2.1.x:
-un plugin poate avea `skills/`, `.mcp.json` si fisiere oarecare.
+un plugin poate avea `skills/`, `.mcp.json` si fisiere oarecare (noi folosim `skills/` si `bin/`).
 
 La fiecare run, Foreman construieste (sau refoloseste, dupa un hash) un plugin per proiect:
 
 ```
-~/.foreman/library/build/<project-id>/
+~/.foreman/library/build/<project-id>-<hash>/
   .claude-plugin/plugin.json      {"name": "foreman-library"}
   skills/<skill>/SKILL.md (+ fisiere)
-  .mcp.json                       serverele MCP activate in proiect, cu secretele proiectului
-  bin/<tool>                      scripturile publicate (copiate, executabile)
+  bin/<tool>/<entry>              scripturile publicate (copiate, executabile)
+  bin/<tool>/run                  wrapper cu secretele proiectului, cand tool-ul are secrete
 ```
+(fara `.mcp.json`: serverele MCP merg prin `--mcp-config`, vezi mai jos)
 
 si adauga `--plugin-dir` + o linie in prompt: `Library tools are in <dir>/bin: pdf-offer, vat-calc. Run them with Bash.`
 
@@ -51,9 +52,10 @@ Decizii schimbate fata de propunerea initiala:
   sistemului de permisiuni al lui claude, deci nu il lasam sa depinda de ce scrie un agent. O propunere MCP locala
   cere tool-ul Shell la agent, iar pana la Publish apare ca "Not tested".
 - "Keep in project" nu publica niciodata; elementele create de utilizator se publica direct.
-- "Recent use": un tool conteaza cand o comanda Bash contine `/bin/<nume>/`, un server MCP cand run-ul apeleaza
-  `mcp__<nume>__*`; un rand per element si run, doar pentru run-uri pe task (chat-ul nu se noteaza). Skill-urile
-  nu se urmaresc.
+- "Recent use": un tool conteaza cand o comanda Bash contine `<build>/<proiect>-<hash>/bin/<nume>/` (build-ul acestui proiect;
+  copiile din repo si alte proiecte nu conteaza), un server MCP cand run-ul apeleaza `mcp__<nume>__*`; un rand per
+  element si task, doar pentru run-uri pe task (chat-ul nu se noteaza). Skill-urile nu se urmaresc.
+- Numele `team` e rezervat pentru servere MCP (e serverul aplicatiei).
 
 ## Date
 
@@ -72,7 +74,7 @@ library_installs
 library_secrets
   project_id, item_id, name, value  -- in baza locala, ca si restul datelor; nu se trimit nicaieri
 library_uses
-  item_id, task_id, agent_id, at  -- "Recent use" din pagina unui tool (din comenzile Bash / tool_use MCP)
+  item_id, task_id, agent_id, at  -- "Recent use" din pagina unui tool sau server MCP (nu skill), doar run-uri pe task (din comenzile Bash / tool_use MCP)
 ```
 
 Fisierele unei versiuni sunt copiate din repo-ul proiectului in `~/.foreman/library/items/...` la publicare: o

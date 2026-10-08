@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -150,10 +151,13 @@ func TestRunWithoutLibraryUnchanged(t *testing.T) {
 	}
 }
 
-// recordOutcome noteaza folosirile: un tool dupa calea /bin/<nume>/ (indiferent de hash-ul de build),
-// un server MCP dupa mcp__<nume>__*; un rand per element si run; run-urile fara task nu se noteaza.
+// recordLibraryUses noteaza un tool doar pentru calea build-ului propriului proiect (nu copii din repo,
+// build-urile altor proiecte sau alte /bin/), un server MCP dupa mcp__<nume>__*; un rand per element si task;
+// run-urile fara task nu se noteaza.
 func TestRecordLibraryUses(t *testing.T) {
 	f := setup(t)
+	lib := library.New(filepath.Join(t.TempDir(), "library"), f.st)
+	f.tm.SetLibrary(lib)
 	tool := store.LibraryItem{Kind: store.KindTool, Name: "pdf-offer", Description: "d", Status: store.ItemPublished, Entry: "pdf-offer.sh"}
 	mcpIt := store.LibraryItem{Kind: store.KindMCP, Name: "stock-db", Description: "d", Status: store.ItemPublished, Transport: "remote", URL: "http://example.invalid/mcp"}
 	unused := store.LibraryItem{Kind: store.KindTool, Name: "vat-calc", Description: "d", Status: store.ItemPublished, Entry: "v.sh"}
@@ -167,25 +171,48 @@ func TestRecordLibraryUses(t *testing.T) {
 		}
 		f.st.Install(f.p.ID, it.ID, v.ID)
 	}
+	uses := func(id int64) int {
+		got, err := f.st.RecentLibraryUses(id, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(got)
+	}
+	sep := string(filepath.Separator)
+	root := lib.BuildRoot()
+	mine := root + sep + strconv.FormatInt(f.p.ID, 10) + "-abc123" + sep + "bin" + sep + "pdf-offer" + sep
 	task := f.task(t, "A", f.rook, store.StatusQueued)
+	ar := activeRun{projectID: f.p.ID, taskID: task.ID}
+
+	// cai care nu sunt ale acestui proiect: zero folosiri
+	loose := runner.Outcome{Commands: []runner.Command{
+		{Text: "/other/bin/pdf-offer/x", OK: true},
+		{Text: root + sep + strconv.FormatInt(f.p.ID+99, 10) + "-abc123" + sep + "bin" + sep + "pdf-offer" + sep + "pdf-offer.sh", OK: true},
+		{Text: "./scripts/bin/pdf-offer/pdf-offer.sh", OK: true},
+		{Text: "/usr/local/bin/node/x", OK: true},
+	}}
+	f.tm.recordLibraryUses(ar, f.rook, loose)
+	if uses(tool.ID) != 0 {
+		t.Fatal("cale straina notata")
+	}
+
 	o := runner.Outcome{
 		Commands: []runner.Command{
-			{Text: "cd /x && /home/u/.foreman/library/build/1-abc123/bin/pdf-offer/pdf-offer.sh --data x", OK: true},
-			{Text: "/home/u/.foreman/library/build/1-abc123/bin/pdf-offer/run", OK: true},
+			{Text: "cd /x && " + mine + "pdf-offer.sh --data x", OK: true},
+			{Text: mine + "run", OK: true},
 		},
 		ToolUses: []string{"Bash", "mcp__stock-db__list_vehicles", "mcp__stock-db__get_vehicle"},
 	}
-	ar := activeRun{projectID: f.p.ID, taskID: task.ID}
 	f.tm.recordLibraryUses(ar, f.rook, o)
+	f.tm.recordLibraryUses(ar, f.rook, o) // alt run pe acelasi task: tot un rand
 	for id, want := range map[int64]int{tool.ID: 1, mcpIt.ID: 1, unused.ID: 0} {
-		got, err := f.st.RecentLibraryUses(id, 10)
-		if err != nil || len(got) != want {
-			t.Fatalf("item %d: %d folosiri (vrut %d), %v", id, len(got), want, err)
+		if got := uses(id); got != want {
+			t.Fatalf("item %d: %d folosiri (vrut %d)", id, got, want)
 		}
 	}
 	// fara task nu se noteaza nimic
 	f.tm.recordLibraryUses(activeRun{projectID: f.p.ID}, f.rook, o)
-	if got, _ := f.st.RecentLibraryUses(tool.ID, 10); len(got) != 1 {
-		t.Fatalf("run fara task a notat: %d", len(got))
+	if uses(tool.ID) != 1 {
+		t.Fatal("run fara task a notat")
 	}
 }
