@@ -291,6 +291,20 @@ func TestLeftForUserInPrompt(t *testing.T) {
 	}
 }
 
+func TestFilesInPrompt(t *testing.T) {
+	worker := System(proj, store.Agent{Name: "A"}, Links{BossName: "Atlas"})
+	sub := System(proj, store.Agent{Name: "S"}, Links{BossName: "Atlas", IsLead: true})
+	root := System(proj, store.Agent{Name: "R"}, Links{IsLead: true})
+	for name, got := range map[string]string{"worker": worker, "sub-lead": sub} {
+		if !strings.Contains(got, "list its path in files when you call report_done") {
+			t.Fatalf("%s: lipseste regula files:\n%s", name, got)
+		}
+	}
+	if strings.Contains(root, "in files when you call report_done") {
+		t.Fatal("radacina nu foloseste report_done")
+	}
+}
+
 func TestSystemBlockedCommands(t *testing.T) {
 	p := store.Project{Name: "Shop"}
 	a := store.Agent{Name: "Rook", Tools: []string{"shell"}}
