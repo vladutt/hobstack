@@ -261,7 +261,7 @@ func (m *Manager) args(s *Session, model, turn string) []string {
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
 		"--settings", string(settings),
-		"--mcp-config", prompt.MCPConfig(m.baseURL + "/mcp/" + s.token),
+		"--mcp-config", prompt.MCPConfig(m.baseURL+"/mcp/"+s.token, nil),
 		"--strict-mcp-config",
 	}
 	for _, dir := range s.addDirs {

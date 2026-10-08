@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"foreman/internal/library"
 	"foreman/internal/mcp"
 	"foreman/internal/prompt"
 	"foreman/internal/runner"
@@ -51,6 +52,23 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		if block := prompt.FilesBlock(refs); block != "" {
 			turn += "\n\n" + block
 		}
+	}
+
+	// Library: pluginul proiectului (skill-uri, scripturi) si serverele MCP instalate.
+	// Liniile merg in tura, nu in system prompt: hash-ul sesiunii nu se schimba.
+	var libBuild library.Build
+	if t.lib != nil {
+		if b, err := t.lib.Build(p.ID); err != nil {
+			log.Printf("library build for project %d: %v", p.ID, err) // run-ul merge si fara
+		} else {
+			libBuild = b
+		}
+	}
+	if libBuild.PluginDir != "" {
+		extraArgs = append(extraArgs, "--plugin-dir", libBuild.PluginDir)
+	}
+	if len(libBuild.TurnLines) > 0 {
+		turn += "\n\nLibrary (shared tools, skills and servers installed in this project):\n" + strings.Join(libBuild.TurnLines, "\n")
 	}
 
 	linkedProjects, err := t.st.LinkedProjects(p.ID)
@@ -104,7 +122,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
 		Dir:    home.Path,
-		Args:   append(t.args(p, a, system, turn, token, resume), extraArgs...),
+		Args:   append(t.args(p, a, system, turn, token, resume, libBuild), extraArgs...),
 		Prompt: turn,
 	}
 	agentID := a.ID
@@ -121,7 +139,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 }
 
 // args construieste linia de comanda pentru claude.
-func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, resume bool) []string {
+func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, resume bool, lb library.Build) []string {
 	args := []string{
 		"-p", turn,
 		"--output-format", "stream-json", "--verbose",
@@ -130,10 +148,10 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, token string, 
 		// setarile globale ale utilizatorului raman; .claude/settings.json din
 		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
 		"--setting-sources", "user",
-		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path),
+		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow),
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
-		"--mcp-config", prompt.MCPConfig(t.baseURL + "/mcp/" + token),
+		"--mcp-config", prompt.MCPConfig(t.baseURL+"/mcp/"+token, lb.MCPServers),
 		"--strict-mcp-config",
 	}
 	// bugetul e optional: cu abonament Claude nu platesti per run

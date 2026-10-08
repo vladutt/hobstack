@@ -145,7 +145,7 @@ func TestSettings(t *testing.T) {
 			Deny  []string `json:"deny"`
 		} `json:"permissions"`
 	}
-	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"}, "")), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"}, "", nil)), &cfg); err != nil {
 		t.Fatal(err)
 	}
 	allow := cfg.Permissions.Allow
@@ -165,7 +165,7 @@ func TestSettings(t *testing.T) {
 		}
 	}
 	// fara tool-uri: doar citire + echipa
-	json.Unmarshal([]byte(Settings(nil, "")), &cfg)
+	json.Unmarshal([]byte(Settings(nil, "", nil)), &cfg)
 	if len(cfg.Permissions.Allow) != 4 {
 		t.Errorf("allow fara tool-uri = %v", cfg.Permissions.Allow)
 	}
@@ -173,7 +173,7 @@ func TestSettings(t *testing.T) {
 
 func TestMCPConfig(t *testing.T) {
 	want := `{"mcpServers":{"team":{"type":"http","url":"http://127.0.0.1:7777/mcp/abc"}}}`
-	if got := MCPConfig("http://127.0.0.1:7777/mcp/abc"); got != want {
+	if got := MCPConfig("http://127.0.0.1:7777/mcp/abc", nil); got != want {
 		t.Fatalf("MCPConfig = %s", got)
 	}
 }

@@ -3,6 +3,7 @@ package prompt
 import (
 	"encoding/json"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -88,8 +89,15 @@ func bashMatches(command string, rules []string) bool {
 // Settings intoarce JSON-ul pentru --settings. In modul -p, ce lipseste din
 // allow sau apare in deny e refuzat automat, fara sa intrebe pe nimeni.
 // home e folderul agentului: cu tool-ul write, scrie doar acolo ("" = oriunde).
-func Settings(tools []string, home string) string {
+// extraAllow: serverele MCP din Library; se accepta doar "mcp__<server>" (tot serverul),
+// nimic cu wildcard, paranteze sau tool anume, ca Library sa nu poata largi permisiunile.
+func Settings(tools []string, home string, extraAllow []string) string {
 	allow := slices.Clone(alwaysAllow)
+	for _, rule := range extraAllow {
+		if libraryServerRule.MatchString(rule) && rule != "mcp__team" {
+			allow = append(allow, rule)
+		}
+	}
 	for _, name := range ValidTools {
 		if !slices.Contains(tools, name) {
 			continue
@@ -108,6 +116,9 @@ func Settings(tools []string, home string) string {
 	return string(b)
 }
 
+// libraryServerRule: numele serverului are forma sigura din Library (fara "__", deci fara tool anume).
+var libraryServerRule = regexp.MustCompile(`^mcp__[a-z][a-z0-9-]{1,39}$`)
+
 // pathRule: tot ce e sub dir, in sintaxa regulilor Claude Code. O cale absoluta
 // incepe cu "//" (ex. //Users/ana/shop/**); pe Windows C:\x devine //c/x/**.
 func pathRule(dir string) string {
@@ -118,13 +129,16 @@ func pathRule(dir string) string {
 	return "/" + strings.TrimSuffix(filepath.ToSlash(p), "/") + "/**"
 }
 
-// MCPConfig intoarce JSON-ul pentru --mcp-config: un singur server, "team",
-// care e chiar aplicatia noastra.
-func MCPConfig(url string) string {
-	b, _ := json.Marshal(map[string]any{
-		"mcpServers": map[string]any{
-			"team": map[string]any{"type": "http", "url": url},
-		},
-	})
+// MCPConfig intoarce JSON-ul pentru --mcp-config: serverul "team" (chiar aplicatia
+// noastra) plus serverele din Library instalate in proiect (extra poate fi nil).
+// Un server din Library nu poate lua numele "team".
+func MCPConfig(url string, extra map[string]any) string {
+	servers := map[string]any{"team": map[string]any{"type": "http", "url": url}}
+	for name, cfg := range extra {
+		if name != "team" {
+			servers[name] = cfg
+		}
+	}
+	b, _ := json.Marshal(map[string]any{"mcpServers": servers})
 	return string(b)
 }

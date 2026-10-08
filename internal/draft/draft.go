@@ -166,7 +166,7 @@ func (m *Manager) args(d *Draft, model, turn string) []string {
 		"--setting-sources", "user",
 		"--permission-mode", "dontAsk",
 		"--settings", string(settings),
-		"--mcp-config", prompt.MCPConfig(m.baseURL + "/mcp/" + d.token),
+		"--mcp-config", prompt.MCPConfig(m.baseURL+"/mcp/"+d.token, nil),
 		"--strict-mcp-config",
 	}
 }

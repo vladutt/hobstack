@@ -15,6 +15,7 @@ import (
 
 	"foreman/internal/config"
 	"foreman/internal/events"
+	"foreman/internal/library"
 	"foreman/internal/mcp"
 	"foreman/internal/runner"
 	"foreman/internal/store"
@@ -43,6 +44,9 @@ type Team struct {
 	// filesRoot e radacina folderelor de proiect (config.Paths.Projects).
 	// Goala = agentii nu primesc fisiere (cazul testelor).
 	filesRoot string
+
+	// lib construieste pluginul Library al proiectului; nil = fara Library (testele).
+	lib *library.Lib
 
 	// now da ora curenta (time.Now); ticker-ul detectorului de task-uri
 	// blocate si web-ul o folosesc prin Now.
@@ -134,6 +138,9 @@ func New(st *store.Store, runs Starter, hub *events.Hub, baseURL string) *Team {
 		wake:    make(chan struct{}, 1),
 	}
 }
+
+// SetLibrary leaga Library de run-uri.
+func (t *Team) SetLibrary(l *library.Lib) { t.lib = l }
 
 // SetFilesRoot seteaza radacina cu fisierele proiectelor.
 func (t *Team) SetFilesRoot(root string) { t.filesRoot = root }
