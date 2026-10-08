@@ -94,6 +94,9 @@ care nu poate porni (anti-bucla); migrarea 020 a scos o data proiectele de pe pa
 Gata (draft AI pentru agent nou, spec in docs/superpowers/specs/2026-10-08-foreman-agent-draft-design.md): pachetul
 internal/draft, run scurt doar citire cu tool-ul propose_agent; pagina Agent nou completeaza campurile neatinse.
 Costul nu intra in Total cost.
+Gata (Left for you, spec in docs/superpowers/specs/2026-10-08-foreman-left-for-you-design.md): report_done
+left_for_user, tick_left_for_user, comment_task; comentariile utilizatorului trezesc asignatul; task_todos
+(migrarea 021); cardul To fill in in Needs you.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"

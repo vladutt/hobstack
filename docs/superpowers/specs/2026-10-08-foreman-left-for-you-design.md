@@ -1,7 +1,7 @@
 # Foreman: "Left for you" (ce ramane de completat de utilizator dupa un task)
 
 Data: 2026-10-08
-Status: propunere, de aprobat (mockup-urile 14 si 15 din ../screenshots). Nimic implementat.
+Status: implementat (2026-10-08).
 
 ## Scop
 
@@ -29,10 +29,9 @@ din alte task-uri.
 ```
 task_todos
   id, task_id, position, text, done_at (NULL = deschis), done_by ('user' | agent_id), created_at
-task_comments            -- comentariile din modala (mockup 15), separate de conversatia agentilor
-  id, task_id, author ('user' | agent_id), text, created_at
 ```
 
+Comentariile sunt `task_events` cu `kind = comment` (decis la plan: fara tabel separat).
 `task_events` primeste `todo_added`, `todo_done`, `comment` (istoric si tab-ul Activity).
 
 ## MCP
