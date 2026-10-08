@@ -8,6 +8,7 @@ import (
 
 	"foreman/internal/config"
 	"foreman/internal/store"
+	"foreman/internal/taskfiles"
 )
 
 func TestAttachFiles(t *testing.T) {
@@ -55,6 +56,22 @@ func TestAttachFiles(t *testing.T) {
 	}
 	if again, _ := f.st.ListTaskEvents(task.ID); len(again) != len(events) {
 		t.Fatal("eveniment scris fara fisiere")
+	}
+	// copierea (pana la 20 x 50 MB) nu tine lock-ul global: ceilalti agenti nu asteapta dupa disc
+	lockFree := false
+	copyTaskFile = func(roots []string, home, raw, dest string) (taskfiles.Copied, error) {
+		if f.tm.work.TryLock() {
+			lockFree = true
+			f.tm.work.Unlock()
+		}
+		return taskfiles.Copy(roots, home, raw, dest)
+	}
+	t.Cleanup(func() { copyTaskFile = taskfiles.Copy })
+	if _, err := f.tm.AttachFiles(c, "", []string{"report.md"}); err != nil {
+		t.Fatal(err)
+	}
+	if !lockFree {
+		t.Fatal("t.work era blocat in timpul copierii")
 	}
 	// un agent strain nu poate atasa
 	if _, err := f.tm.AttachFiles(f.workerCaller(f.vera, 0), task.Ref(), []string{"report.md"}); err == nil {

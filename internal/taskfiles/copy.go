@@ -52,10 +52,18 @@ func Copy(roots []string, home, raw, destDir string) (Copied, error) {
 	abs = filepath.Clean(abs)
 	root, rel, ok := within(roots, abs)
 	if !ok {
-		return Copied{}, errOutside
+		// folderul poate fi salvat printr-un symlink (/var -> /private/var pe macOS), iar agentul
+		// preda calea reala (sau invers): comparam caile rezolvate. Deschiderea ramane prin os.Root
+		// pe radacina rezolvata, deci un symlink spre exterior e tot refuzat.
+		root, rel, ok = within(resolveAll(roots), resolveParent(abs))
+		if !ok {
+			return Copied{}, errOutside
+		}
 	}
 	display := abs
 	if r, ok := relTo(home, abs); ok {
+		display = r
+	} else if r, ok := relTo(resolve(home), resolveParent(abs)); ok {
 		display = r
 	}
 
@@ -120,6 +128,28 @@ func within(roots []string, abs string) (root, rel string, ok bool) {
 		}
 	}
 	return "", "", false
+}
+
+// resolve: calea fara symlink-uri (aceeasi cale daca nu se poate rezolva, de ex. folder sters).
+func resolve(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
+}
+
+// resolveParent rezolva doar folderul: un symlink in locul fisierului ramane symlink
+// (si e refuzat mai departe ca "not a regular file").
+func resolveParent(p string) string {
+	return filepath.Join(resolve(filepath.Dir(p)), filepath.Base(p))
+}
+
+func resolveAll(roots []string) []string {
+	out := make([]string, len(roots))
+	for i, r := range roots {
+		out[i] = resolve(r)
+	}
+	return out
 }
 
 // relTo: abs relativ la dir, doar daca e strict sub dir.

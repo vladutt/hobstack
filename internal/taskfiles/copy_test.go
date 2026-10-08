@@ -81,6 +81,38 @@ func TestCopySymlinkOut(t *testing.T) {
 	}
 }
 
+// folderul proiectului salvat printr-un symlink (ex. /var -> /private/var pe macOS), iar agentul
+// preda calea reala (getcwd o intoarce rezolvata): trebuie acceptata, si invers
+func TestCopySymlinkedRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink-uri pe Windows cer drepturi")
+	}
+	real, dest := t.TempDir(), t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(real, "docs", "a.md"), []byte("# A"))
+
+	c, err := Copy([]string{link}, link, filepath.Join(real, "docs", "a.md"), dest)
+	if err != nil || c.Path != filepath.Join("docs", "a.md") {
+		t.Fatalf("root prin symlink, cale reala: %+v %v", c, err)
+	}
+	c, err = Copy([]string{real}, real, filepath.Join(link, "docs", "a.md"), dest)
+	if err != nil || c.Path != filepath.Join("docs", "a.md") {
+		t.Fatalf("root real, cale prin symlink: %+v %v", c, err)
+	}
+	// un symlink din folder spre exterior ramane refuzat si dupa rezolvare
+	outside := t.TempDir()
+	write(t, filepath.Join(outside, "secret.txt"), []byte("key"))
+	if err := os.Symlink(outside, filepath.Join(real, "out")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Copy([]string{link}, link, filepath.Join(link, "out", "secret.txt"), dest); err == nil {
+		t.Fatal("symlink spre exterior acceptat dupa rezolvare")
+	}
+}
+
 func TestCopyTooLarge(t *testing.T) {
 	home, dest := t.TempDir(), t.TempDir()
 	write(t, filepath.Join(home, "big.log"), bytes.Repeat([]byte("a"), MaxSize+1))

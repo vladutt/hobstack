@@ -14,28 +14,49 @@ import (
 	"foreman/internal/taskfiles"
 )
 
-// AttachFiles copiaza fisierele predate la report_done si le leaga de task.
-// Un fisier care nu poate fi copiat nu strica nimic: agentul afla care si de ce.
-func (t *Team) AttachFiles(c mcp.Caller, ref string, paths []string) (string, error) {
+// copyTaskFile e taskfiles.Copy; testele il inlocuiesc ca sa vada daca t.work e liber in timpul copierii.
+var copyTaskFile = taskfiles.Copy
+
+// attachTarget: ce trebuie stiut ca sa copiem, citit sub t.work.
+type attachTarget struct {
+	task  store.Task
+	agent store.Agent
+	roots []string
+	home  string
+	dest  string
+}
+
+func (t *Team) attachTarget(c mcp.Caller, ref string) (attachTarget, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
 	task, a, err := t.todoTask(c, ref)
 	if err != nil {
-		return "", err
+		return attachTarget{}, err
 	}
 	if t.filesRoot == "" {
-		return "", errors.New("files cannot be attached in this setup")
+		return attachTarget{}, errors.New("files cannot be attached in this setup")
 	}
 	p, err := t.st.GetProject(task.ProjectID)
 	if err != nil {
-		return "", err
+		return attachTarget{}, err
 	}
 	roots := make([]string, 0, len(p.Folders))
 	for _, f := range p.Folders {
 		roots = append(roots, f.Path)
 	}
-	home := store.HomeFolder(a, p.Folders).Path
-	dest := config.TaskFilesDir(t.filesRoot, p.ID, task.ID)
+	return attachTarget{task: task, agent: a, roots: roots, home: store.HomeFolder(a, p.Folders).Path,
+		dest: config.TaskFilesDir(t.filesRoot, p.ID, task.ID)}, nil
+}
+
+// AttachFiles copiaza fisierele predate la report_done si le leaga de task.
+// Un fisier care nu poate fi copiat nu strica nimic: agentul afla care si de ce.
+// Copierea (pana la 20 x 50 MB) se face fara t.work: un disc lent nu opreste ceilalti agenti.
+func (t *Team) AttachFiles(c mcp.Caller, ref string, paths []string) (string, error) {
+	tg, err := t.attachTarget(c, ref)
+	if err != nil {
+		return "", err
+	}
+	task, a, roots, home, dest := tg.task, tg.agent, tg.roots, tg.home, tg.dest
 
 	var attached, failed []string
 	seen := map[string]bool{}
@@ -45,13 +66,13 @@ func (t *Team) AttachFiles(c mcp.Caller, ref string, paths []string) (string, er
 			continue
 		}
 		seen[key] = true
-		cp, err := taskfiles.Copy(roots, home, raw, dest)
+		cp, err := copyTaskFile(roots, home, raw, dest)
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s (%s)", key, err))
 			continue
 		}
 		agentID := a.ID
-		tf := store.TaskFile{TaskID: task.ID, ProjectID: p.ID, AgentID: &agentID, AgentName: a.Name,
+		tf := store.TaskFile{TaskID: task.ID, ProjectID: task.ProjectID, AgentID: &agentID, AgentName: a.Name,
 			Path: cp.Path, Name: cp.Name, Stored: cp.Stored, Size: cp.Size, Mime: cp.Mime}
 		if err := t.st.AddTaskFile(&tf); err != nil {
 			removeQuiet(dest, cp.Stored)
@@ -64,6 +85,8 @@ func (t *Team) AttachFiles(c mcp.Caller, ref string, paths []string) (string, er
 	out := "No files attached."
 	if n := len(attached); n > 0 {
 		out = fmt.Sprintf("Attached %d %s.", n, plural(n, "file", "files"))
+		t.work.Lock() // evenimentul intra in istoric ca orice schimbare de stare
+		defer t.work.Unlock()
 		t.taskMsg(task, "files_attached", a.Name, actorUser,
 			fmt.Sprintf("%s attached %d %s", a.Name, n, plural(n, "file", "files")),
 			"- "+strings.Join(attached, "\n- "))
