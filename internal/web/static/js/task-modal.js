@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { el, avatar, clock, kindOf, toast } from "./ui.js";
 import { changesView } from "./changes.js";
 import { flowView } from "./flow.js";
+import { taskFilesView } from "./task-files.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
@@ -31,12 +32,15 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   let descOpen = false;   // descrierea lunga ramane desfasurata la refresh
   let filesKey = null;    // ce s-a desenat ultima data in rezumatul fisierelor
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
-  let tab = initialTab;   // "conversation" | "history" | "changes" | "flow"; null = inca nealeasa (se alege la primul raspuns)
+  let tab = initialTab;   // "conversation" | "history" | "changes" | "files" | "flow"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
   let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
+  let filesCount = null;  // filesCount-ul pentru care s-a incarcat tab-ul Files (null = neincarcat)
+  let filesSeq = 0;       // ca seq, pentru cererea Files
+  const filesView = taskFilesView();
   let flowSeq = 0;        // ca seq, pentru cererea Flow
   let flowKey = null;     // ultimul raspuns Flow desenat (serializat)
   const flow = flowView({ projectId, open: flowOpen });
@@ -62,10 +66,12 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "Activity");
   const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
   const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
+  const filesPane = el("div", { id: `files-${taskId}`, role: "tabpanel", hidden: true }, filesView.el);
+  const tabFiles = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": filesPane.id, hidden: true, onclick: () => setTab("files") }, "Files");
   const flowPane = el("div", { id: `flow-${taskId}`, role: "tabpanel", hidden: true }, flow.el);
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
-    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFlow), convPane, histPane, chgPane, flowPane);
+    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFiles, tabFlow), convPane, histPane, chgPane, filesPane, flowPane);
   // formularul de comentarii: creat o singura data, ca textul scris sa nu se piarda la refresh
   const commentInput = el("textarea", { rows: 2, placeholder: "Reply to the agent...", "aria-label": "Comment" });
   const commentForm = el("form", { class: "comment-form", onsubmit: async (e) => {
@@ -359,9 +365,9 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   }
 
   function applyTab() {
-    const names = ["conversation", "history", "changes", "flow"];
-    const tabs = [tabConv, tabHist, tabChg, tabFlow];
-    const panes = [convPane, histPane, chgPane, flowPane];
+    const names = ["conversation", "history", "changes", "files", "flow"];
+    const tabs = [tabConv, tabHist, tabChg, tabFiles, tabFlow];
+    const panes = [convPane, histPane, chgPane, filesPane, flowPane];
     names.forEach((n, i) => {
       const on = tab === n;
       tabs[i].setAttribute("aria-selected", String(on));
@@ -369,6 +375,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       panes[i].hidden = !on;
     });
     syncChanges();
+    syncFiles();
     syncFlow();
   }
 
@@ -390,6 +397,27 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       if (destroyed || my !== flowSeq) return;
       flowKey = null;
       flow.error(err.message);
+    }
+  }
+
+  // syncFiles: tab-ul Files apare doar cand exista fisiere (pe task sau pe sub-task-uri);
+  // /files se cere cand tab-ul e deschis si filesCount s-a schimbat
+  async function syncFiles() {
+    if (!data) return;
+    const count = data.filesCount || 0;
+    tabFiles.hidden = count === 0;
+    if (count === 0 && tab === "files") { setTab("conversation"); return; }
+    if (tab !== "files" || count === filesCount) return;
+    const my = ++filesSeq;
+    try {
+      const res = await api(`/api/tasks/${taskId}/files`);
+      if (destroyed || my !== filesSeq) return;
+      filesCount = count;
+      filesView.show(res);
+    } catch (err) {
+      if (destroyed || my !== filesSeq) return;
+      filesCount = null;
+      filesView.error(err.message);
     }
   }
 

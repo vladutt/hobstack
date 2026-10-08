@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"foreman/internal/config"
 	"foreman/internal/picker"
@@ -194,20 +195,28 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	base, _, _ := strings.Cut(a.Mime, ";")
+	serveStored(w, r, f, a.Name, a.Mime, a.CreatedAt, false)
+}
+
+// serveStored trimite un fisier salvat de noi (urcat de utilizator sau predat de un agent).
+// Inline doar tipurile din inlineTypes; restul (HTML, SVG...) se descarca, in sandbox,
+// ca un fisier scris de un agent sa nu ruleze pe originea aplicatiei.
+func serveStored(w http.ResponseWriter, r *http.Request, f io.ReadSeeker, name, mimeType string, mod time.Time, download bool) {
+	base, _, _ := strings.Cut(mimeType, ";")
+	base = strings.TrimSpace(base)
 	disposition := "attachment"
-	if inlineTypes[strings.TrimSpace(base)] {
+	if inlineTypes[base] && !download {
 		disposition = "inline"
 	}
-	w.Header().Set("Content-Type", normalizeMime(a.Mime)) // si fisierele salvate mai demult
+	w.Header().Set("Content-Type", normalizeMime(mimeType)) // si fisierele salvate mai demult
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	// viewerul de PDF din Chrome nu merge sub sandbox; restul tipurilor raman in sandbox
-	if strings.TrimSpace(base) != "application/pdf" {
+	if base != "application/pdf" {
 		w.Header().Set("Content-Security-Policy", "sandbox")
 	}
-	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": a.Name}))
-	http.ServeContent(w, r, a.Name, a.CreatedAt, f)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": name}))
+	http.ServeContent(w, r, name, mod, f)
 }
 
 func (s *Server) deleteFile(w http.ResponseWriter, r *http.Request) {

@@ -1083,6 +1083,7 @@ export async function workspaceView(root, projectId, route) {
       el("span", { class: "task-foot" },
         el("span", { class: "task-id" }, ref(t)),
         kids.length ? el("span", { class: "task-meta", title: "Subtasks done" }, `${kidsDone}/${kids.length} subtasks`) : null,
+        t.attachments > 0 ? el("span", { class: "task-meta", title: `${t.attachments} attached ${t.attachments === 1 ? "file" : "files"}` }, `📎 ${t.attachments}`) : null,
         waiting ? el("span", { class: "task-meta" }, "queued in stage")
           : files ? el("span", { class: "task-meta" }, files)
           : who && !working ? el("span", { class: "task-meta" }, who.name) : null,

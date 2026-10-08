@@ -1209,3 +1209,20 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .cmd-add input { max-width: 260px; }
 .cmd-warnings { color: var(--amber); font-size: 13px; margin: 0; padding-left: 18px; }
 .link-btn.danger { color: var(--red); }
+
+/* Files: fisierele predate pe task (report_done files) */
+.tfiles-list { list-style: none; margin: 0; padding: 0; }
+.tfiles-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.tfiles-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; flex: 1 1 180px; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tfiles-main:hover .tfiles-name { text-decoration: underline; }
+.tfiles-main:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 3px; }
+.tfiles-name { font-weight: 600; overflow-wrap: anywhere; }
+.tfiles-dir, .tfiles-meta { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.tfiles-versions { list-style: none; flex-basis: 100%; margin: 4px 0 0 12px; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+.tfiles-sub-head { margin: 16px 0 4px; font-size: 13px; color: var(--muted); }
+.tfiles-sub { margin-bottom: 8px; }
+.tfiles-sub-title { font-size: 13px; margin: 6px 0 2px; }
+.tfiles-preview-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tfiles-preview-body img { max-width: 100%; height: auto; display: block; border-radius: 6px; }
+.tfiles-preview-body iframe { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.tfiles-text { max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; margin: 0; padding: 12px; border-radius: 6px; background: var(--deep); }

@@ -1,7 +1,7 @@
 # Foreman: fisiere atasate pe task (livrabile)
 
 Data: 2026-10-08
-Status: spec aprobat in chat, de implementat.
+Status: implementat (2026-10-08).
 
 ## Scop
 
