@@ -49,8 +49,66 @@ export async function newAgentView(root, projectId, parentHint) {
   const note = el("p", { class: "np-note" });
   const addBtn = el("button", { type: "submit", form: "new-agent", class: "btn primary" }, "Add to team");
 
+  // campurile atinse de utilizator nu se suprascriu cu propunerea AI
+  const touched = new Set();
+  for (const [key, node] of Object.entries({ name, role, takes, model, instructions, background, doneDef, parent, reviewer })) {
+    node.addEventListener(node.tagName === "SELECT" ? "change" : "input", () => touched.add(key));
+  }
+  const ask = el("input", { type: "text", maxlength: 1000, placeholder: "e.g. someone to own the e-mail templates", "aria-label": "What is the team missing" });
+  const draftBtn = el("button", { type: "button", class: "link-btn na-draft-btn", onclick: runDraft }, "Draft");
+  const draftNote = el("span", { class: "hint" });
+  const draftBox = el("section", { class: "na-draft" },
+    el("span", { class: "np-spark", "aria-hidden": "true" }, "\u2726"),
+    el("div", { class: "na-draft-text" }, el("strong", {}, "Let AI draft this agent"),
+      el("span", { class: "hint" }, "Say what's missing from the team; it proposes name, role, responsibilities and where it reports."), draftNote),
+    el("div", { class: "na-draft-ask" }, ask, draftBtn));
+  ask.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); runDraft(); } });
+  let draftId = null, timer = null;
+
+  async function runDraft() {
+    if (draftId) { // al doilea click opreste draft-ul in curs
+      api(`/api/drafts/${draftId}/stop`, { method: "POST" }).catch(() => {});
+      return;
+    }
+    if (!ask.value.trim()) { ask.focus(); return; }
+    try {
+      const d = await api(`/api/projects/${projectId}/agents/draft`, { method: "POST", body: { ask: ask.value.trim(), model: "sonnet" } });
+      draftId = d.id;
+      draftBtn.textContent = "Stop";
+      draftNote.textContent = "Drafting\u2026";
+      poll();
+    } catch (err) { toast(err.message); }
+  }
+  async function poll() {
+    clearTimeout(timer);
+    if (!draftId || !root.isConnected) return;
+    let d;
+    try { d = await api(`/api/drafts/${draftId}`); } catch (err) { finishDraft(err.message); return; }
+    if (d.status === "running") { timer = setTimeout(poll, 1000); return; }
+    if (d.status === "ready" && d.proposal) { fillFrom(d.proposal); finishDraft("Drafted. Check the fields, then Add to team."); return; }
+    finishDraft(d.error || (d.status === "stopped" ? "Stopped." : "The draft failed."));
+  }
+  function finishDraft(msg) {
+    draftId = null;
+    draftBtn.textContent = "Draft";
+    draftNote.textContent = msg;
+  }
+  // fillFrom: pune propunerea doar in campurile neatinse; sef/reviewer dupa nume (fara diferenta de litere/spatii)
+  function fillFrom(p) {
+    const set = (key, node, value) => { if (value && !touched.has(key)) node.value = value; };
+    set("name", name, p.name); set("role", role, p.role); set("takes", takes, p.responsibilities);
+    set("model", model, p.model); set("instructions", instructions, p.instructions);
+    set("background", background, p.background); set("doneDef", doneDef, p.doneDef);
+    const idOf = (n) => agents.find((a) => a.name.trim().toLowerCase() === (n || "").trim().toLowerCase())?.id;
+    if (!touched.has("parent")) parent.value = p.reportsTo ? String(idOf(p.reportsTo) ?? parent.value) : "";
+    if (!touched.has("reviewer") && p.reviewedBy && idOf(p.reviewedBy)) reviewer.value = String(idOf(p.reviewedBy));
+    if (Array.isArray(p.tools) && p.tools.length) for (const t of tools) t.box.checked = p.tools.includes(t.id);
+    syncFolder();
+    draw();
+  }
+
   const form = el("form", { id: "new-agent", class: "np na", onsubmit: save },
-    el("div", { class: "np-main" },
+    el("div", { class: "np-main" }, draftBox,
       el("div", { class: "row" },
         el("div", { class: "field" }, el("label", { class: "label" }, "Name"),
           el("div", { class: "na-name" }, nameAvatar, name),

@@ -1015,3 +1015,10 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .filter-item { display: flex; align-items: center; gap: 9px; background: none; border: 0; border-radius: 7px; padding: 7px 8px; color: var(--soft); font: 14px var(--sans); cursor: pointer; text-align: left; }
 .filter-item:hover { background: var(--card); color: var(--text); }
 .filter-item.on { color: var(--amber); font-weight: 600; }
+
+/* caseta "Let AI draft this agent" de pe pagina Agent nou */
+.na-draft { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border: 1.5px dashed var(--amber-line); border-radius: 14px; background: rgba(242, 181, 68, .025); flex-wrap: wrap; }
+.na-draft-text { display: grid; gap: 2px; flex: 1 1 280px; min-width: 0; }
+.na-draft-ask { display: flex; align-items: center; gap: 12px; flex: 1 1 360px; }
+.na-draft-ask input { background: var(--deep); }
+.na-draft-btn { color: var(--amber); font-weight: 700; font-size: 15px; }
