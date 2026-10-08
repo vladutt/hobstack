@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"slices"
 	"strings"
 
 	"foreman/internal/prompt"
@@ -263,15 +264,16 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request) {
 // Seful vine din parentId (null = radacina); lider/reviewer reies din legaturile salvate.
 func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		ProjectID    int64  `json:"projectId"`
-		AgentID      int64  `json:"agentId"` // 0 = agent nou
-		Name         string `json:"name"`
-		Role         string `json:"role"`
-		ParentID     *int64 `json:"parentId"`
-		FolderID     *int64 `json:"folderId"`
-		Background   string `json:"background"`
-		Instructions string `json:"instructions"`
-		DoneDef      string `json:"doneDef"`
+		ProjectID    int64    `json:"projectId"`
+		AgentID      int64    `json:"agentId"` // 0 = agent nou
+		Name         string   `json:"name"`
+		Role         string   `json:"role"`
+		ParentID     *int64   `json:"parentId"`
+		FolderID     *int64   `json:"folderId"`
+		Tools        []string `json:"tools"` // alege daca promptul are linia cu comenzile blocate
+		Background   string   `json:"background"`
+		Instructions string   `json:"instructions"`
+		DoneDef      string   `json:"doneDef"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -299,12 +301,21 @@ func (s *Server) promptPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	a := store.Agent{
 		ID: in.AgentID, ProjectID: p.ID, Name: strings.TrimSpace(in.Name), Role: strings.TrimSpace(in.Role),
-		Background: in.Background, Instructions: in.Instructions, DoneDef: in.DoneDef, ParentID: in.ParentID, FolderID: in.FolderID,
+		Background: in.Background, Instructions: in.Instructions, DoneDef: in.DoneDef, ParentID: in.ParentID, FolderID: in.FolderID, Tools: in.Tools,
 	}
 	if a.Name == "" {
 		a.Name = "Agent"
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"prompt": prompt.System(p, a, prompt.LinksFor(a, agents))})
+	pl := prompt.LinksFor(a, agents)
+	if slices.Contains(a.Tools, "shell") { // ca in team/run.go
+		rules, err := s.team.EffectiveCommandRules(p.ID)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		pl.BlockedCommands = prompt.BlockedPrefixes(rules)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"prompt": prompt.System(p, a, pl)})
 }
 
 // setAgentPosition retine pozitia agentului pe canvas (fara eveniment SSE).

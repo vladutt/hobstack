@@ -439,3 +439,24 @@ func TestFavoriteAndUsageOnProjectList(t *testing.T) {
 		t.Fatalf("proiect inexistent: %d", code)
 	}
 }
+
+func TestPromptPreviewBlockedCommands(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
+	body := func(tools []string) string {
+		code, raw := e.do(t, "POST", "/api/prompt-preview", map[string]any{
+			"projectId": p.ID, "name": "Nova", "role": "Dev", "parentId": root.ID, "tools": tools,
+		})
+		if code != 200 {
+			t.Fatalf("%d %s", code, raw)
+		}
+		return string(raw)
+	}
+	if !strings.Contains(body([]string{"shell"}), "do not try them:") {
+		t.Fatal("agentul cu shell trebuie sa vada comenzile blocate")
+	}
+	if strings.Contains(body(nil), "do not try them:") {
+		t.Fatal("agentul fara shell nu are linia")
+	}
+}

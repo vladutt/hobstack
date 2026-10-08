@@ -92,6 +92,7 @@ export function agentEditor({ projectId, project, info, agent: a, onSaved, onDel
           projectId, name: name.value, role: role.value, agentId: a.id,
           background: background.value, instructions: instructions.value, doneDef: doneDef.value,
           parentId: idOf(parentSelect), folderId: folderValue(),
+          tools: tools.filter((t) => t.box.checked).map((t) => t.id),
         },
       });
       preview.textContent = res.prompt;
