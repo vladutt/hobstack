@@ -258,6 +258,24 @@ var requestWorkTool = Tool{
 	}),
 }
 
+var proposeLibraryTool = Tool{
+	Name: "propose_library_item",
+	Description: "Proposes something you built here for the shared Library, so other projects can use it: a script (tool), " +
+		"instructions (skill, a folder with SKILL.md) or an MCP server. The user reviews and publishes it; keep using it in this project meanwhile.",
+	InputSchema: schema([]string{"kind", "name", "description", "files"}, map[string]any{
+		"kind":        map[string]any{"type": "string", "enum": []string{"tool", "skill", "mcp"}},
+		"name":        str("lowercase-with-dashes, e.g. pdf-offer"),
+		"description": str("One sentence: what it does"),
+		"files":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Paths relative to your folder (max 20 files, 1 MB)"},
+		"entry":       str("tool: the file to run, e.g. pdf-offer.sh"),
+		"command":     str("mcp (local): the command that starts the server, e.g. python3"),
+		"args":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "mcp (local): its arguments; ${DIR} is the server's folder"},
+		"url":         str("mcp (remote): the server URL"),
+		"needs":       map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"network", "write", "browser", "shell"}}},
+		"secrets":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Names of secrets each project provides, e.g. META_TOKEN"},
+	}),
+}
+
 // toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
 // Orice agent al echipei primeste ask_user; analistul din wizard nu.
 func toolsFor(c Caller) []Tool {
@@ -319,6 +337,9 @@ func toolsFor(c Caller) []Tool {
 	// cine poate raporta poate si lasa / bifa puncte pentru utilizator si raspunde in comentarii
 	if has(reportTool.Name) {
 		out = append(out, tickLeftTool, commentTaskTool)
+	}
+	if c.CanWrite {
+		out = append(out, proposeLibraryTool)
 	}
 	out = append(out, askUserTool)
 	return out

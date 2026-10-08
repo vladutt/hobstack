@@ -28,8 +28,15 @@ type Caller struct {
 	HasStages    bool   // proiectul are etape: la create_task assignee e optional
 	CanAddAgents bool   // lider sau radacina: add_agent / remove_agent
 	HasLinks     bool   // proiectul are legaturi cu alte proiecte
+	CanWrite     bool   // agentul are tool-ul write: poate propune elemente pentru Library
 	IsRoot       bool   // raporteaza utilizatorului: primeste intrebarile proiectelor legate
 	FromRequest  bool   // run pe un task cerut de un proiect legat: are report_done chiar fara sef
+}
+
+// LibraryInput sunt argumentele lui propose_library_item.
+type LibraryInput struct {
+	Kind, Name, Description, Entry, Command, URL string
+	Files, Args, Needs, Secrets                  []string
 }
 
 // AddAgentInput sunt argumentele lui add_agent. ToolsSet spune daca agentul a
@@ -56,6 +63,7 @@ type Backend interface {
 	ReviewReject(c Caller, task, feedback string) (string, error)
 	ProposeSetup(c Caller, args json.RawMessage) (string, error)
 	ProposeAgent(c Caller, args json.RawMessage) (string, error)
+	ProposeLibraryItem(c Caller, in LibraryInput) (string, error)
 	AskUser(c Caller, question string, options []string) (string, error)
 	AddAgent(c Caller, in AddAgentInput) (string, error)
 	RemoveAgent(c Caller, name string) (string, error)
@@ -214,6 +222,12 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		text, err = s.backend.ReplyToProject(c, arg("request"), arg("answer"))
 	case "request_project_work":
 		text, err = s.backend.RequestProjectWork(c, arg("project"), arg("title"), arg("description"))
+	case "propose_library_item":
+		text, err = s.backend.ProposeLibraryItem(c, LibraryInput{
+			Kind: arg("kind"), Name: arg("name"), Description: arg("description"), Entry: arg("entry"),
+			Command: arg("command"), URL: arg("url"), Files: argList(p.Arguments, "files"), Args: argList(p.Arguments, "args"),
+			Needs: argList(p.Arguments, "needs"), Secrets: argList(p.Arguments, "secrets"),
+		})
 	case "propose_setup":
 		raw, _ := json.Marshal(p.Arguments)
 		text, err = s.backend.ProposeSetup(c, raw)

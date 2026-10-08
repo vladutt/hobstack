@@ -104,6 +104,11 @@ func (f *fakeBackend) RequestProjectWork(c Caller, project, title, description s
 	return "ok", f.err
 }
 
+func (f *fakeBackend) ProposeLibraryItem(c Caller, in LibraryInput) (string, error) {
+	f.calls = append(f.calls, "propose_library_item|"+in.Kind+"|"+in.Name+"|"+strings.Join(in.Files, ","))
+	return "ok", f.err
+}
+
 func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 	t.Helper()
 	fb := &fakeBackend{callers: map[string]Caller{
@@ -113,6 +118,7 @@ func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 		"reviewer":     {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
 		"solo":         {ProjectID: 1, AgentID: 5},
 		"setup":        {SetupID: "s1"},
+		"writer":       {ProjectID: 1, AgentID: 30, HasParent: true, CanWrite: true},
 		"stagework":    {ProjectID: 1, AgentID: 6, TaskID: 9, StageKind: "work"},
 		"stagelead":    {ProjectID: 1, AgentID: 8, IsLead: true, HasStages: true},
 		"stagecheck":   {ProjectID: 1, AgentID: 7, TaskID: 9, StageKind: "check"},
@@ -587,5 +593,33 @@ func TestCallTickAndCommentTools(t *testing.T) {
 	}
 	if got := fb.calls[len(fb.calls)-1]; got != "comment|5|VAT filled in" {
 		t.Fatalf("apel = %q", got)
+	}
+}
+
+func TestProposeLibraryTool(t *testing.T) {
+	fb, ts := setup(t)
+	names := func(token string) string {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
+		var out []string
+		for _, tool := range result(t, resp)["tools"].([]any) {
+			out = append(out, tool.(map[string]any)["name"].(string))
+		}
+		return strings.Join(out, ",")
+	}
+	if !strings.Contains(names("writer"), "propose_library_item") {
+		t.Fatalf("writer: %s", names("writer"))
+	}
+	for _, token := range []string{"worker", "lead", "setup"} {
+		if strings.Contains(names(token), "propose_library_item") {
+			t.Fatalf("%s nu are voie: %s", token, names(token))
+		}
+	}
+	_, resp := rpc(t, ts, "writer", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"propose_library_item","arguments":{"kind":"skill","name":"tone","description":"d","files":["SKILL.md"]}}}`)
+	if _, isErr := toolText(t, resp); isErr || len(fb.calls) != 1 || fb.calls[0] != "propose_library_item|skill|tone|SKILL.md" {
+		t.Fatalf("%v %v", resp, fb.calls)
+	}
+	_, resp = rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"propose_library_item","arguments":{"kind":"skill","name":"tone","description":"d","files":["SKILL.md"]}}}`)
+	if _, isErr := toolText(t, resp); !isErr || len(fb.calls) != 1 {
+		t.Fatal("worker fara write trebuia refuzat")
 	}
 }
