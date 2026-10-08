@@ -11,6 +11,7 @@ import { stuckBox, refreshStuckAges } from "./stuck.js";
 import { accessBox } from "./access.js";
 import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
+import { statsView } from "./stats.js";
 import { renderMarkdown } from "./md.js";
 
 const SUB_STATUS = {
@@ -43,6 +44,7 @@ const TABS = [
   { id: "tasks", label: "Tasks" },
   { id: "team", label: "Team" },
   { id: "files", label: "Files" },
+  { id: "stats", label: "Stats" },
 ];
 
 // parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId, taskId }.
@@ -206,6 +208,10 @@ export async function workspaceView(root, projectId, route) {
     consoleHead, panelTabs, detailsBox, chatBox);
   setupDrop(chatBox, addPending);
 
+  // tab-ul Stats: datele se incarca doar la intrarea pe tab (fara auto-refresh)
+  const stats = statsView(projectId, {
+    agentKind: (id) => kindOf(state.project.agents.find((a) => a.id === id)),
+  });
   const bodies = {
     "team": el("div", { class: "tab-body team-body" }, canvas.el),
     "tasks": el("section", { class: "tab-body tasks-body" },
@@ -214,6 +220,7 @@ export async function workspaceView(root, projectId, route) {
       el("div", { class: "board-row" }, needsBox, board),
       boardHint),
     "files": el("div", { class: "tab-body files-body" }, filesSection),
+    "stats": stats.el,
   };
   const ws = el("div", { class: "ws" },
     header,
@@ -496,6 +503,7 @@ export async function workspaceView(root, projectId, route) {
     syncModal(r.taskId);
     if (r.tab === "team" && state.tab !== "team" && !keep) state.panel = "details"; // intrarea pe Echipa arata Detaliile
     if (r.tab !== "team" && state.tab === "team" && !keep) state.panel = "chat"; // iesirea de pe Echipa: inapoi la chat
+    const enteringStats = r.tab === "stats" && state.tab !== "stats";
     state.tab = r.tab;
     renderNeeds(); // eticheta "N need you" din bara de sus apare doar in afara board-ului
     if (r.tab === "team" && r.agentId && r.agentId !== state.selected) {
@@ -508,6 +516,7 @@ export async function workspaceView(root, projectId, route) {
     }
     if (keep) { state.drawer = true; applyDrawer(); }
     renderTabs();
+    if (enteringStats) stats.load();
     syncHash();
     if (!chatBox.hidden) scrollDown(true);
   }
@@ -1481,6 +1490,7 @@ export async function workspaceView(root, projectId, route) {
     clearTimeout(reloadTimer);
     clearInterval(agesTimer);
   };
+  if (state.tab === "stats") stats.load(); // pagina deschisa direct pe #/p/3/stats
   return { cleanup, update };
 }
 

@@ -396,6 +396,57 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 
 /* fisiere si atasamente */
 .files-body { max-width: 900px; }
+
+/* tab-ul Stats */
+.stats-body { max-width: 1200px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.stats-content > * { min-width: 0; } /* tabelul lat face scroll in card, nu lateste pagina */
+.stats-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.stats-toolbar .grow { flex: 1; }
+.stats-ranges { display: flex; gap: 4px; flex-wrap: wrap; }
+.stats-content { display: flex; flex-direction: column; gap: 16px; transition: opacity .15s; }
+.stats-content.loading { opacity: .55; }
+.stats-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.stats-tile { background: var(--col); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+.stats-tile-label { font-size: 12px; color: var(--muted); }
+.stats-tile-value { font: 650 24px/1.2 var(--display); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.stats-delta { font-size: 12px; color: var(--dim); margin-top: 2px; }
+.stats-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+.stats-card { background: var(--col); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+.stats-card h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.stats-chart { width: 100%; height: auto; display: block; }
+.stats-grid { stroke: var(--line); stroke-width: 1; }
+.stats-axis { fill: var(--dim); font: 11px var(--sans); }
+.stats-line { fill: none; stroke-width: 2; }
+.stats-line.created, .stats-dot.created { stroke: var(--blue); }
+.stats-line.done, .stats-dot.done { stroke: var(--teal); }
+.stats-line.done { stroke-dasharray: 6 4; } /* cand liniile se suprapun, Created ramane vizibil */
+.stats-dot { fill: var(--col); stroke-width: 2; }
+.stats-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--soft); }
+.stats-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.stats-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.stats-legend i.created { background: var(--blue); }
+.stats-legend i.done { background: var(--teal); }
+.stats-table-wrap { overflow-x: auto; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.stats-table th, .stats-table td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+.stats-table th button { all: unset; cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12px; }
+.stats-table th[aria-sort] button { color: var(--text); }
+.stats-table th button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.stats-table a { color: var(--text); text-decoration: none; }
+.stats-table a:hover { color: var(--amber); }
+.stats-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.stats-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.stats-list li:last-child { border-bottom: 0; }
+.stats-list .grow { flex: 1; }
+.stats-list li > span, .stats-list li > strong { white-space: nowrap; }
+.stats-list a { color: var(--text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.stats-list a:hover { color: var(--amber); }
+.stats-list code { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; direction: rtl; text-align: left; }
+.stats-facts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; color: var(--soft); }
+.stats-facts strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.stats-empty, .stats-error { padding: 40px 0; text-align: center; }
+.stats-error { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--red); }
 .input-row { display: flex; gap: 8px; align-items: stretch; }
 .input-row input { flex: 1; min-width: 0; }
 .files-list { display: grid; gap: 6px; }

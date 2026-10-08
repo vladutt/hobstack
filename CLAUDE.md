@@ -82,6 +82,9 @@ Gata (redesign UI dupa mockup-urile din ../screenshots): tema ardezie rece + fon
 in loc de sidebar; Proiecte ca tabel; pe proiect board-ul pe toata latimea cu "Needs you" ca prima coloana, Done cu "Show N more";
 chat-ul si detaliile agentului intr-un panou lateral care se inchide (starea in localStorage "foreman-drawer"); modala de task pe
 doua coloane (continut + detalii); avatare colorate dupa nume (ui.toneOf, amber = radacina); canvas-ul se incadreaza pe noduri.
+Gata (Stats, spec in docs/superpowers/specs/2026-10-08-foreman-project-stats-design.md): tab-ul Stats pe proiect
+(Today / 7d / 30d / All): cheltuiala si tokeni pe agent si pe zi, task-uri create/terminate, mediana pana la Done,
+rata de succes a run-urilor, fisiere si comenzi, intrebari; store.ProjectStats + GET /api/projects/{id}/stats, grafice SVG in stats.js.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"
