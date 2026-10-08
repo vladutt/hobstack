@@ -623,7 +623,7 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 		t.work.Unlock()
 		return store.Message{}, err
 	}
-	m, err := t.addUserMessage(a, text, attachmentIDs, false)
+	m, err := t.addUserMessage(a, text, attachmentIDs, false, false)
 	t.work.Unlock()
 	if err != nil {
 		return store.Message{}, err
@@ -635,7 +635,8 @@ func (t *Team) UserMessage(agentID int64, text string, attachmentIDs []int64) (s
 // addUserMessage salveaza mesajul utilizatorului si anunta seful agentului.
 // Apelantul tine t.work si face Kick dupa ce il elibereaza. reply=true marcheaza
 // raspunsul la o intrebare ask_user: arata la fel in chat, dar nu e cerere din chat.
-func (t *Team) addUserMessage(a store.Agent, text string, attachmentIDs []int64, reply bool) (store.Message, error) {
+// skipParent=true nu lasa nota la seful agentului (comentariile pe task).
+func (t *Team) addUserMessage(a store.Agent, text string, attachmentIDs []int64, reply, skipParent bool) (store.Message, error) {
 	m := store.Message{ProjectID: a.ProjectID, AgentID: a.ID, Kind: store.KindMsg, Author: store.AuthorUser, Text: text, Reply: reply}
 	if err := t.st.AddMessage(&m); err != nil {
 		return store.Message{}, err
@@ -650,7 +651,7 @@ func (t *Team) addUserMessage(a store.Agent, text string, attachmentIDs []int64,
 		}
 	}
 	t.emit(a.ProjectID, "message", m)
-	if a.ParentID != nil {
+	if a.ParentID != nil && !skipParent {
 		note := fmt.Sprintf("User -> %s: %s", a.Name, text)
 		dir := t.filesDir(a.ProjectID)
 		for _, att := range m.Attachments {
@@ -702,7 +703,7 @@ func (t *Team) closeQuestion(id int64, status, answer string) error {
 		t.work.Unlock()
 		return err
 	}
-	if _, err := t.addUserMessage(a, clip(msg), nil, true); err != nil {
+	if _, err := t.addUserMessage(a, clip(msg), nil, true, false); err != nil {
 		t.work.Unlock()
 		return err
 	}

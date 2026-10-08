@@ -49,6 +49,42 @@ func (t *Team) reportedBy(task store.Task, a store.Agent) bool {
 	return false
 }
 
+// TodosBy: agentul care a lasat punctele (actorul ultimului eveniment left_for_user), daca mai exista in proiect;
+// altfel asignatul. In proiectele cu etape asignatul se muta la etapa urmatoare, dar punctele raman ale celui care le-a lasat.
+func (t *Team) TodosBy(task store.Task) (store.Agent, error) {
+	events, err := t.st.ListTaskEvents(task.ID)
+	if err == nil {
+		for i := len(events) - 1; i >= 0; i-- {
+			if events[i].Kind != "left_for_user" {
+				continue
+			}
+			if a, err := t.st.FindAgentByName(task.ProjectID, events[i].Actor); err == nil {
+				return a, nil
+			}
+			break
+		}
+	}
+	return t.st.GetAgent(task.AssigneeID)
+}
+
+// openItems: "Open items on T-5: 1. Company name; 3. VAT" (gol daca nu mai e nimic deschis)
+func (t *Team) openItems(task store.Task) string {
+	list, err := t.st.ListTodos(task.ID)
+	if err != nil {
+		return ""
+	}
+	var parts []string
+	for _, x := range list {
+		if x.DoneAt == nil {
+			parts = append(parts, fmt.Sprintf("%d. %s", x.Position, x.Text))
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Open items on %s: %s", task.Ref(), strings.Join(parts, "; "))
+}
+
 func (t *Team) LeaveForUser(c mcp.Caller, ref string, items []string) (string, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -65,7 +101,15 @@ func (t *Team) LeaveForUser(c mcp.Caller, ref string, items []string) (string, e
 			"- "+strings.Join(items, "\n- "))
 		t.emit(c.ProjectID, "task", task)
 	}
-	return fmt.Sprintf("%d %s left for the user; they answer in the task's comments. When you fill one in, call tick_left_for_user.", n, plural(n, "item", "items")), nil
+	head := fmt.Sprintf("%d %s left for the user; they answer in the task's comments.", n, plural(n, "item", "items"))
+	if n == 0 {
+		head = "No new items; they were already listed."
+	}
+	out := head + " When you fill one in, call tick_left_for_user with its number."
+	if open := t.openItems(task); open != "" {
+		out += " " + open + "."
+	}
+	return out, nil
 }
 
 func (t *Team) TickLeftForUser(c mcp.Caller, ref string, items []int) (string, error) {
@@ -87,11 +131,15 @@ func (t *Team) TickLeftForUser(c mcp.Caller, ref string, items []int) (string, e
 			return "", fmt.Errorf("%s has items 1-%d; there is no item %d", task.Ref(), len(list), n)
 		}
 	}
+	var texts []string
 	for _, n := range items {
 		if err := t.st.SetTodo(task.ID, n, true, a.Name); err != nil {
 			return "", err
 		}
+		texts = append(texts, list[n-1].Text)
 	}
+	t.taskMsg(task, "todo_done", a.Name, actorUser, fmt.Sprintf("%s ticked %d %s", a.Name, len(texts), plural(len(texts), "item", "items")),
+		"- "+strings.Join(texts, "\n- "))
 	t.emit(c.ProjectID, "task", task)
 	open := 0
 	if list, err = t.st.ListTodos(task.ID); err == nil {
@@ -101,7 +149,11 @@ func (t *Team) TickLeftForUser(c mcp.Caller, ref string, items []int) (string, e
 			}
 		}
 	}
-	return fmt.Sprintf("Ticked. %d still open on %s.", open, task.Ref()), nil
+	out := fmt.Sprintf("Ticked. %d still open on %s.", open, task.Ref())
+	if o := t.openItems(task); o != "" {
+		out += " " + o + "."
+	}
+	return out, nil
 }
 
 func (t *Team) CommentTask(c mcp.Caller, ref, text string) (string, error) {
@@ -145,15 +197,20 @@ func (t *Team) UserComment(taskID int64, text string) error {
 		t.work.Unlock()
 		return err
 	}
-	a, err := t.st.GetAgent(task.AssigneeID)
+	// primeste comentariul cel care a lasat punctele (nu neaparat asignatul curent)
+	a, err := t.TodosBy(task)
 	if err != nil {
 		t.work.Unlock()
 		return ErrNoAssignee
 	}
 	t.taskMsg(task, "comment", actorUser, a.Name, "You commented", text)
 	msg := fmt.Sprintf("Comment from the user on %s (%s): %s\nIf it fills in something you left for them, update the work, "+
-		"tick it with mcp__team__tick_left_for_user and reply with mcp__team__comment_task.", task.Ref(), task.Title, text)
-	if _, err := t.addUserMessage(a, clip(msg), nil, true); err != nil {
+		"tick it with mcp__team__tick_left_for_user (item numbers below) and reply with mcp__team__comment_task.", task.Ref(), task.Title, text)
+	if o := t.openItems(task); o != "" {
+		msg += "\n" + o + "."
+	}
+	// seful nu primeste nota: nu poate bifa, iar un run in plus ar fi degeaba
+	if _, err := t.addUserMessage(a, clip(msg), nil, true, true); err != nil {
 		t.work.Unlock()
 		return err
 	}
@@ -170,8 +227,21 @@ func (t *Team) UserSetTodo(taskID int64, position int, done bool) error {
 	if err != nil {
 		return err
 	}
+	list, err := t.st.ListTodos(taskID)
+	if err != nil {
+		return err
+	}
 	if err := t.st.SetTodo(taskID, position, done, actorUser); err != nil {
 		return err
+	}
+	for _, x := range list {
+		if x.Position == position {
+			if done {
+				t.taskMsg(task, "todo_done", actorUser, "", "You ticked: "+x.Text, "")
+			} else {
+				t.taskMsg(task, "todo_reopened", actorUser, "", "You reopened: "+x.Text, "")
+			}
+		}
 	}
 	t.emit(task.ProjectID, "task", task)
 	return nil

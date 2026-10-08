@@ -571,3 +571,21 @@ func TestReportDoneLeftForUser(t *testing.T) {
 		t.Fatal("punct gol acceptat")
 	}
 }
+
+func TestCallTickAndCommentTools(t *testing.T) {
+	fb, ts := setup(t)
+	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"tick_left_for_user","arguments":{"task":"T-5","items":[1,"3",2.0,"x"]}}}`)
+	if _, isErr := toolText(t, resp); isErr {
+		t.Fatal("tick a dat eroare")
+	}
+	if got := fb.calls[len(fb.calls)-1]; got != "tick|T-5|[1 3 2]" {
+		t.Fatalf("apel = %q", got)
+	}
+	_, resp = rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"comment_task","arguments":{"task":5,"text":"VAT filled in"}}}`)
+	if _, isErr := toolText(t, resp); isErr {
+		t.Fatal("comment a dat eroare")
+	}
+	if got := fb.calls[len(fb.calls)-1]; got != "comment|5|VAT filled in" {
+		t.Fatalf("apel = %q", got)
+	}
+}

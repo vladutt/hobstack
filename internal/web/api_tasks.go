@@ -117,8 +117,16 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 	if todos == nil {
 		todos = []store.Todo{}
 	}
+	// cine a lasat punctele (nu neaparat asignatul curent): la el ajung comentariile
+	todosBy, todosByID := "", int64(0)
+	if len(todos) > 0 {
+		if a, err := s.team.TodosBy(task); err == nil {
+			todosBy, todosByID = a.Name, a.ID
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"todos":     todos, // puncte lasate utilizatorului
+		"todos":   todos, // puncte lasate utilizatorului
+		"todosBy": todosBy, "todosById": todosByID,
 		"recurring": recurring,
 		"task":      task, "events": slim, "assignee": assignee, "stage": stage,
 		"conversation": conv, "working": working, "workingAgentId": workingID,

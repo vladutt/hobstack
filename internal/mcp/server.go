@@ -182,7 +182,7 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 			// raportul a trecut: punctele se lasa pe acelasi task (task gol = task-ul curent)
 			extra, lerr := s.backend.LeaveForUser(c, arg("task"), left)
 			if lerr != nil {
-				text += " Note: the items for the user were not saved: " + lerr.Error()
+				text += " Note: the items for the user were NOT saved (" + lerr.Error() + "). Write them in your next comment_task so the user sees them: " + strings.Join(left, "; ") + "."
 			} else {
 				text += " " + extra
 			}
