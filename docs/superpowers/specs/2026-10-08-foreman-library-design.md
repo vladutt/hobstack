@@ -1,7 +1,7 @@
 # Foreman: Library (tool-uri, skill-uri si servere MCP refolosite intre proiecte)
 
 Data: 2026-10-08
-Status: propunere, de aprobat (mockup-urile 09-13 din ../screenshots). Nimic implementat.
+Status: implementat (2026-10-08). Mockup-urile 09-13 din ../screenshots.
 
 ## Scop
 
@@ -37,10 +37,23 @@ La fiecare run, Foreman construieste (sau refoloseste, dupa un hash) un plugin p
 
 si adauga `--plugin-dir` + o linie in prompt: `Library tools are in <dir>/bin: pdf-offer, vat-calc. Run them with Bash.`
 
-**De verificat inainte de implementare** (cu claude 2.1.x, in modul nostru `--setting-sources user --strict-mcp-config`):
-1. skill-urile din `--plugin-dir` se incarca si cu `--setting-sources user`;
-2. `.mcp.json` din plugin se incarca si cu `--strict-mcp-config` (daca nu, serverele intra in JSON-ul nostru de `--mcp-config`);
-3. permisiunile: tool-urile MCP din plugin trebuie permise explicit in `--settings` (altfel `dontAsk` le refuza).
+**Rezultatele spike-ului** (claude 2.1.x, in modul nostru `--setting-sources user --strict-mcp-config`):
+1. skill-urile din `--plugin-dir` se incarca si cu `--setting-sources user`: merge asa cum e planificat.
+2. `.mcp.json` din plugin este ignorat sub `--strict-mcp-config`. Serverele MCP ajung deci prin `--mcp-config`-ul
+   nostru (cel cu serverul `team`); cand un server are secrete, config-ul se scrie intr-un fisier 0600 (sters la
+   sfarsitul run-ului) si `--mcp-config` primeste calea, ca secretele sa nu apara in linia de comanda.
+3. Tool-urile MCP (`mcp__<server>__*`) trebuie permise explicit in `--settings`; Foreman adauga serverul in allow.
+
+Decizii schimbate fata de propunerea initiala:
+- Directorul pluginului e per proiect si per hash al intrarilor (`build/<proiect>-<hash>/`), nu doar per proiect;
+  se refoloseste cat timp intrarile nu se schimba.
+- Probe-ul serverului MCP local (`tools/list`) ruleaza la Publish, nu la propunere: porneste un proces in afara
+  sistemului de permisiuni al lui claude, deci nu il lasam sa depinda de ce scrie un agent. O propunere MCP locala
+  cere tool-ul Shell la agent, iar pana la Publish apare ca "Not tested".
+- "Keep in project" nu publica niciodata; elementele create de utilizator se publica direct.
+- "Recent use": un tool conteaza cand o comanda Bash contine `/bin/<nume>/`, un server MCP cand run-ul apeleaza
+  `mcp__<nume>__*`; un rand per element si run, doar pentru run-uri pe task (chat-ul nu se noteaza). Skill-urile
+  nu se urmaresc.
 
 ## Date
 

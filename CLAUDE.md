@@ -97,6 +97,12 @@ Costul nu intra in Total cost.
 Gata (Left for you, spec in docs/superpowers/specs/2026-10-08-foreman-left-for-you-design.md): report_done
 left_for_user, tick_left_for_user, comment_task; comentariile utilizatorului trezesc asignatul; task_todos
 (migrarea 021); cardul To fill in in Needs you.
+Gata (Library, spec in docs/superpowers/specs/2026-10-08-foreman-library-design.md): tool-uri, skill-uri si servere MCP
+refolosite intre proiecte. Tabelele library_* (migrarea 022); pachet internal/library: propuneri copiate cu OpenRoot,
+versiuni read-only, plugin per proiect pe hash (--plugin-dir), serverele MCP prin --mcp-config (fisier 0600 cu
+secrete), probe la Publish. Tool-ul MCP propose_library_item (MCP local doar cu Shell). API + UI #/library,
+Instructions > Library cu secrete per proiect, "Recent use" pe pagina item-ului (tool dupa /bin/<nume>/ in comenzile
+Bash, MCP dupa mcp__<nume>__*, doar run-uri pe task).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"
