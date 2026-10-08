@@ -54,6 +54,7 @@ export async function newAgentView(root, projectId, parentHint) {
   for (const [key, node] of Object.entries({ name, role, takes, model, instructions, background, doneDef, parent, reviewer })) {
     node.addEventListener(node.tagName === "SELECT" ? "change" : "input", () => touched.add(key));
   }
+  for (const t of tools) t.box.addEventListener("change", () => touched.add("tools"));
   const ask = el("input", { type: "text", maxlength: 1000, placeholder: "e.g. someone to own the e-mail templates", "aria-label": "What is the team missing" });
   const draftBtn = el("button", { type: "button", class: "link-btn na-draft-btn", onclick: runDraft }, "Draft");
   const draftNote = el("span", { class: "hint" });
@@ -71,6 +72,7 @@ export async function newAgentView(root, projectId, parentHint) {
       return;
     }
     if (!ask.value.trim()) { ask.focus(); return; }
+    draftBtn.disabled = true; // fara al doilea POST cat timp primul e in zbor
     try {
       const d = await api(`/api/projects/${projectId}/agents/draft`, { method: "POST", body: { ask: ask.value.trim(), model: "sonnet" } });
       draftId = d.id;
@@ -78,6 +80,7 @@ export async function newAgentView(root, projectId, parentHint) {
       draftNote.textContent = "Drafting\u2026";
       poll();
     } catch (err) { toast(err.message); }
+    draftBtn.disabled = false;
   }
   async function poll() {
     clearTimeout(timer);
@@ -100,9 +103,11 @@ export async function newAgentView(root, projectId, parentHint) {
     set("model", model, p.model); set("instructions", instructions, p.instructions);
     set("background", background, p.background); set("doneDef", doneDef, p.doneDef);
     const idOf = (n) => agents.find((a) => a.name.trim().toLowerCase() === (n || "").trim().toLowerCase())?.id;
-    if (!touched.has("parent")) parent.value = p.reportsTo ? String(idOf(p.reportsTo) ?? parent.value) : "";
+    // seful se schimba doar daca propunerea indica un agent existent; altfel ramane cel implicit
+    const bossId = idOf(p.reportsTo);
+    if (!touched.has("parent") && bossId != null) parent.value = String(bossId);
     if (!touched.has("reviewer") && p.reviewedBy && idOf(p.reviewedBy)) reviewer.value = String(idOf(p.reviewedBy));
-    if (Array.isArray(p.tools) && p.tools.length) for (const t of tools) t.box.checked = p.tools.includes(t.id);
+    if (!touched.has("tools") && Array.isArray(p.tools) && p.tools.length) for (const t of tools) t.box.checked = p.tools.includes(t.id);
     syncFolder();
     draw();
   }
