@@ -77,7 +77,8 @@ Gata (proiecte legate, spec in docs/superpowers/specs/2026-10-06-foreman-project
 proiecte (fara sens); agentii pun intrebari radacinii proiectului legat (ask_project / reply_to_project, max 3 deschise,
 anti-bucla) si liderii cer munca (request_project_work: task pentru radacina tinta, aprobat in "Needs you" la tinta,
 direct doar la cererea utilizatorului din chat); raportul se intoarce la Done (afterDone).
-Gata (fire de lucru): create_task primeste continues ("T-85"); tasks.thread_id (doar afisare) leaga follow-up-urile de task-ul care a pornit munca; pe board un fir e un singur card, in coloana muncii deschise celei mai recente.
+Gata (fire de lucru): create_task primeste continues ("T-85"); tasks.thread_id (doar afisare) leaga follow-up-urile de task-ul care a pornit munca; pe board doar Done grupeaza (arbore + fir, doar membrii gata); in celelalte coloane fiecare task are cardul lui
+(eticheta "↳ T-3" / "follow-up of T-3"), iar "working" vine din run-ul activ (agentView.workingTaskId).
 Gata (tool-ul packages): "Install packages" per agent scoate npm install / composer require / pip install / go get
 din deny-ul fix (brew install, sudo, rm -rf, git push raman blocate); refuzurile lor apar in "Needs you" cu Allow package installs.
 Gata (redesign UI dupa mockup-urile din ../screenshots): tema ardezie rece + font Figtree (static/fonts); bara de sus (ui.topbar)
