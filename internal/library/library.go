@@ -5,6 +5,8 @@ package library
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -39,6 +41,9 @@ type Lib struct {
 	mu       sync.Mutex            // protejeaza harta de mai jos
 	buildMus map[int64]*sync.Mutex // un build pe proiect
 	itemMus  map[int64]*sync.Mutex // o publicare pe item
+
+	keyMu sync.Mutex
+	key   []byte // cheia HMAC pentru hash-ul build-urilor (Root/.hashkey), citita la prima folosire
 }
 
 func New(root string, st *store.Store) *Lib {
@@ -77,16 +82,14 @@ func (l *Lib) RemoveMCPConfig(runID string) {
 	os.Remove(filepath.Join(l.RunDir(), runID+".mcp.json"))
 }
 
-// sweepRunFiles sterge fisierele ramase de la run-uri mai vechi de 24h (de ex. dupa un crash).
+// sweepRunFiles sterge TOATE fisierele din run/ la pornire: niciun run de dinainte de restart nu le mai poate folosi.
 func (l *Lib) sweepRunFiles() {
 	entries, err := os.ReadDir(l.RunDir())
 	if err != nil {
 		return
 	}
 	for _, e := range entries {
-		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > 24*time.Hour {
-			os.Remove(filepath.Join(l.RunDir(), e.Name()))
-		}
+		os.RemoveAll(filepath.Join(l.RunDir(), e.Name()))
 	}
 }
 
@@ -305,8 +308,17 @@ func countLines(data []byte) int {
 // Publish face din propunere (peste versiunea curenta, daca exista) o versiune read-only,
 // o marcheaza publicata si o instaleaza in proiectul sursa.
 func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
-	return l.publish(itemID, note, false)
+	return l.publish(itemID, note, false, false)
 }
+
+// PublishSkipTest ca Publish, dar fara testul serverului MCP local (ToolNames ramane gol). Pentru elementele
+// facute de utilizator si pentru "Publish without test", dupa confirmarea comenzii.
+func (l *Lib) PublishSkipTest(itemID int64, note string) (store.LibraryVersion, error) {
+	return l.publish(itemID, note, false, true)
+}
+
+// probeTimeout: cat asteptam un server MCP local sa raspunda la publicare (un `npx` poate descarca pachetul).
+var probeTimeout = 30 * time.Second
 
 // ErrStatus: elementul nu e in starea potrivita pentru actiune (verificat sub lock-ul item-ului).
 var ErrStatus = errors.New("the item is not in a state that allows this")
@@ -314,11 +326,27 @@ var ErrStatus = errors.New("the item is not in a state that allows this")
 // KeepInSource ("Keep in <project>"): ia un instantaneu al propunerii ca versiune, o instaleaza in proiectul sursa
 // si pune direct starea declined. Elementul nu e niciodata published (published_at ramane NULL), deci niciun alt
 // proiect nu il poate instala. Doar pentru propuneri cu proiect sursa.
-func (l *Lib) KeepInSource(itemID int64, note string) (store.LibraryVersion, error) {
-	return l.publish(itemID, note, true)
+func (l *Lib) KeepInSource(itemID int64, note string, skipTest bool) (store.LibraryVersion, error) {
+	return l.publish(itemID, note, true, skipTest)
 }
 
-func (l *Lib) publish(itemID int64, note string, keep bool) (store.LibraryVersion, error) {
+// Decline respinge de tot o propunere (fara "Keep"): sterge fisierele si pune starea declined, sub lock-ul item-ului.
+func (l *Lib) Decline(itemID int64) error {
+	mu := l.lockFor(l.itemMus, itemID)
+	mu.Lock()
+	defer mu.Unlock()
+	it, err := l.St.GetLibraryItem(itemID)
+	if err != nil {
+		return err
+	}
+	if it.Status != store.ItemProposed {
+		return ErrStatus
+	}
+	l.DiscardProposal(itemID)
+	return l.St.SetLibraryStatus(itemID, store.ItemDeclined)
+}
+
+func (l *Lib) publish(itemID int64, note string, keep, skipTest bool) (store.LibraryVersion, error) {
 	// o singura publicare pe item: altfel doua apeluri ar alege aceeasi versiune
 	mu := l.lockFor(l.itemMus, itemID)
 	mu.Lock()
@@ -344,12 +372,13 @@ func (l *Lib) publish(itemID int64, note string, keep bool) (store.LibraryVersio
 	}
 	// un server MCP local se testeaza aici, la actiunea utilizatorului (nu la propunerea agentului,
 	// care ar rula o comanda aleasa de agent in afara permisiunilor lui). Fara secrete.
-	if it.Kind == store.KindMCP && it.Transport == "local" {
+	// skipTest: utilizatorul a ales sa publice fara test (sau a facut el elementul)
+	if it.Kind == store.KindMCP && it.Transport == "local" && !skipTest {
 		args := make([]string, len(it.Args))
 		for i, a := range it.Args {
 			args[i] = strings.ReplaceAll(a, "${DIR}", prop)
 		}
-		names, err := ProbeMCPIn(prop, it.Command, args, nil, 10*time.Second)
+		names, err := ProbeMCPIn(prop, it.Command, args, nil, probeTimeout)
 		if err != nil {
 			msg := strings.TrimSpace(err.Error())
 			if r := []rune(msg); len(r) > 300 {
@@ -577,6 +606,11 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 	final := filepath.Join(buildRoot, pid+"-"+hash)
 	// hash identic: folderul exista deja, deci nu mai copiem nimic (doar calculam serverele, liniile si caile)
 	hit := dirExists(final)
+	if hit {
+		// folosit din nou: cleanOld se uita la mtime, deci un folder refolosit zile in sir nu trebuie sa para vechi
+		now := time.Now()
+		_ = os.Chtimes(final, now, now)
+	}
 	tmp := ""
 	if !hit {
 		tmp, err = os.MkdirTemp(buildRoot, pid+".tmp-")
@@ -680,8 +714,12 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 
 // inputsHash: hash peste tot ce influenteaza continutul pluginului (instalari, versiuni, secrete, sistem).
 func (l *Lib) inputsHash(projectID int64, installs []store.LibraryInstall) (string, error) {
+	key, err := l.hashKey()
+	if err != nil {
+		return "", err
+	}
 	h := sha256.New()
-	fmt.Fprintf(h, "format=2 os=%s\n", runtime.GOOS)
+	fmt.Fprintf(h, "format=3 os=%s\n", runtime.GOOS)
 	for _, in := range installs { // ListInstalls vine sortat dupa item
 		fmt.Fprintf(h, "install %d %d %v\n", in.ItemID, in.VersionID, in.Enabled)
 		if !in.Enabled {
@@ -705,11 +743,72 @@ func (l *Lib) inputsHash(projectID int64, installs []store.LibraryInstall) (stri
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
+		// numele hash-ului ajunge in calea folderului, vizibila agentilor: valorile intra doar printr-un HMAC cu cheie secreta
+		mac := hmac.New(sha256.New, key)
 		for _, k := range keys {
-			fmt.Fprintf(h, "secret %q=%q\n", k, secrets[k])
+			fmt.Fprintf(mac, "secret %q=%q\n", k, secrets[k])
 		}
+		fmt.Fprintf(h, "secrets %v %x\n", keys, mac.Sum(nil))
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16], nil
+}
+
+// hashKey: cheia HMAC (32 de octeti) din Root/.hashkey (0600); se creeaza la prima folosire.
+func (l *Lib) hashKey() ([]byte, error) {
+	l.keyMu.Lock()
+	defer l.keyMu.Unlock()
+	if l.key != nil {
+		return l.key, nil
+	}
+	path := filepath.Join(l.Root, ".hashkey")
+	if b, err := os.ReadFile(path); err == nil && len(b) == 32 {
+		l.key = b
+		return b, nil
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(l.Root, 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		return nil, err
+	}
+	_ = os.Chmod(path, 0o600)
+	l.key = b
+	return b, nil
+}
+
+// RemoveProjectBuilds sterge build-urile proiectului (cu wrapper-ele de secrete); la stergerea proiectului.
+func (l *Lib) RemoveProjectBuilds(projectID int64) {
+	mu := l.projectMu(projectID)
+	mu.Lock()
+	defer mu.Unlock()
+	buildRoot := filepath.Join(l.Root, "build")
+	pid := strconv.FormatInt(projectID, 10)
+	entries, _ := os.ReadDir(buildRoot)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), pid+"-") || strings.HasPrefix(e.Name(), pid+".tmp-") {
+			os.RemoveAll(filepath.Join(buildRoot, e.Name()))
+		}
+	}
+}
+
+// NameTakenMsg descrie elementul care ocupa deja (kind, name): starea lui si proiectul sursa. Un element
+// respins sau pastrat ramane invizibil in Library, dar isi tine numele.
+func (l *Lib) NameTakenMsg(kind, name string) string {
+	it, err := l.St.FindLibraryItem(kind, name)
+	if err != nil {
+		return fmt.Sprintf("the library already has a %s named %q", kind, name)
+	}
+	where := "the library"
+	if it.SourceProjectID != 0 && it.Status != store.ItemPublished {
+		if p, err := l.St.GetProject(it.SourceProjectID); err == nil {
+			where = p.Name
+		}
+	}
+	return fmt.Sprintf("a %s %s named %q already exists in %s", it.Status, kind, name, where)
 }
 
 // cleanOld sterge build-urile mai vechi ale proiectului (au wrapper-e cu secrete), dar doar cele

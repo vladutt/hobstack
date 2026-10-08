@@ -276,7 +276,8 @@ func (s *Server) publishLibraryItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Note string `json:"note"`
+		Note     string `json:"note"`
+		SkipTest bool   `json:"skipTest"` // "Publish without test": serverul MCP local nu se mai porneste
 	}
 	if err := decodeOptional(r, &in); err != nil {
 		fail(w, err)
@@ -297,7 +298,11 @@ func (s *Server) publishLibraryItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// fara lock-uri tinute aici: Publish poate dura (probe-ul unui server MCP local)
-	v, err := s.lib.Publish(id, in.Note)
+	publish := s.lib.Publish
+	if in.SkipTest {
+		publish = s.lib.PublishSkipTest
+	}
+	v, err := publish(id, in.Note)
 	if err != nil {
 		libraryErr(w, err)
 		return
@@ -322,7 +327,8 @@ func (s *Server) declineLibraryItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Keep *bool `json:"keep"`
+		Keep     *bool `json:"keep"`
+		SkipTest bool  `json:"skipTest"`
 	}
 	if err := decodeOptional(r, &in); err != nil {
 		fail(w, err)
@@ -343,16 +349,14 @@ func (s *Server) declineLibraryItem(w http.ResponseWriter, r *http.Request) {
 	}
 	if keep {
 		// instantaneu + instalare in sursa + declined, intr-un singur pas sub lock (niciodata published)
-		if _, err := s.lib.KeepInSource(id, "Kept in the project"); err != nil {
+		if _, err := s.lib.KeepInSource(id, "Kept in the project", in.SkipTest); err != nil {
 			libraryErr(w, err)
 			return
 		}
 	} else {
-		s.lib.DiscardProposal(id)
-	}
-	if !keep {
-		if err := s.st.SetLibraryStatus(id, store.ItemDeclined); err != nil {
-			fail(w, err)
+		// fisierele si starea, sub lock-ul item-ului
+		if err := s.lib.Decline(id); err != nil {
+			libraryErr(w, err)
 			return
 		}
 	}
@@ -441,7 +445,7 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 		fail(w, badRequest(err.Error()))
 		return
 	}
-	conflict := func() { writeErr(w, http.StatusConflict, "the library already has a "+v.Kind+" named \""+v.Name+"\"") }
+	conflict := func() { writeErr(w, http.StatusConflict, s.lib.NameTakenMsg(v.Kind, v.Name)) }
 	if _, err := s.st.FindLibraryItem(v.Kind, v.Name); err == nil {
 		conflict()
 		return
@@ -488,7 +492,8 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if _, err := s.lib.Publish(it.ID, ""); err != nil {
+	// elementul facut de utilizator nu se testeaza: comanda e a lui
+	if _, err := s.lib.PublishSkipTest(it.ID, ""); err != nil {
 		_ = s.st.DeleteLibraryItem(it.ID)
 		s.lib.DiscardProposal(it.ID)
 		libraryErr(w, err)

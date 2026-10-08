@@ -549,6 +549,9 @@ func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	if s.lib != nil {
+		s.lib.RemoveProjectBuilds(id) // build-urile Library, cu wrapper-ele de secrete
+	}
 	// fisierele proiectului; folderul de lucru nu se atinge niciodata
 	if err := os.RemoveAll(filepath.Join(s.dirs.Projects, strconv.FormatInt(id, 10))); err != nil {
 		log.Printf("cannot delete files of project %d: %v", id, err)

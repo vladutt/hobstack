@@ -123,7 +123,7 @@ func TestProposeLibraryRejects(t *testing.T) {
 	if _, err := f.tm.ProposeLibraryItem(c, good); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.tm.ProposeLibraryItem(c, good); err == nil || !strings.Contains(err.Error(), "already has") {
+	if _, err := f.tm.ProposeLibraryItem(c, good); err == nil || !strings.Contains(err.Error(), "already exists in") {
 		t.Fatalf("duplicat: %v", err)
 	}
 	_ = dir
@@ -205,7 +205,7 @@ func TestProposeLibraryLocalMCP(t *testing.T) {
 	}
 
 	// remote: fara fisiere, fara probe
-	in3 := mcp.LibraryInput{Kind: "mcp", Name: "remote-one", Description: "d", URL: "https://example.com/mcp", Secrets: []string{"API_TOKEN"}}
+	in3 := mcp.LibraryInput{Kind: "mcp", Name: "remote-one", Description: "d", URL: "https://example.com/mcp", Secrets: []string{"AUTH_TOKEN"}}
 	if _, err := f.tm.ProposeLibraryItem(c, in3); err != nil {
 		t.Fatal(err)
 	}

@@ -476,3 +476,125 @@ func TestBuildHitCreatesNoTmp(t *testing.T) {
 		t.Fatalf("%v %v", b1.TurnLines, b2.TurnLines)
 	}
 }
+
+// un build refolosit (hit) isi reimprospateaza mtime-ul, altfel cleanOld l-ar sterge desi runurile il folosesc
+func TestBuildHitRefreshesMtime(t *testing.T) {
+	st, lib, _ := newEnv(t)
+	p := project(t, st)
+	publishSkill(t, st, lib, p, "tone", "---\nname: tone\ndescription: d\n---\nx\n")
+	b1, err := lib.Build(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	os.Chtimes(b1.PluginDir, old, old)
+	b2, err := lib.Build(p.ID) // hit
+	if err != nil || b2.PluginDir != b1.PluginDir {
+		t.Fatal(b2.PluginDir, err)
+	}
+	// alt build al proiectului (alta instalare) -> cleanOld; folderul refolosit nu are voie sa dispara
+	publishSkill(t, st, lib, p, "tone2", "---\nname: tone2\ndescription: d\n---\nx\n")
+	b3, err := lib.Build(p.ID)
+	if err != nil || b3.PluginDir == b1.PluginDir {
+		t.Fatal(b3.PluginDir, err)
+	}
+	if !dirExists(b1.PluginDir) {
+		t.Fatal("folderul refolosit a fost sters")
+	}
+}
+
+func TestBuildDirNameHidesSecretValues(t *testing.T) {
+	st, lib, src := newEnv(t)
+	p := project(t, st)
+	os.WriteFile(filepath.Join(src, "go.sh"), []byte("#!/bin/sh\necho hi\n"), 0o755)
+	tool := store.LibraryItem{Kind: store.KindTool, Name: "go", Description: "d", Status: store.ItemProposed, Entry: "go.sh", Secrets: []string{"META_TOKEN"}}
+	st.AddLibraryItem(&tool)
+	lib.CopyProposal(tool.ID, src, []string{"go.sh"})
+	v, err := lib.Publish(tool.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Install(p.ID, tool.ID, v.ID)
+	st.SetSecret(p.ID, tool.ID, "META_TOKEN", "one")
+	h1, _ := lib.inputsHash(p.ID, mustInstalls(t, st, p.ID))
+	if fi, err := os.Stat(filepath.Join(lib.Root, ".hashkey")); err != nil || fi.Mode().Perm() != 0o600 || fi.Size() != 32 {
+		t.Fatalf("hashkey: %v %v", fi, err)
+	}
+	// aceeasi cheie dupa repornire -> acelasi hash; alt secret -> alt hash
+	lib2 := New(lib.Root, st)
+	if h2, _ := lib2.inputsHash(p.ID, mustInstalls(t, st, p.ID)); h2 != h1 {
+		t.Fatal("hash instabil")
+	}
+	st.SetSecret(p.ID, tool.ID, "META_TOKEN", "two")
+	if h3, _ := lib.inputsHash(p.ID, mustInstalls(t, st, p.ID)); h3 == h1 {
+		t.Fatal("secretul nu schimba hash-ul")
+	}
+	// fara cheie, hash-ul ar fi reproductibil din valoare: cu alta cheie iese altul
+	other := New(filepath.Join(t.TempDir(), "library"), st)
+	if h4, _ := other.inputsHash(p.ID, mustInstalls(t, st, p.ID)); h4 == h1 {
+		t.Fatal("hash-ul nu depinde de cheie")
+	}
+}
+
+func mustInstalls(t *testing.T, st *store.Store, pid int64) []store.LibraryInstall {
+	t.Helper()
+	ins, err := st.ListInstalls(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ins
+}
+
+func TestSweepRunFilesRemovesAllAtStartup(t *testing.T) {
+	st, lib, _ := newEnv(t)
+	path, err := lib.WriteMCPConfig("run1", "{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	New(lib.Root, st)
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("fisierul run-ului a ramas dupa pornire")
+	}
+}
+
+func TestPublishSkipTestLocalMCP(t *testing.T) {
+	st, lib, _ := newEnv(t)
+	p := project(t, st)
+	it := proposeMCP(t, st, lib, p, "slowsrv", "definitely-not-a-command-xyz", nil)
+	v, err := lib.PublishSkipTest(it.ID, "")
+	if err != nil || v.Version != "1.0" {
+		t.Fatal(v, err)
+	}
+	got, _ := st.GetLibraryItem(it.ID)
+	if got.Status != store.ItemPublished || len(got.ToolNames) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestDeclineUnderLock(t *testing.T) {
+	st, lib, _ := newEnv(t)
+	p := project(t, st)
+	it := proposeMCP(t, st, lib, p, "nope", "true", nil)
+	if err := lib.Decline(it.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.GetLibraryItem(it.ID); got.Status != store.ItemDeclined {
+		t.Fatal(got.Status)
+	}
+	if err := lib.Decline(it.ID); err != ErrStatus {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestRemoveProjectBuilds(t *testing.T) {
+	_, lib, _ := newEnv(t)
+	for _, n := range []string{"7-aaaa", "7.tmp-x", "77-bbbb"} {
+		os.MkdirAll(filepath.Join(lib.BuildRoot(), n), 0o755)
+	}
+	lib.RemoveProjectBuilds(7)
+	for n, want := range map[string]bool{"7-aaaa": false, "7.tmp-x": false, "77-bbbb": true} {
+		if dirExists(filepath.Join(lib.BuildRoot(), n)) != want {
+			t.Errorf("%s exists != %v", n, want)
+		}
+	}
+}

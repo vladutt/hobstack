@@ -272,7 +272,7 @@ var proposeLibraryTool = Tool{
 		"args":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "mcp (local): its arguments; ${DIR} is the server's folder"},
 		"url":         str("mcp (remote): the server URL"),
 		"needs":       map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"network", "write", "browser", "shell"}}},
-		"secrets":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Names of secrets each project provides, e.g. META_TOKEN"},
+		"secrets":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Names of secrets each project provides, e.g. META_TOKEN (not PATH, HOME, LD_*, DYLD_* and similar). A remote mcp can only have AUTH_TOKEN (sent as a Bearer token). A tool with secrets cannot use run as its entry."},
 	}),
 }
 

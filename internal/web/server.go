@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -198,7 +199,7 @@ func guard(next http.Handler) http.Handler {
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick, "models": models.All, "editors": s.editors()})
+	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick, "models": models.All, "editors": s.editors(), "os": runtime.GOOS})
 }
 
 // badRequest e o eroare de validare; mesajul ajunge ca atare in UI (400).

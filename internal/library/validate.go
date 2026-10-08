@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -17,8 +18,13 @@ var (
 	needsAllowed = []string{"network", "write", "browser", "shell"}
 )
 
-// ValidSecretName: numele unui secret arata ca META_TOKEN (devine variabila de mediu).
-func ValidSecretName(s string) bool { return secretNameRe.MatchString(s) }
+// reservedEnv: variabile care schimba cum porneste un proces; un secret cu acest nume ar putea deturna tool-ul.
+var reservedEnv = []string{"PATH", "HOME", "SHELL", "LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "IFS", "PS4"}
+
+// ValidSecretName: numele unui secret arata ca META_TOKEN (devine variabila de mediu), fara nume rezervate.
+func ValidSecretName(s string) bool {
+	return secretNameRe.MatchString(s) && !slices.Contains(reservedEnv, s) && !strings.HasPrefix(s, "DYLD_")
+}
 
 // ValidateInput verifica tot ce nu cere disc, pentru propunerile agentilor si pentru elementele facute de utilizator.
 // Intoarce campurile curatate. byUser: un server MCP local poate lipsi de fisiere (de ex. `npx -y pachet`).
@@ -50,6 +56,9 @@ func ValidateInput(in mcp.LibraryInput, byUser bool) (mcp.LibraryInput, error) {
 		if !secretNameRe.MatchString(s) {
 			return in, fmt.Errorf("secrets: %q must look like META_TOKEN (capital letters, digits, underscores)", s)
 		}
+		if !ValidSecretName(s) {
+			return in, fmt.Errorf("secrets: %q is reserved (it changes how processes start); pick another name", s)
+		}
 	}
 	remote := in.Kind == store.KindMCP && in.URL != ""
 	switch in.Kind {
@@ -61,6 +70,10 @@ func ValidateInput(in mcp.LibraryInput, byUser bool) (mcp.LibraryInput, error) {
 		if in.Entry == "" || !slices.Contains(in.Files, in.Entry) {
 			return in, errors.New("a tool needs entry: one of the files, the one to run")
 		}
+		// wrapper-ul cu secrete se scrie in bin/<name>/run si ar suprascrie fisierul
+		if len(in.Secrets) > 0 && filepath.Clean(in.Entry) == "run" {
+			return in, errors.New(`entry: "run" is reserved for tools with secrets; rename the file`)
+		}
 	case store.KindMCP:
 		if remote {
 			u, err := url.Parse(in.URL)
@@ -69,6 +82,10 @@ func ValidateInput(in mcp.LibraryInput, byUser bool) (mcp.LibraryInput, error) {
 			}
 			if in.Command != "" {
 				return in, errors.New("an mcp is either remote (url) or local (command), not both")
+			}
+			// serverul remote primeste doar AUTH_TOKEN, ca Authorization: Bearer
+			if len(in.Secrets) > 1 || (len(in.Secrets) == 1 && in.Secrets[0] != "AUTH_TOKEN") {
+				return in, errors.New(`secrets: a remote mcp can only have AUTH_TOKEN (sent as "Authorization: Bearer"), or none`)
 			}
 		} else if in.Command == "" {
 			return in, errors.New("an mcp needs command (local) or url (remote)")

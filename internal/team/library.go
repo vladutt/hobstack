@@ -30,7 +30,7 @@ func (t *Team) checkProposalRoom(projectID int64, in mcp.LibraryInput) error {
 		return fmt.Errorf("this project already has %d proposals waiting for the user; wait for a decision before proposing more", maxOpenProposals)
 	}
 	if _, err := t.st.FindLibraryItem(in.Kind, in.Name); err == nil {
-		return fmt.Errorf("the library already has a %s named %q; pick another name", in.Kind, in.Name)
+		return fmt.Errorf("%s; pick another name", t.lib.NameTakenMsg(in.Kind, in.Name))
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
@@ -109,7 +109,7 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 		}
 	}
 	if err := t.st.AddLibraryItem(&it); errors.Is(err, store.ErrConflict) {
-		return "", fmt.Errorf("the library already has a %s named %q; pick another name", in.Kind, in.Name)
+		return "", fmt.Errorf("%s; pick another name", t.lib.NameTakenMsg(in.Kind, in.Name))
 	} else if err != nil {
 		return "", err
 	}

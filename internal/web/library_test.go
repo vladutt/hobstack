@@ -414,18 +414,105 @@ func TestLibraryCreateByUser(t *testing.T) {
 	}
 }
 
-func TestLibraryCreateLocalMCPProbeFailureIs422AndLeavesNothing(t *testing.T) {
+// un element facut de utilizator nu se testeaza: comanda e a lui
+func TestLibraryCreateLocalMCPSkipsProbe(t *testing.T) {
 	e := setupLib(t)
-	code, raw := e.do(t, "POST", "/api/library", map[string]any{"kind": "mcp", "name": "dead-srv", "description": "d",
+	code, raw := e.do(t, "POST", "/api/library", map[string]any{"kind": "mcp", "name": "slow-srv", "description": "d",
 		"command": "definitely-not-a-command-xyz"})
-	if code != 422 || !strings.Contains(string(raw), "did not answer tools/list") {
+	if code != 201 {
 		t.Fatalf("%d %s", code, raw)
 	}
-	if items, _ := e.st.ListLibraryItems(""); len(items) != 0 {
-		t.Fatalf("leftover: %+v", items)
+	it, err := e.st.FindLibraryItem("mcp", "slow-srv")
+	if err != nil || it.Status != store.ItemPublished || len(it.ToolNames) != 0 {
+		t.Fatalf("%+v %v", it, err)
 	}
-	if _, err := e.st.FindLibraryItem("mcp", "dead-srv"); err == nil {
-		t.Fatal("hidden row left behind")
+}
+
+// proba esuata la Publish da 422; "Publish without test" ({skipTest:true}) publica fara nume de tool-uri
+func TestLibraryPublishSkipTest(t *testing.T) {
+	e := setupLib(t)
+	p := e.project(t)
+	it := e.propose(t, store.KindMCP, "dead-local", p.ID, map[string]string{"x": "y"}, func(i *store.LibraryItem) {
+		i.Transport, i.Command = "local", "definitely-not-a-command-xyz"
+	})
+	path := "/api/library/" + itoa(it.ID) + "/publish"
+	if code, raw := e.do(t, "POST", path, nil); code != 422 || !strings.Contains(string(raw), "did not answer tools/list") {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if code, raw := e.do(t, "POST", path, map[string]any{"skipTest": true}); code != 200 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	got, _ := e.st.GetLibraryItem(it.ID)
+	if got.Status != store.ItemPublished || len(got.ToolNames) != 0 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestLibraryKeepSkipTest(t *testing.T) {
+	e := setupLib(t)
+	p := e.project(t)
+	it := e.propose(t, store.KindMCP, "dead-keep", p.ID, map[string]string{"x": "y"}, func(i *store.LibraryItem) {
+		i.Transport, i.Command = "local", "definitely-not-a-command-xyz"
+	})
+	path := "/api/library/" + itoa(it.ID) + "/decline"
+	if code, _ := e.do(t, "POST", path, nil); code != 422 {
+		t.Fatalf("keep without skipTest: %d", code)
+	}
+	if code, raw := e.do(t, "POST", path, map[string]any{"skipTest": true}); code != 204 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if ins, _ := e.st.ListInstalls(p.ID); len(ins) != 1 {
+		t.Fatalf("not installed: %+v", ins)
+	}
+}
+
+// keep=false trece prin Lib (sub lock-ul item-ului); numele ramane ocupat si eroarea spune de cine
+func TestLibraryDeclineDiscardAndNameTaken(t *testing.T) {
+	e := setupLib(t)
+	p := e.project(t)
+	it := e.propose(t, store.KindSkill, "gone-skill", p.ID, map[string]string{"SKILL.md": "a"}, nil)
+	if code, raw := e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/decline", map[string]any{"keep": false}); code != 204 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	got, _ := e.st.GetLibraryItem(it.ID)
+	if got.Status != store.ItemDeclined {
+		t.Fatalf("status %s", got.Status)
+	}
+	if _, err := os.Stat(e.lib.ProposalDir(it.ID)); err == nil {
+		t.Fatal("proposal files left")
+	}
+	if code, _ := e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/decline", map[string]any{"keep": false}); code != 409 {
+		t.Fatalf("second decline: %d", code)
+	}
+	code, raw := e.do(t, "POST", "/api/library", map[string]any{"kind": "skill", "name": "gone-skill", "description": "d", "content": "x"})
+	if code != 409 || !strings.Contains(string(raw), "declined skill") || !strings.Contains(string(raw), p.Name) {
+		t.Fatalf("%d %s", code, raw)
+	}
+}
+
+// la stergerea proiectului dispar si build-urile lui (au wrapper-e cu secrete)
+func TestLibraryDeleteProjectRemovesBuilds(t *testing.T) {
+	e := setupLib(t)
+	p := e.project(t)
+	other := e.project(t)
+	for _, id := range []int64{p.ID, other.ID} {
+		os.MkdirAll(filepath.Join(e.lib.BuildRoot(), itoa(id)+"-abcd1234", "bin"), 0o755)
+	}
+	if code, raw := e.do(t, "DELETE", "/api/projects/"+itoa(p.ID), nil); code != 204 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if _, err := os.Stat(filepath.Join(e.lib.BuildRoot(), itoa(p.ID)+"-abcd1234")); err == nil {
+		t.Fatal("build of the deleted project left")
+	}
+	if _, err := os.Stat(filepath.Join(e.lib.BuildRoot(), itoa(other.ID)+"-abcd1234")); err != nil {
+		t.Fatal("build of another project removed")
+	}
+}
+
+func TestInfoHasOS(t *testing.T) {
+	e := setup(t)
+	if _, raw := e.do(t, "GET", "/api/info", nil); !strings.Contains(string(raw), `"os":"`) {
+		t.Fatalf("%s", raw)
 	}
 }
 
