@@ -39,7 +39,7 @@ function titles(active) {
 }
 
 // busy: pune butonul pe "ocupat" cat dureaza actiunea; erorile apar ca toast (422 = mesajul de reparat)
-export async function run(btn, label, fn) {
+export async function run(btn, label, fn, onError) {
   const text = btn.textContent;
   btn.disabled = true;
   btn.classList.add("busy");
@@ -48,7 +48,7 @@ export async function run(btn, label, fn) {
     await fn();
     return true;
   } catch (err) {
-    toast(err.message);
+    if (onError) onError(err); else toast(err.message);
     return false;
   } finally {
     btn.disabled = false;
@@ -57,15 +57,52 @@ export async function run(btn, label, fn) {
   }
 }
 
+// commandOf: linia de comanda a unui server MCP local ("" pentru restul). Comanda e aleasa de agent
+// si rulata o data pe masina utilizatorului la Publish / Keep, deci apare pe orice card.
+export const commandOf = (it) => (it.kind === "mcp" && it.transport === "local" ? [it.command, ...(it.args || [])].join(" ") : "");
+
+export function cmdBox(it) {
+  const cmd = commandOf(it);
+  return cmd ? el("div", { class: "lib-cmd" }, el("span", { class: "hint" }, "Runs on your machine: "), el("code", { class: "mono" }, cmd)) : null;
+}
+
+// testedAction: Publish / Keep. La un server local cere confirmarea cu comanda exacta; daca testul pica,
+// arata eroarea si "Publish without test" (tot cu confirmare), care trimite skipTest.
+async function testedAction(it, btn, { verb, busy, path, body, success, onDone }) {
+  const cmd = commandOf(it);
+  if (cmd && !confirm(`${verb}ing runs this command once on your machine to test it: ${cmd}. Continue?`)) return;
+  const host = btn.parentElement;
+  const clear = () => host?.parentElement?.querySelectorAll(":scope > .lib-fail").forEach((n) => n.remove());
+  const attempt = async (button, skipTest) => {
+    clear();
+    const payload = skipTest ? { ...body, skipTest: true } : body;
+    const ok = await run(button, cmd && !skipTest ? "Testing…" : busy, () => api(path, { method: "POST", body: payload }), (err) => {
+      if (!cmd) { toast(err.message); return; }
+      const skip = el("button", { type: "button", class: "btn small ghost" }, `${verb} without test`);
+      skip.addEventListener("click", () => {
+        if (confirm(`${verb} without testing? Agents will run this command unverified: ${cmd}. Continue?`)) attempt(skip, true);
+      });
+      host?.insertAdjacentElement("afterend", el("div", { class: "lib-fail" },
+        el("span", { class: "lib-fail-msg" }, err.message), skip));
+    });
+    if (ok) { clear(); toast(success, "ok"); onDone?.(); }
+  };
+  await attempt(btn, false);
+}
+
+export function publishItem(it, btn, onDone) {
+  return testedAction(it, btn, { verb: "Publish", busy: "Publishing…", path: `/api/library/${it.id}/publish`, body: {},
+    success: `${it.name} is in the library`, onDone });
+}
+
+export function keepItem(it, btn, onDone) {
+  return testedAction(it, btn, { verb: "Keep", busy: "Keeping…", path: `/api/library/${it.id}/decline`, body: { keep: true },
+    success: `${it.name} kept in the project`, onDone });
+}
+
 function publishButton(it, onDone, cls = "btn primary") {
-  const slow = it.kind === "mcp" && it.transport === "local";
   const btn = el("button", { class: cls, type: "button" }, "Publish");
-  btn.addEventListener("click", async () => {
-    if (await run(btn, slow ? "Testing…" : "Publishing…", () => api(`/api/library/${it.id}/publish`, { method: "POST", body: {} }))) {
-      toast(`${it.name} is in the library`, "ok");
-      onDone();
-    }
-  });
+  btn.addEventListener("click", () => publishItem(it, btn, onDone));
   return btn;
 }
 
@@ -78,9 +115,7 @@ function declineButtons(it, projects, onDone) {
   if (it.sourceProjectId) {
     const name = projects.get(it.sourceProjectId) || "the project";
     const keep = el("button", { class: "btn ghost keep", type: "button", title: "Not shared: it stays installed only in this project" }, `Keep in ${name}`);
-    keep.addEventListener("click", async () => {
-      if (await run(keep, "Keeping…", () => api(`/api/library/${it.id}/decline`, { method: "POST", body: { keep: true } }))) onDone();
-    });
+    keep.addEventListener("click", () => keepItem(it, keep, onDone));
     out.push(keep);
   }
   return out;
@@ -222,6 +257,7 @@ export async function libraryView(root, path) {
         el("p", { class: "lib-desc" }, it.description),
         el("p", { class: "lib-tested untested" }, el("span", { class: "dot-grey" }),
           local ? "Tested when you publish" : `Not tested \u00b7 remote ${it.url}`),
+        cmdBox(it),
         el("div", { class: "lib-actions" }, publishButton(it, done), reviewLink(it),
           el("span", { class: "grow" }), declineButtons(it, projects, done))),
       el("div", { class: "lib-prop-col" },
@@ -346,7 +382,8 @@ export async function libraryItemView(root, id, tab) {
         el("p", { class: "lib-text" }, "Agents in projects that installed this skill load SKILL.md when a task matches its description."));
     } else {
       box.append(el("h3", { class: "lib-h" }, "Connection"),
-        el("pre", { class: "md-pre lib-call" }, d.transport === "remote" ? d.url : [d.command, ...(d.args || [])].join(" ")),
+        el("pre", { class: "md-pre lib-call" }, d.transport === "remote" ? d.url : commandOf(d)),
+        d.transport === "remote" ? null : el("p", { class: "hint" }, "This command runs on your machine, once to test it when you publish and then whenever an agent in a project that installed it starts."),
         (d.toolNames || []).length ? el("h3", { class: "lib-h" }, "Exposes") : null,
         (d.toolNames || []).length ? el("pre", { class: "md-pre lib-call" }, d.toolNames.join("\n")) : null);
     }
@@ -366,7 +403,7 @@ export async function libraryItemView(root, id, tab) {
 
   function code() {
     const box = el("div", { class: "lib-code" });
-    if (!d.files.length) return el("p", { class: "hint" }, d.kind === "mcp" && d.transport === "remote" ? "A remote server has no files." : "No files.");
+    if (!d.files.length) return el("div", {}, cmdBox(d), el("p", { class: "hint" }, d.kind === "mcp" && d.transport === "remote" ? "A remote server has no files." : "No files."));
     const pre = el("pre", { class: "md-pre lib-file" }, "Loading…");
     const names = el("div", { class: "lib-files" });
     async function open(name) {
@@ -379,7 +416,7 @@ export async function libraryItemView(root, id, tab) {
         pre.textContent = res.ok ? await res.text() : ((await res.json().catch(() => ({}))).error || "Cannot show this file.");
       } catch (err) { pre.textContent = err.message; }
     }
-    box.append(el("p", { class: "hint" }, d.filesFrom === "proposal" ? "This is the proposed code. Nothing runs until you publish." : "Code of the latest version."), names, pre);
+    box.append(cmdBox(d), el("p", { class: "hint" }, d.filesFrom === "proposal" ? "This is the proposed code. Nothing runs until you publish." : "Code of the latest version."), names, pre);
     open(d.files.find((f) => f.name === d.entry)?.name || d.files.find((f) => f.name === "SKILL.md")?.name || d.files[0].name);
     return box;
   }
@@ -465,7 +502,7 @@ function newForm(kind, onCreated) {
       if (mode.value === "remote") body.url = url.value.trim();
       else { body.command = command.value.trim(); body.args = args.value.split("\n").map((x) => x.trim()).filter(Boolean); }
     }
-    if (await run(create, mode.value === "local" && kind === "mcp" ? "Testing…" : "Creating…", () => api("/api/library", { method: "POST", body }))) {
+    if (await run(create, "Creating…", () => api("/api/library", { method: "POST", body }))) {
       toast(`${body.name} created`, "ok");
       close();
       onCreated();
@@ -482,7 +519,7 @@ function newForm(kind, onCreated) {
         kind === "tool" ? field("Entry file", entry, "The file agents run.") : null,
         kind === "tool" ? el("div", { class: "field" }, el("span", { class: "label" }, "Needs"), needs) : null,
         kind !== "mcp" ? field(kind === "skill" ? "SKILL.md" : "Code", content) : null,
-        kind !== "skill" ? field("Secrets", secrets) : null),
+        kind !== "skill" ? field("Secrets", secrets, kind === "mcp" ? "A remote server can only have AUTH_TOKEN (sent as a Bearer token). A local one gets each secret as an environment variable." : null) : null),
       el("div", { class: "lib-form-foot" },
         el("button", { class: "btn ghost", type: "button", onclick: close }, "Cancel"), el("span", { class: "grow" }), create)));
   overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });

@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { el, toast } from "./ui.js";
-import { run, chips } from "./library.js";
+import { run, chips, cmdBox, publishItem, keepItem } from "./library.js";
 
 // Cardurile Library din afara paginilor Library: propunerile din "Needs you", cardul
 // "Share to ... library?" din chat si sectiunea Instructions > Library a proiectului.
@@ -10,12 +10,8 @@ const KIND = { tool: "Tool", skill: "Skill", mcp: "MCP" };
 const statsCache = new Map(); // id propunere -> { files, lines }, ca sa nu recitim fisierele la fiecare redesenare
 const kindLabel = (it) => KIND[it.kind] || it.kind;
 
-// publish: POST publish cu starea "ocupat"; 422/409 apar ca toast
-function publish(it, btn, onDone) {
-  const slow = it.kind === "mcp" && it.transport === "local";
-  return run(btn, slow ? "Testing…" : "Publishing…", () => api(`/api/library/${it.id}/publish`, { method: "POST", body: {} }))
-    .then((ok) => { if (ok) { toast(`${it.name} is in the library`, "ok"); onDone?.(); } });
-}
+// publish: confirmare cu comanda (server local), erori si "Publish without test" sunt in publishItem
+const publish = publishItem;
 
 // needsProposalBox: cardul unei propuneri in banda "Needs you"
 export function libraryProposalBox(it, { onDone }) {
@@ -26,6 +22,7 @@ export function libraryProposalBox(it, { onDone }) {
       it.madeBy ? el("span", {}, `by ${it.madeBy}`) : null),
     el("p", { class: "question-text" }, el("code", { class: "lib-name" }, it.name)),
     it.description ? el("p", { class: "question-text hint" }, it.description) : null,
+    cmdBox(it),
     el("div", { class: "actions" },
       el("a", { class: "btn small", href: `#/library/item/${it.id}?tab=code` }, "Review"),
       el("span", { class: "grow" }), pub));
@@ -57,9 +54,7 @@ export function librarySharePrompt(it, { onDone }) {
   const pub = el("button", { type: "button", class: "btn primary" }, "Publish");
   pub.addEventListener("click", () => publish(it, pub, onDone));
   const keep = el("button", { type: "button", class: "btn ghost keep" }, "Keep in this project");
-  keep.addEventListener("click", async () => {
-    if (await run(keep, "Keeping…", () => api(`/api/library/${it.id}/decline`, { method: "POST", body: { keep: true } }))) onDone?.();
-  });
+  keep.addEventListener("click", () => keepItem(it, keep, onDone));
   const hasSecrets = (it.secrets || []).length > 0;
   return el("div", { class: "share-card" },
     el("div", { class: "share-title" }, el("span", { class: "dot-amber" }), `Share to ${kindLabel(it)} library?`),
@@ -67,6 +62,7 @@ export function librarySharePrompt(it, { onDone }) {
       el("code", { class: "lib-name" }, it.name),
       el("span", { class: "label-tag" }, it.kind === "tool" ? "script" : it.kind),
       el("span", { class: "grow" }), stats),
+    cmdBox(it),
     (it.needs || []).length || hasSecrets ? el("div", { class: "chips" }, chips(it)) : null,
     hasSecrets ? el("p", { class: "share-note" }, "Secrets stay in each project. Each project provides its own value when it installs it.") : null,
     el("div", { class: "share-actions" }, pub,
@@ -80,6 +76,7 @@ export function libraryInstalls(projectId) {
   const list = el("div", { class: "lib-installs" });
   const nodes = new Map(); // id element -> nodul randului
   const queues = new Map(); // id element -> coada de PUT-uri (un singur PUT pe rand odata)
+  let windows = false; // tool-urile cu secrete nu merg pe Windows (wrapper sh)
 
   // put: salveaza un rand si redeseneaza DOAR acel rand; celelalte randuri (cu secrete pe jumatate scrise) raman neatinse
   function put(r, body, okMsg) {
@@ -131,7 +128,9 @@ export function libraryInstalls(projectId) {
           if (confirm(`Remove the saved value for ${s.name}?`)) put(r, { installed: true, clear: [s.name] });
         } }, "Clear") : null);
     }) : [];
-    return el("div", { class: "lib-install" }, head, meta, ...secrets);
+    const winNote = windows && it.kind === "tool" && (it.secrets || []).length
+      ? el("p", { class: "hint" }, "Tools with secrets are off on Windows.") : null;
+    return el("div", { class: "lib-install" }, head, meta, winNote, ...secrets);
   }
 
   async function load() {
@@ -142,7 +141,7 @@ export function libraryInstalls(projectId) {
     list.replaceChildren(...(rows.length ? rows.map((r) => { const n = row(r); nodes.set(r.item.id, n); return n; })
       : [el("p", { class: "hint" }, "Nothing published yet. Published tools, skills and MCP servers show up here.")]));
   }
-  load();
+  api("/api/info").catch(() => ({})).then((i) => { windows = i.os === "windows"; load(); });
   return el("section", { class: "section" },
     el("h2", {}, "Library", el("span", { class: "hint" }, " · tools, skills and servers for this project")),
     el("p", { class: "hint" }, "Changes save immediately and apply on each agent's next run. Secrets are stored on this machine and never shown again."),
