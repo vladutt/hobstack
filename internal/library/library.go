@@ -319,7 +319,7 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 	}
 	prop := filepath.Join(l.Root, "proposals", strconv.FormatInt(itemID, 10))
 	if fi, err := os.Stat(prop); err != nil || !fi.IsDir() {
-		return store.LibraryVersion{}, errors.New("nothing to publish: no proposal files")
+		return store.LibraryVersion{}, UserError{"nothing to publish: no proposal files"}
 	}
 	// un server MCP local se testeaza aici, la actiunea utilizatorului (nu la propunerea agentului,
 	// care ar rula o comanda aleasa de agent in afara permisiunilor lui). Fara secrete.
@@ -334,7 +334,7 @@ func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
 			if r := []rune(msg); len(r) > 300 {
 				msg = string(r[:300]) + "..."
 			}
-			return store.LibraryVersion{}, errors.New("The server did not answer tools/list: " + msg)
+			return store.LibraryVersion{}, UserError{"The server did not answer tools/list: " + msg}
 		}
 		if err := l.St.SetLibraryToolNames(itemID, names); err != nil {
 			return store.LibraryVersion{}, err

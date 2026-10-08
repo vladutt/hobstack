@@ -19,6 +19,7 @@ import (
 	"foreman/internal/config"
 	"foreman/internal/draft"
 	"foreman/internal/events"
+	"foreman/internal/library"
 	"foreman/internal/models"
 	"foreman/internal/runner"
 	wizard "foreman/internal/setup" // alias: in pachetul web, "setup" e helper-ul din teste
@@ -47,6 +48,7 @@ type Server struct {
 	opener  Opener          // nil = butoanele "Deschide" nu sunt disponibile
 	wizard  *wizard.Manager // nil = wizard-ul "Proiect nou cu AI" nu e disponibil
 	drafts  *draft.Manager  // nil = "Let AI draft this agent" nu e disponibil
+	lib     *library.Lib    // nil = rutele Library raspund 503
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
@@ -137,6 +139,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/comments", s.commentTask)
 	mux.HandleFunc("PUT /api/tasks/{id}/todos/{pos}", s.setTodo)
 
+	mux.HandleFunc("GET /api/library", s.listLibrary)
+	mux.HandleFunc("POST /api/library", s.createLibraryItem)
+	mux.HandleFunc("GET /api/library/{id}", s.getLibraryItem)
+	mux.HandleFunc("GET /api/library/{id}/files/{path...}", s.libraryFile)
+	mux.HandleFunc("POST /api/library/{id}/publish", s.publishLibraryItem)
+	mux.HandleFunc("POST /api/library/{id}/decline", s.declineLibraryItem)
+	mux.HandleFunc("POST /api/library/{id}/unpublish", s.unpublishLibraryItem)
+	mux.HandleFunc("GET /api/projects/{id}/library", s.listProjectLibrary)
+	mux.HandleFunc("PUT /api/projects/{id}/library/{item}", s.putProjectLibrary)
+
 	mux.HandleFunc("GET /api/runs/{id}/events", s.streamRun)
 
 	// MCP: POST pentru JSON-RPC; GET doar ca sa raspunda 405 (Claude incearca si GET).
@@ -159,6 +171,15 @@ func guard(next http.Handler) http.Handler {
 		if host != "127.0.0.1" && host != "localhost" {
 			writeErr(w, http.StatusForbidden, "host not allowed")
 			return
+		}
+		// ".." intr-o cale /api: ServeMux ar raspunde cu redirect, noi refuzam direct
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			for _, seg := range strings.Split(r.URL.Path, "/") {
+				if seg == ".." {
+					writeErr(w, http.StatusBadRequest, "bad path")
+					return
+				}
+			}
 		}
 		// Content-Type: cererile care schimba starea trebuie sa fie JSON, chiar
 		// si fara body (stop/resume/accept), sau multipart cu header custom

@@ -325,3 +325,60 @@ func (s *Store) SetLibraryToolNames(id int64, names []string) error {
 	_, err := s.db.Exec(`UPDATE library_items SET tool_names = ? WHERE id = ?`, jsonList(names), id)
 	return err
 }
+
+// ListOpenProposals: propunerile in asteptare facute din proiect (cele mai vechi primele).
+func (s *Store) ListOpenProposals(projectID int64) ([]LibraryItem, error) {
+	rows, err := s.db.Query(`SELECT `+libraryItemCols+` FROM library_items
+		WHERE status = 'proposed' AND source_project_id = ? ORDER BY id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []LibraryItem{}
+	for rows.Next() {
+		it, err := scanLibraryItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// ListItemInstalls: proiectele in care e instalat elementul.
+func (s *Store) ListItemInstalls(itemID int64) ([]LibraryInstall, error) {
+	rows, err := s.db.Query(`SELECT project_id, item_id, version_id, enabled FROM library_installs
+		WHERE item_id = ? ORDER BY project_id`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []LibraryInstall{}
+	for rows.Next() {
+		var in LibraryInstall
+		if err := rows.Scan(&in.ProjectID, &in.ItemID, &in.VersionID, &in.Enabled); err != nil {
+			return nil, err
+		}
+		out = append(out, in)
+	}
+	return out, rows.Err()
+}
+
+// InstallCounts: in cate proiecte e instalat fiecare element (id element -> numar).
+func (s *Store) InstallCounts() (map[int64]int, error) {
+	rows, err := s.db.Query(`SELECT item_id, COUNT(*) FROM library_installs GROUP BY item_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}

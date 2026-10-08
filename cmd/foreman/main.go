@@ -95,7 +95,8 @@ func start(args []string) error {
 	mgr := runner.NewManager(claudeBin, paths.Logs)
 	tm := team.New(st, mgr, hub, url)
 	tm.SetFilesRoot(paths.Projects)
-	tm.SetLibrary(library.New(filepath.Join(paths.Root, "library"), st))
+	lib := library.New(filepath.Join(paths.Root, "library"), st)
+	tm.SetLibrary(lib)
 	// dupa un restart: run-urile vechi devin "interrupted", task-urile in lucru revin in coada
 	// si echipele pornesc singure (pauza o pune doar utilizatorul, cu Stop team)
 	if err := tm.Recover(); err != nil {
@@ -113,6 +114,7 @@ func start(args []string) error {
 		web.Dirs{Projects: paths.Projects, Workspaces: paths.Workspaces}, picker.Pick, picker.Available())
 	webSrv.SetSetup(sm)
 	webSrv.SetDraft(dm)
+	webSrv.SetLibrary(lib)
 	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
 	webSrv.SetOpener(opener.New())
 

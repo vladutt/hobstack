@@ -3,80 +3,16 @@ package team
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
-	"regexp"
 	"slices"
-	"strings"
 
+	"foreman/internal/library"
 	"foreman/internal/mcp"
 	"foreman/internal/store"
 )
 
 // maxOpenProposals: cate propuneri deschise poate avea un proiect.
 const maxOpenProposals = 3
-
-var (
-	itemNameRe   = regexp.MustCompile(`^[a-z][a-z0-9-]{1,39}$`)
-	secretNameRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
-	needsAllowed = []string{"network", "write", "browser", "shell"}
-)
-
-// validateLibraryInput verifica tot ce nu cere disc. Intoarce campurile curatate.
-func validateLibraryInput(in mcp.LibraryInput) (mcp.LibraryInput, error) {
-	in.Name = strings.TrimSpace(in.Name)
-	in.Description = strings.TrimSpace(in.Description)
-	in.Entry = strings.TrimSpace(in.Entry)
-	in.Command = strings.TrimSpace(in.Command)
-	in.URL = strings.TrimSpace(in.URL)
-	if in.Kind != store.KindTool && in.Kind != store.KindSkill && in.Kind != store.KindMCP {
-		return in, errors.New("kind: tool, skill or mcp")
-	}
-	if !itemNameRe.MatchString(in.Name) {
-		return in, errors.New("name: lowercase letters, digits and dashes, 2-40 characters, starting with a letter (e.g. pdf-offer)")
-	}
-	if n := len([]rune(in.Description)); n < 1 || n > 300 {
-		return in, errors.New("description: 1-300 characters")
-	}
-	for _, n := range in.Needs {
-		if !slices.Contains(needsAllowed, n) {
-			return in, fmt.Errorf("needs: %q is not one of %s", n, strings.Join(needsAllowed, ", "))
-		}
-	}
-	for _, s := range in.Secrets {
-		if !secretNameRe.MatchString(s) {
-			return in, fmt.Errorf("secrets: %q must look like META_TOKEN (capital letters, digits, underscores)", s)
-		}
-	}
-	remote := in.Kind == store.KindMCP && in.URL != ""
-	switch in.Kind {
-	case store.KindSkill:
-		if !slices.Contains(in.Files, "SKILL.md") {
-			return in, errors.New("a skill needs SKILL.md in files")
-		}
-	case store.KindTool:
-		if in.Entry == "" || !slices.Contains(in.Files, in.Entry) {
-			return in, errors.New("a tool needs entry: one of the files, the one to run")
-		}
-	case store.KindMCP:
-		if remote {
-			u, err := url.Parse(in.URL)
-			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-				return in, errors.New("url: a full http(s) address")
-			}
-			if in.Command != "" {
-				return in, errors.New("an mcp is either remote (url) or local (command), not both")
-			}
-		} else if in.Command == "" {
-			return in, errors.New("an mcp needs command (local) or url (remote)")
-		}
-	}
-	// mcp remote: fisierele sunt optionale (nu e nimic de pornit local); in rest cel putin unul
-	if !remote && len(in.Files) == 0 {
-		return in, errors.New("files: at least one file")
-	}
-	return in, nil
-}
 
 // checkProposalRoom verifica limita de propuneri deschise si numele liber. Se cheama cu t.work blocat.
 func (t *Team) checkProposalRoom(projectID int64, in mcp.LibraryInput) error {
@@ -105,7 +41,7 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 	if c.SetupID != "" || c.DraftID != "" || !c.CanWrite {
 		return "", errors.New("propose_library_item is only for agents that can write files")
 	}
-	in, err := validateLibraryInput(in)
+	in, err := library.ValidateInput(in, false)
 	if err != nil {
 		return "", err
 	}
