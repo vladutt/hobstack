@@ -28,11 +28,15 @@ din alte task-uri.
 
 ```
 task_todos
-  id, task_id, position, text, done_at (NULL = deschis), done_by ('user' | agent_id), created_at
+  id, task_id, position, text, done_at (NULL = deschis), done_by ("You" sau numele agentului), created_at
 ```
 
 Comentariile sunt `task_events` cu `kind = comment` (decis la plan: fara tabel separat).
-`task_events` primeste `todo_added`, `todo_done`, `comment` (istoric si tab-ul Activity).
+`task_events` primeste `left_for_user`, `todo_done`, `todo_reopened`, `comment` (istoric si tab-ul Activity). `todo_done` se scrie
+cand agentul (tick_left_for_user) sau utilizatorul bifeaza; `todo_reopened` cand utilizatorul debifeaza. Comentariul
+utilizatorului ajunge la agentul care a lasat punctele (actorul ultimului `left_for_user`, daca mai exista; altfel asignatul),
+nu neaparat la asignatul curent (in etape asignatul se muta). Mesajul lui si raspunsurile tool-urilor listeaza punctele
+deschise cu numere; seful nu primeste nota pentru comentarii.
 
 ## MCP
 
