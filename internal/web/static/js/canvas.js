@@ -2,9 +2,9 @@
 // (linie plina cu sageata) si review-uri (linie punctata amber).
 // Totul se construieste cu svg()/el(), niciodata cu innerHTML.
 import { api } from "./api.js";
-import { el, svg, kindOf, agentBody, folderOf, toast } from "./ui.js";
+import { el, svg, kindOf, toneOf, agentBody, folderOf, toast } from "./ui.js";
 
-const NODE_W = 184, NODE_H = 64, YOU_W = 64, YOU_H = 30, TOP = 16, LEVEL = 110;
+const NODE_W = 196, NODE_H = 72, YOU_W = 84, YOU_H = 34, TOP = 16, LEVEL = 120;
 const DRAG_PX = 4; // sub pragul asta e click, nu mutare
 
 // autoLayout aseaza pe niveluri (dupa adancimea in arbore) doar agentii fara pozitie salvata.
@@ -28,6 +28,13 @@ function autoLayout(agents, width) {
 }
 
 const shorten = (s, n = 26) => (s.length > n ? s.slice(0, n - 3) + "..." : s);
+
+// modelShort: "claude-opus-4-8" -> "Opus 4.8", "sonnet" -> "Sonnet"
+function modelShort(id) {
+  const parts = String(id || "").replace(/^claude-/, "").split("-");
+  if (!parts[0]) return "";
+  return [parts[0].charAt(0).toUpperCase() + parts[0].slice(1), parts.slice(1).join(".")].filter(Boolean).join(" ");
+}
 
 // onCreate(pos, link): agent nou; pos e {x, y} in coordonate SVG sau null (butonul "+ Agent"),
 // link e {parentId, detached}: sub un agent, legat de "Tu" sau nelegat.
@@ -144,14 +151,22 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
     if (!width || !height) return; // inca nu e in pagina: ResizeObserver ne cheama
     const agents = project.agents;
     pos = autoLayout(agents, width);
-    youPos = { x: width / 2 - YOU_W / 2, y: TOP };
+    // "Tu" sta deasupra radacinilor (agentii legati direct de utilizator)
+    const roots = agents.filter((a) => !a.parentId && !a.detached).map((a) => pos.get(a.id)).filter(Boolean);
+    youPos = roots.length
+      ? { x: roots.reduce((s, p) => s + p.x + NODE_W / 2, 0) / roots.length - YOU_W / 2, y: Math.min(...roots.map((p) => p.y)) - YOU_H - 56 }
+      : { x: width / 2 - YOU_W / 2, y: TOP };
 
-    // reuniunea [0,0,width,height] cu marginile nodurilor + 24
-    let minX = 0, minY = 0, maxX = width, maxY = height;
+    // cutia nodurilor (+ 32 margine); viewBox-ul e cel putin cat canvas-ul, ca un graf
+    // mic sa nu fie marit, si centrat pe orizontala pe noduri
+    let bx0 = youPos.x, by0 = youPos.y, bx1 = youPos.x + YOU_W, by1 = youPos.y + YOU_H;
     for (const p of pos.values()) {
-      minX = Math.min(minX, p.x - 24); minY = Math.min(minY, p.y - 24);
-      maxX = Math.max(maxX, p.x + NODE_W + 24); maxY = Math.max(maxY, p.y + NODE_H + 24);
+      bx0 = Math.min(bx0, p.x); by0 = Math.min(by0, p.y);
+      bx1 = Math.max(bx1, p.x + NODE_W); by1 = Math.max(by1, p.y + NODE_H);
     }
+    bx0 -= 32; by0 -= 32; bx1 += 32; by1 += 32;
+    const vw = Math.max(bx1 - bx0, width), vh = Math.max(by1 - by0, height);
+    let minX = (bx0 + bx1) / 2 - vw / 2, minY = by0, maxX = minX + vw, maxY = minY + vh;
     if (lastView && lastView.width === width && lastView.height === height) {
       const [a, b, c, d] = lastView.box;
       minX = Math.min(minX, a); minY = Math.min(minY, b); maxX = Math.max(maxX, c); maxY = Math.max(maxY, d);
@@ -164,7 +179,7 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
         svg("path", { class: "arrow", d: "M0 0 L10 5 L0 10 z" })),
       svg("marker", { id: "arrow-review", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" },
         svg("path", { class: "arrow review", d: "M0 0 L10 5 L0 10 z" })),
-      svg("clipPath", { id: "node-clip" }, svg("rect", { x: 0, y: 0, width: NODE_W, height: NODE_H, rx: 10 })));
+      svg("clipPath", { id: "node-clip" }, svg("rect", { x: 0, y: 0, width: NODE_W, height: NODE_H, rx: 12 })));
 
     const edgeLayer = svg("g", { class: "edges" });
     edges = [];
@@ -201,33 +216,42 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete }) 
 
   function youNode() {
     return svg("g", { class: "node-you", transform: `translate(${youPos.x} ${youPos.y})` },
-      svg("rect", { class: "card", width: YOU_W, height: YOU_H, rx: 8 }),
-      svg("text", { class: "you-label", x: YOU_W / 2, y: YOU_H / 2 + 4, "text-anchor": "middle" }, "You"),
+      svg("rect", { class: "card", width: YOU_W, height: YOU_H, rx: YOU_H / 2 }),
+      svg("text", { class: "you-label", x: YOU_W / 2, y: YOU_H / 2 + 5, "text-anchor": "middle" }, "You"),
       handle(YOU_W / 2, YOU_H, "you"));
   }
 
   function agentNode(a) {
     const p = pos.get(a.id);
-    const dot = "status-dot " + (a.status || "idle").toLowerCase();
+    const status = (a.status || "idle").toLowerCase();
+    const asks = (project.questions || []).some((q) => q.agentId === a.id);
+    const [tone, ink] = toneOf(a.name, kindOf(a));
+    // linia de stare: ce face agentul acum (sau de ce sta)
+    const state = a.detached ? ["detached", "asks"]
+      : asks ? ["needs you", "asks"]
+      : status === "working" ? [a.currentTask ? `working \u00b7 T-${a.currentTask.number}` : "working", "working"]
+      : status === "queued" ? ["queued", "queued"]
+      : ["idle", "idle"];
+    const folder = (project.folders || []).length > 1 ? folderOf(project, a)?.name : "";
     const del = svg("g", { class: "node-x", role: "button", "aria-label": "Delete agent " + a.name, transform: `translate(${NODE_W - 2} 2)` },
       svg("circle", { r: 9 }), svg("path", { d: "M -3.5 -3.5 L 3.5 3.5 M 3.5 -3.5 L -3.5 3.5" }));
     del.addEventListener("pointerdown", (e) => e.stopPropagation()); // nu porneste mutarea nodului
     del.addEventListener("click", (e) => { e.stopPropagation(); onDelete(a.id); });
-    const g = svg("g", { class: "node" + (a.detached ? " detached" : ""), "data-agent": a.id, transform: `translate(${p.x} ${p.y})` },
-      // tooltip: agentul a fost adaugat de un lider
-      a.createdBy ? svg("title", {}, "Added by " + (project.agents.find((x) => x.id === a.createdBy)?.name || "a lead")) : null,
+    const tip = [a.createdBy ? "Added by " + (project.agents.find((x) => x.id === a.createdBy)?.name || "a lead") : "",
+      a.responsibilities ? "Takes: " + a.responsibilities : ""].filter(Boolean).join("\n");
+    const g = svg("g", {
+      class: "node" + (a.detached ? " detached" : "") + (status === "working" ? " working" : "") + (asks ? " asks" : ""),
+      "data-agent": a.id, transform: `translate(${p.x} ${p.y})`,
+    },
+      tip ? svg("title", {}, tip) : null,
       svg("g", { "clip-path": "url(#node-clip)" },
-        svg("rect", { class: "card", width: NODE_W, height: NODE_H, rx: 10 }),
-        svg("circle", { class: "avatar-c " + kindOf(a), cx: 24, cy: 32, r: 14 }),
-        svg("text", { class: "avatar-t " + kindOf(a), x: 24, y: 37, "text-anchor": "middle" }, (a.name || "?").charAt(0).toUpperCase()),
-        svg("text", { class: "name", x: 46, y: 24 }, shorten(a.name || "", 16)),
-        svg("text", { class: "sub", x: 46, y: 40 }, shorten([a.role, (project.folders || []).length > 1 ? folderOf(project, a)?.name : ""].filter(Boolean).join(" \u00b7 "))),
-        svg("text", { class: "sub" + (a.detached ? " unlinked" : ""), x: 46, y: 54 },
-          a.detached ? "detached" : a.responsibilities ? shorten("Takes: " + a.responsibilities) : ""),
-        svg("circle", { class: dot, cx: NODE_W - 22, cy: 14, r: 4 }),
-        // "?": agentul asteapta un raspuns de la utilizator
-        (project.questions || []).some((q) => q.agentId === a.id)
-          ? svg("text", { class: "ask-mark", x: NODE_W - 40, y: 18 }, "?") : null),
+        svg("rect", { class: "card", width: NODE_W, height: NODE_H, rx: 12 }),
+        svg("circle", { class: "avatar-c", cx: 32, cy: NODE_H / 2, r: 17, style: `fill:${tone}` }),
+        svg("text", { class: "avatar-t", x: 32, y: NODE_H / 2 + 5, "text-anchor": "middle", style: `fill:${ink}` }, (a.name || "?").charAt(0).toUpperCase()),
+        svg("text", { class: "name", x: 60, y: 25 }, shorten(a.name || "", 17)),
+        svg("text", { class: "sub", x: 60, y: 43 }, shorten([a.role, modelShort(a.model), folder].filter(Boolean).join(" \u00b7 "), 22)),
+        svg("circle", { class: "status-dot " + state[1], cx: 64, cy: 56, r: 3 }),
+        svg("text", { class: "state " + state[1], x: 72, y: 60 }, state[0])),
       handle(NODE_W / 2, NODE_H, a.id), del);
     g.addEventListener("pointerdown", (e) => startMove(e, a.id, g));
     g.addEventListener("dblclick", () => onEdit(a.id));

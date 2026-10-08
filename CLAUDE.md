@@ -78,6 +78,10 @@ proiecte (fara sens); agentii pun intrebari radacinii proiectului legat (ask_pro
 anti-bucla) si liderii cer munca (request_project_work: task pentru radacina tinta, aprobat in "Needs you" la tinta,
 direct doar la cererea utilizatorului din chat); raportul se intoarce la Done (afterDone).
 Gata (fire de lucru): create_task primeste continues ("T-85"); tasks.thread_id (doar afisare) leaga follow-up-urile de task-ul care a pornit munca; pe board un fir e un singur card, in coloana muncii deschise celei mai recente.
+Gata (redesign UI dupa mockup-urile din ../screenshots): tema ardezie rece + font Figtree (static/fonts); bara de sus (ui.topbar)
+in loc de sidebar; Proiecte ca tabel; pe proiect board-ul pe toata latimea cu "Needs you" ca prima coloana, Done cu "Show N more";
+chat-ul si detaliile agentului intr-un panou lateral care se inchide (starea in localStorage "foreman-drawer"); modala de task pe
+doua coloane (continut + detalii); avatare colorate dupa nume (ui.toneOf, amber = radacina); canvas-ul se incadreaza pe noduri.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari pentru actiuni riscante (--permission-prompt-tool), feed global "Live activity"

@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { el, field, toast, TOOLS } from "./ui.js";
+import { el, field, toast, TOOLS, topbar } from "./ui.js";
 import { liveRenderer } from "./live.js";
 import { foremanChat } from "./foreman-chat.js";
 
@@ -47,15 +47,15 @@ export async function setupView(root, id, target = null) {
   const body = el("div", { class: "wizard" });
   const title = target ? `Set up agents for ${folder.name}` : "New project with AI";
   root.append(
-    el("header", { class: "page-head" },
-      el("div", {},
-        el("div", { class: "crumbs" }, el("a", { href: "#/" }, "Projects"), " / ",
-          target ? [el("a", { href: `#/p/${project.id}/edit` }, project.name), " / "] : null, title),
-        el("h1", {}, title),
-        el("p", { class: "muted" }, target
-          ? "An AI reads this folder and proposes agents for it. Your existing team is not changed."
-          : "Pick a folder (or describe the project); an AI reads it and proposes the project and the team. You decide what to keep."))),
-    body);
+    topbar([["Projects", "#/"], ...(target ? [[project.name, `#/p/${project.id}`]] : []), [title, null]]),
+    el("div", { class: "page" },
+      el("header", { class: "page-head" },
+        el("div", {},
+          el("h1", {}, title),
+          el("p", { class: "muted" }, target
+            ? "An AI reads this folder and proposes agents for it. Your existing team is not changed."
+            : "Pick a folder (or describe the project); an AI reads it and proposes the project and the team. You decide what to keep."))),
+      body));
 
   // modelSelect: modelele recomandate pentru analiza
   const modelSelect = () => el("select", { value: form.model },

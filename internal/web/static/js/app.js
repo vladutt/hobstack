@@ -70,5 +70,4 @@ route();
 api("/api/info").then(({ name }) => {
   const title = name.charAt(0).toUpperCase() + name.slice(1);
   document.title = title;
-  document.getElementById("app-name").textContent = title;
 }).catch(() => {});

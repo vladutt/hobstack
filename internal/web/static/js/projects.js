@@ -1,37 +1,54 @@
 import { api } from "./api.js";
-import { el, avatar, pill, field, toast, kindOf, clock } from "./ui.js";
+import { el, avatar, field, toast, kindOf, clock, topbar } from "./ui.js";
 
 export async function projectsView(root) {
   const [projects, setups] = await Promise.all([api("/api/projects"), api("/api/setup").catch(() => [])]);
-  const grid = el("div", { class: "grid" });
-  // cardurile de proiect nu se schimba; doar cele de analiza se redeseneaza
-  const fixed = [
-    ...projects.map(projectCard),
-    el("a", { class: "card card-new", href: "#/setup" },
-      el("span", { class: "plus" }, "\u2728"),
-      el("strong", {}, "New project with AI"),
-      el("span", { class: "hint" }, "Pick a folder; the AI proposes the project and the team")),
-    el("a", { class: "card card-new", href: "#/new" },
-      el("span", { class: "plus" }, "+"),
-      el("strong", {}, "New project"),
-      el("span", { class: "hint" }, "Start with a lead, add the team later")),
-  ];
+  const setupBox = el("div", { class: "setups" });
+  const search = el("input", {
+    type: "search", class: "search", placeholder: "Search projects", "aria-label": "Search projects",
+    oninput: () => filter(),
+  });
+  const rows = projects.map((p) => ({ p, tr: projectRow(p) }));
+  const tbody = el("tbody", {}, rows.map((r) => r.tr));
+  const none = el("tr", { hidden: true }, el("td", { colspan: 5, class: "hint" }, "No project matches."));
+  tbody.append(none);
+  function filter() {
+    const q = search.value.trim().toLowerCase();
+    let shown = 0;
+    for (const r of rows) {
+      const on = !q || r.p.name.toLowerCase().includes(q) || (r.p.goal || "").toLowerCase().includes(q);
+      r.tr.hidden = !on;
+      if (on) shown++;
+    }
+    none.hidden = shown > 0;
+  }
   root.append(
-    el("header", { class: "page-head" },
-      el("div", {},
-        el("h1", {}, "Projects"),
-        el("p", { class: "muted" }, "Each project has its own team. The lead plans, delegates and reviews.")),
-      el("div", { class: "actions" },
-        el("a", { class: "btn", href: "#/setup" }, "New project with AI"),
-        el("a", { class: "btn primary", href: "#/new" }, "+ New project"))),
-    grid);
+    topbar([["Projects", null]],
+      el("span", { class: "grow" }),
+      projects.length > 5 ? search : null,
+      el("a", { class: "btn ghost", href: "#/setup", title: "Pick a folder; the AI proposes the project and the team" }, "\u2726 New project with AI"),
+      el("a", { class: "btn primary", href: "#/new" }, "Create project")),
+    el("div", { class: "page projects-page" },
+      setupBox,
+      projects.length
+        ? el("table", { class: "ptable" },
+          el("thead", {}, el("tr", {},
+            el("th", {}, "Name"), el("th", { class: "hide-xs" }, "Lead"), el("th", { class: "hide-sm" }, "Team"),
+            el("th", {}, "Progress"), el("th", { class: "hide-sm" }, "State"))),
+          tbody)
+        : el("div", { class: "empty-state" },
+          el("h2", {}, "No projects yet"),
+          el("p", {}, "Point Foreman at a folder and let the AI propose a team, or start with just a lead."),
+          el("div", { class: "actions" },
+            el("a", { class: "btn primary", href: "#/setup" }, "\u2726 New project with AI"),
+            el("a", { class: "btn", href: "#/new" }, "Create project")))));
 
   // analizele din wizard ruleaza pe server; cat timp una ruleaza, verificam
   // lista la cateva secunde ca sa vedem cand e gata
   let timer = null;
   let closed = false;
   function draw(list) {
-    grid.replaceChildren(...list.map((s) => setupCard(s, refresh)), ...fixed);
+    setupBox.replaceChildren(...list.map((s) => setupCard(s, refresh)));
     clearTimeout(timer);
     if (!closed && list.some((s) => s.status === "running")) timer = setTimeout(refresh, 3000);
   }
@@ -84,22 +101,33 @@ function setupCard(s, refresh) {
     el("div", { class: "card-actions" }, buttons));
 }
 
-function projectCard(p) {
+// projectRow: un rand din tabelul de proiecte; click oriunde pe rand deschide proiectul
+function projectRow(p) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
   const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
-  return el("a", { class: "card" + (asks > 0 ? " needs-you-card" : ""), href: `#/p/${p.id}` },
-    el("div", { class: "card-top" }, el("span", { class: "card-title" }, p.name),
-      el("span", { class: "actions" }, pill(p.status),
-        p.autonomy ? el("span", { class: "pill pill-auto", title: "Agents don't ask you questions" }, "Autonomous") : null,
-        asks ? el("span", { class: "pill pill-ask" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null)),
-    el("p", { class: "muted clamp" }, p.goal || "No goal yet."),
-    el("div", { class: "avatars" },
-      el("span", { class: "stack" }, p.team.map((m) => avatar(m.name, kindOf(m), 28))),
-      el("span", { class: "hint" }, p.team.length === 1 ? "1 agent" : `${p.team.length} agents`)),
-    el("div", { class: "progress-row" },
-      el("span", { class: "hint" }, p.total ? `${p.done} of ${p.total} tasks done` : "No tasks"),
-      el("div", { class: "bar" },
-        el("div", { class: "bar-fill" + (p.status === "Running" ? " live" : ""), style: `width:${pct}%` }))));
+  const href = `#/p/${p.id}`;
+  const lead = p.team.find((m) => m.isRoot) || p.team[0];
+  const shown = p.team.slice(0, 3);
+  const state = p.status === "Paused" ? "paused" : p.status === "Running" ? "running" : "idle";
+  return el("tr", {
+    class: asks > 0 ? "needs-you-row" : null,
+    onclick: (e) => { if (!e.target.closest("a")) location.hash = href; },
+  },
+    el("td", {}, el("div", { class: "p-name" },
+      el("a", { href }, p.name,
+        asks ? el("span", { class: "badge-needs-you" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null,
+        p.autonomy ? el("span", { class: "badge-auto", title: "Agents don't ask you questions" }, "autonomous") : null),
+      el("span", { class: "p-sub", title: p.goal || "" }, p.goal || "No goal yet."))),
+    el("td", { class: "hide-xs" }, lead ? el("span", { class: "p-lead" }, avatar(lead.name, kindOf(lead), 30), lead.name) : el("span", { class: "hint" }, "\u2014")),
+    el("td", { class: "hide-sm" }, p.team.length > 4
+      ? el("span", { class: "avatars" }, el("span", { class: "stack" }, shown.map((m) => avatar(m.name, kindOf(m), 28)),
+        el("span", { class: "avatar more", style: "--size:28px" }, `+${p.team.length - shown.length}`)))
+      : el("span", { class: "stack" }, p.team.map((m) => avatar(m.name, kindOf(m), 28)))),
+    el("td", {}, el("div", { class: "p-progress" },
+      el("div", { class: "bar" }, el("div", { class: "bar-fill", style: `width:${pct}%` })),
+      el("span", {}, p.total ? `${p.done}/${p.total}` : "\u2014"))),
+    el("td", { class: "hide-sm" }, el("span", { class: `p-status ${state}` },
+      el("span", { class: "dot" + (state === "running" ? " working" : "") }), p.status)));
 }
 
 export async function projectFormView(root, id) {
@@ -121,39 +149,39 @@ export async function projectFormView(root, id) {
   const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd || "", placeholder: "no limit" });
 
   const autonomy = el("input", { type: "checkbox", checked: !!p.autonomy });
-  root.append(el("form", { class: "form", onsubmit: save },
-    el("header", { class: "page-head" },
-      el("div", {},
-        el("div", { class: "crumbs" },
-          el("a", { href: "#/" }, "Projects"), " / ",
-          id ? el("a", { href: `#/p/${id}` }, p.name) : "New project"),
-        el("h1", {}, id ? "Project instructions" : "New project")),
-      el("div", { class: "actions" },
-        id && el("button", { type: "button", class: "btn danger", onclick: remove }, "Delete project"),
-        el("a", { class: "btn", href: id ? `#/p/${id}` : "#/" }, "Cancel"),
-        el("button", { type: "submit", class: "btn primary" }, id ? "Save" : "Create project"))),
-    el("div", { class: "form-cols" },
-      el("section", { class: "section" },
-        el("h2", {}, "Brief"),
-        field("Name", name),
-        field("Goal: what done looks like", goal),
-        field("Shared context: every agent reads it", context)),
-      el("section", { class: "section" },
-        el("h2", {}, "How the team works"),
-        el("div", { class: "row" },
-          field("Parallel workers", parallel),
-          field("Budget per run (USD)", budget)),
-        el("p", { class: "hint" }, "Both are optional: leave them empty for no limit. The budget only matters if you use an API key (with a subscription you do not pay per run); when set, a run stops once it reaches it. Agents that report directly to you do not count toward the limit."),
-        el("label", { class: "check" }, autonomy, el("span", {}, "Full autonomy")),
-        el("p", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."),
-        !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page."))),
-    el("section", { class: "section" },
-      el("div", { class: "section-head" },
-        el("h2", {}, "Folders"),
-        el("button", { type: "button", class: "btn small", onclick: () => folders.add() }, "+ Add folder")),
-      el("p", { class: "hint" }, "A folder can be a repo or a plain folder. Each agent works and writes in its own folder and can read the others. The first folder is the default."),
-      folders.el),
-    id && linksSection(id, p.links || [])));
+  const formId = `project-form-${id || "new"}`;
+  root.append(
+    topbar([["Projects", "#/"], ...(id ? [[p.name, `#/p/${id}`]] : []), [id ? "Instructions" : "New project", null]],
+      el("span", { class: "grow" }),
+      id && el("button", { type: "button", class: "btn ghost danger", onclick: remove }, "Delete project"),
+      el("a", { class: "btn ghost", href: id ? `#/p/${id}` : "#/" }, "Cancel"),
+      el("button", { type: "submit", form: formId, class: "btn primary" }, id ? "Save" : "Create project")),
+    el("div", { class: "page" },
+      el("form", { class: "form project-form", id: formId, onsubmit: save },
+        el("div", { class: "form-main" },
+          el("section", { class: "section" },
+            el("h2", {}, "Brief"),
+            field("Name", name),
+            field("Goal \u00b7 what done looks like", goal),
+            field("Shared context \u00b7 every agent reads it", context)),
+          el("section", { class: "section" },
+            el("div", { class: "section-head" },
+              el("h2", {}, "Folders"),
+              el("button", { type: "button", class: "btn small", onclick: () => folders.add() }, "+ Add folder")),
+            el("p", { class: "hint" }, "A folder can be a repo or a plain folder. Each agent works and writes in its own folder and can read the others. The first folder is the default."),
+            folders.el)),
+        el("div", { class: "form-side" },
+          el("section", { class: "section" },
+            el("h2", {}, "How the team works"),
+            el("div", { class: "row" },
+              field("Parallel workers", parallel),
+              field("Budget per run (USD)", budget)),
+            el("p", { class: "hint" }, "Both are optional: leave them empty for no limit. The budget only matters if you use an API key (with a subscription you do not pay per run); when set, a run stops once it reaches it. Agents that report directly to you do not count toward the limit."),
+            el("label", { class: "check toggle-row" }, autonomy,
+              el("span", { class: "grow" }, el("strong", {}, "Full autonomy"),
+                el("span", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."))),
+            !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
+          id && linksSection(id, p.links || [])))));
   name.focus();
 
   async function save(e) {
@@ -229,7 +257,7 @@ function linksSection(projectId, initial) {
 
   refresh();
   return el("section", { class: "section" },
-    el("h2", {}, "Linked projects"),
+    el("h2", {}, "Linked projects", el("span", { class: "hint" }, " \u00b7 agents can ask each other")),
     el("p", { class: "hint" }, "Agents of linked projects can ask each other questions; leads can request work, which you approve in Needs you. Linking or unlinking restarts the agents' Claude sessions on their next run."),
     list,
     el("div", { class: "link-add" }, select, addBtn));

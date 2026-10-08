@@ -39,8 +39,25 @@ export function svg(tag, attrs = {}, ...children) {
   return node;
 }
 
-// kindOf: culoarea avatarului; amber pentru lideri si radacini, teal in rest.
-export const kindOf = (a) => (a && (a.isLead || a.isRoot) ? "lead" : "worker");
+// kindOf: culoarea avatarului; amber pentru radacini (vorbesc cu utilizatorul),
+// in rest o culoare stabila dupa nume (vezi toneOf).
+export const kindOf = (a) => (a && a.isRoot ? "lead" : "worker");
+
+// TONES: culorile avatarelor (fundal, text). Amber e rezervat radacinilor.
+const TONES = [
+  ["#8c9eff", "#111a3d"], ["#c79bf2", "#2a1640"], ["#5fd0a8", "#0b2a20"], ["#f0a3c4", "#3a1426"],
+  ["#7cc4f2", "#0b2436"], ["#b5d86a", "#1f2a0b"], ["#f2967c", "#3a160b"], ["#9ad7d0", "#0e2a27"],
+];
+export const AMBER = ["#f2b544", "#2a1d05"];
+
+// toneOf: aceeasi culoare pentru acelasi nume, pe orice pagina
+export function toneOf(name, kind) {
+  if (kind === "lead") return AMBER;
+  if (kind === "user") return ["#3a414d", "#dfe3e8"];
+  let h = 0;
+  for (const ch of String(name || "?")) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return TONES[h % TONES.length];
+}
 
 // folderOf: folderul in care lucreaza agentul (fara folder ales: primul).
 export function folderOf(project, a) {
@@ -60,13 +77,28 @@ export function agentBody(a, patch = {}) {
   };
 }
 
-// kind: "lead" sau "worker" (vezi kindOf)
+// kind: "lead", "worker" sau "user" (vezi kindOf si toneOf)
 export function avatar(name, kind, size = 32) {
+  const [bg, ink] = toneOf(name, kind);
   return el("span", {
     class: `avatar ${kind === "lead" ? "lead" : "worker"}`,
-    style: `--size:${size}px`,
+    style: `--size:${size}px;--tone:${bg};--ink:${ink}`,
     "aria-hidden": "true",
   }, (name || "?").charAt(0).toUpperCase());
+}
+
+// topbar: bara de sus a fiecarei pagini: logo, firimituri (crumbs: [text, href?]),
+// apoi ce primeste in dreapta (butoane, tab-uri).
+export function topbar(crumbs, ...right) {
+  const parts = [];
+  crumbs.forEach(([text, href], i) => {
+    if (i) parts.push(el("span", { class: "crumb-sep", "aria-hidden": "true" }, "/"));
+    parts.push(href ? el("a", { class: "crumb", href }, text) : el("span", { class: "crumb current" }, text));
+  });
+  return el("header", { class: "topbar" },
+    el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "F"),
+    el("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, parts),
+    el("div", { class: "topbar-right" }, right));
 }
 
 export const STATUS_LABELS = {

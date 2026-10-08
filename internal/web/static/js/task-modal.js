@@ -27,7 +27,9 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
   let data = null;        // ultimul raspuns GET /api/tasks/{id}
   let seq = 0;            // numarul ultimei cereri: un raspuns vechi nu suprascrie unul nou
   let destroyed = false;
-  let reportOpen = false; // "Show report" ramane desfasurat la refresh
+  let reportOpen = false; // raportul lung ramane desfasurat la refresh
+  let descOpen = false;   // descrierea lunga ramane desfasurata la refresh
+  let filesKey = null;    // ce s-a desenat ultima data in rezumatul fisierelor
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
   let tab = initialTab;   // "conversation" | "history" | "changes" | "flow"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
@@ -55,19 +57,24 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
   const convPane = el("div", { class: "conv", id: `conv-${taskId}`, role: "tabpanel", hidden: true });
   const histPane = el("div", { id: `hist-${taskId}`, role: "tabpanel", hidden: true });
   const tabConv = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": convPane.id, onclick: () => setTab("conversation") }, "Conversation");
-  const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "History");
+  const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "Activity");
   const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
   const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
   const flowPane = el("div", { id: `flow-${taskId}`, role: "tabpanel", hidden: true }, flow.el);
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
-    el("div", { class: "modal-tabs", role: "tablist" }, tabConv, tabHist, tabChg, tabFlow), convPane, histPane, chgPane, flowPane);
+    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFlow), convPane, histPane, chgPane, flowPane);
   const reportBox = el("div", { class: "modal-top" });
+  const filesBox = el("div", { class: "modal-top" }); // primele fisiere modificate, deasupra tab-urilor
   const body = el("div", { class: "modal-body" }, el("p", { class: "hint" }, "Loading..."));
   const actionsBox = el("div", { class: "modal-actions", hidden: true });
+  const side = el("aside", { class: "modal-side", "aria-label": "Task details" });
+  const copyBtn = el("button", { type: "button", class: "btn ghost small", onclick: copyLink }, "Copy link");
   const dialog = el("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-labelledby": titleId, tabindex: "-1" },
-    el("div", { class: "modal-head" }, head, closeBtn),
-    body, actionsBox);
+    el("div", { class: "modal-main" },
+      el("div", { class: "modal-head" }, head),
+      body, actionsBox),
+    side);
   const overlay = el("div", { class: "modal-overlay" }, dialog);
   // click pe fundal (nu in fereastra) inchide; mousedown ca o selectie de text
   // inceputa in fereastra si terminata pe fundal sa nu inchida
@@ -85,6 +92,18 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
   document.body.append(overlay);
   dialog.focus();
   load();
+
+  // copyLink: adresa task-ului in clipboard (deschide modala direct)
+  async function copyLink() {
+    const url = `${location.origin}${location.pathname}#/p/${projectId}/tasks/${taskId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      copyBtn.textContent = "Copied";
+    } catch {
+      copyBtn.textContent = "Copy failed";
+    }
+    setTimeout(() => { if (!destroyed) copyBtn.textContent = "Copy link"; }, 1500);
+  }
 
   // requestClose: feedback-ul netrimis nu se pierde in tacere
   function requestClose() {
@@ -133,12 +152,13 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
   }
 
   function showMissing(msg) {
-    head.replaceChildren(el("h2", { id: titleId }, "Task not found"));
+    head.replaceChildren(el("div", { class: "modal-crumbs" }, el("span", { class: "grow" }), closeBtn), el("h2", { id: titleId, class: "modal-title" }, "Task not found"));
+    side.replaceChildren();
     body.replaceChildren(el("p", { class: "hint" }, msg === "Not found" || /not found/i.test(msg) ? "This task does not exist (anymore)." : msg));
     actionsBox.hidden = true;
     actionsBox.replaceChildren();
     actionsKey = null;
-    topKey = histKey = convKey = reportKey = flowKey = null;
+    topKey = histKey = convKey = reportKey = flowKey = filesKey = null;
     chgCount = null; // la urmatorul succes se reincarca tot
   }
 
@@ -151,19 +171,15 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
     const waiting = t.status === "review" ? actions.waitingOn(t) : null;
     const stuck = (project.stuck || []).some((s) => s.taskId === t.id);
     head.replaceChildren(
-      el("h2", { id: titleId, class: "modal-title" }, el("span", { class: "task-id" }, `T-${t.number}`), "· ", t.title),
-      el("div", { class: "modal-meta" },
-        el("span", { class: `pill pill-task-${t.status}` }, STATUS[t.status] || t.status),
-        data.recurring ? el("button", { type: "button", class: "link-btn", onclick: () => actions.openRecurring() },
-          `From recurring: ${data.recurring.title}`) : null,
-        queuedInStage ? el("span", { class: "hint" }, data.stage ? `queued in stage ${data.stage}` : "queued in stage") : null,
-        who ? el("span", { class: "modal-who" }, avatar(who, kindOf(agent), 20), who) : null,
-        data.stage && !queuedInStage ? el("span", { class: "hint" }, `Stage: ${data.stage}`) : null,
-        waiting ? el("span", { class: "task-stage" }, `with ${waiting}`) : null,
-        stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null));
+      el("div", { class: "modal-crumbs" },
+        el("span", {}, project.name || "Project"), el("span", { class: "crumb-sep", "aria-hidden": "true" }, "/"),
+        el("span", { class: "task-id" }, `T-${t.number}`),
+        el("span", { class: "grow" }), copyBtn, closeBtn),
+      el("h2", { id: titleId, class: "modal-title" }, t.title));
+    renderSide(t, agent, who, waiting, stuck, queuedInStage);
 
     // prima data scoatem "Loading..." si punem nodurile stabile
-    if (!body.contains(tabsSection)) body.replaceChildren(topBox, tabsSection, reportBox);
+    if (!body.contains(tabsSection)) body.replaceChildren(topBox, reportBox, filesBox, tabsSection);
 
     const topNow = JSON.stringify([t.description, t.feedback]);
     if (topNow !== topKey) {
@@ -172,18 +188,101 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
       topBox.replaceChildren(...[
         el("section", { class: "modal-section" },
           el("h3", {}, "Description"),
-          t.description ? el("div", { class: "modal-text" }, renderMarkdown(t.description)) : el("p", { class: "hint" }, "No description.")),
+          t.description ? collapsible(t.description, null, () => descOpen, (v) => { descOpen = v; }) : el("p", { class: "hint" }, "No description.")),
         t.feedback ? el("section", { class: "modal-section" },
           el("h3", {}, "Feedback"), el("div", { class: "modal-text" }, renderMarkdown(t.feedback))) : null,
       ].filter(Boolean));
     }
     tabsSection.hidden = false;
     if (tab === null) tab = (data.conversation || []).length ? "conversation" : "history";
+    tabConv.replaceChildren("Conversation", (data.conversation || []).length ? el("span", { class: "count" }, data.conversation.length) : null);
     renderHistory(data.events || []);
     renderConversation();
     applyTab();
     renderReport();
+    renderFiles();
     renderActions(t, stuck);
+  }
+
+  // collapsible: text markdown lung, taiat la cateva randuri cu "Show more" (starea prin get/set)
+  function collapsible(text, withStats, get, set) {
+    const box = el("div", { class: "modal-text" }, renderMarkdown(text, withStats));
+    if (text.length < 520) return box;
+    const btn = el("button", { type: "button", class: "more-btn" });
+    const paint = () => {
+      box.classList.toggle("collapsed", !get());
+      btn.textContent = get() ? "Show less" : "Show more";
+      btn.setAttribute("aria-expanded", String(get()));
+    };
+    btn.addEventListener("click", () => { set(!get()); paint(); });
+    paint();
+    return el("div", { class: "modal-section" }, box, btn);
+  }
+
+  // renderSide: coloana din dreapta: starea si cine e implicat (se redeseneaza la fiecare refresh)
+  function renderSide(t, agent, who, waiting, stuck, queuedInStage) {
+    const byId = new Map(project.agents.map((a) => [a.id, a]));
+    const person = (name, a) => el("span", { class: "side-value" }, avatar(name, a ? kindOf(a) : "user", 26), name);
+    const reviewer = agent?.reviewerId ? byId.get(agent.reviewerId) : null;
+    const creator = t.byUser ? null : byId.get(t.creatorId);
+    const parent = t.parentTaskId ? (project.tasks || []).find((x) => x.id === t.parentTaskId) : null;
+    const rows = [];
+    const row = (label, value) => { if (value) rows.push(el("span", { class: "side-label" }, label), value); };
+    row("Assignee", queuedInStage
+      ? el("span", { class: "side-value hint" }, data.stage ? `queued in ${data.stage}` : "queued in stage")
+      : who ? person(who, agent) : el("span", { class: "side-value hint" }, "Unassigned"));
+    row("Reviewer", reviewer ? person(reviewer.name, reviewer) : null);
+    row("Reporter", t.byUser ? person("You", null) : creator ? person(creator.name, creator) : null);
+    row("Waiting on", waiting ? el("span", { class: "side-value", style: "color:var(--amber)" }, waiting) : null);
+    row("Stage", data.stage && !queuedInStage ? el("span", { class: "side-value" }, data.stage) : null);
+    row("Parent", parent ? el("span", { class: "side-value" },
+      el("a", { href: `#/p/${projectId}/tasks/${parent.id}` }, el("span", { class: "task-id" }, `T-${parent.number}`), " ", parent.title)) : null);
+    row("From", t.fromProject ? el("span", { class: "side-value" }, el("span", { class: "dot", style: "background:var(--teal)" }), t.fromProject) : null);
+    row("Recurring", data.recurring ? el("span", { class: "side-value" },
+      el("button", { type: "button", class: "link-btn", onclick: () => actions.openRecurring() }, data.recurring.title)) : null);
+    row("Files", data.changesCount ? el("span", { class: "side-value" },
+      el("button", { type: "button", class: "link-btn", onclick: () => setTab("changes") }, filesLabel())) : null);
+    if (t.sendBacks) row("Sent back", el("span", { class: "side-value" }, `${t.sendBacks}\u00d7`));
+    const when = (iso) => {
+      const d = new Date(iso);
+      return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${clock(iso)}`;
+    };
+    side.replaceChildren(
+      el("div", { class: "side-status" },
+        el("span", { class: `pill pill-task-${t.status}` }, STATUS[t.status] || t.status),
+        stuck ? el("span", { class: "badge-stuck", title: "No one is moving this task" }, "stuck") : null),
+      el("div", { class: "side-rows" }, rows),
+      el("div", { class: "side-foot" },
+        el("span", {}, "Created " + when(t.createdAt)),
+        t.updatedAt && t.updatedAt !== t.createdAt ? el("span", {}, (t.status === "done" ? "Resolved " : "Updated ") + when(t.updatedAt)) : null));
+  }
+
+  // filesLabel: "11 files +437 −16" din statisticile incarcate (sau doar numarul de modificari)
+  function filesLabel() {
+    if (!stats.size) return `${data.changesCount} ${data.changesCount === 1 ? "change" : "changes"}`;
+    let added = 0, removed = 0;
+    for (const v of stats.values()) { added += v.added; removed += v.removed; }
+    return el("span", { class: "md-stat" }, `${stats.size} ${stats.size === 1 ? "file" : "files"}\u00a0`, statBadge({ added, removed }));
+  }
+
+  // renderFiles: primele fisiere modificate, deasupra tab-urilor; click duce in Changes
+  function renderFiles() {
+    const list = [...stats.entries()].sort((a, b) => (b[1].added + b[1].removed) - (a[1].added + a[1].removed));
+    const key = list.map(([p, v]) => `${p}:${v.added}:${v.removed}`).join("|");
+    if (key === filesKey) return;
+    filesKey = key;
+    if (!list.length) { filesBox.replaceChildren(); return; }
+    const open = () => { setTab("changes"); tabsSection.scrollIntoView({ block: "nearest" }); };
+    const top = list.slice(0, 3);
+    filesBox.replaceChildren(el("section", { class: "modal-section" },
+      el("div", { class: "files-head" }, "Changes \u00b7 ", filesLabel()),
+      el("div", { class: "files-box" },
+        top.map(([path, v]) => el("button", { type: "button", class: "files-box-row", onclick: open, title: path },
+          el("span", { class: "fb-dir" }, path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : ""),
+          el("span", { class: "fb-name" }, path.slice(path.lastIndexOf("/") + 1)),
+          el("span", { class: "grow" }), statBadge(v))),
+        list.length > top.length ? el("button", { type: "button", class: "files-box-row files-box-more", onclick: open },
+          `${list.length - top.length} more ${list.length - top.length === 1 ? "file" : "files"}`) : null)));
   }
 
   function renderReport() {
@@ -247,8 +346,7 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
       chgCount = count;
       stats = changeStats(res);
       convKey = reportKey = null; // se redeseneaza cu badge-urile noi
-      renderConversation();
-      renderReport();
+      render(); // conversatia, raportul, rezumatul si coloana din dreapta, cu statisticile noi
       const hasSubtasks = (project.tasks || []).some((x) => x.parentTaskId === taskId);
       changes.show(res, hasSubtasks);
     } catch (err) {
@@ -320,29 +418,12 @@ export function taskModal({ projectId, taskId, project, onClose, actions, initia
       text, more);
   }
 
-  // reportNode: raportul AI, ascuns implicit; langa buton, rezumatul fisierelor modificate
+  // reportNode: raportul agentului, cu "Show more" cand e lung
   function reportNode(result) {
-    const text = el("div", { class: "modal-report", hidden: !reportOpen }, renderMarkdown(result, stats));
-    const btn = el("button", {
-      type: "button", class: "btn small", "aria-expanded": String(reportOpen),
-      onclick: () => {
-        reportOpen = !reportOpen;
-        text.hidden = !reportOpen;
-        btn.textContent = reportOpen ? "Hide report" : "Show report";
-        btn.setAttribute("aria-expanded", String(reportOpen));
-      },
-    }, reportOpen ? "Hide report" : "Show report");
-    return el("section", { class: "modal-section" }, el("div", { class: "report-head" }, btn, filesSummary()), text);
-  }
-
-  // filesSummary: "2 files changed +3 −1"; click deschide tab-ul Changes
-  function filesSummary() {
-    if (!stats.size) return null;
-    let added = 0, removed = 0;
-    for (const s of stats.values()) { added += s.added; removed += s.removed; }
-    const n = stats.size;
-    return el("button", { type: "button", class: "report-files", title: "Open the Changes tab", onclick: () => { setTab("changes"); tabsSection.scrollIntoView({ block: "nearest" }); } },
-      `${n} ${n === 1 ? "file" : "files"} changed`, statBadge({ added, removed }));
+    const author = data.assignee || "the agent";
+    return el("section", { class: "modal-section" },
+      el("h3", {}, `Report from ${author}`),
+      collapsible(result, stats, () => reportOpen, (v) => { reportOpen = v; }));
   }
 
   // rootName: numele radacinii agentului (urcand pe parentId); garda contra ciclurilor
