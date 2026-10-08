@@ -87,8 +87,9 @@ testabil fara server; `team` il apeleaza din `ReportDone` dupa ce raportul a tre
 
 ## Istoric
 
-`task_events`: evenimentul raportului primeste in text `· attached 3 files` (fara kind nou), deci apare in
-Conversation si Flow. Numele fisierelor apar in textul complet al evenimentului.
+`task_events`: dupa raport, un eveniment nou `files_attached` (actor = agentul, catre "You"), text
+`Rook attached 3 files`, corp = lista cailor. Ca `left_for_user`, se scrie separat de raport (raportul e deja
+salvat de `ReportDone` cand se copiaza fisierele), iar corpul nevid il aduce in Conversation.
 
 ## API
 
