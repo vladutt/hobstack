@@ -16,8 +16,8 @@ func TestAccessInResponses(t *testing.T) {
 	if err := e.st.CreateTask(&task); err != nil {
 		t.Fatal(err)
 	}
-	e.st.RecordAccessDenial(p.ID, w.ID, &task.ID, "Bash", "npm test")
-	e.st.RecordAccessDenial(p.ID, w.ID, &task.ID, "WebFetch", "https://x.dev")
+	e.st.RecordAccessDenial(p.ID, w.ID, &task.ID, "Bash", "npm test", "")
+	e.st.RecordAccessDenial(p.ID, w.ID, &task.ID, "WebFetch", "https://x.dev", "")
 
 	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
 	var d struct {
@@ -67,7 +67,7 @@ func TestAccessDismiss(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
 	w := e.addWorker(t, p.ID, "Beacon")
-	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "ls")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "ls", "")
 	reqs, _ := e.st.ListOpenAccessRequests(p.ID)
 	if code, _ := e.do(t, "POST", "/api/access/"+itoa(reqs[0].ID)+"/dismiss", nil); code != 204 {
 		t.Fatalf("dismiss: %d", code)
@@ -91,8 +91,8 @@ func TestAccessEnableShell(t *testing.T) {
 	if err := e.st.UpdateAgent(w); err != nil {
 		t.Fatal(err)
 	}
-	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "npm test")
-	e.st.RecordAccessDenial(p.ID, w.ID, nil, "WebFetch", "https://x.dev")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "npm test", "")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "WebFetch", "https://x.dev", "")
 	reqs, _ := e.st.ListOpenAccessRequests(p.ID)
 
 	// alt tool decat Bash: 409, nimic schimbat
@@ -111,7 +111,7 @@ func TestAccessEnableShell(t *testing.T) {
 		t.Fatalf("deschise: %+v", open)
 	}
 	// a doua oara pe acelasi rand: tool-ul nu se dubleaza
-	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "make")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "make", "")
 	open, _ = e.st.ListOpenAccessRequests(p.ID)
 	if code, _ := e.do(t, "POST", "/api/access/"+itoa(open[1].ID)+"/enable-shell", nil); code != 204 {
 		t.Fatalf("a doua oara: %d", code)
@@ -130,7 +130,7 @@ func TestAccessEnablePackages(t *testing.T) {
 	if err := e.st.UpdateAgent(w); err != nil {
 		t.Fatal(err)
 	}
-	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "cd app && npm install 2>&1 | tail -8")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "cd app && npm install 2>&1 | tail -8", "")
 	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
 	var d struct {
 		Access []struct {
@@ -191,7 +191,7 @@ func TestAccessNoEnableShellForAlwaysDenied(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
 	w := e.addWorker(t, p.ID, "Beacon")
-	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "git push origin main")
+	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "git push origin main", "")
 	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
 	var d struct {
 		Access []struct {

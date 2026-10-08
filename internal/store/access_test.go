@@ -55,19 +55,19 @@ func TestAccessDenialInsertMergeDismiss(t *testing.T) {
 	if l, err := s.ListOpenAccessRequests(p.ID); err != nil || l == nil || len(l) != 0 {
 		t.Fatalf("lista goala trebuie non-nil: %v %v", l, err)
 	}
-	if err := s.RecordAccessDenial(p.ID, w.ID, &t1.ID, "Bash", "npm test"); err != nil {
+	if err := s.RecordAccessDenial(p.ID, w.ID, &t1.ID, "Bash", "npm test", ""); err != nil {
 		t.Fatal(err)
 	}
 	// al doilea refuz: comasat, detail = ultimul, task_id = ultimul
-	if err := s.RecordAccessDenial(p.ID, w.ID, &t2.ID, "Bash", "npm build"); err != nil {
+	if err := s.RecordAccessDenial(p.ID, w.ID, &t2.ID, "Bash", "npm build", ""); err != nil {
 		t.Fatal(err)
 	}
 	// cu taskID nil, task_id ramane
-	if err := s.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "npm lint"); err != nil {
+	if err := s.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "npm lint", ""); err != nil {
 		t.Fatal(err)
 	}
 	// alt tool = rand nou
-	if err := s.RecordAccessDenial(p.ID, w.ID, nil, "WebFetch", "http://x"); err != nil {
+	if err := s.RecordAccessDenial(p.ID, w.ID, nil, "WebFetch", "http://x", ""); err != nil {
 		t.Fatal(err)
 	}
 	l, err := s.ListOpenAccessRequests(p.ID)
@@ -100,7 +100,7 @@ func TestAccessDenialInsertMergeDismiss(t *testing.T) {
 	if n, _ := s.CountOpenAccessRequests(p.ID); n != 1 {
 		t.Fatalf("count dupa dismiss = %d", n)
 	}
-	if err := s.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "ls"); err != nil {
+	if err := s.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "ls", ""); err != nil {
 		t.Fatal(err)
 	}
 	l, _ = s.ListOpenAccessRequests(p.ID)
@@ -115,7 +115,7 @@ func TestAccessRequestCascadeAndSetNull(t *testing.T) {
 	w := newWorker(t, s, p.ID, "Rook")
 	task := Task{ProjectID: p.ID, Title: "t", AssigneeID: w.ID}
 	s.CreateTask(&task)
-	s.RecordAccessDenial(p.ID, w.ID, &task.ID, "Bash", "x")
+	s.RecordAccessDenial(p.ID, w.ID, &task.ID, "Bash", "x", "")
 
 	// stergerea task-ului pastreaza cererea, cu task_id NULL
 	if _, err := s.db.Exec(`DELETE FROM tasks WHERE id = ?`, task.ID); err != nil {

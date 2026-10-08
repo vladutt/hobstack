@@ -14,17 +14,18 @@ type AccessRequest struct {
 	TaskID    *int64    `json:"taskId"` // ultimul task in care a fost refuzat; nil = fara task
 	Tool      string    `json:"tool"`
 	Detail    string    `json:"detail"` // rezumat scurt al ultimei incercari
+	Prefix    string    `json:"prefix"` // prefixul regulii Ask care a refuzat comanda; "" = cerere de tool
 	Count     int       `json:"count"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-const accessCols = `id, project_id, agent_id, task_id, tool, detail, count, created_at, updated_at`
+const accessCols = `id, project_id, agent_id, task_id, tool, detail, prefix, count, created_at, updated_at`
 
 func scanAccessRequest(sc scanner) (AccessRequest, error) {
 	var r AccessRequest
 	var created, updated string
-	err := sc.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.TaskID, &r.Tool, &r.Detail, &r.Count, &created, &updated)
+	err := sc.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.TaskID, &r.Tool, &r.Detail, &r.Prefix, &r.Count, &created, &updated)
 	if err != nil {
 		return AccessRequest{}, err
 	}
@@ -33,8 +34,8 @@ func scanAccessRequest(sc scanner) (AccessRequest, error) {
 }
 
 // RecordAccessDenial noteaza un refuz. Daca agentul are deja un rand deschis
-// pentru acelasi tool, il comasam (count++, detail si task_id = ultimele).
-func (s *Store) RecordAccessDenial(projectID, agentID int64, taskID *int64, tool, detail string) error {
+// pentru acelasi tool si prefix, il comasam (count++, detail si task_id = ultimele).
+func (s *Store) RecordAccessDenial(projectID, agentID int64, taskID *int64, tool, detail, prefix string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -43,7 +44,7 @@ func (s *Store) RecordAccessDenial(projectID, agentID int64, taskID *int64, tool
 
 	ts := now()
 	var id int64
-	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND dismissed = 0`, agentID, tool).Scan(&id)
+	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND prefix = ? AND dismissed = 0`, agentID, tool, prefix).Scan(&id)
 	switch {
 	case err == nil:
 		// task_id se schimba doar cand avem unul nou
@@ -52,8 +53,8 @@ func (s *Store) RecordAccessDenial(projectID, agentID int64, taskID *int64, tool
 			return err
 		}
 	case err == sql.ErrNoRows:
-		if _, err := tx.Exec(`INSERT INTO access_requests (project_id, agent_id, task_id, tool, detail, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`, projectID, agentID, nullPtr(taskID), tool, detail, ts, ts); err != nil {
+		if _, err := tx.Exec(`INSERT INTO access_requests (project_id, agent_id, task_id, tool, detail, prefix, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, projectID, agentID, nullPtr(taskID), tool, detail, prefix, ts, ts); err != nil {
 			return err
 		}
 	default:

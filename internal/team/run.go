@@ -369,7 +369,7 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 			continue
 		}
 		seen[d.Tool] = true
-		if err := t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail); err != nil {
+		if err := t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail, ""); err != nil {
 			log.Printf("agent %d: access denial: %v", a.ID, err)
 			continue
 		}
