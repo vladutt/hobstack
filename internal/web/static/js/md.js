@@ -1,4 +1,5 @@
 import { el } from "./ui.js";
+import { highlightInto, languageFor } from "./highlight.js";
 
 // Markdown minimal pentru textele scrise de agenti (rapoarte, mesaje).
 // Stie: paragrafe, liste (- * 1.), titluri (#), blocuri ``` si linii de diff (+/-),
@@ -56,7 +57,7 @@ function inline(text, stats) {
     if (m.index > last) out.push(...plain(text.slice(last, m.index), stats));
     if (m[1] != null) {
       const s = fileStat(m[1], stats);
-      out.push(s ? el("span", { class: "md-file" }, el("code", {}, m[1]), statBadge(s)) : el("code", {}, m[1]));
+      out.push(s ? fileLabel(m[1], s) : el("code", {}, m[1]));
     } else {
       out.push(el("strong", {}, ...inline(m[2], stats)));
     }
@@ -95,12 +96,20 @@ export function renderMarkdown(text, stats) {
 
     // bloc ``` ... ```
     if (/^\s*```/.test(line)) {
+      const tag = (/^\s*```\s*([\w#+.-]*)/.exec(line)[1] || "").toLowerCase(); // ```php -> "php"
       const body = [];
       i++;
       while (i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i++]);
       i++; // ``` de inchidere (sau sfarsitul textului)
       const diffy = body.some((l) => DIFF.test(l));
-      root.append(el("pre", { class: diffy ? "md-pre diff" : "md-pre" }, diffy ? body.map(diffLine) : body.join("\n")));
+      if (!diffy) {
+        // codul se coloreaza dupa eticheta (```php, ```ts); fara eticheta, ghicit
+        const code = el("code", {});
+        highlightInto(code, body.join("\n"), tag ? (languageFor("x." + tag) || tag) : null);
+        root.append(el("pre", { class: "md-pre" }, code));
+        continue;
+      }
+      root.append(el("pre", { class: "md-pre diff" }, body.map(diffLine)));
       continue;
     }
 
@@ -148,13 +157,13 @@ export function renderMarkdown(text, stats) {
   return root;
 }
 
-// changeStats: Map cale -> { added, removed, kind } din raspunsul /changes
-// (acelasi fisier din mai multe run-uri se aduna).
-export function changeStats(data) {
+// changeStats: Map cale -> { added, removed, kind, path, open? } din raspunsul /changes
+// (acelasi fisier din mai multe run-uri se aduna). onOpen(path), daca e dat, face eticheta clicabila.
+export function changeStats(data, onOpen) {
   const stats = new Map();
   for (const run of data?.runs || []) {
     for (const f of run.files || []) {
-      const s = stats.get(f.path) || { added: 0, removed: 0, kind: f.kind };
+      const s = stats.get(f.path) || { added: 0, removed: 0, kind: f.kind, path: f.path, open: onOpen ? () => onOpen(f.path) : null };
       s.added += f.added;
       s.removed += f.removed;
       if (f.kind === "create") s.kind = "create";
@@ -162,4 +171,11 @@ export function changeStats(data) {
     }
   }
   return stats;
+}
+
+// fileLabel: `cale` +N −M; cu s.open, clicabila (deschide modala de fisier)
+function fileLabel(code, s) {
+  if (!s.open) return el("span", { class: "md-file" }, el("code", {}, code), statBadge(s));
+  return el("span", { class: "md-file md-file-link", role: "button", tabindex: "0", title: "View file",
+    onclick: () => s.open(), onkeydown: (e) => { if (e.key === "Enter") s.open(); } }, el("code", {}, code), statBadge(s));
 }

@@ -125,6 +125,14 @@ start_task (doar in run-urile fara task) creeaza un task Queued pentru agent, fa
 cererile din chat, max 3 in lucru (Queued / In progress; evenimentul self_started); cu echipa oprita raspunsul spune
 ca task-ul porneste la Start team. Comentariile pe task cer modificarile printr-un task de continuare. Refuzurile Edit/Write/Bash din run-urile fara task nu fac
 cereri de acces. Verificat cu claude 2.1.295: Edit, redirectarea >, tee si git commit sunt refuzate, git log trece.
+Gata (cod colorat si fisierele modificate, spec in docs/superpowers/specs/2026-10-09-foreman-code-view-design.md):
+highlight.js 11.9.0 (build common ES, 36 de limbaje, static/vendor/highlight, BSD-3) prin static/js/highlight.js (languageFor,
+highlightInto, highlightLine; fara colorare peste 5000 linii / 500 KB) in markdown, diff-uri (changes.js: diffBlock) si
+previzualizari. Tab-ul Modified pe task (GET /api/tasks/{id}/modified, cu sub-task-urile) si modala de fisier (file-view.js,
+GET /api/tasks/{id}/file?path=&task=): fisierul de acum de pe disc, doar cai din task_changes, prin os.OpenRoot, max 1 MB,
+binar = NUL in primii 8 KB; marcajele added/modified/deleted din store.FileMarkers (fragmentele aplicate in ordine;
+exact=false fara numere de linie / trunchiat / Write fara fragmente). Deschisa din Modified, "View file" din Changes si
+numele de fisiere +/- din rapoarte; Esc inchide doar modala de fisier.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din

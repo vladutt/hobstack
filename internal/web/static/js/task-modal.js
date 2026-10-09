@@ -1,6 +1,8 @@
 import { api, upload } from "./api.js";
 import { el, avatar, clock, kindOf, toast } from "./ui.js";
 import { changesView } from "./changes.js";
+import { modifiedView } from "./modified.js";
+import { openFileView } from "./file-view.js";
 import { flowView } from "./flow.js";
 import { agentPicker } from "./agent-picker.js";
 import { taskFilesView } from "./task-files.js";
@@ -34,12 +36,15 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   let descOpen = false;   // descrierea lunga ramane desfasurata la refresh
   let filesKey = null;    // ce s-a desenat ultima data in rezumatul fisierelor
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
-  let tab = initialTab;   // "conversation" | "history" | "changes" | "files" | "flow"; null = inca nealeasa (se alege la primul raspuns)
+  let tab = initialTab;   // "conversation" | "history" | "changes" | "modified" | "files" | "flow"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
   let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
-  const changes = changesView();
+  const changes = changesView({ openFile: (path) => openFileView({ taskId, path }) });
+  let modCount = null;    // changesCount-ul pentru care s-a incarcat tab-ul Modified (null = neincarcat)
+  let modSeq = 0;         // ca seq, pentru cererea Modified
+  const modified = modifiedView({ onOpen: (f) => openFileView({ taskId, subTaskId: f.taskId, path: f.path }) });
   let filesCount = null;  // filesCount (+ sters) pentru care s-a incarcat tab-ul Files (null = neincarcat)
   let filesSeq = 0;       // ca seq, pentru cererea Files
   // Upload din tab-ul Files: dupa raspuns se reincarca task-ul (filesCount) si lista
@@ -75,12 +80,14 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "Activity");
   const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
   const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
+  const modPane = el("div", { id: `mod-${taskId}`, role: "tabpanel", hidden: true }, modified.el);
+  const tabMod = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": modPane.id, onclick: () => setTab("modified") }, "Modified");
   const filesPane = el("div", { id: `files-${taskId}`, role: "tabpanel", hidden: true }, filesView.el);
   const tabFiles = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": filesPane.id, onclick: () => setTab("files") }, "Files");
   const flowPane = el("div", { id: `flow-${taskId}`, role: "tabpanel", hidden: true }, flow.el);
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
-    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabFiles, tabFlow), convPane, histPane, chgPane, filesPane, flowPane);
+    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabMod, tabFiles, tabFlow), convPane, histPane, chgPane, modPane, filesPane, flowPane);
   // formularul de comentarii: creat o singura data, ca textul scris sa nu se piarda la refresh.
   // Cand decide utilizatorul, se muta in zona de actiuni si textul lui e si feedback-ul pentru Send back.
   const commentInput = el("textarea", { rows: 2, placeholder: "Reply to the agent...", "aria-label": "Comment" });
@@ -395,9 +402,9 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   }
 
   function applyTab() {
-    const names = ["conversation", "history", "changes", "files", "flow"];
-    const tabs = [tabConv, tabHist, tabChg, tabFiles, tabFlow];
-    const panes = [convPane, histPane, chgPane, filesPane, flowPane];
+    const names = ["conversation", "history", "changes", "modified", "files", "flow"];
+    const tabs = [tabConv, tabHist, tabChg, tabMod, tabFiles, tabFlow];
+    const panes = [convPane, histPane, chgPane, modPane, filesPane, flowPane];
     names.forEach((n, i) => {
       const on = tab === n;
       tabs[i].setAttribute("aria-selected", String(on));
@@ -405,8 +412,30 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       panes[i].hidden = !on;
     });
     syncChanges();
+    syncModified();
     syncFiles();
     syncFlow();
+  }
+
+  // syncModified: /modified se cere cand tab-ul e deschis si changesCount s-a schimbat de la ultima incarcare
+  async function syncModified() {
+    if (!data || tab !== "modified") return;
+    const count = data.changesCount || 0;
+    if (count === modCount) return;
+    const my = ++modSeq;
+    try {
+      const res = await api(`/api/tasks/${taskId}/modified`);
+      if (destroyed || my !== modSeq) return;
+      modCount = count;
+      const n = (res.files || []).length;
+      // numarul intr-un span separat: pe telefon se ascunde, ca tab-urile sa incapa pe un rand
+      tabMod.replaceChildren("Modified", n ? el("span", { class: "tab-count" }, ` (${n})`) : "");
+      modified.show(res, taskId);
+    } catch (err) {
+      if (destroyed || my !== modSeq) return;
+      modCount = null;
+      modified.error(err.message);
+    }
   }
 
   // syncFlow: cat timp tab-ul e deschis, arborele se cere la fiecare desenare a modalei
@@ -462,7 +491,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       const res = await api(`/api/tasks/${taskId}/changes`);
       if (destroyed || my !== chgSeq) return;
       chgCount = count;
-      stats = changeStats(res);
+      stats = changeStats(res, (path) => openFileView({ taskId, path }));
       convKey = reportKey = null; // se redeseneaza cu badge-urile noi
       render(); // conversatia, raportul, rezumatul si coloana din dreapta, cu statisticile noi
       const hasSubtasks = (project.tasks || []).some((x) => x.parentTaskId === taskId);
