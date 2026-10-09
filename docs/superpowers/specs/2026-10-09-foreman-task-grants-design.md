@@ -1,7 +1,7 @@
 # Foreman: aprobarea unei comenzi din "Needs you" tine pe tot task-ul
 
 Data: 2026-10-09
-Status: spec, de implementat.
+Status: implementat (2026-10-09).
 
 ## Problema
 
@@ -32,7 +32,7 @@ reguli Allow pe proiect pentru agentii fara Shell.
 
 ## 1. Date: `command_grants` pe task
 
-Migrarea 028:
+Migrarea 029 (028 era deja luata de account_usage):
 
 ```sql
 DROP INDEX command_grants_open;
@@ -88,7 +88,8 @@ docker cargo make kubectl`, plus `php artisan` (doua cuvinte, apoi comanda artis
 - `git stash push -u -m "x" -- app/` -> `git stash`
 - `ls -la` -> `ls`
 - `php artisan migrate --force` -> `php artisan migrate`
-- `git -C dir status` -> `git` (al doilea cuvant e flag: prefixul ramane primul cuvant)
+- `git -C dir status` -> fara prefix (al doilea cuvant e flag; `git` ar insemna tot git-ul): ramane cererea de tool
+  (Enable Shell). La fel interpretoarele si wrapper-ele (bash, sh, env, sudo, xargs, python, node, php fara artisan...).
 
 Cererile se comaseaza ca acum (agent + tool + prefix, `count++`). O comanda compusa care are nevoie de doua prefixe da
 doua carduri (rar). De verificat la implementare cu `claude` real: daca `cd <folder> && ...` produce un refuz pe `cd`;
@@ -108,7 +109,7 @@ Team (`internal/team/commands.go`):
 - `AllowCommandInProject` / `BlockCommandInProject`: neschimbate, doar pentru cererile pe o regula Ask (un agent fara
   Shell nu primeste nimic dintr-o regula Allow, iar Block pe un prefix calculat nu e cerut); altfel 409 cu mesaj clar.
   Cererile Ask si cele calculate se deosebesc printr-o coloana noua `access_requests.kind` ('ask' / 'command', in
-  migrarea 028; randurile vechi cu prefix sunt 'ask').
+  migrarea 029; randurile vechi cu prefix sunt 'ask').
 - `EnableTool(accessID, tool)` muta logica din `web.enableTool` in team si cheama `wakeForCommand` (cu un mesaj
   "You now have the Shell tool" / "...can install packages"): **repara bug-ul** in care agentul nu era trezit.
 
@@ -133,7 +134,7 @@ O constanta noua `howDenied`, adaugata pentru toti agentii (in toate modurile, i
 > Command and tool permissions are set in Foreman, not in Claude Code settings. If something is denied, do not ask the
 > user to allow it and do not suggest editing settings files or changing the
 > permission mode: the denial already appears in the user's Needs you list, and approving it wakes you up. Say in one
-> line what was denied and why you need it, then stop without calling report_done for that work. When you are told it is
+> line what was denied and why you need it, then stop; do not report that work as finished while you wait. When you are told it is
 > now allowed, run it again.
 
 Textul nu pomeneste ask_user (in modul autonom promptul nu are voie sa-l contina, `TestSystemAutonomy`); descrierea
@@ -149,7 +150,7 @@ ar fi refuzat din nou. Store: `HasOpenAccessRequest(agentID, taskID int64) (bool
 
 ## Teste
 
-- store: migrarea 028 (grant-urile consumate dispar, cele nefolosite devin de chat); `AddCommandGrant` fara duplicate;
+- store: migrarea 029 (grant-urile consumate dispar, cele nefolosite devin de chat); `AddCommandGrant` fara duplicate;
   `CommandGrants` pe task vs chat, fara consum; `StartNewChat` sterge grant-urile de chat.
 - prompt: `CommandPrefix` (exemplele de mai sus, flag pe pozitia 2, `php artisan`); `Settings` cu grant pune
   `Bash(prefix:*)` in allow; un Block sau un deny fix ramane in deny chiar cu grant.
@@ -159,3 +160,15 @@ ar fi refuzat din nou. Store: `HasOpenAccessRequest(agentID, taskID int64) (bool
   acces deschisa nu e "stuck".
 - web: `allow-task`, `allow-project` refuzat pentru agent fara Shell, `hasShell` in `accessView`.
 - UI: verificat cu screenshot (cardul cu prefix calculat si cel Ask).
+
+## Dupa review (2026-10-09)
+
+- Cererile se comaseaza doar pe acelasi task (sau tot in chat); agentul e trezit dupa ultima aprobare de pe task.
+- Enable Shell inchide toate cererile Bash de tool/comanda ale agentului; Allow in this project doar pentru agentii cu Shell.
+- Verificat cu claude 2.1.295 (`dontAsk`, agent cu doar `git`): `pwd`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq`,
+  `grep`, `echo`, `find` (si in pipe) si `cd` singur sunt permise de claude fara reguli, deci nu fac carduri.
+  `cd sub && git ...` e refuzat chiar cu `Bash(cd:*)` in allow (cu Shell trece): ramane Enable Shell.
+- Un task cu o cerere de acces deschisa asteapta ca la o intrebare: nu merge in review la un run oprit fara report_done si nu
+  e repus in coada la Stop team / restart.
+- Un prefix calculat se refuza la aprobare doar pe Block / refuz fix (o regula Ask o ridica grant-ul); prefixele trec prin
+  NormalizePrefix; instalarile de pachete au mai multe variante in refuzul fix.

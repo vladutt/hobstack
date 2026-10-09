@@ -151,9 +151,8 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 	}
 
-	// grant-urile "Allow once" se consuma la pornirea run-ului; daca pornirea esueaza le punem la loc
-	// grant-ul merge la urmatorul run al agentului, de orice fel (acceptat)
-	granted, err := t.st.TakeCommandGrants(a.ID)
+	// grant-urile din "Needs you": ale task-ului run-ului, sau de chat (taskID 0); nu se consuma
+	granted, err := t.st.CommandGrants(a.ID, taskID)
 	if err != nil {
 		log.Printf("agent %d: command grants: %v", a.ID, err)
 		granted = nil
@@ -164,7 +163,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
 		Dir:    home.Path,
-		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild, cmdDeny), extraArgs...),
+		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild, cmdDeny, granted), extraArgs...),
 		Prompt: turn,
 		Env:    env,
 	}
@@ -177,11 +176,6 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		if mcpFile {
 			t.lib.RemoveMCPConfig(runID)
 		}
-		for _, g := range granted {
-			if gerr := t.st.AddCommandGrant(p.ID, a.ID, g); gerr != nil {
-				log.Printf("agent %d: restoring command grant: %v", a.ID, gerr)
-			}
-		}
 		t.st.FinishRun(runID, store.RunFailed, 0, err.Error())
 		return err
 	}
@@ -190,7 +184,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 }
 
 // args construieste linia de comanda pentru claude.
-func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build, cmdDeny []string) []string {
+func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build, cmdDeny, granted []string) []string {
 	args := []string{
 		"-p", turn,
 		"--output-format", "stream-json", "--verbose",
@@ -199,7 +193,7 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string,
 		// setarile globale ale utilizatorului raman; .claude/settings.json din
 		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
 		"--setting-sources", "user",
-		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, cmdDeny),
+		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, cmdDeny, granted),
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
 		"--mcp-config", mcpCfg,
@@ -339,11 +333,17 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		t.taskEvent(task, "waiting_subtasks", a.Name, "Waiting for subtasks "+strings.Join(open, ", "))
 		return t.note(ar.projectID, a.ID, fmt.Sprintf("%s is waiting for its subtasks: %s.", task.Ref(), strings.Join(open, ", ")), true)
 	}
-	// regula: task-ul asteapta cat timp are orice intrebare deschisa pe el
+	// regula: task-ul asteapta cat timp are orice intrebare deschisa pe el,
+	// sau o cerere de acces a agentului (aprobarea din "Needs you" il pune inapoi in coada)
 	waiting, err := t.st.HasOpenQuestionForTask(task.ID)
 	if err != nil {
 		return err
 	}
+	approval, err := t.st.HasOpenAccessRequest(a.ID, task.ID)
+	if err != nil {
+		return err
+	}
+	waiting = waiting || approval
 	switch o.Status {
 	case store.RunStopped:
 		if waiting {
@@ -376,6 +376,9 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	default:
 		// a intrebat utilizatorul (ask_user): task-ul asteapta raspunsul, nu merge in review
 		if waiting {
+			if approval {
+				return t.note(ar.projectID, a.ID, task.Ref()+" is waiting for your approval in Needs you.", true)
+			}
 			return t.note(ar.projectID, a.ID, task.Ref()+" is waiting for your answer.", true)
 		}
 		// run-ul a intrebat, dar utilizatorul a raspuns deja (in timpul run-ului):
@@ -425,6 +428,10 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		log.Printf("agent %d: command rules: %v", a.ID, err)
 	}
 	hasShell := slices.Contains(a.Tools, "shell")
+	granted, err := t.st.CommandGrants(a.ID, ar.taskID)
+	if err != nil {
+		log.Printf("agent %d: command grants: %v", a.ID, err)
+	}
 	seen := map[string]bool{}
 	recorded := false
 	for _, d := range denials {
@@ -432,37 +439,62 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		if d.Tool == "Task" || prompt.AlwaysDeniedTool(d.Tool) {
 			continue
 		}
-		// comanda Bash a unui agent cu shell: regulile decid (block = fara cerere, ask = cerere pe prefix)
-		prefix := ""
-		if d.Tool == "Bash" && hasShell {
+		// cererile pentru acest refuz; implicit cererea de tool (Enable Shell, WebFetch...)
+		reqs := []prompt.Request{{Prefix: "", Kind: store.AccessTool}}
+		if d.Tool == "Bash" {
 			cmd := d.Command // comanda intreaga; Detail e scurtat la 120 de caractere
 			if cmd == "" {
 				cmd = d.Detail
 			}
-			mode, pfx := prompt.MatchCommand(cmd, rules)
-			if mode != store.CmdBlock && mode != store.CmdAsk {
-				// claude a refuzat desi regula decisiva e Allow (sau lipseste): cautam deny-ul care a lucrat
-				mode, pfx = prompt.DenyingRule(cmd, rules)
+			if hasShell {
+				// agent cu shell: regulile decid (block = fara cerere, ask = cerere pe prefix)
+				mode, pfx := prompt.MatchCommand(cmd, rules)
+				if mode != store.CmdBlock && mode != store.CmdAsk {
+					// claude a refuzat desi regula decisiva e Allow (sau lipseste): cautam deny-ul care a lucrat
+					mode, pfx = prompt.DenyingRule(cmd, rules)
+				}
+				if mode == store.CmdBlock {
+					t.denialEvent(task, a, d)
+					continue
+				}
+				if mode == store.CmdAsk {
+					reqs = []prompt.Request{{Prefix: pfx, Kind: store.AccessAsk}}
+				}
+			} else {
+				// agent fara shell: cate o cerere pe fiecare prefix care lipseste
+				var blocked bool
+				reqs, blocked = prompt.NoShellRequests(cmd, a.Tools, rules, granted)
+				if len(reqs) == 0 {
+					if blocked {
+						t.denialEvent(task, a, d)
+					}
+					continue
+				}
 			}
-			if mode == store.CmdBlock {
-				t.denialEvent(task, a, d)
+		}
+		added := false
+		for _, r := range reqs {
+			key := d.Tool + "|" + r.Kind + "|" + r.Prefix
+			if seen[key] {
 				continue
 			}
-			if mode == store.CmdAsk {
-				prefix = pfx
+			seen[key] = true
+			var rerr error
+			if r.Kind == store.AccessCommand {
+				rerr = t.st.RecordCommandRequest(ar.projectID, a.ID, tid, d.Detail, r.Prefix)
+			} else {
+				rerr = t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail, r.Prefix)
 			}
+			if rerr != nil {
+				log.Printf("agent %d: access denial: %v", a.ID, rerr)
+				continue
+			}
+			added = true
 		}
-		key := d.Tool + "|" + prefix
-		if seen[key] {
-			continue
+		if added {
+			recorded = true
+			t.denialEvent(task, a, d)
 		}
-		seen[key] = true
-		if err := t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail, prefix); err != nil {
-			log.Printf("agent %d: access denial: %v", a.ID, err)
-			continue
-		}
-		recorded = true
-		t.denialEvent(task, a, d)
 	}
 	if recorded {
 		t.emit(ar.projectID, "access", map[string]any{"agentId": a.ID})

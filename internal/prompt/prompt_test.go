@@ -146,7 +146,7 @@ func TestSettings(t *testing.T) {
 			Deny  []string `json:"deny"`
 		} `json:"permissions"`
 	}
-	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"}, "", nil, nil)), &cfg); err != nil {
+	if err := json.Unmarshal([]byte(Settings([]string{"git", "write"}, "", nil, nil, nil)), &cfg); err != nil {
 		t.Fatal(err)
 	}
 	allow := cfg.Permissions.Allow
@@ -166,7 +166,7 @@ func TestSettings(t *testing.T) {
 		}
 	}
 	// fara tool-uri: doar citire + echipa
-	json.Unmarshal([]byte(Settings(nil, "", nil, nil)), &cfg)
+	json.Unmarshal([]byte(Settings(nil, "", nil, nil, nil)), &cfg)
 	if len(cfg.Permissions.Allow) != 4 {
 		t.Errorf("allow fara tool-uri = %v", cfg.Permissions.Allow)
 	}
@@ -314,5 +314,15 @@ func TestSystemBlockedCommands(t *testing.T) {
 	}
 	if strings.Contains(System(p, a, Links{BossName: "Lead"}), "blocked in this project") {
 		t.Fatal("fara comenzi blocate nu apare linia")
+	}
+}
+
+// refuzurile: in toate modurile, fara ask_user (TestSystemAutonomy cere ca modul autonom sa nu-l pomeneasca)
+func TestSystemDenied(t *testing.T) {
+	for _, p := range []store.Project{{Name: "X"}, {Name: "X", Autonomy: true}} {
+		got := System(p, store.Agent{Name: "A"}, Links{BossName: "Boss"})
+		if !strings.Contains(got, "Command and tool permissions are set in Foreman") || strings.Contains(got, "a decision, a permission") {
+			t.Errorf("autonomy=%v:\n%s", p.Autonomy, got)
+		}
 	}
 }

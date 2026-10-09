@@ -13,6 +13,9 @@ import (
 var ErrNotCommandRequest = errors.New("this request is not about a command")
 var ErrRequestClosed = errors.New("this request is already closed")
 
+// ErrNoProjectRule: cererea e pe o comanda a unui agent fara Shell; o regula de proiect nu i-ar folosi.
+var ErrNoProjectRule = errors.New("this agent has no Shell; allow the command on the task or enable Shell")
+
 // ErrRuleChanged: regula prefixului nu mai e Ask, deci cererea e depasita.
 var ErrRuleChanged = errors.New("the rule changed")
 
@@ -37,9 +40,18 @@ func (t *Team) EffectiveCommandRules(projectID int64) ([]store.CommandRule, erro
 	return prompt.EffectiveRules(global, project), nil
 }
 
-func (t *Team) AllowCommandOnce(accessID int64) error {
+// AllowCommandForTask permite prefixul agentului pe task-ul cererii (fara task: in chat, pana la New chat).
+func (t *Team) AllowCommandForTask(accessID int64) error {
 	return t.decideCommand(accessID, func(r store.AccessRequest) (string, error) {
-		return "allowed once", t.st.AddCommandGrant(r.ProjectID, r.AgentID, r.Prefix)
+		how := "allowed in this chat"
+		if r.TaskID != nil {
+			task, err := t.st.GetTask(*r.TaskID)
+			if err != nil {
+				return "", err
+			}
+			how = "allowed on " + task.Ref()
+		}
+		return how, t.st.AddCommandGrant(r.ProjectID, r.AgentID, r.TaskID, r.Prefix)
 	}, true, false)
 }
 
@@ -88,6 +100,20 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 		t.work.Unlock()
 		return ErrNotCommandRequest
 	}
+	if project && r.Kind != store.AccessAsk {
+		t.work.Unlock()
+		return ErrNoProjectRule
+	}
+	if project && allow {
+		// o regula Allow nu da nimic unui agent fara Shell
+		if shell, err := t.agentHasShell(r.AgentID); err != nil || !shell {
+			t.work.Unlock()
+			if err != nil {
+				return err
+			}
+			return ErrNoProjectRule
+		}
+	}
 	if allow {
 		// regula s-a putut schimba dupa cerere (de ex. in Block): un Allow nu are voie sa o ocoleasca
 		rules, err := t.EffectiveCommandRules(r.ProjectID)
@@ -95,7 +121,19 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 			t.work.Unlock()
 			return err
 		}
-		if !slices.Contains(rules, store.CommandRule{Prefix: r.Prefix, Mode: store.CmdAsk}) {
+		ok := slices.Contains(rules, store.CommandRule{Prefix: r.Prefix, Mode: store.CmdAsk})
+		if r.Kind == store.AccessCommand {
+			// prefix calculat: permis cat timp nu e pe Block si nu e un refuz fix pentru tool-urile agentului
+			// (o regula Ask pusa intre timp nu conteaza: grant-ul o ridica)
+			a, err := t.st.GetAgent(r.AgentID)
+			if err != nil {
+				t.work.Unlock()
+				return err
+			}
+			mode, _ := prompt.DenyingRule(r.Prefix, rules)
+			ok = mode != store.CmdBlock && !prompt.AlwaysDeniedBash(r.Prefix, a.Tools, nil)
+		}
+		if !ok {
 			t.work.Unlock()
 			return ruleChangedError{r.Prefix}
 		}
@@ -122,8 +160,14 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 			return err
 		}
 		for _, o := range open {
-			if o.ID == r.ID || o.Prefix != r.Prefix {
+			if o.ID == r.ID || o.Prefix != r.Prefix || o.Kind != store.AccessAsk {
 				continue
+			}
+			if allow {
+				// agentii fara Shell nu primesc nimic din regula: cererea lor ramane deschisa
+				if shell, err := t.agentHasShell(o.AgentID); err != nil || !shell {
+					continue
+				}
 			}
 			if err := t.st.DismissAccessRequest(o.ID); err != nil {
 				t.work.Unlock()
@@ -144,8 +188,90 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 	return nil
 }
 
-// wakeForCommand pune task-ul cererii inapoi in coada si lasa agentului un mesaj nelivrat. Se apeleaza cu t.work blocat.
+// ErrNotToolRequest: tool-ul nu se poate porni din aceasta cerere.
+var ErrNotToolRequest = errors.New("only shell access can be enabled from here")
+
+// EnableTool adauga tool-ul ("shell" sau "packages") agentului cererii, inchide cererea si il trezeste.
+// Shell: pentru o cerere de tool Bash sau o comanda calculata; packages: doar pentru o cerere de tool Bash.
+func (t *Team) EnableTool(accessID int64, tool string) error {
+	t.work.Lock()
+	r, err := t.st.GetAccessRequest(accessID)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = store.ErrNotFound
+	}
+	if err != nil {
+		t.work.Unlock()
+		return err
+	}
+	if r.Dismissed {
+		t.work.Unlock()
+		return ErrRequestClosed
+	}
+	if r.Tool != "Bash" || r.Kind == store.AccessAsk || (tool == "packages" && r.Kind != store.AccessTool) {
+		t.work.Unlock()
+		return ErrNotToolRequest
+	}
+	a, err := t.st.GetAgent(r.AgentID)
+	if err != nil {
+		t.work.Unlock()
+		return err
+	}
+	if !slices.Contains(a.Tools, tool) {
+		a.Tools = append(a.Tools, tool)
+		if err := t.st.UpdateAgent(a); err != nil {
+			t.work.Unlock()
+			return err
+		}
+		t.emit(a.ProjectID, "agent", map[string]int64{"id": a.ID})
+	}
+	dismiss := t.st.DismissAccessRequest(r.ID)
+	if tool == "shell" {
+		// cu Shell, celelalte cereri Bash de tool/comanda ale agentului nu mai au rost
+		dismiss = t.st.DismissShellRequests(r.AgentID)
+	}
+	if err := dismiss; err != nil {
+		t.work.Unlock()
+		return err
+	}
+	msg := "You now have the Shell tool (enabled by the user). Run your command again if you still need it."
+	if tool == "packages" {
+		msg = "You may now install packages (enabled by the user). Run your command again if you still need it."
+	}
+	if err := t.wakeAgent(r, msg); err != nil {
+		t.work.Unlock()
+		return err
+	}
+	t.emit(r.ProjectID, "access", map[string]int64{"agentId": r.AgentID})
+	t.work.Unlock()
+	t.Kick(r.ProjectID)
+	return nil
+}
+
+// agentHasShell spune daca agentul are tool-ul "shell".
+func (t *Team) agentHasShell(agentID int64) (bool, error) {
+	a, err := t.st.GetAgent(agentID)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(a.Tools, "shell"), nil
+}
+
+// wakeForCommand: wakeAgent cu mesajul pentru un prefix permis. Se apeleaza cu t.work blocat.
+// Daca agentul mai are cereri deschise pe acelasi task (sau in chat), asteapta ultima aprobare:
+// altfel run-ul ar fi refuzat iar pe comanda inca neaprobata.
 func (t *Team) wakeForCommand(r store.AccessRequest, how string) error {
+	var tid int64
+	if r.TaskID != nil {
+		tid = *r.TaskID
+	}
+	if waiting, err := t.st.HasOpenAccessRequest(r.AgentID, tid); err != nil || waiting {
+		return err
+	}
+	return t.wakeAgent(r, fmt.Sprintf("You may now run commands starting with %q (%s by the user). Run your command again if you still need it.", r.Prefix, how))
+}
+
+// wakeAgent pune task-ul cererii inapoi in coada si lasa agentului un mesaj nelivrat. Se apeleaza cu t.work blocat.
+func (t *Team) wakeAgent(r store.AccessRequest, msg string) error {
 	a, err := t.st.GetAgent(r.AgentID)
 	if err != nil {
 		return err
@@ -155,7 +281,6 @@ func (t *Team) wakeForCommand(r store.AccessRequest, how string) error {
 			return err
 		}
 	}
-	msg := fmt.Sprintf("You may now run commands starting with %q (%s by the user). Run your command again if you still need it.", r.Prefix, how)
 	_, err = t.addUserMessage(a, clip(msg), nil, true, true)
 	return err
 }

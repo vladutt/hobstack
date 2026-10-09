@@ -48,9 +48,7 @@ func TestAccessDenialInsertMergeDismiss(t *testing.T) {
 	p, _ := newProject(t, s)
 	w := newWorker(t, s, p.ID, "Rook")
 	t1 := Task{ProjectID: p.ID, Title: "t1", AssigneeID: w.ID}
-	t2 := Task{ProjectID: p.ID, Title: "t2", AssigneeID: w.ID}
 	s.CreateTask(&t1)
-	s.CreateTask(&t2)
 
 	if l, err := s.ListOpenAccessRequests(p.ID); err != nil || l == nil || len(l) != 0 {
 		t.Fatalf("lista goala trebuie non-nil: %v %v", l, err)
@@ -58,12 +56,11 @@ func TestAccessDenialInsertMergeDismiss(t *testing.T) {
 	if err := s.RecordAccessDenial(p.ID, w.ID, &t1.ID, "Bash", "npm test", ""); err != nil {
 		t.Fatal(err)
 	}
-	// al doilea refuz: comasat, detail = ultimul, task_id = ultimul
-	if err := s.RecordAccessDenial(p.ID, w.ID, &t2.ID, "Bash", "npm build", ""); err != nil {
+	// refuzurile pe acelasi task se comaseaza, detail = ultimul (alt task / chat = alt rand, vezi TestAccessRequestsKeptPerTask)
+	if err := s.RecordAccessDenial(p.ID, w.ID, &t1.ID, "Bash", "npm build", ""); err != nil {
 		t.Fatal(err)
 	}
-	// cu taskID nil, task_id ramane
-	if err := s.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "npm lint", ""); err != nil {
+	if err := s.RecordAccessDenial(p.ID, w.ID, &t1.ID, "Bash", "npm lint", ""); err != nil {
 		t.Fatal(err)
 	}
 	// alt tool = rand nou
@@ -75,7 +72,7 @@ func TestAccessDenialInsertMergeDismiss(t *testing.T) {
 		t.Fatalf("lista: %+v %v", l, err)
 	}
 	r := l[0]
-	if r.Tool != "Bash" || r.Count != 3 || r.Detail != "npm lint" || r.TaskID == nil || *r.TaskID != t2.ID ||
+	if r.Tool != "Bash" || r.Count != 3 || r.Detail != "npm lint" || r.TaskID == nil || *r.TaskID != t1.ID ||
 		r.ProjectID != p.ID || r.AgentID != w.ID || r.CreatedAt.IsZero() || r.UpdatedAt.Before(r.CreatedAt) {
 		t.Fatalf("rand comasat: %+v", r)
 	}
@@ -132,5 +129,47 @@ func TestAccessRequestCascadeAndSetNull(t *testing.T) {
 	}
 	if n, _ := s.CountOpenAccessRequests(p.ID); n != 0 {
 		t.Fatalf("dupa stergerea agentului: %d", n)
+	}
+}
+
+// cererile se comaseaza doar pe acelasi task: altfel aprobarea ar ajunge pe alt task (sau in chat)
+func TestAccessRequestsKeptPerTask(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	t1 := Task{ProjectID: p.ID, Title: "a", AssigneeID: lead.ID}
+	t2 := Task{ProjectID: p.ID, Title: "b", AssigneeID: lead.ID}
+	s.CreateTask(&t1)
+	s.CreateTask(&t2)
+	s.RecordCommandRequest(p.ID, lead.ID, &t1.ID, "git stash", "git stash")
+	s.RecordCommandRequest(p.ID, lead.ID, &t2.ID, "git stash", "git stash")
+	s.RecordCommandRequest(p.ID, lead.ID, nil, "git stash", "git stash")
+	s.RecordCommandRequest(p.ID, lead.ID, &t1.ID, "git stash pop", "git stash")
+	reqs, _ := s.ListOpenAccessRequests(p.ID)
+	if len(reqs) != 3 || *reqs[0].TaskID != t1.ID || reqs[0].Count != 2 || *reqs[1].TaskID != t2.ID || reqs[2].TaskID != nil {
+		t.Fatalf("%+v", reqs)
+	}
+	if ok, _ := s.HasOpenAccessRequest(lead.ID, t1.ID); !ok {
+		t.Fatal("T-1 si-a pierdut cererea")
+	}
+}
+
+// Stop team / restart nu repun in coada un task care asteapta o aprobare
+func TestRequeueSkipsTasksWaitingForAccess(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	waiting := Task{ProjectID: p.ID, Title: "a", AssigneeID: lead.ID}
+	free := Task{ProjectID: p.ID, Title: "b", AssigneeID: lead.ID}
+	for _, tk := range []*Task{&waiting, &free} {
+		s.CreateTask(tk) // CreateTask pune mereu Queued
+		tk.Status = StatusInProgress
+		s.SaveTask(tk)
+	}
+	s.RecordCommandRequest(p.ID, lead.ID, &waiting.ID, "git stash", "git stash")
+	ids, err := s.RequeueInProgress(p.ID)
+	if err != nil || len(ids) != 1 || ids[0] != free.ID {
+		t.Fatalf("%v %v", ids, err)
+	}
+	if ids, _ := s.RequeueAllInProgress(); len(ids) != 0 {
+		t.Fatalf("restart: %v", ids)
 	}
 }

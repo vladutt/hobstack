@@ -29,13 +29,34 @@ func TestCommandRulesAndGrants(t *testing.T) {
 	if g, _ := s.CommandRules(0); len(g) != 4 {
 		t.Fatalf("reset: %+v", g)
 	}
-	// grant-uri: luate o singura data
-	s.AddCommandGrant(p.ID, lead.ID, "git push")
-	if g, _ := s.TakeCommandGrants(lead.ID); len(g) != 1 || g[0] != "git push" {
-		t.Fatalf("%v", g)
+	// grant-uri: pe task sau pe chat (task 0), fara consum, fara duplicate
+	task := Task{ProjectID: p.ID, Title: "t", AssigneeID: lead.ID}
+	if err := s.CreateTask(&task); err != nil {
+		t.Fatal(err)
 	}
-	if g, _ := s.TakeCommandGrants(lead.ID); len(g) != 0 {
-		t.Fatalf("grant folosit de doua ori: %v", g)
+	s.AddCommandGrant(p.ID, lead.ID, &task.ID, "git push")
+	s.AddCommandGrant(p.ID, lead.ID, &task.ID, "git push")
+	s.AddCommandGrant(p.ID, lead.ID, nil, "git stash")
+	for i := 0; i < 2; i++ {
+		if g, _ := s.CommandGrants(lead.ID, task.ID); len(g) != 1 || g[0] != "git push" {
+			t.Fatalf("task, citirea %d: %v", i, g)
+		}
+	}
+	if g, _ := s.CommandGrants(lead.ID, 0); len(g) != 1 || g[0] != "git stash" {
+		t.Fatalf("chat: %v", g)
+	}
+	if g, _ := s.CommandGrants(lead.ID, task.ID+999); len(g) != 0 {
+		t.Fatalf("alt task: %v", g)
+	}
+	// New chat sterge doar grant-urile de chat
+	if _, err := s.StartNewChat(lead.ID, "New chat started."); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := s.CommandGrants(lead.ID, 0); len(g) != 0 {
+		t.Fatalf("chat dupa New chat: %v", g)
+	}
+	if g, _ := s.CommandGrants(lead.ID, task.ID); len(g) != 1 {
+		t.Fatalf("task dupa New chat: %v", g)
 	}
 	// cereri: acelasi agent + tool + prefix se aduna; alt prefix = alta cerere
 	s.RecordAccessDenial(p.ID, lead.ID, nil, "Bash", "git push origin main", "git push")
@@ -44,6 +65,24 @@ func TestCommandRulesAndGrants(t *testing.T) {
 	reqs, _ := s.ListOpenAccessRequests(p.ID)
 	if len(reqs) != 2 || reqs[0].Count != 2 || reqs[0].Prefix != "git push" || reqs[0].Detail != "git push -f" {
 		t.Fatalf("%+v", reqs)
+	}
+	// felul cererii: Ask pentru prefix, tool fara prefix, command prin RecordCommandRequest
+	s.RecordCommandRequest(p.ID, lead.ID, &task.ID, "git stash push -u", "git stash")
+	s.RecordCommandRequest(p.ID, lead.ID, &task.ID, "git stash pop", "git stash")
+	s.RecordAccessDenial(p.ID, lead.ID, nil, "WebFetch", "https://x.dev", "")
+	reqs, _ = s.ListOpenAccessRequests(p.ID)
+	kinds := map[string]string{}
+	for _, r := range reqs {
+		kinds[r.Tool+"|"+r.Prefix] = r.Kind
+	}
+	if kinds["Bash|git push"] != AccessAsk || kinds["Bash|git stash"] != AccessCommand || kinds["WebFetch|"] != AccessTool || len(reqs) != 4 {
+		t.Fatalf("%+v", reqs)
+	}
+	if ok, _ := s.HasOpenAccessRequest(lead.ID, task.ID); !ok {
+		t.Fatal("cererea pe task nu e gasita")
+	}
+	if ok, _ := s.HasOpenAccessRequest(lead.ID, task.ID+999); ok {
+		t.Fatal("cerere pe alt task")
 	}
 	// stergerea proiectului ia si regulile lui
 	if err := s.DeleteProject(p.ID); err != nil {

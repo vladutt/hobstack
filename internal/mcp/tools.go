@@ -188,7 +188,7 @@ var commentTaskTool = Tool{
 
 var askUserTool = Tool{
 	Name:        "ask_user",
-	Description: "Ask the user a question when you need a decision, a permission or information only they can give. After calling it, stop: the answer arrives later as a message. Do not call report_done while you wait.",
+	Description: "Ask the user a question when you need a decision or information only they can give (not for denied commands: those reach the user on their own). After calling it, stop: the answer arrives later as a message. Do not call report_done while you wait.",
 	InputSchema: schema([]string{"question"}, map[string]any{
 		"question": str("The question, clear and self-contained (what you need and why)"),
 		"options": map[string]any{

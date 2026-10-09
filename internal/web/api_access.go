@@ -9,6 +9,7 @@ import (
 
 	"foreman/internal/prompt"
 	"foreman/internal/store"
+	"foreman/internal/team"
 )
 
 // accessView e o cerere de acces deschisa, asa cum o vede UI-ul.
@@ -29,6 +30,8 @@ type accessView struct {
 	// CanEnablePackages: comanda refuzata instaleaza pachete (npm install...) si
 	// agentul nu are inca "packages"
 	CanEnablePackages bool `json:"canEnablePackages"`
+	Kind              string `json:"kind"`     // "" (tool) / "ask" / "command"
+	HasShell          bool   `json:"hasShell"` // fara Shell, "Allow in this project" nu are efect
 }
 
 // accessViews intoarce cererile deschise ale proiectului (lista e mereu non-nil).
@@ -43,12 +46,15 @@ func (s *Server) accessViews(projectID int64, agents []store.Agent, tasks []stor
 	}
 	out := make([]accessView, 0, len(reqs))
 	for _, r := range reqs {
-		v := accessView{ID: r.ID, AgentID: r.AgentID, TaskID: r.TaskID, Tool: r.Tool, Detail: r.Detail, Prefix: r.Prefix, Count: r.Count, UpdatedAt: r.UpdatedAt}
+		v := accessView{ID: r.ID, AgentID: r.AgentID, TaskID: r.TaskID, Tool: r.Tool, Detail: r.Detail, Prefix: r.Prefix, Kind: r.Kind, Count: r.Count, UpdatedAt: r.UpdatedAt}
 		for _, a := range agents {
 			if a.ID == r.AgentID {
-				v.AgentName = a.Name
-				v.CanEnableShell = r.Prefix == "" && r.Tool == "Bash" && !slices.Contains(a.Tools, "shell") && !prompt.AlwaysDeniedBash(r.Detail, a.Tools, rules)
-				v.CanEnablePackages = r.Prefix == "" && r.Tool == "Bash" && !slices.Contains(a.Tools, "packages") && prompt.NeedsPackages(r.Detail)
+				hasShell := slices.Contains(a.Tools, "shell")
+				v.AgentName, v.HasShell = a.Name, hasShell
+				// Enable Shell ajuta la o cerere de tool Bash (daca nu e refuz fix) si la o comanda calculata
+				v.CanEnableShell = r.Tool == "Bash" && !hasShell &&
+					(r.Kind == store.AccessCommand || (r.Kind == store.AccessTool && !prompt.AlwaysDeniedBash(r.Detail, a.Tools, rules)))
+				v.CanEnablePackages = r.Kind == store.AccessTool && r.Tool == "Bash" && !slices.Contains(a.Tools, "packages") && prompt.NeedsPackages(r.Detail)
 			}
 		}
 		if r.TaskID != nil {
@@ -98,35 +104,20 @@ func (s *Server) enablePackages(w http.ResponseWriter, r *http.Request) {
 	s.enableTool(w, r, "packages")
 }
 
-// enableTool adauga tool-ul ("shell" sau "packages") la tool-urile agentului
-// (restul campurilor raman) si inchide cererea.
+// enableTool porneste tool-ul ("shell" sau "packages") prin team, care trezeste agentul.
 func (s *Server) enableTool(w http.ResponseWriter, r *http.Request, tool string) {
-	req, err := s.getAccess(r)
+	id, err := pathID(r)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	if req.Tool != "Bash" || req.Prefix != "" {
-		writeErr(w, http.StatusConflict, "only shell access can be enabled from here")
-		return
-	}
-	a, err := s.st.GetAgent(req.AgentID)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	if !slices.Contains(a.Tools, tool) {
-		a.Tools = append(a.Tools, tool)
-		if err := s.st.UpdateAgent(a); err != nil {
-			fail(w, err)
+	if err := s.team.EnableTool(id, tool); err != nil {
+		if errors.Is(err, team.ErrNotToolRequest) || errors.Is(err, team.ErrRequestClosed) {
+			writeErr(w, http.StatusConflict, err.Error())
 			return
 		}
-		s.hub.Publish(a.ProjectID, "agent", map[string]int64{"id": a.ID})
-	}
-	if err := s.st.DismissAccessRequest(req.ID); err != nil {
 		fail(w, err)
 		return
 	}
-	s.hub.Publish(req.ProjectID, "access", map[string]int64{"agentId": req.AgentID})
 	w.WriteHeader(http.StatusNoContent)
 }

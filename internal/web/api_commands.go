@@ -106,7 +106,7 @@ func (s *Server) accessCommand(w http.ResponseWriter, r *http.Request, act func(
 		return
 	}
 	if err := act(id); err != nil {
-		if errors.Is(err, team.ErrNotCommandRequest) || errors.Is(err, team.ErrRequestClosed) || errors.Is(err, team.ErrRuleChanged) {
+		if errors.Is(err, team.ErrNotCommandRequest) || errors.Is(err, team.ErrRequestClosed) || errors.Is(err, team.ErrRuleChanged) || errors.Is(err, team.ErrNoProjectRule) {
 			writeErr(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -116,8 +116,8 @@ func (s *Server) accessCommand(w http.ResponseWriter, r *http.Request, act func(
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) allowCommandOnce(w http.ResponseWriter, r *http.Request) {
-	s.accessCommand(w, r, s.team.AllowCommandOnce)
+func (s *Server) allowCommandTask(w http.ResponseWriter, r *http.Request) {
+	s.accessCommand(w, r, s.team.AllowCommandForTask)
 }
 
 func (s *Server) allowCommandProject(w http.ResponseWriter, r *http.Request) {

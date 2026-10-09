@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+// Felurile unei cereri de acces (access_requests.kind).
+const (
+	AccessTool    = ""        // un tool refuzat (Bash fara Shell, WebFetch...): Enable Shell / packages
+	AccessAsk     = "ask"     // o comanda pe o regula Ask: prefixul regulii
+	AccessCommand = "command" // o comanda in afara tool-urilor unui agent fara Shell: prefix calculat
+)
+
 // AccessRequest: un agent a fost refuzat la un tool; refuzurile repetate pentru
 // acelasi (agent, tool) se aduna intr-un singur rand deschis, cu count.
 type AccessRequest struct {
@@ -14,19 +21,20 @@ type AccessRequest struct {
 	TaskID    *int64    `json:"taskId"` // ultimul task in care a fost refuzat; nil = fara task
 	Tool      string    `json:"tool"`
 	Detail    string    `json:"detail"` // rezumat scurt al ultimei incercari
-	Prefix    string    `json:"prefix"` // prefixul regulii Ask care a refuzat comanda; "" = cerere de tool
+	Prefix    string    `json:"prefix"` // prefixul regulii Ask (sau cel calculat); "" = cerere de tool
+	Kind      string    `json:"kind"`   // AccessTool / AccessAsk / AccessCommand
 	Count     int       `json:"count"`
 	Dismissed bool      `json:"dismissed"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-const accessCols = `id, project_id, agent_id, task_id, tool, detail, prefix, count, dismissed, created_at, updated_at`
+const accessCols = `id, project_id, agent_id, task_id, tool, detail, prefix, kind, count, dismissed, created_at, updated_at`
 
 func scanAccessRequest(sc scanner) (AccessRequest, error) {
 	var r AccessRequest
 	var created, updated string
-	err := sc.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.TaskID, &r.Tool, &r.Detail, &r.Prefix, &r.Count, &r.Dismissed, &created, &updated)
+	err := sc.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.TaskID, &r.Tool, &r.Detail, &r.Prefix, &r.Kind, &r.Count, &r.Dismissed, &created, &updated)
 	if err != nil {
 		return AccessRequest{}, err
 	}
@@ -34,9 +42,24 @@ func scanAccessRequest(sc scanner) (AccessRequest, error) {
 	return r, nil
 }
 
-// RecordAccessDenial noteaza un refuz. Daca agentul are deja un rand deschis
-// pentru acelasi tool si prefix, il comasam (count++, detail si task_id = ultimele).
+// RecordAccessDenial noteaza un refuz de tool (prefix "") sau de comanda pe o regula Ask (prefixul regulii).
 func (s *Store) RecordAccessDenial(projectID, agentID int64, taskID *int64, tool, detail, prefix string) error {
+	kind := AccessTool
+	if prefix != "" {
+		kind = AccessAsk
+	}
+	return s.recordAccess(projectID, agentID, taskID, tool, detail, prefix, kind)
+}
+
+// RecordCommandRequest noteaza o comanda refuzata unui agent fara Shell, pe prefixul calculat.
+func (s *Store) RecordCommandRequest(projectID, agentID int64, taskID *int64, detail, prefix string) error {
+	return s.recordAccess(projectID, agentID, taskID, "Bash", detail, prefix, AccessCommand)
+}
+
+// recordAccess noteaza o cerere. Daca agentul are deja un rand deschis pentru acelasi
+// tool, prefix, fel si task (sau tot in chat), il comasam (count++, detail = ultimul).
+// Task-ul face parte din cheie: aprobarea se da pe task-ul cererii.
+func (s *Store) recordAccess(projectID, agentID int64, taskID *int64, tool, detail, prefix, kind string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -45,17 +68,17 @@ func (s *Store) RecordAccessDenial(projectID, agentID int64, taskID *int64, tool
 
 	ts := now()
 	var id int64
-	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND prefix = ? AND dismissed = 0`, agentID, tool, prefix).Scan(&id)
+	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND prefix = ? AND kind = ? AND task_id IS ? AND dismissed = 0`,
+		agentID, tool, prefix, kind, nullPtr(taskID)).Scan(&id)
 	switch {
 	case err == nil:
-		// task_id se schimba doar cand avem unul nou
-		if _, err := tx.Exec(`UPDATE access_requests SET count = count + 1, detail = ?, updated_at = ?,
-			task_id = COALESCE(?, task_id) WHERE id = ?`, detail, ts, nullPtr(taskID), id); err != nil {
+		if _, err := tx.Exec(`UPDATE access_requests SET count = count + 1, detail = ?, updated_at = ? WHERE id = ?`,
+			detail, ts, id); err != nil {
 			return err
 		}
 	case err == sql.ErrNoRows:
-		if _, err := tx.Exec(`INSERT INTO access_requests (project_id, agent_id, task_id, tool, detail, prefix, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, projectID, agentID, nullPtr(taskID), tool, detail, prefix, ts, ts); err != nil {
+		if _, err := tx.Exec(`INSERT INTO access_requests (project_id, agent_id, task_id, tool, detail, prefix, kind, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, projectID, agentID, nullPtr(taskID), tool, detail, prefix, kind, ts, ts); err != nil {
 			return err
 		}
 	default:
@@ -97,4 +120,23 @@ func (s *Store) CountOpenAccessRequests(projectID int64) (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM access_requests WHERE project_id = ? AND dismissed = 0`, projectID).Scan(&n)
 	return n, err
+}
+
+// HasOpenAccessRequest spune daca agentul asteapta o aprobare pe task (taskID 0 = in chat).
+func (s *Store) HasOpenAccessRequest(agentID, taskID int64) (bool, error) {
+	var tid any // NULL pentru chat
+	if taskID != 0 {
+		tid = taskID
+	}
+	var ok bool
+	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM access_requests WHERE agent_id = ? AND task_id IS ? AND dismissed = 0)`,
+		agentID, tid).Scan(&ok)
+	return ok, err
+}
+
+// DismissShellRequests inchide cererile Bash de tool si de comanda ale agentului (dupa Enable Shell nu mai au rost).
+func (s *Store) DismissShellRequests(agentID int64) error {
+	_, err := s.db.Exec(`UPDATE access_requests SET dismissed = 1 WHERE agent_id = ? AND tool = 'Bash' AND kind IN (?, ?) AND dismissed = 0`,
+		agentID, AccessTool, AccessCommand)
+	return err
 }

@@ -43,8 +43,9 @@ func TestDenialsCountAcrossRuns(t *testing.T) {
 	f.task(t, "B", f.rook, store.StatusQueued)
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunFailed, Error: "x", Denials: []runner.Denial{{Tool: "Bash", Detail: "ls /"}}})
+	// alt task = alta cerere: aprobarea se da pe task-ul ei
 	rs, _ := f.st.ListOpenAccessRequests(f.p.ID)
-	if len(rs) != 1 || rs[0].Count != 2 {
+	if len(rs) != 2 || rs[0].Count != 1 || rs[1].Count != 1 || *rs[0].TaskID == *rs[1].TaskID {
 		t.Fatalf("%+v", rs)
 	}
 }
@@ -55,5 +56,17 @@ func TestDenialsIgnoreFixedDenyList(t *testing.T) {
 	runTaskWithDenials(t, f, []runner.Denial{{Tool: "TaskUpdate"}, {Tool: "TaskList"}, {Tool: "TaskGet"}})
 	if rs, _ := f.st.ListOpenAccessRequests(f.p.ID); len(rs) != 0 {
 		t.Fatalf("refuzurile fixe nu sunt cereri de acces: %+v", rs)
+	}
+}
+
+// un run oprit dupa un refuz (fara report_done) asteapta aprobarea: task-ul ramane In progress, nu merge in review
+func TestDeniedRunWaitsForApproval(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := runTaskWithDenials(t, f, []runner.Denial{{Tool: "Bash", Detail: "git stash"}})
+	f.wantStatus(t, task.Number, store.StatusInProgress)
+	if !f.hasMessage(f.rook.ID, "T-1 is waiting for your approval in Needs you.") {
+		t.Fatal("lipseste nota")
 	}
 }

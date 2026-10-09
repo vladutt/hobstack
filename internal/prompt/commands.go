@@ -174,3 +174,127 @@ func splitCommand(command string) []string {
 	}
 	return out
 }
+
+// subcommandTools: unelte la care al doilea cuvant e subcomanda (git stash, npm run...).
+var subcommandTools = map[string]bool{
+	"git": true, "npm": true, "npx": true, "pnpm": true, "yarn": true, "composer": true,
+	"go": true, "docker": true, "cargo": true, "make": true, "kubectl": true,
+}
+
+var subcommandWord = regexp.MustCompile(`^[a-z][a-z0-9:-]*$`)
+
+// wrapperCommands: comenzi care ruleaza alte comenzi (interpretoare, sudo, env...); aprobarea lor
+// ar fi cat Shell-ul intreg (si ar ocoli regulile Block), deci nu primesc prefix.
+var wrapperCommands = map[string]bool{
+	"bash": true, "sh": true, "zsh": true, "fish": true, "dash": true, "env": true, "xargs": true,
+	"eval": true, "exec": true, "sudo": true, "su": true, "doas": true, "nohup": true, "timeout": true,
+	"nice": true, "time": true, "command": true, "builtin": true, "watch": true, "php": true,
+	"python": true, "python3": true, "python2": true, "node": true, "perl": true, "ruby": true,
+	"deno": true, "bun": true, "osascript": true,
+}
+
+// readOnlyCommands: comenzi pe care claude le permite singur (si in pipe), fara reguli in allow
+// (verificat cu claude 2.1.295 in modul dontAsk): nu fac cereri.
+var readOnlyCommands = map[string]bool{
+	"cd": true, "pwd": true, "ls": true, "cat": true, "head": true, "tail": true, "wc": true,
+	"sort": true, "uniq": true, "grep": true, "echo": true, "find": true,
+}
+
+// CommandPrefix: prefixul pe care il aprobi pentru o comanda (o bucata, fara && / |):
+// primul cuvant, plus subcomanda la uneltele cu subcomenzi ("git stash", "php artisan migrate").
+// "" = nu se poate aproba ca prefix (prea larg): un interpretor / wrapper, sau o unealta cu
+// subcomenzi la care pe locul subcomenzii e un flag ("git -C dir ..." ar insemna tot git-ul).
+func CommandPrefix(cmd string) string {
+	words := strings.Fields(cmd)
+	if len(words) == 0 {
+		return ""
+	}
+	n := 1
+	switch {
+	case words[0] == "php" && len(words) > 1 && words[1] == "artisan":
+		n = 2
+	case wrapperCommands[words[0]]:
+		return ""
+	case !subcommandTools[words[0]]:
+		return words[0]
+	}
+	if len(words) > n {
+		if !subcommandWord.MatchString(words[n]) {
+			return ""
+		}
+		n++
+	}
+	return strings.Join(words[:n], " ")
+}
+
+// BashAllowed spune daca o bucata de comanda e permisa agentului: cu Shell orice,
+// altfel ce permit tool-urile lui (git -> git status...) si grant-urile.
+func BashAllowed(cmd string, tools, granted []string) bool {
+	if slices.Contains(tools, "shell") {
+		return true
+	}
+	var rules []string
+	for _, name := range tools {
+		rules = append(rules, toolRules[name]...)
+	}
+	for _, g := range granted {
+		rules = append(rules, "Bash("+g+":*)")
+	}
+	return bashMatches(cmd, rules)
+}
+
+// Request: o cerere pentru "Needs you" dintr-o comanda refuzata (Kind = store.Access*).
+type Request struct {
+	Prefix string
+	Kind   string
+}
+
+// NoShellRequests imparte comanda refuzata unui agent fara Shell in cereri, pe bucati:
+// regula Block = fara cerere (blocked); regula Ask = prefixul regulii (daca nu are deja grant);
+// refuz fix (npm install fara packages) = cerere de tool; bucata permisa = nimic;
+// altfel prefixul calculat. Fara nicio cerere si fara Block ramane cererea de tool (Enable Shell),
+// ca utilizatorul sa vada refuzul.
+func NoShellRequests(cmd string, tools []string, rules []store.CommandRule, granted []string) (reqs []Request, blocked bool) {
+	add := func(r Request) {
+		if !slices.Contains(reqs, r) {
+			reqs = append(reqs, r)
+		}
+	}
+	for _, part := range splitCommand(cmd) {
+		mode, pfx := MatchCommand(part, rules)
+		if mode != store.CmdBlock && mode != store.CmdAsk {
+			mode, pfx = DenyingRule(part, rules)
+		}
+		switch {
+		case mode == store.CmdBlock:
+			blocked = true
+		case mode == store.CmdAsk:
+			if !slices.Contains(granted, pfx) {
+				add(Request{pfx, store.AccessAsk})
+			}
+		case bashMatches(part, denyFor(tools)):
+			add(Request{"", store.AccessTool})
+		case BashAllowed(part, tools, granted), readOnlyCommands[firstWord(part)]:
+			// deja permisa (de tool-uri, grant-uri sau de claude insusi)
+		default:
+			if pfx, err := NormalizePrefix(CommandPrefix(part)); err == nil {
+				add(Request{pfx, store.AccessCommand})
+			} else {
+				// prea larg sau cu caractere de shell: nu se poate aproba ca prefix, doar Enable Shell
+				add(Request{"", store.AccessTool})
+			}
+		}
+	}
+	if len(reqs) == 0 && !blocked {
+		reqs = []Request{{"", store.AccessTool}}
+	}
+	return reqs, blocked
+}
+
+// firstWord: primul cuvant al unei bucati de comanda.
+func firstWord(cmd string) string {
+	if f := strings.Fields(cmd); len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}

@@ -144,7 +144,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/accounts/{id}/check", s.checkAccountRoute)
 	mux.HandleFunc("GET /api/projects/{id}/commands", s.getProjectCommands)
 	mux.HandleFunc("PUT /api/projects/{id}/commands", s.putProjectCommands)
-	mux.HandleFunc("POST /api/access/{id}/allow-once", s.allowCommandOnce)
+	mux.HandleFunc("POST /api/access/{id}/allow-task", s.allowCommandTask)
 	mux.HandleFunc("POST /api/access/{id}/allow-project", s.allowCommandProject)
 	mux.HandleFunc("POST /api/access/{id}/block-project", s.blockCommandProject)
 	mux.HandleFunc("GET /api/projects/{id}/links", s.listLinks)
