@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -102,11 +103,11 @@ func (s *Store) AnswerDecisions(taskID int64, answers []DecisionAnswer) error {
 	}
 	defer tx.Rollback()
 	for _, a := range answers {
-		var optsJSON string
+		var optsJSON, ansJSON, other string
 		var multi bool
 		var answered sql.NullString
-		err := tx.QueryRow(`SELECT options, multi, answered_at FROM task_decisions WHERE id = ? AND task_id = ?`, a.ID, taskID).
-			Scan(&optsJSON, &multi, &answered)
+		err := tx.QueryRow(`SELECT options, multi, answer, other, answered_at FROM task_decisions WHERE id = ? AND task_id = ?`, a.ID, taskID).
+			Scan(&optsJSON, &multi, &ansJSON, &other, &answered)
 		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("%w: question %d does not belong to this task", ErrBadAnswer, a.ID)
 		}
@@ -114,6 +115,12 @@ func (s *Store) AnswerDecisions(taskID int64, answers []DecisionAnswer) error {
 			return err
 		}
 		if answered.Valid {
+			// reincercare cu exact acelasi raspuns (ex. decizia a picat dupa salvare): nimic de facut
+			var prev []string
+			json.Unmarshal([]byte(ansJSON), &prev)
+			if sameChoices(prev, a.Choices) && strings.TrimSpace(other) == strings.TrimSpace(a.Other) {
+				continue
+			}
 			return fmt.Errorf("%w: question %d is already answered", ErrBadAnswer, a.ID)
 		}
 		var opts []string
@@ -133,4 +140,12 @@ func (s *Store) AnswerDecisions(taskID int64, answers []DecisionAnswer) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// sameChoices: aceeasi multime de alegeri, indiferent de ordine.
+func sameChoices(a, b []string) bool {
+	x, y := slices.Clone(a), slices.Clone(b)
+	slices.Sort(x)
+	slices.Sort(y)
+	return slices.Equal(x, y)
 }

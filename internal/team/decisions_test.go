@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"foreman/internal/mcp"
 	"foreman/internal/store"
@@ -262,5 +263,155 @@ func TestAnswersText(t *testing.T) {
 	want := "Q1 Q?: A, B; other: c\nQ2 R?: no answer\nQ3 S?: other: only"
 	if got := answersText(ds); got != want {
 		t.Fatalf("%q", got)
+	}
+}
+
+// notesFor intoarce textele notelor "The user accepted" primite de agent.
+func acceptNotes(f *fixture, agentID int64) []string {
+	msgs, _ := f.st.ListMessages(agentID)
+	var out []string
+	for _, m := range msgs {
+		if strings.Contains(m.Text, "The user accepted") {
+			out = append(out, m.Text)
+		}
+	}
+	return out
+}
+
+// Vera are o intrebare raspunsa intr-o runda veche: nu mai primeste nimic.
+func TestUserDecideNoNoteToOldAsker(t *testing.T) {
+	f := setup(t)
+	task, ds := userReviewTask(t, f)
+	f.st.SetDecisions(task.ID, f.vera.Name, []store.Decision{{Question: "Old?", Options: []string{"Yes", "No"}}})
+	all, _ := f.st.ListDecisions(task.ID)
+	if err := f.st.AnswerDecisions(task.ID, []store.DecisionAnswer{{ID: all[2].ID, Choices: []string{"No"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.UserDecide(task.ID, true, "", []store.DecisionAnswer{{ID: ds[0].ID, Choices: []string{"Yes"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if n := acceptNotes(f, f.vera.ID); len(n) != 0 {
+		t.Fatalf("Vera: %q", n)
+	}
+	if n := acceptNotes(f, f.rook.ID); len(n) != 1 || strings.Contains(n[0], "Old?") {
+		t.Fatalf("Rook: %q", n)
+	}
+}
+
+// doi agenti cu intrebari deschise: fiecare primeste doar intrebarile lui
+func TestUserDecideEachAskerOwnQuestions(t *testing.T) {
+	f := setup(t)
+	task, ds := userReviewTask(t, f)
+	f.st.SetDecisions(task.ID, f.vera.Name, []store.Decision{{Question: "Vera asks?", Options: []string{"Yes", "No"}}})
+	all, _ := f.st.ListDecisions(task.ID)
+	if err := f.tm.UserDecide(task.ID, true, "thanks", []store.DecisionAnswer{
+		{ID: ds[0].ID, Choices: []string{"Yes"}}, {ID: all[2].ID, Choices: []string{"No"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r, v := acceptNotes(f, f.rook.ID), acceptNotes(f, f.vera.ID)
+	if len(r) != 1 || !strings.Contains(r[0], "Q1 Open a follow-up?: Yes") || !strings.Contains(r[0], "Q2 Which?: no answer") ||
+		strings.Contains(r[0], "Vera asks?") || !strings.Contains(r[0], "Note: thanks") {
+		t.Fatalf("Rook: %q", r)
+	}
+	if len(v) != 1 || !strings.Contains(v[0], "Q3 Vera asks?: No") || strings.Contains(v[0], "Open a follow-up?") || !strings.Contains(v[0], "Note: thanks") {
+		t.Fatalf("Vera: %q", v)
+	}
+}
+
+// doar nota: la cei cu intrebari deschise; daca nu sunt, doar la ultimul care a intrebat
+func TestUserDecideNoteOnlyRecipients(t *testing.T) {
+	f := setup(t)
+	task, _ := userReviewTask(t, f)
+	f.st.SetDecisions(task.ID, f.vera.Name, []store.Decision{{Question: "Vera asks?", Options: []string{"Yes"}}})
+	all, _ := f.st.ListDecisions(task.ID)
+	f.st.AnswerDecisions(task.ID, []store.DecisionAnswer{{ID: all[2].ID, Choices: []string{"Yes"}}})
+	if err := f.tm.UserDecide(task.ID, true, "ok", nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(acceptNotes(f, f.vera.ID)) != 0 || len(acceptNotes(f, f.rook.ID)) != 1 {
+		t.Fatal("nota trebuia doar la Rook (are intrebari deschise)")
+	}
+
+	// toate raspunse: doar ultimul care a intrebat (Vera)
+	task2, ds2 := userReviewTask(t, f)
+	f.st.AnswerDecisions(task2.ID, []store.DecisionAnswer{{ID: ds2[0].ID, Choices: []string{"No"}}, {ID: ds2[1].ID, Choices: []string{"A"}}})
+	time.Sleep(5 * time.Millisecond)
+	f.st.SetDecisions(task2.ID, f.vera.Name, []store.Decision{{Question: "Late?", Options: []string{"Yes"}}})
+	all2, _ := f.st.ListDecisions(task2.ID)
+	f.st.AnswerDecisions(task2.ID, []store.DecisionAnswer{{ID: all2[2].ID, Choices: []string{"Yes"}}})
+	if err := f.tm.UserDecide(task2.ID, true, "ok2", nil); err != nil {
+		t.Fatal(err)
+	}
+	if v := acceptNotes(f, f.vera.ID); len(v) != 1 || !strings.Contains(v[0], "Note: ok2") {
+		t.Fatalf("Vera: %q", v)
+	}
+	if len(acceptNotes(f, f.rook.ID)) != 1 {
+		t.Fatal("Rook nu trebuia sa mai primeasca o nota")
+	}
+}
+
+// decided vine dupa decizie (user_accepted / sent_back), pe toate drumurile
+func TestUserDecideDecidedAfterDecision(t *testing.T) {
+	cases := []struct {
+		accept   bool
+		feedback string
+		answer   bool
+		after    string
+	}{
+		{true, "", true, "user_accepted"},
+		{true, "note", false, "user_accepted"},
+		{false, "", true, "sent_back"},
+	}
+	for _, c := range cases {
+		f := setup(t)
+		task, ds := userReviewTask(t, f)
+		var ans []store.DecisionAnswer
+		if c.answer {
+			ans = []store.DecisionAnswer{{ID: ds[0].ID, Choices: []string{"Yes"}}}
+		}
+		if err := f.tm.UserDecide(task.ID, c.accept, c.feedback, ans); err != nil {
+			t.Fatal(err)
+		}
+		evs, _ := f.st.ListTaskEvents(task.ID)
+		di, ai := -1, -1
+		for i, e := range evs {
+			switch e.Kind {
+			case "decided":
+				di = i
+			case c.after:
+				ai = i
+			}
+		}
+		if di < 0 || ai < 0 || di < ai {
+			t.Fatalf("%+v: decided %d, %s %d", c, di, c.after, ai)
+		}
+	}
+}
+
+// reincercare: raspunsurile deja salvate (identice) nu dau eroare; altele da
+func TestUserDecideRetrySameAnswers(t *testing.T) {
+	f := setup(t)
+	task, ds := userReviewTask(t, f)
+	ans := []store.DecisionAnswer{{ID: ds[0].ID, Choices: []string{"Yes"}, Other: "soon"}}
+	if err := f.tm.UserDecide(task.ID, true, "", ans); err != nil {
+		t.Fatal(err)
+	}
+	// a doua oara, task-ul deja Done: doar ErrNotUserDecision
+	if err := f.tm.UserDecide(task.ID, true, "", ans); !errors.Is(err, ErrNotUserDecision) {
+		t.Fatalf("%v", err)
+	}
+	// ca dupa o decizie care a picat: raspunsurile salvate, task-ul inca in Review
+	got, _ := f.st.GetTask(task.ID)
+	got.Status, got.ReviewStage = store.StatusReview, store.StageLead
+	f.st.SaveTask(&got)
+	if err := f.tm.UserDecide(task.ID, false, "", []store.DecisionAnswer{{ID: ds[0].ID, Choices: []string{"No"}}}); !errors.Is(err, store.ErrBadAnswer) {
+		t.Fatalf("raspuns diferit: %v", err)
+	}
+	if err := f.tm.UserDecide(task.ID, true, "", []store.DecisionAnswer{{ID: ds[0].ID, Choices: []string{"Yes"}, Other: " soon "}}); err != nil {
+		t.Fatalf("raspuns identic: %v", err)
+	}
+	if got, _ := f.st.GetTask(task.ID); got.Status != store.StatusDone {
+		t.Fatalf("%+v", got)
 	}
 }

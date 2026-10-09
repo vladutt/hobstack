@@ -55,6 +55,14 @@ func TestDecisions(t *testing.T) {
 	if err := s.AnswerDecisions(task.ID, []DecisionAnswer{{ID: list[0].ID, Choices: []string{"sqlite"}}}); !errors.Is(err, ErrBadAnswer) {
 		t.Fatalf("deja raspunsa: %v", err)
 	}
+	// acelasi raspuns din nou (reincercare): nimic de facut, fara eroare
+	if err := s.AnswerDecisions(task.ID, []DecisionAnswer{{ID: list[0].ID, Choices: []string{"sqlite"}, Other: " keep it simple "}}); err != nil {
+		t.Fatalf("raspuns identic: %v", err)
+	}
+	// alt raspuns la o intrebare raspunsa: tot eroare
+	if err := s.AnswerDecisions(task.ID, []DecisionAnswer{{ID: list[0].ID, Choices: []string{"postgres"}, Other: "keep it simple"}}); !errors.Is(err, ErrBadAnswer) {
+		t.Fatalf("raspuns diferit: %v", err)
+	}
 	// raspuns gol se salveaza
 	if err := s.AnswerDecisions(task.ID, []DecisionAnswer{{ID: list[1].ID}}); err != nil {
 		t.Fatal(err)
@@ -93,5 +101,29 @@ func TestTodoKind(t *testing.T) {
 	list, _ := s.ListTodos(task.ID)
 	if len(list) != 2 || list[0].Kind != "value" || list[1].Kind != "step" {
 		t.Fatalf("%+v", list)
+	}
+}
+
+func TestAnswerDecisionsIdenticalMulti(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	task := Task{ProjectID: p.ID, Title: "x", AssigneeID: lead.ID, CreatorID: &lead.ID}
+	s.CreateTask(&task)
+	s.SetDecisions(task.ID, "Lead", []Decision{{Question: "Which?", Options: []string{"a", "b", "c"}, Multi: true}})
+	list, _ := s.ListDecisions(task.ID)
+	if err := s.AnswerDecisions(task.ID, []DecisionAnswer{{ID: list[0].ID, Choices: []string{"a", "c"}}}); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := s.ListDecisions(task.ID)
+	// aceeasi multime, alta ordine: identic
+	if err := s.AnswerDecisions(task.ID, []DecisionAnswer{{ID: list[0].ID, Choices: []string{"c", "a"}}}); err != nil {
+		t.Fatalf("identic: %v", err)
+	}
+	again, _ := s.ListDecisions(task.ID)
+	if !again[0].AnsweredAt.Equal(*first[0].AnsweredAt) {
+		t.Fatal("raspunsul identic a rescris answered_at")
+	}
+	if err := s.AnswerDecisions(task.ID, []DecisionAnswer{{ID: list[0].ID, Choices: []string{"a"}}}); !errors.Is(err, ErrBadAnswer) {
+		t.Fatalf("diferit: %v", err)
 	}
 }
