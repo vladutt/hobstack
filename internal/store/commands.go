@@ -60,36 +60,36 @@ func (s *Store) SetCommandRules(projectID int64, rules []CommandRule) error {
 
 func (s *Store) ResetGlobalCommandRules() error { return s.SetCommandRules(0, DefaultCommandRules) }
 
-func (s *Store) AddCommandGrant(projectID, agentID int64, prefix string) error {
-	_, err := s.db.Exec(`INSERT INTO command_grants (project_id, agent_id, prefix, created_at) VALUES (?, ?, ?, ?)`,
-		projectID, agentID, prefix, now())
+// AddCommandGrant permite prefixul agentului pe un task (taskID nil = in chat, pana la New chat).
+// Acelasi grant de doua ori nu face un rand nou.
+func (s *Store) AddCommandGrant(projectID, agentID int64, taskID *int64, prefix string) error {
+	_, err := s.db.Exec(`INSERT INTO command_grants (project_id, agent_id, task_id, prefix, created_at)
+		SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS
+		(SELECT 1 FROM command_grants WHERE agent_id = ? AND task_id IS ? AND prefix = ?)`,
+		projectID, agentID, nullPtr(taskID), prefix, now(), agentID, nullPtr(taskID), prefix)
 	return err
 }
 
-// TakeCommandGrants intoarce prefixele cu grant nefolosit ale agentului si le marcheaza folosite (un run).
-func (s *Store) TakeCommandGrants(agentID int64) ([]string, error) {
-	tx, err := s.db.Begin()
+// CommandGrants intoarce prefixele permise agentului pentru un run pe task-ul dat
+// (taskID 0 = run fara task, adica grant-urile de chat). Nu se consuma: tin cat task-ul.
+func (s *Store) CommandGrants(agentID, taskID int64) ([]string, error) {
+	var tid any // NULL pentru chat
+	if taskID != 0 {
+		tid = taskID
+	}
+	rows, err := s.db.Query(`SELECT DISTINCT prefix FROM command_grants WHERE agent_id = ? AND task_id IS ? ORDER BY prefix`,
+		agentID, tid)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
-	rows, err := tx.Query(`SELECT prefix FROM command_grants WHERE agent_id = ? AND used_at IS NULL`, agentID)
-	if err != nil {
-		return nil, err
-	}
+	defer rows.Close()
 	out := []string{}
 	for rows.Next() {
 		var p string
 		if err := rows.Scan(&p); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		out = append(out, p)
 	}
-	rows.Close()
-	if _, err := tx.Exec(`UPDATE command_grants SET used_at = ? WHERE agent_id = ? AND used_at IS NULL`,
-		now(), agentID); err != nil {
-		return nil, err
-	}
-	return out, tx.Commit()
+	return out, rows.Err()
 }

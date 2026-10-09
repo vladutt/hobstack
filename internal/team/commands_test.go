@@ -53,11 +53,11 @@ func TestAskDenialAllowOnceAndProject(t *testing.T) {
 	if len(reqs) != 1 || reqs[0].Prefix != "git push" {
 		t.Fatalf("doar git push (Ask) face cerere, sudo (Block) nu: %+v", reqs)
 	}
-	if err := f.tm.AllowCommandOnce(reqs[0].ID); err != nil {
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	pending, _ := f.st.Undelivered(f.rook.ID)
-	if len(pending) == 0 || !strings.Contains(pending[len(pending)-1].Text, "allowed once") {
+	if len(pending) == 0 || !strings.Contains(pending[len(pending)-1].Text, "allowed on T-1") {
 		t.Fatalf("Rook nu a fost trezit: %+v", pending)
 	}
 	if got, _ := f.st.GetTask(task.ID); got.Status != store.StatusQueued {
@@ -109,7 +109,7 @@ func TestBlockCommandAndNonCommandRequest(t *testing.T) {
 	f.st.UpdateAgent(f.vera)
 	f.st.RecordAccessDenial(f.p.ID, f.vera.ID, nil, "Bash", "ls", "")
 	reqs, _ = f.st.ListOpenAccessRequests(f.p.ID)
-	if err := f.tm.AllowCommandOnce(reqs[len(reqs)-1].ID); err != ErrNotCommandRequest {
+	if err := f.tm.AllowCommandForTask(reqs[len(reqs)-1].ID); err != ErrNotCommandRequest {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -123,14 +123,14 @@ func TestAllowOnceGrantLifecycle(t *testing.T) {
 	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
 	f.tm.work.Unlock()
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
-	if err := f.tm.AllowCommandOnce(reqs[0].ID); err != nil {
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	// a doua apasare pe aceeasi cerere nu mai face nimic
-	if err := f.tm.AllowCommandOnce(reqs[0].ID); !errors.Is(err, ErrRequestClosed) {
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); !errors.Is(err, ErrRequestClosed) {
 		t.Fatalf("err = %v", err)
 	}
-	if err := f.tm.AllowCommandOnce(99999); !errors.Is(err, store.ErrNotFound) {
+	if err := f.tm.AllowCommandForTask(99999); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("err = %v", err)
 	}
 	f.wantStatus(t, task.Number, store.StatusQueued)
@@ -142,6 +142,7 @@ func TestAllowOnceGrantLifecycle(t *testing.T) {
 		t.Fatal("run-ul cu grant are git push in deny")
 	}
 	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone})
+	// un run in chat (fara task) nu primeste grant-ul task-ului
 	f.tm.work.Lock()
 	_, err := f.tm.addUserMessage(f.rook, "again", nil, false, false)
 	f.tm.work.Unlock()
@@ -151,26 +152,24 @@ func TestAllowOnceGrantLifecycle(t *testing.T) {
 	if err := f.tm.Reconcile(f.p.ID); err != nil {
 		t.Fatal(err)
 	}
-	next := f.fs.last(t, f.rook)
-	if next.ID == run.ID {
-		t.Fatal("nu a pornit al doilea run")
+	chat := f.fs.last(t, f.rook)
+	if chat.ID == run.ID {
+		t.Fatal("nu a pornit run-ul de chat")
 	}
-	if !strings.Contains(argAfter(next.Args, "--settings"), "Bash(git push:*)") {
-		t.Fatal("grant-ul a fost doar pentru un run")
+	if !strings.Contains(argAfter(chat.Args, "--settings"), "Bash(git push:*)") {
+		t.Fatal("grant-ul task-ului a ajuns in chat")
 	}
-}
-
-func TestGrantRestoredWhenStartFails(t *testing.T) {
-	f := setup(t)
-	f.rook.Tools = []string{"shell"}
-	f.st.UpdateAgent(f.rook)
-	f.task(t, "Ship", f.rook, store.StatusQueued)
-	f.st.AddCommandGrant(f.p.ID, f.rook.ID, "git push")
-	f.fs.failErr = errors.New("boom")
-	f.tm.Reconcile(f.p.ID) // eroarea de pornire ajunge ca nota
-	g, _ := f.st.TakeCommandGrants(f.rook.ID)
-	if len(g) != 1 || g[0] != "git push" {
-		t.Fatalf("grants = %v", g)
+	f.fs.finish(chat.ID, runner.Outcome{Status: store.RunDone})
+	// al doilea run pe acelasi task: grant-ul tine
+	got, _ := f.st.GetTask(task.ID)
+	got.Status = store.StatusQueued
+	f.st.SaveTask(&got)
+	if err := f.tm.Reconcile(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	again := f.fs.last(t, f.rook)
+	if again.ID == chat.ID || strings.Contains(argAfter(again.Args, "--settings"), "Bash(git push:*)") {
+		t.Fatal("grant-ul nu a tinut pe al doilea run al task-ului")
 	}
 }
 
@@ -213,22 +212,21 @@ func TestAllowRefusedWhenRuleNoLongerAsk(t *testing.T) {
 	f.tm.work.Unlock()
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
 	f.st.SetCommandRules(f.p.ID, []store.CommandRule{{Prefix: "git push", Mode: store.CmdBlock}})
-	for _, act := range []func(int64) error{f.tm.AllowCommandOnce, f.tm.AllowCommandInProject} {
+	for _, act := range []func(int64) error{f.tm.AllowCommandForTask, f.tm.AllowCommandInProject} {
 		err := act(reqs[0].ID)
 		if !errors.Is(err, ErrRuleChanged) || err.Error() != "The rule for git push changed; this request is out of date." {
 			t.Fatalf("err = %v", err)
 		}
 	}
-	if g, _ := f.st.TakeCommandGrants(f.rook.ID); len(g) != 0 {
+	if g, _ := f.st.CommandGrants(f.rook.ID, task.ID); len(g) != 0 {
 		t.Fatalf("grants = %v", g)
 	}
 	if open, _ := f.st.ListOpenAccessRequests(f.p.ID); len(open) != 1 {
 		t.Fatal("cererea trebuia sa ramana deschisa")
 	}
 	// grant-ul nu ridica Block-ul nici daca exista deja
-	f.st.AddCommandGrant(f.p.ID, f.rook.ID, "git push")
 	task2 := f.task(t, "Again", f.rook, store.StatusQueued)
-	_ = task2
+	f.st.AddCommandGrant(f.p.ID, f.rook.ID, &task2.ID, "git push")
 	f.tm.Reconcile(f.p.ID)
 	if !strings.Contains(argAfter(f.fs.last(t, f.rook).Args, "--settings"), "Bash(git push:*)") {
 		t.Fatal("Block ridicat de grant")

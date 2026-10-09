@@ -46,6 +46,10 @@ func newChatTx(tx *sql.Tx, projectID, agentID int64, text string) (int64, string
 	if _, err := tx.Exec(`UPDATE agents SET session_id = '', prompt_hash = '', chat_from = ? WHERE id = ?`, id, agentID); err != nil {
 		return 0, "", err
 	}
+	// grant-urile de chat tin pana la New chat (si la schimbarea contului, care reseteaza sesiunile)
+	if _, err := tx.Exec(`DELETE FROM command_grants WHERE agent_id = ? AND task_id IS NULL`, agentID); err != nil {
+		return 0, "", err
+	}
 	return id, ts, nil
 }
 

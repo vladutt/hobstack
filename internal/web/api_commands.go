@@ -116,8 +116,8 @@ func (s *Server) accessCommand(w http.ResponseWriter, r *http.Request, act func(
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) allowCommandOnce(w http.ResponseWriter, r *http.Request) {
-	s.accessCommand(w, r, s.team.AllowCommandOnce)
+func (s *Server) allowCommandTask(w http.ResponseWriter, r *http.Request) {
+	s.accessCommand(w, r, s.team.AllowCommandForTask)
 }
 
 func (s *Server) allowCommandProject(w http.ResponseWriter, r *http.Request) {

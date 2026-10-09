@@ -151,9 +151,8 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 	}
 
-	// grant-urile "Allow once" se consuma la pornirea run-ului; daca pornirea esueaza le punem la loc
-	// grant-ul merge la urmatorul run al agentului, de orice fel (acceptat)
-	granted, err := t.st.TakeCommandGrants(a.ID)
+	// grant-urile din "Needs you": ale task-ului run-ului, sau de chat (taskID 0); nu se consuma
+	granted, err := t.st.CommandGrants(a.ID, taskID)
 	if err != nil {
 		log.Printf("agent %d: command grants: %v", a.ID, err)
 		granted = nil
@@ -176,11 +175,6 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		t.mu.Unlock()
 		if mcpFile {
 			t.lib.RemoveMCPConfig(runID)
-		}
-		for _, g := range granted {
-			if gerr := t.st.AddCommandGrant(p.ID, a.ID, g); gerr != nil {
-				log.Printf("agent %d: restoring command grant: %v", a.ID, gerr)
-			}
 		}
 		t.st.FinishRun(runID, store.RunFailed, 0, err.Error())
 		return err

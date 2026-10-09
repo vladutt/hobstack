@@ -37,9 +37,18 @@ func (t *Team) EffectiveCommandRules(projectID int64) ([]store.CommandRule, erro
 	return prompt.EffectiveRules(global, project), nil
 }
 
-func (t *Team) AllowCommandOnce(accessID int64) error {
+// AllowCommandForTask permite prefixul agentului pe task-ul cererii (fara task: in chat, pana la New chat).
+func (t *Team) AllowCommandForTask(accessID int64) error {
 	return t.decideCommand(accessID, func(r store.AccessRequest) (string, error) {
-		return "allowed once", t.st.AddCommandGrant(r.ProjectID, r.AgentID, r.Prefix)
+		how := "allowed in this chat"
+		if r.TaskID != nil {
+			task, err := t.st.GetTask(*r.TaskID)
+			if err != nil {
+				return "", err
+			}
+			how = "allowed on " + task.Ref()
+		}
+		return how, t.st.AddCommandGrant(r.ProjectID, r.AgentID, r.TaskID, r.Prefix)
 	}, true, false)
 }
 

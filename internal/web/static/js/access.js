@@ -27,7 +27,7 @@ export function accessBox(r, { agent, projectId, onDone, onOpen }) {
       el("p", { class: "question-text" }, el("code", {}, r.detail || r.prefix), " · ",
         el("span", { class: "stuck-age", "data-since": r.updatedAt }, stuckAge(r.updatedAt)), " ago"),
       el("div", { class: "actions" },
-        act(`Allow "${r.prefix}" once`, "btn small primary", `/api/access/${r.id}/allow-once`),
+        act(`Allow "${r.prefix}" ${r.ref ? `on ${r.ref}` : "in this chat"}`, "btn small primary", `/api/access/${r.id}/allow-task`),
         act(`Allow "${r.prefix}" in this project`, "btn small", `/api/access/${r.id}/allow-project`),
         act("Block", "btn small", `/api/access/${r.id}/block-project`),
         act("Dismiss", "btn small", `/api/access/${r.id}/dismiss`)));

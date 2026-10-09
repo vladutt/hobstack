@@ -55,7 +55,7 @@ func TestCommandSettingsAPI(t *testing.T) {
 	if code, _ := e.do(t, "GET", "/api/projects/99999/commands", nil); code != http.StatusNotFound {
 		t.Fatalf("proiect necunoscut: %d", code)
 	}
-	if code, _ := e.do(t, "POST", "/api/access/99999/allow-once", nil); code != http.StatusNotFound {
+	if code, _ := e.do(t, "POST", "/api/access/99999/allow-task", nil); code != http.StatusNotFound {
 		t.Fatalf("cerere necunoscuta: %d", code)
 	}
 }
@@ -70,7 +70,7 @@ func TestAccessCommandActionsAPI(t *testing.T) {
 	e.st.RecordAccessDenial(p.ID, w.ID, nil, "Bash", "ls", "")
 	reqs, _ := e.st.ListOpenAccessRequests(p.ID)
 	cmdID, toolID := strconv.FormatInt(reqs[0].ID, 10), strconv.FormatInt(reqs[1].ID, 10)
-	if code, _ := e.do(t, "POST", "/api/access/"+toolID+"/allow-once", nil); code != http.StatusConflict {
+	if code, _ := e.do(t, "POST", "/api/access/"+toolID+"/allow-task", nil); code != http.StatusConflict {
 		t.Fatalf("cerere de tool: %d", code)
 	}
 	if code, raw := e.do(t, "POST", "/api/access/"+cmdID+"/allow-project", nil); code != http.StatusNoContent {
