@@ -122,7 +122,8 @@ Gata (chat doar de citire, spec in docs/superpowers/specs/2026-10-09-foreman-cha
 (chat, notificari, comentarii) primeste prompt.ReadOnlyTools (fara write/shell/packages, git doar citire: git-read) si linia
 prompt.ReadOnlyTurn; system prompt-ul ramane acelasi (sesiunea continua). Modificarile se fac pe task: tool-ul MCP
 start_task (doar in run-urile fara task) creeaza un task Queued pentru agent, fara etape, CreatorID gol, ByUser pentru
-cererile din chat, max 3 deschise (evenimentul self_started). Refuzurile Edit/Write/Bash din run-urile fara task nu fac
+cererile din chat, max 3 in lucru (Queued / In progress; evenimentul self_started); cu echipa oprita raspunsul spune
+ca task-ul porneste la Start team. Comentariile pe task cer modificarile printr-un task de continuare. Refuzurile Edit/Write/Bash din run-urile fara task nu fac
 cereri de acces. Verificat cu claude 2.1.295: Edit, redirectarea >, tee si git commit sunt refuzate, git log trece.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
