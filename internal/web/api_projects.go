@@ -32,6 +32,8 @@ type projectInput struct {
 	BudgetUSD   float64       `json:"budgetUsd"`
 	// Autonomy: pointer, ca un PUT fara camp sa nu reseteze bifa
 	Autonomy *bool `json:"autonomy"`
+	// Category: pointer, ca un PUT fara camp sa pastreze categoria; "" = fara categorie
+	Category *string `json:"category"`
 	// AccountID: contul Claude; absent = neschimbat (PUT) / Default (POST); 0 = Default
 	AccountID *int64 `json:"accountId"`
 }
@@ -121,12 +123,16 @@ func (in projectInput) toProject(workspaces string) (store.Project, error) {
 		BudgetUSD:   in.BudgetUSD,
 		Autonomy:    in.Autonomy != nil && *in.Autonomy,
 	}
+	if in.Category != nil {
+		p.Category = strings.TrimSpace(*in.Category)
+	}
 	if p.Name == "" {
 		return p, badRequest("project name is required")
 	}
 	for _, err := range []error{
 		maxLen("project name", p.Name, 80),
 		maxLen("goal", p.Goal, 2000),
+		maxLen("category", p.Category, 40),
 		maxLen("shared context", p.Context, 20000),
 	} {
 		if err != nil {
@@ -538,6 +544,9 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 	p.ID, p.Paused, p.CreatedAt = existing.ID, existing.Paused, existing.CreatedAt
 	if in.Autonomy == nil {
 		p.Autonomy = existing.Autonomy // UpdateProject scrie campul: fara el in corp il pastram
+	}
+	if in.Category == nil {
+		p.Category = existing.Category
 	}
 	// contul se schimba doar cu echipa oprita: run-urile active sunt pe contul vechi
 	changeAccount := false

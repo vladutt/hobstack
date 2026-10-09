@@ -19,18 +19,19 @@ type Project struct {
 	Autonomy    bool      `json:"autonomy"` // full autonomy: agentii nu pun intrebari; decide radacina
 	BudgetUSD   float64   `json:"budgetUsd"`
 	Favorite    bool      `json:"favorite"`  // steluta din lista de proiecte; se schimba doar prin SetFavorite
+	Category    string    `json:"category"`  // categoria din lista de proiecte; '' = fara
 	AccountID   *int64    `json:"accountId"` // contul Claude; nil = Default (CLI-ul logat). Se schimba doar prin SetProjectAccount
 	CreatedAt   time.Time `json:"createdAt"`
 	Folders     []Folder  `json:"folders"` // cel putin unul; primul e cel implicit
 }
 
-const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, favorite, created_at, account_id`
+const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, favorite, created_at, account_id, category`
 
 func scanProject(sc scanner) (Project, error) {
 	var p Project
 	var created string
 	var account sql.NullInt64
-	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &p.Autonomy, &p.Favorite, &created, &account)
+	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &p.Autonomy, &p.Favorite, &created, &account, &p.Category)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, ErrNotFound
 	}
@@ -56,9 +57,12 @@ func (s *Store) CreateProject(p *Project) (Agent, error) {
 	}
 	defer tx.Rollback() // nu face nimic dupa Commit
 
-	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at, account_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, p.Autonomy, created, nullPtr(p.AccountID))
+	if p.Category, err = canonicalCategory(tx, p.Category, 0); err != nil {
+		return Agent{}, err
+	}
+	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at, account_id, category)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, p.Autonomy, created, nullPtr(p.AccountID), p.Category)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -98,9 +102,12 @@ func (s *Store) CreateProjectWithTeam(p *Project, team []NewMember) ([]Agent, er
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at, account_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, p.Autonomy, created, nullPtr(p.AccountID))
+	if p.Category, err = canonicalCategory(tx, p.Category, 0); err != nil {
+		return nil, err
+	}
+	res, err := tx.Exec(`INSERT INTO projects (name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, created_at, account_id, category)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.Goal, p.Context, p.Workdir, p.Paused, p.MaxParallel, p.BudgetUSD, p.Autonomy, created, nullPtr(p.AccountID), p.Category)
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +198,12 @@ func (s *Store) UpdateProject(p Project) error {
 	if len(p.Folders) > 0 {
 		p.Workdir = p.Folders[0].Path
 	}
-	if err := mustAffect(tx.Exec(`UPDATE projects SET name = ?, goal = ?, context = ?, workdir = ?, max_parallel = ?, budget_usd = ?, autonomy = ?
-		WHERE id = ?`, p.Name, p.Goal, p.Context, p.Workdir, p.MaxParallel, p.BudgetUSD, p.Autonomy, p.ID)); err != nil {
+	category, err := canonicalCategory(tx, p.Category, p.ID)
+	if err != nil {
+		return err
+	}
+	if err := mustAffect(tx.Exec(`UPDATE projects SET name = ?, goal = ?, context = ?, workdir = ?, max_parallel = ?, budget_usd = ?, autonomy = ?, category = ?
+		WHERE id = ?`, p.Name, p.Goal, p.Context, p.Workdir, p.MaxParallel, p.BudgetUSD, p.Autonomy, category, p.ID)); err != nil {
 		return err
 	}
 	if len(p.Folders) > 0 {
@@ -231,4 +242,19 @@ func (s *Store) SetPaused(id int64, paused bool) error {
 // SetFavorite pune sau scoate steluta unui proiect.
 func (s *Store) SetFavorite(id int64, on bool) error {
 	return mustAffect(s.db.Exec(`UPDATE projects SET favorite = ? WHERE id = ?`, on, id))
+}
+
+// canonicalCategory: "work" si "Work" sunt aceeasi categorie; daca alt proiect (nu exceptID) o are
+// deja, folosim scrierea lui, ca filtrele din lista sa nu se dubleze.
+func canonicalCategory(tx *sql.Tx, category string, exceptID int64) (string, error) {
+	if category == "" {
+		return "", nil
+	}
+	var existing string
+	err := tx.QueryRow(`SELECT category FROM projects WHERE category = ? COLLATE NOCASE AND id != ? ORDER BY id LIMIT 1`,
+		category, exceptID).Scan(&existing)
+	if errors.Is(err, sql.ErrNoRows) {
+		return category, nil
+	}
+	return existing, err
 }
