@@ -95,7 +95,7 @@ func (t *Team) LeaveForUser(c mcp.Caller, ref string, items []string) (string, e
 	if err != nil {
 		return "", err
 	}
-	n, err := t.st.AddTodos(task.ID, items)
+	n, err := t.st.AddTodos(task.ID, items, "value")
 	if err != nil {
 		return "", err
 	}

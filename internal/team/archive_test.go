@@ -153,7 +153,7 @@ func TestArchiveDoneSubtaskNoteIsDelivered(t *testing.T) {
 func TestArchivedTaskRejectsCommentAndTodo(t *testing.T) {
 	f := setup(t)
 	task := f.task(t, "Terms page", f.rook, store.StatusDone)
-	f.st.AddTodos(task.ID, []string{"VAT"})
+	f.st.AddTodos(task.ID, []string{"VAT"}, "value")
 	if _, err := f.tm.ArchiveTask(task.ID); err != nil {
 		t.Fatal(err)
 	}

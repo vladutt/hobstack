@@ -12,6 +12,7 @@ type Todo struct {
 	Text     string     `json:"text"`
 	DoneAt   *time.Time `json:"doneAt"`
 	DoneBy   string     `json:"doneBy"`
+	Kind     string     `json:"kind"` // "value" (de completat) | "step" (de facut)
 }
 
 type FillIn struct {
@@ -25,7 +26,7 @@ type FillIn struct {
 }
 
 // AddTodos adauga punctele la coada listei task-ului; un text deja prezent (fara diferenta de litere) se sare.
-func (s *Store) AddTodos(taskID int64, texts []string) (int, error) {
+func (s *Store) AddTodos(taskID int64, texts []string, kind string) (int, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, err
@@ -56,8 +57,8 @@ func (s *Store) AddTodos(taskID int64, texts []string) (int, error) {
 		}
 		existing[key] = true
 		last++
-		if _, err := tx.Exec(`INSERT INTO task_todos (task_id, position, text, created_at) VALUES (?, ?, ?, ?)`,
-			taskID, last, strings.TrimSpace(text), now()); err != nil {
+		if _, err := tx.Exec(`INSERT INTO task_todos (task_id, position, text, created_at, kind) VALUES (?, ?, ?, ?, ?)`,
+			taskID, last, strings.TrimSpace(text), now(), kind); err != nil {
 			return 0, err
 		}
 		added++
@@ -66,7 +67,7 @@ func (s *Store) AddTodos(taskID int64, texts []string) (int, error) {
 }
 
 func (s *Store) ListTodos(taskID int64) ([]Todo, error) {
-	rows, err := s.db.Query(`SELECT task_id, position, text, done_at, done_by FROM task_todos WHERE task_id = ? ORDER BY position`, taskID)
+	rows, err := s.db.Query(`SELECT task_id, position, text, done_at, done_by, kind FROM task_todos WHERE task_id = ? ORDER BY position`, taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func (s *Store) ListTodos(taskID int64) ([]Todo, error) {
 	for rows.Next() {
 		var t Todo
 		var done sql.NullString
-		if err := rows.Scan(&t.TaskID, &t.Position, &t.Text, &done, &t.DoneBy); err != nil {
+		if err := rows.Scan(&t.TaskID, &t.Position, &t.Text, &done, &t.DoneBy, &t.Kind); err != nil {
 			return nil, err
 		}
 		if done.Valid {

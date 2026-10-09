@@ -69,7 +69,7 @@ func TestUserCommentWakesAssignee(t *testing.T) {
 		t.Fatalf("mesajul nu a ajuns la Rook: %+v", pending)
 	}
 	// task Done cu puncte: bifatul nu ii schimba statusul
-	f.st.AddTodos(task.ID, []string{"VAT"})
+	f.st.AddTodos(task.ID, []string{"VAT"}, "value")
 	if err := f.tm.UserSetTodo(task.ID, 1, true); err != nil {
 		t.Fatal(err)
 	}

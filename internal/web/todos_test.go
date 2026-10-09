@@ -18,7 +18,7 @@ func TestTodosAPI(t *testing.T) {
 	if err := e.st.CreateTask(&task); err != nil {
 		t.Fatal(err)
 	}
-	e.st.AddTodos(task.ID, []string{"Company name", "VAT"})
+	e.st.AddTodos(task.ID, []string{"Company name", "VAT"}, "value")
 	id := strconv.FormatInt(task.ID, 10)
 	if code, raw := e.do(t, "PUT", "/api/tasks/"+id+"/todos/1", map[string]bool{"done": true}); code != http.StatusNoContent {
 		t.Fatalf("%d %s", code, raw)

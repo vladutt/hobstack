@@ -9,11 +9,11 @@ func TestTodos(t *testing.T) {
 	if err := s.CreateTask(&task); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := s.AddTodos(task.ID, []string{"Company name", "Registration number"}); err != nil || n != 2 {
+	if n, err := s.AddTodos(task.ID, []string{"Company name", "Registration number"}, "value"); err != nil || n != 2 {
 		t.Fatalf("%d %v", n, err)
 	}
 	// al doilea raport: textul existent nu se dubleaza, cel nou vine la coada
-	if n, _ := s.AddTodos(task.ID, []string{"Company name", "Contact e-mail"}); n != 1 {
+	if n, _ := s.AddTodos(task.ID, []string{"Company name", "Contact e-mail"}, "value"); n != 1 {
 		t.Fatalf("adaugate %d, vreau 1", n)
 	}
 	list, _ := s.ListTodos(task.ID)
