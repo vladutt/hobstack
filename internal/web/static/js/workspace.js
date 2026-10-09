@@ -180,6 +180,11 @@ export async function workspaceView(root, projectId, route) {
   setupDrop(filesSection, uploadProjectFiles);
   const consoleHead = el("div", { class: "console-head" });
   const thread = el("div", { class: "thread", "aria-live": "polite" });
+  // stickBottom: utilizatorul e la capatul chat-ului (sub 120px); daca a urcat sa citeasca, mesajele noi nu-l mai coboara
+  let stickBottom = true;
+  thread.addEventListener("scroll", () => {
+    stickBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+  });
   const input = el("textarea", { rows: 1, "aria-label": "Message" });
   const note = el("span", { class: "hint" });
   const chips = el("div", { class: "chips" });
@@ -1548,9 +1553,13 @@ export async function workspaceView(root, projectId, route) {
       mine && !m.delivered && el("span", { class: "pending" }, "queued"));
   }
 
+  // scrollDown: coboara la capat daca utilizatorul era jos inainte de mesajul nou (stickBottom, din ultimul scroll).
+  // Masurat dupa adaugare, un raspuns lung ar parea "departe de jos" si chat-ul n-ar mai cobori.
   function scrollDown(force) {
-    const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
-    if (force || nearBottom) thread.scrollTop = thread.scrollHeight;
+    if (force || stickBottom) {
+      thread.scrollTop = thread.scrollHeight;
+      stickBottom = true;
+    }
   }
 
   // sendText: un mesaj gata scris (actiunile rapide); campul de scris ramane cum era
