@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"foreman/internal/store"
@@ -49,5 +50,15 @@ func TestTodosAPI(t *testing.T) {
 	}
 	if code, _ := e.do(t, "POST", "/api/tasks/99999/comments", map[string]string{"text": "x"}); code != http.StatusNotFound {
 		t.Fatalf("task lipsa: %d", code)
+	}
+	// task sters: comentariul si bifa sunt refuzate cu 409
+	if code, raw := e.do(t, "DELETE", "/api/tasks/"+id, nil); code != http.StatusOK {
+		t.Fatalf("delete: %d %s", code, raw)
+	}
+	if code, raw := e.do(t, "POST", "/api/tasks/"+id+"/comments", map[string]string{"text": "x"}); code != http.StatusConflict || !strings.Contains(string(raw), "restore it first") {
+		t.Fatalf("comentariu pe sters: %d %s", code, raw)
+	}
+	if code, raw := e.do(t, "PUT", "/api/tasks/"+id+"/todos/2", map[string]bool{"done": true}); code != http.StatusConflict {
+		t.Fatalf("bifa pe sters: %d %s", code, raw)
 	}
 }

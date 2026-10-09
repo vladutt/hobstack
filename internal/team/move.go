@@ -57,7 +57,7 @@ func (t *Team) moveToDone(task store.Task, agents []store.Agent, reason string) 
 	case store.StatusReview:
 		return t.decideAsUser(task, agents, true, "", decisionOwner(task, agents), nil)
 	case store.StatusBlocked:
-		return t.resolveBlockedLocked(task, agents, true)
+		return t.resolveBlockedLocked(task, agents, true, "")
 	case store.StatusQueued:
 		return t.closeTask(task, agents, reason)
 	}
@@ -72,7 +72,7 @@ func (t *Team) moveToQueue(task store.Task, agents []store.Agent, reason string)
 		}
 		return t.decideAsUser(task, agents, false, reason, decisionOwner(task, agents), nil)
 	case store.StatusBlocked:
-		return t.resolveBlockedLocked(task, agents, false)
+		return t.resolveBlockedLocked(task, agents, false, reason)
 	case store.StatusDone:
 		if reason == "" {
 			return ErrReasonRequired
@@ -109,7 +109,7 @@ func (t *Team) moveToStage(task store.Task, agents []store.Agent, stageID int64,
 		return t.decideAsUser(task, agents, false, reason, decisionOwner(task, agents), &st)
 	case store.StatusBlocked:
 		if task.StageID != nil && *task.StageID == st.ID {
-			return t.resolveBlockedLocked(task, agents, false)
+			return t.resolveBlockedLocked(task, agents, false, reason)
 		}
 	case store.StatusQueued:
 	default:

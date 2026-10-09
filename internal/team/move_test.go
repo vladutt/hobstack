@@ -214,3 +214,50 @@ func TestMoveOnStageBoard(t *testing.T) {
 		t.Fatal("liderul n-a primit nota")
 	}
 }
+
+// deblocat pe loc cu o nota: nota devine feedback, intra in istoric si ajunge la decident
+func TestUnblockInPlaceWithReason(t *testing.T) {
+	f := setup(t)
+	stages, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Build", Kind: store.KindWork, AgentIDs: []int64{f.rook.ID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := store.Task{ProjectID: f.p.ID, Title: "Blocked", AssigneeID: f.rook.ID, CreatorID: &f.lead.ID, StageID: &stages[0].ID}
+	if err := f.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	task.Status, task.Feedback = store.StatusBlocked, "old feedback"
+	if err := f.st.SaveTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.MoveTask(task.ID, "stage:"+itoa(stages[0].ID), "  The key is in .env.local  "); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.st.GetTask(task.ID)
+	if got.Status != store.StatusQueued || got.Feedback != "The key is in .env.local" {
+		t.Fatalf("unblock cu nota: %+v", got)
+	}
+	if !f.hasMessage(f.lead.ID, "The user unblocked "+task.Ref()+": The key is in .env.local") {
+		t.Fatal("decidentul n-a primit nota")
+	}
+	events, _ := f.st.ListTaskEvents(task.ID)
+	if last := events[len(events)-1]; last.Kind != "unblocked" || last.Text != "You unblocked it: The key is in .env.local" {
+		t.Fatalf("eveniment: %+v", last)
+	}
+
+	// fara nota (butonul Unblock): feedback-ul vechi ramane
+	task2 := store.Task{ProjectID: f.p.ID, Title: "Blocked 2", AssigneeID: f.rook.ID, CreatorID: &f.lead.ID, StageID: &stages[0].ID}
+	if err := f.st.CreateTask(&task2); err != nil {
+		t.Fatal(err)
+	}
+	task2.Status, task2.Feedback = store.StatusBlocked, "old feedback"
+	if err := f.st.SaveTask(&task2); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.Unblock(task2.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.st.GetTask(task2.ID); got.Status != store.StatusQueued || got.Feedback != "old feedback" {
+		t.Fatalf("unblock fara nota: %+v", got)
+	}
+}

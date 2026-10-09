@@ -11,6 +11,12 @@ import (
 // ErrArchived: task-ul a fost sters de utilizator (tool-urile MCP primesc mesajul lui).
 var ErrArchived = errors.New("the task was deleted")
 
+// archivedError: actiune a utilizatorului pe un task sters (comentariu, bifa); errors.Is(err, ErrArchived) e adevarat.
+type archivedError string
+
+func (e archivedError) Error() string        { return string(e) + " was deleted; restore it first." }
+func (e archivedError) Is(target error) bool { return target == ErrArchived }
+
 // RestoreError: Restore refuzat (de ex. parintele e inca sters).
 type RestoreError string
 
@@ -67,7 +73,9 @@ func (t *Team) ArchiveTask(taskID int64) (int, error) {
 		t.note(task.ProjectID, agentID, text, true)
 	}
 	if d, ok := decider(task, agents, t.autonomyOf(task.ProjectID)); ok && !working[d.ID] {
-		t.note(task.ProjectID, d.ID, fmt.Sprintf("The user deleted %s: %s. Do not wait for it.", task.Ref(), task.Title), false)
+		// un task Done sters e doar curatenie: nota ramane informativa (livrata), fara un run platit
+		done := task.Status == store.StatusDone
+		t.note(task.ProjectID, d.ID, fmt.Sprintf("The user deleted %s: %s. Do not wait for it.", task.Ref(), task.Title), done)
 	}
 	t.emit(task.ProjectID, "task", task)
 	t.Kick(task.ProjectID)
