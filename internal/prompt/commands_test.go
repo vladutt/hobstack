@@ -137,8 +137,13 @@ func TestCommandPrefix(t *testing.T) {
 		`git stash push -u -m "x" -- app/`: "git stash",
 		"ls -la":                           "ls",
 		"php artisan migrate --force":      "php artisan migrate",
-		"php -v":                           "php",
-		"git -C dir status":                "git",
+		"php -v":                           "",
+		"make":                             "make",
+		"git -C dir status":                "",
+		"bash -c ls":                       "",
+		"env X=1 make":                     "",
+		"python3 -c 'print(1)'":            "",
+		"sudo ls":                          "",
 		"npx prettier --write .":           "npx prettier",
 		"./vendor/bin/phpunit --filter X":  "./vendor/bin/phpunit",
 		"":                                 "",
@@ -171,6 +176,9 @@ func TestNoShellRequests(t *testing.T) {
 		{"sudo ls", git, nil, nil, true},
 		// refuz fix (instalare fara packages): cerere de tool
 		{"npm install x", git, nil, []Request{{"", store.AccessTool}}, false},
+		// prefix prea larg (flag in locul subcomenzii, interpretor): doar Enable Shell
+		{"git -C app stash", git, nil, []Request{{"", store.AccessTool}}, false},
+		{"bash -c 'git stash'", git, nil, []Request{{"", store.AccessTool}}, false},
 		// doua bucati necunoscute, fara duplicate
 		{"cd app && make build && make test", nil, nil, []Request{{"cd", store.AccessCommand}, {"make build", store.AccessCommand}, {"make test", store.AccessCommand}}, false},
 	}

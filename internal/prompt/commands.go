@@ -183,9 +183,20 @@ var subcommandTools = map[string]bool{
 
 var subcommandWord = regexp.MustCompile(`^[a-z][a-z0-9:-]*$`)
 
+// wrapperCommands: comenzi care ruleaza alte comenzi (interpretoare, sudo, env...); aprobarea lor
+// ar fi cat Shell-ul intreg (si ar ocoli regulile Block), deci nu primesc prefix.
+var wrapperCommands = map[string]bool{
+	"bash": true, "sh": true, "zsh": true, "fish": true, "dash": true, "env": true, "xargs": true,
+	"eval": true, "exec": true, "sudo": true, "su": true, "doas": true, "nohup": true, "timeout": true,
+	"nice": true, "time": true, "command": true, "builtin": true, "watch": true, "php": true,
+	"python": true, "python3": true, "python2": true, "node": true, "perl": true, "ruby": true,
+	"deno": true, "bun": true, "osascript": true,
+}
+
 // CommandPrefix: prefixul pe care il aprobi pentru o comanda (o bucata, fara && / |):
 // primul cuvant, plus subcomanda la uneltele cu subcomenzi ("git stash", "php artisan migrate").
-// Un flag pe locul subcomenzii ("git -C dir ...") lasa doar primul cuvant.
+// "" = nu se poate aproba ca prefix (prea larg): un interpretor / wrapper, sau o unealta cu
+// subcomenzi la care pe locul subcomenzii e un flag ("git -C dir ..." ar insemna tot git-ul).
 func CommandPrefix(cmd string) string {
 	words := strings.Fields(cmd)
 	if len(words) == 0 {
@@ -195,10 +206,15 @@ func CommandPrefix(cmd string) string {
 	switch {
 	case words[0] == "php" && len(words) > 1 && words[1] == "artisan":
 		n = 2
+	case wrapperCommands[words[0]]:
+		return ""
 	case !subcommandTools[words[0]]:
 		return words[0]
 	}
-	if len(words) > n && subcommandWord.MatchString(words[n]) {
+	if len(words) > n {
+		if !subcommandWord.MatchString(words[n]) {
+			return ""
+		}
 		n++
 	}
 	return strings.Join(words[:n], " ")
@@ -254,7 +270,11 @@ func NoShellRequests(cmd string, tools []string, rules []store.CommandRule, gran
 		case BashAllowed(part, tools, granted):
 			// deja permisa
 		default:
-			add(Request{CommandPrefix(part), store.AccessCommand})
+			if pfx := CommandPrefix(part); pfx != "" {
+				add(Request{pfx, store.AccessCommand})
+			} else {
+				add(Request{"", store.AccessTool}) // prea larg pentru un prefix: doar Enable Shell
+			}
 		}
 	}
 	if len(reqs) == 0 && !blocked {

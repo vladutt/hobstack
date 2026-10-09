@@ -419,3 +419,82 @@ func TestEnableShellWakesAgent(t *testing.T) {
 		t.Fatalf("a doua oara: %v", err)
 	}
 }
+
+// o comanda compusa face mai multe carduri: agentul e trezit abia dupa ultima aprobare pe task
+func TestAllowWakesAfterLastRequestOnTask(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Build", f.rook, store.StatusInProgress)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "make build && make test"}})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 2 {
+		t.Fatalf("%+v", reqs)
+	}
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, task.Number, store.StatusInProgress)
+	if p, _ := f.st.Undelivered(f.rook.ID); len(p) != 0 {
+		t.Fatalf("trezit prea devreme: %+v", p)
+	}
+	if err := f.tm.AllowCommandForTask(reqs[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, task.Number, store.StatusQueued)
+	if p, _ := f.st.Undelivered(f.rook.ID); len(p) != 1 {
+		t.Fatalf("un singur mesaj: %+v", p)
+	}
+}
+
+// Enable Shell inchide toate cererile Bash de tool/comanda ale agentului (au devenit inutile)
+func TestEnableShellClosesOtherBashRequests(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Build", f.rook, store.StatusInProgress)
+	f.st.RecordCommandRequest(f.p.ID, f.rook.ID, &task.ID, "make build", "make build")
+	f.st.RecordCommandRequest(f.p.ID, f.rook.ID, &task.ID, "make test", "make test")
+	f.st.RecordAccessDenial(f.p.ID, f.rook.ID, nil, "WebFetch", "https://x.dev", "")
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if err := f.tm.EnableTool(reqs[0].ID, "shell"); err != nil {
+		t.Fatal(err)
+	}
+	open, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(open) != 1 || open[0].Tool != "WebFetch" {
+		t.Fatalf("%+v", open)
+	}
+}
+
+// Allow in this project nu ajuta un agent fara Shell: nici direct, nici prin maturarea cererilor
+func TestAllowInProjectSkipsAgentsWithoutShell(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.vera.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	f.st.UpdateAgent(f.vera)
+	for _, a := range []store.Agent{f.rook, f.vera} {
+		f.tm.work.Lock()
+		f.tm.recordDenials(activeRun{projectID: f.p.ID}, a, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
+		f.tm.work.Unlock()
+	}
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 2 || reqs[1].AgentID != f.vera.ID {
+		t.Fatalf("%+v", reqs)
+	}
+	if err := f.tm.AllowCommandInProject(reqs[1].ID); !errors.Is(err, ErrNoProjectRule) {
+		t.Fatalf("err = %v", err)
+	}
+	if err := f.tm.AllowCommandInProject(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	open, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(open) != 1 || open[0].AgentID != f.vera.ID {
+		t.Fatalf("cererea Verei trebuia sa ramana: %+v", open)
+	}
+	if p, _ := f.st.Undelivered(f.vera.ID); len(p) != 0 {
+		t.Fatalf("Vera trezita degeaba: %+v", p)
+	}
+}

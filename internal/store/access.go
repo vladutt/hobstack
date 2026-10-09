@@ -57,7 +57,8 @@ func (s *Store) RecordCommandRequest(projectID, agentID int64, taskID *int64, de
 }
 
 // recordAccess noteaza o cerere. Daca agentul are deja un rand deschis pentru acelasi
-// tool, prefix si fel, il comasam (count++, detail si task_id = ultimele).
+// tool, prefix, fel si task (sau tot in chat), il comasam (count++, detail = ultimul).
+// Task-ul face parte din cheie: aprobarea se da pe task-ul cererii.
 func (s *Store) recordAccess(projectID, agentID int64, taskID *int64, tool, detail, prefix, kind string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -67,12 +68,12 @@ func (s *Store) recordAccess(projectID, agentID int64, taskID *int64, tool, deta
 
 	ts := now()
 	var id int64
-	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND prefix = ? AND kind = ? AND dismissed = 0`, agentID, tool, prefix, kind).Scan(&id)
+	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND prefix = ? AND kind = ? AND task_id IS ? AND dismissed = 0`,
+		agentID, tool, prefix, kind, nullPtr(taskID)).Scan(&id)
 	switch {
 	case err == nil:
-		// task_id se schimba doar cand avem unul nou
-		if _, err := tx.Exec(`UPDATE access_requests SET count = count + 1, detail = ?, updated_at = ?,
-			task_id = COALESCE(?, task_id) WHERE id = ?`, detail, ts, nullPtr(taskID), id); err != nil {
+		if _, err := tx.Exec(`UPDATE access_requests SET count = count + 1, detail = ?, updated_at = ? WHERE id = ?`,
+			detail, ts, id); err != nil {
 			return err
 		}
 	case err == sql.ErrNoRows:
@@ -121,10 +122,21 @@ func (s *Store) CountOpenAccessRequests(projectID int64) (int, error) {
 	return n, err
 }
 
-// HasOpenAccessRequest spune daca agentul asteapta o aprobare pe task (cerere deschisa).
+// HasOpenAccessRequest spune daca agentul asteapta o aprobare pe task (taskID 0 = in chat).
 func (s *Store) HasOpenAccessRequest(agentID, taskID int64) (bool, error) {
+	var tid any // NULL pentru chat
+	if taskID != 0 {
+		tid = taskID
+	}
 	var ok bool
-	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM access_requests WHERE agent_id = ? AND task_id = ? AND dismissed = 0)`,
-		agentID, taskID).Scan(&ok)
+	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM access_requests WHERE agent_id = ? AND task_id IS ? AND dismissed = 0)`,
+		agentID, tid).Scan(&ok)
 	return ok, err
+}
+
+// DismissShellRequests inchide cererile Bash de tool si de comanda ale agentului (dupa Enable Shell nu mai au rost).
+func (s *Store) DismissShellRequests(agentID int64) error {
+	_, err := s.db.Exec(`UPDATE access_requests SET dismissed = 1 WHERE agent_id = ? AND tool = 'Bash' AND kind IN (?, ?) AND dismissed = 0`,
+		agentID, AccessTool, AccessCommand)
+	return err
 }

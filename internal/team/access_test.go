@@ -43,8 +43,9 @@ func TestDenialsCountAcrossRuns(t *testing.T) {
 	f.task(t, "B", f.rook, store.StatusQueued)
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunFailed, Error: "x", Denials: []runner.Denial{{Tool: "Bash", Detail: "ls /"}}})
+	// alt task = alta cerere: aprobarea se da pe task-ul ei
 	rs, _ := f.st.ListOpenAccessRequests(f.p.ID)
-	if len(rs) != 1 || rs[0].Count != 2 {
+	if len(rs) != 2 || rs[0].Count != 1 || rs[1].Count != 1 || *rs[0].TaskID == *rs[1].TaskID {
 		t.Fatalf("%+v", rs)
 	}
 }
