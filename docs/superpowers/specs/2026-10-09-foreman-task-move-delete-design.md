@@ -1,7 +1,7 @@
 # Foreman: mutarea task-urilor intre coloane (drag & drop) si stergerea lor (arhivare)
 
 Data: 2026-10-09
-Status: spec aprobat in chat, de implementat.
+Status: implementat (2026-10-09).
 
 ## Scop
 

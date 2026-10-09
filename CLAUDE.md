@@ -113,6 +113,11 @@ Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-fi
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
 modala (preview imagine/PDF/Markdown/text, Download, versiuni, "From subtasks"), eticheta 📎 N pe card; HTML/SVG nu
 se servesc inline (serveStored, comun cu fisierele urcate).
+Gata (mutare si stergere, spec in docs/superpowers/specs/2026-10-09-foreman-task-move-delete-design.md): drag & drop pe
+board = actiunea coloanei (team.MoveTask: Accept, Send back, Unblock, Reopen, Close, mutare intre etape; In progress si
+Review nu primesc drop), meniul "⋯" de pe card (Move to… / Delete). Delete = arhivare (status archived, migrarea 025,
+archived_from/archived_root): run-ul se opreste, intrebarile/cererile legate se inchid, ListTasks/Subtasks nu le mai
+intorc; toast cu Undo si panoul "Deleted (N)" cu Restore.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
