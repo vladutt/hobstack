@@ -1,7 +1,7 @@
 # Foreman: search si Install pentru servere MCP in Library
 
 Data: 2026-10-09
-Status: spec aprobat in chat, de implementat.
+Status: implementat (2026-10-09).
 
 ## Scop
 

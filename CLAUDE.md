@@ -182,6 +182,14 @@ decisions (max 5 intrebari cu 2-5 optiuni, multi) si user_steps (max 10, in task
 Accept / Send back mari); POST /decide primeste answers: la Accept fiecare agent care a intrebat primeste in coada doar
 raspunsurile lui (si nota), la Send back raspunsurile intra in feedback; evenimentul decided dupa decizie; raspuns identic
 retrimis = no-op.
+Gata (install MCP din registru, spec in docs/superpowers/specs/2026-10-09-foreman-mcp-install-design.md): pachetul
+internal/mcpregistry cauta in registrul oficial (GET /v0/servers, cache 10 min, timeout 10 s, FOREMAN_MCP_REGISTRY_URL
+doar http/https) si construieste comanda (npx/uvx/docker, fara runtimeArguments optionale; argumente sau header-e
+obligatorii = neinstalabil) si citeste serverele din ~/.claude.json si Claude Desktop cu valorile credentialelor ascunse
+(<hidden>, serverul devine neinstalabil). Library > MCP > + Add server (#/library/mcp/add[?project=]): cautare, From
+your Claude, Install cu nume, comanda exacta confirmata, valorile cheilor pentru proiect (secretValues, folosite la
+proba) si Install without test; POST /api/library/install-mcp creeaza elementul publicat si il instaleaza in proiect
+atomic.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
