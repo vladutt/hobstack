@@ -747,12 +747,17 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	if err != nil {
 		return err
 	}
-	if task.Status != store.StatusBlocked {
-		return ErrNotBlocked
-	}
 	agents, err := t.st.ListAgents(task.ProjectID)
 	if err != nil {
 		return err
+	}
+	return t.resolveBlockedLocked(task, agents, accept)
+}
+
+// resolveBlockedLocked e corpul lui resolveBlocked; se apeleaza cu t.work blocat.
+func (t *Team) resolveBlockedLocked(task store.Task, agents []store.Agent, accept bool) error {
+	if task.Status != store.StatusBlocked {
+		return ErrNotBlocked
 	}
 	text := "The user accepted " + task.Ref() + "."
 	if accept {
