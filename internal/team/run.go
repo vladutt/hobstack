@@ -419,6 +419,10 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		log.Printf("agent %d: command rules: %v", a.ID, err)
 	}
 	hasShell := slices.Contains(a.Tools, "shell")
+	granted, err := t.st.CommandGrants(a.ID, ar.taskID)
+	if err != nil {
+		log.Printf("agent %d: command grants: %v", a.ID, err)
+	}
 	seen := map[string]bool{}
 	recorded := false
 	for _, d := range denials {
@@ -426,37 +430,62 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		if d.Tool == "Task" || prompt.AlwaysDeniedTool(d.Tool) {
 			continue
 		}
-		// comanda Bash a unui agent cu shell: regulile decid (block = fara cerere, ask = cerere pe prefix)
-		prefix := ""
-		if d.Tool == "Bash" && hasShell {
+		// cererile pentru acest refuz; implicit cererea de tool (Enable Shell, WebFetch...)
+		reqs := []prompt.Request{{Prefix: "", Kind: store.AccessTool}}
+		if d.Tool == "Bash" {
 			cmd := d.Command // comanda intreaga; Detail e scurtat la 120 de caractere
 			if cmd == "" {
 				cmd = d.Detail
 			}
-			mode, pfx := prompt.MatchCommand(cmd, rules)
-			if mode != store.CmdBlock && mode != store.CmdAsk {
-				// claude a refuzat desi regula decisiva e Allow (sau lipseste): cautam deny-ul care a lucrat
-				mode, pfx = prompt.DenyingRule(cmd, rules)
+			if hasShell {
+				// agent cu shell: regulile decid (block = fara cerere, ask = cerere pe prefix)
+				mode, pfx := prompt.MatchCommand(cmd, rules)
+				if mode != store.CmdBlock && mode != store.CmdAsk {
+					// claude a refuzat desi regula decisiva e Allow (sau lipseste): cautam deny-ul care a lucrat
+					mode, pfx = prompt.DenyingRule(cmd, rules)
+				}
+				if mode == store.CmdBlock {
+					t.denialEvent(task, a, d)
+					continue
+				}
+				if mode == store.CmdAsk {
+					reqs = []prompt.Request{{Prefix: pfx, Kind: store.AccessAsk}}
+				}
+			} else {
+				// agent fara shell: cate o cerere pe fiecare prefix care lipseste
+				var blocked bool
+				reqs, blocked = prompt.NoShellRequests(cmd, a.Tools, rules, granted)
+				if len(reqs) == 0 {
+					if blocked {
+						t.denialEvent(task, a, d)
+					}
+					continue
+				}
 			}
-			if mode == store.CmdBlock {
-				t.denialEvent(task, a, d)
+		}
+		added := false
+		for _, r := range reqs {
+			key := d.Tool + "|" + r.Kind + "|" + r.Prefix
+			if seen[key] {
 				continue
 			}
-			if mode == store.CmdAsk {
-				prefix = pfx
+			seen[key] = true
+			var rerr error
+			if r.Kind == store.AccessCommand {
+				rerr = t.st.RecordCommandRequest(ar.projectID, a.ID, tid, d.Detail, r.Prefix)
+			} else {
+				rerr = t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail, r.Prefix)
 			}
+			if rerr != nil {
+				log.Printf("agent %d: access denial: %v", a.ID, rerr)
+				continue
+			}
+			added = true
 		}
-		key := d.Tool + "|" + prefix
-		if seen[key] {
-			continue
+		if added {
+			recorded = true
+			t.denialEvent(task, a, d)
 		}
-		seen[key] = true
-		if err := t.st.RecordAccessDenial(ar.projectID, a.ID, tid, d.Tool, d.Detail, prefix); err != nil {
-			log.Printf("agent %d: access denial: %v", a.ID, err)
-			continue
-		}
-		recorded = true
-		t.denialEvent(task, a, d)
 	}
 	if recorded {
 		t.emit(ar.projectID, "access", map[string]any{"agentId": a.ID})

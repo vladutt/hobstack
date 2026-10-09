@@ -319,3 +319,73 @@ func TestTaskGrantAllowsCommandWithoutShell(t *testing.T) {
 		t.Fatal("grant-ul nu e in allow")
 	}
 }
+
+func TestNoShellDenialAllowOnTask(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Stash", f.rook, store.StatusInProgress)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{
+		{Tool: "Bash", Detail: `git stash push -u -m "wip" -- app/`},
+	})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 1 || reqs[0].Prefix != "git stash" || reqs[0].Kind != store.AccessCommand || reqs[0].TaskID == nil || *reqs[0].TaskID != task.ID {
+		t.Fatalf("%+v", reqs)
+	}
+	// Allow in this project / Block nu au sens fara Shell
+	for _, act := range []func(int64) error{f.tm.AllowCommandInProject, f.tm.BlockCommandInProject} {
+		if err := act(reqs[0].ID); !errors.Is(err, ErrNoProjectRule) {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := f.st.CommandGrants(f.rook.ID, task.ID); len(g) != 1 || g[0] != "git stash" {
+		t.Fatalf("grants = %v", g)
+	}
+	pending, _ := f.st.Undelivered(f.rook.ID)
+	want := `You may now run commands starting with "git stash" (allowed on T-1 by the user). Run your command again if you still need it.`
+	if len(pending) == 0 || pending[len(pending)-1].Text != want {
+		t.Fatalf("%+v", pending)
+	}
+	f.wantStatus(t, task.Number, store.StatusQueued)
+}
+
+func TestNoShellAllowRefusedWhenBlockedNow(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Stash", f.rook, store.StatusInProgress)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git stash"}})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	f.st.SetCommandRules(f.p.ID, []store.CommandRule{{Prefix: "git stash", Mode: store.CmdBlock}})
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); !errors.Is(err, ErrRuleChanged) {
+		t.Fatalf("err = %v", err)
+	}
+	if g, _ := f.st.CommandGrants(f.rook.ID, task.ID); len(g) != 0 {
+		t.Fatalf("grants = %v", g)
+	}
+}
+
+func TestNoShellDenialSkipsGrantedAndBlocked(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Stash", f.rook, store.StatusInProgress)
+	f.st.AddCommandGrant(f.p.ID, f.rook.ID, &task.ID, "git stash")
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{
+		{Tool: "Bash", Detail: "sudo ls"},
+		{Tool: "Bash", Detail: "git stash && make build"},
+	})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 1 || reqs[0].Prefix != "make build" {
+		t.Fatalf("doar make build: %+v", reqs)
+	}
+}

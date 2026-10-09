@@ -106,7 +106,7 @@ func (s *Server) accessCommand(w http.ResponseWriter, r *http.Request, act func(
 		return
 	}
 	if err := act(id); err != nil {
-		if errors.Is(err, team.ErrNotCommandRequest) || errors.Is(err, team.ErrRequestClosed) || errors.Is(err, team.ErrRuleChanged) {
+		if errors.Is(err, team.ErrNotCommandRequest) || errors.Is(err, team.ErrRequestClosed) || errors.Is(err, team.ErrRuleChanged) || errors.Is(err, team.ErrNoProjectRule) {
 			writeErr(w, http.StatusConflict, err.Error())
 			return
 		}

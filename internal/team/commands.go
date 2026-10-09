@@ -13,6 +13,9 @@ import (
 var ErrNotCommandRequest = errors.New("this request is not about a command")
 var ErrRequestClosed = errors.New("this request is already closed")
 
+// ErrNoProjectRule: cererea e pe o comanda a unui agent fara Shell; o regula de proiect nu i-ar folosi.
+var ErrNoProjectRule = errors.New("this agent has no Shell; allow the command on the task or enable Shell")
+
 // ErrRuleChanged: regula prefixului nu mai e Ask, deci cererea e depasita.
 var ErrRuleChanged = errors.New("the rule changed")
 
@@ -97,6 +100,10 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 		t.work.Unlock()
 		return ErrNotCommandRequest
 	}
+	if project && r.Kind != store.AccessAsk {
+		t.work.Unlock()
+		return ErrNoProjectRule
+	}
 	if allow {
 		// regula s-a putut schimba dupa cerere (de ex. in Block): un Allow nu are voie sa o ocoleasca
 		rules, err := t.EffectiveCommandRules(r.ProjectID)
@@ -104,7 +111,17 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 			t.work.Unlock()
 			return err
 		}
-		if !slices.Contains(rules, store.CommandRule{Prefix: r.Prefix, Mode: store.CmdAsk}) {
+		ok := slices.Contains(rules, store.CommandRule{Prefix: r.Prefix, Mode: store.CmdAsk})
+		if r.Kind == store.AccessCommand {
+			// prefix calculat: permis cat timp nu e pe Block si nu e un refuz fix pentru tool-urile agentului
+			a, err := t.st.GetAgent(r.AgentID)
+			if err != nil {
+				t.work.Unlock()
+				return err
+			}
+			ok = !prompt.AlwaysDeniedBash(r.Prefix, a.Tools, rules)
+		}
+		if !ok {
 			t.work.Unlock()
 			return ruleChangedError{r.Prefix}
 		}

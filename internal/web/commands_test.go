@@ -91,3 +91,27 @@ func TestAccessCommandActionsAPI(t *testing.T) {
 		t.Fatalf("Enable Shell oferit pentru o comanda blocata: %s", raw)
 	}
 }
+
+func TestAccessCommandKindAPI(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Beacon")
+	w.Tools = []string{"git"}
+	e.st.UpdateAgent(w)
+	e.st.RecordCommandRequest(p.ID, w.ID, nil, "git stash push", "git stash")
+	reqs, _ := e.st.ListOpenAccessRequests(p.ID)
+	id := itoa(reqs[0].ID)
+	code, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
+	if code != 200 || !strings.Contains(string(raw), `"kind":"command"`) || !strings.Contains(string(raw), `"hasShell":false`) || !strings.Contains(string(raw), `"canEnableShell":true`) {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if code, raw := e.do(t, "POST", "/api/access/"+id+"/allow-project", nil); code != http.StatusConflict || !strings.Contains(string(raw), "no Shell") {
+		t.Fatalf("allow-project: %d %s", code, raw)
+	}
+	if code, raw := e.do(t, "POST", "/api/access/"+id+"/allow-task", nil); code != http.StatusNoContent {
+		t.Fatalf("allow-task: %d %s", code, raw)
+	}
+	if g, _ := e.st.CommandGrants(w.ID, 0); len(g) != 1 || g[0] != "git stash" {
+		t.Fatalf("grants = %v", g)
+	}
+}
