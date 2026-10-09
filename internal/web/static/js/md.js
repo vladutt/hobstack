@@ -1,4 +1,5 @@
 import { el } from "./ui.js";
+import { highlightInto, languageFor } from "./highlight.js";
 
 // Markdown minimal pentru textele scrise de agenti (rapoarte, mesaje).
 // Stie: paragrafe, liste (- * 1.), titluri (#), blocuri ``` si linii de diff (+/-),
@@ -95,12 +96,20 @@ export function renderMarkdown(text, stats) {
 
     // bloc ``` ... ```
     if (/^\s*```/.test(line)) {
+      const tag = (/^\s*```\s*([\w#+.-]*)/.exec(line)[1] || "").toLowerCase(); // ```php -> "php"
       const body = [];
       i++;
       while (i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i++]);
       i++; // ``` de inchidere (sau sfarsitul textului)
       const diffy = body.some((l) => DIFF.test(l));
-      root.append(el("pre", { class: diffy ? "md-pre diff" : "md-pre" }, diffy ? body.map(diffLine) : body.join("\n")));
+      if (!diffy) {
+        // codul se coloreaza dupa eticheta (```php, ```ts); fara eticheta, ghicit
+        const code = el("code", {});
+        highlightInto(code, body.join("\n"), tag ? (languageFor("x." + tag) || tag) : null);
+        root.append(el("pre", { class: "md-pre" }, code));
+        continue;
+      }
+      root.append(el("pre", { class: "md-pre diff" }, body.map(diffLine)));
       continue;
     }
 

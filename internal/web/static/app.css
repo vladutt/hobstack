@@ -1332,3 +1332,17 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .usage-bar i.warn { background: var(--amber); }
 .usage-bar i.bad { background: var(--red); }
 .usage-updated { margin: 12px 0 0; font-size: 12px; }
+
+/* evidentiere de sintaxa (highlight.js): culorile vin din tema, nu dintr-o tema highlight.js */
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type, .hljs-meta .hljs-keyword { color: var(--purple); }
+.hljs-string, .hljs-regexp, .hljs-char.escape_ { color: var(--teal); }
+.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: var(--amber); }
+.hljs-comment, .hljs-quote { color: var(--muted); font-style: italic; }
+.hljs-title, .hljs-title.function_, .hljs-title.class_, .hljs-section { color: var(--blue); }
+.hljs-variable, .hljs-template-variable, .hljs-params { color: var(--soft); }
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-selector-class, .hljs-selector-id { color: #89ddff; }
+.hljs-meta, .hljs-doctag { color: #ff9e80; }
+.hljs-tag, .hljs-name { color: var(--red); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 650; }
+.diff-sign { display: inline-block; width: 1.2em; opacity: .7; user-select: none; }

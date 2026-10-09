@@ -1,5 +1,36 @@
 import { el, clock } from "./ui.js";
 import { statBadge } from "./md.js";
+import { highlightLine, languageFor } from "./highlight.js";
+
+// hunkHeader: "@@ -a,b +c,d @@"; lipseste cand numerele de linie nu se cunosc (fallback fara structuredPatch)
+function hunkHeader(h) {
+  if (!h.oldStart && !h.newStart) return null;
+  return el("div", { class: "diff-line diff-hunk" }, `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`);
+}
+
+// lineNode: o linie de diff; prefixul (+, -, spatiu) ramane separat, codul de dupa el se coloreaza dupa limbaj
+function lineNode(text, lang) {
+  const c = text[0];
+  const cls = c === "+" ? "diff-add" : c === "-" ? "diff-del" : c === "\\" ? "diff-meta" : "diff-ctx";
+  if (text === "") return el("div", { class: `diff-line ${cls}` }, " ");
+  if (c === "\\") return el("div", { class: `diff-line ${cls}` }, text);
+  return el("div", { class: `diff-line ${cls}` }, el("span", { class: "diff-sign" }, c), highlightLine(text.slice(1), lang));
+}
+
+// diffBlock: diff-ul unui fisier (fragmentele lui), colorat dupa extensia caii. Liniile se adauga intr-o
+// bucla (fara spread: un diff de 150k+ linii ar depasi stiva). Folosit si de modala de fisier.
+export function diffBlock(path, hunks) {
+  const lang = languageFor(path);
+  const frag = document.createDocumentFragment();
+  for (const h of hunks || []) {
+    const head = hunkHeader(h);
+    if (head) frag.append(head);
+    for (const line of h.lines || []) frag.append(lineNode(line, lang));
+  }
+  const d = el("div", { class: "diff" });
+  d.append(frag);
+  return d;
+}
 
 // changesView: tab-ul "Changes" al unui task. Starea "diff deschis" (cheie: run + cale)
 // ramane intre reincarcari ale datelor.
@@ -7,31 +38,6 @@ import { statBadge } from "./md.js";
 export function changesView() {
   const root = el("div", { class: "changes" }, el("p", { class: "hint" }, "Loading..."));
   const open = new Set();
-
-  // hunkHeader: "@@ -a,b +c,d @@"; lipseste cand numerele de linie nu se cunosc (fallback fara structuredPatch)
-  function hunkHeader(h) {
-    if (!h.oldStart && !h.newStart) return null;
-    return el("div", { class: "diff-line diff-hunk" }, `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`);
-  }
-
-  function lineNode(text) {
-    const c = text[0];
-    const cls = c === "+" ? "diff-add" : c === "-" ? "diff-del" : c === "\\" ? "diff-meta" : "diff-ctx";
-    return el("div", { class: `diff-line ${cls}` }, text === "" ? " " : text);
-  }
-
-  // diffNode: liniile se adauga intr-un bucla (fara spread: un diff de 150k+ linii ar depasi stiva)
-  function diffNode(f) {
-    const frag = document.createDocumentFragment();
-    for (const h of f.hunks || []) {
-      const head = hunkHeader(h);
-      if (head) frag.append(head);
-      for (const line of h.lines || []) frag.append(lineNode(line));
-    }
-    const d = el("div", { class: "diff" });
-    d.append(frag);
-    return d;
-  }
 
   // pathNode: folderul estompat, numele fisierului evidentiat
   function pathNode(path) {
@@ -50,7 +56,7 @@ export function changesView() {
     function ensureDiff() {
       if (built) return;
       built = true;
-      body.append(diffNode(f));
+      body.append(diffBlock(f.path, f.hunks));
     }
     if (open.has(key)) ensureDiff();
     const btn = el("button", { type: "button", class: "change-file", "aria-expanded": String(open.has(key)) },

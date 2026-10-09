@@ -1,5 +1,6 @@
 import { el } from "./ui.js";
 import { renderMarkdown } from "./md.js";
+import { highlightInto, languageFor } from "./highlight.js";
 
 // Cat text se arata in preview (restul se descarca).
 const PREVIEW_BYTES = 1 << 20;
@@ -134,7 +135,7 @@ export function taskFilesView() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       if (previewId !== id) return;
-      const nodes = [kind === "markdown" ? renderMarkdown(text) : el("pre", { class: "tfiles-text" }, text)];
+      const nodes = [kind === "markdown" ? renderMarkdown(text) : (() => { const pre = el("pre", { class: "tfiles-text" }); highlightInto(pre, text, languageFor(f.name)); return pre; })()];
       if (f.size > PREVIEW_BYTES) nodes.push(el("p", { class: "hint" }, "Showing the first 1 MB. Download to see the rest."));
       body.replaceChildren(...nodes); // replaceChildren scrie "null" pentru un copil null
     } catch (err) {
