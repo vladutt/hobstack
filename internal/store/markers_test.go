@@ -59,3 +59,15 @@ func TestFileMarkersNotExact(t *testing.T) {
 		}
 	}
 }
+
+// jsdiff (structuredPatch, ce intoarce Claude): la OldLines == 0, OldStart e linia INAINTEA careia vin liniile noi
+func TestFileMarkersPureInsert(t *testing.T) {
+	// fisier gol -> doua linii
+	if m, _ := FileMarkers([]TaskChange{edit(Hunk{1, 0, 1, 2, []string{"+x", "+y"}})}); !slices.Equal(m.Added, []int{1, 2}) {
+		t.Fatalf("fisier gol: %+v", m)
+	}
+	// insert dupa linia 3, fara context
+	if m, _ := FileMarkers([]TaskChange{edit(Hunk{4, 0, 4, 1, []string{"+z"}})}); !slices.Equal(m.Added, []int{4}) {
+		t.Fatalf("insert: %+v", m)
+	}
+}

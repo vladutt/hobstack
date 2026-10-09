@@ -51,10 +51,9 @@ func FileMarkers(changes []TaskChange) (Markers, bool) {
 
 // applyHunk inlocuieste in marks zona veche a fragmentului cu liniile noi, marcate.
 func applyHunk(marks []uint8, h Hunk) []uint8 {
-	pos := h.OldStart - 1 // indexul primei linii vechi din fragment
-	if h.OldLines == 0 {
-		pos = h.OldStart // fragment doar cu linii noi: ele vin dupa linia OldStart
-	}
+	// indexul primei linii vechi din fragment. In structuredPatch (jsdiff, ce intoarce Claude) si un fragment
+	// doar cu linii noi (OldLines == 0) are OldStart = linia inaintea careia intra; {0,0,1,N} (createHunk) da 0.
+	pos := h.OldStart - 1
 	if pos < 0 {
 		pos = 0
 	}

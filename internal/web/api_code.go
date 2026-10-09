@@ -224,6 +224,20 @@ func (s *Server) readTaskFile(projectID int64, agentID *int64, path string) (str
 	if !filepath.IsLocal(path) {
 		return "", errOutside
 	}
+	// cu mai multe foldere, calea e "<numele folderului>/<cale in folder>" (vezi recordChanges in team/run.go)
+	if len(p.Folders) > 1 {
+		if name, rest, ok := strings.Cut(filepath.ToSlash(path), "/"); ok {
+			for _, f := range p.Folders {
+				fn := f.Name
+				if fn == "" {
+					fn = store.FolderName(f.Path)
+				}
+				if fn == name {
+					return readIn(f.Path, filepath.FromSlash(rest))
+				}
+			}
+		}
+	}
 	var last error = fs.ErrNotExist
 	for _, root := range roots {
 		txt, err := readIn(root, path)

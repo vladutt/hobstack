@@ -111,3 +111,26 @@ func TestFileViewSymlinkOutside(t *testing.T) {
 		t.Fatalf("%d %s", code, raw)
 	}
 }
+
+// proiect cu doua foldere: caile din task_changes au in fata numele folderului agentului
+func TestFileViewMultiFolder(t *testing.T) {
+	e := setup(t)
+	back, front := t.TempDir(), t.TempDir()
+	p := store.Project{Name: "Multi", Folders: []store.Folder{{Name: "backend", Path: back}, {Name: "frontend", Path: front}}}
+	if _, err := e.st.CreateProject(&p); err != nil {
+		t.Fatal(err)
+	}
+	w := e.addWorker(t, p.ID, "Beacon") // folderul implicit: backend
+	task := store.Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID}
+	e.st.CreateTask(&task)
+	os.MkdirAll(filepath.Join(back, "app"), 0o755)
+	os.WriteFile(filepath.Join(back, "app", "x.php"), []byte("<?php\necho 1;\n"), 0o644)
+	e.st.AddTaskChanges([]store.TaskChange{{TaskID: task.ID, RunID: "r1", AgentID: &w.ID, AgentName: "Beacon", Kind: "edit", Tool: "Edit", Path: "backend/app/x.php",
+		Patch: []store.Hunk{{OldStart: 1, OldLines: 2, NewStart: 1, NewLines: 2, Lines: []string{" <?php", "-echo 0;", "+echo 1;"}}}}})
+	code, raw := e.do(t, "GET", "/api/tasks/"+itoa(task.ID)+"/file?path=backend/app/x.php", nil)
+	var v fileView
+	json.Unmarshal(raw, &v)
+	if code != 200 || !v.Exists || !strings.Contains(v.Content, "echo 1;") {
+		t.Fatalf("%d %s", code, raw)
+	}
+}

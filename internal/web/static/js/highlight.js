@@ -21,7 +21,7 @@ export function languageFor(path) {
   if (name === "dockerfile") return hljs.getLanguage("dockerfile") ? "dockerfile" : null;
   if (name === "makefile") return hljs.getLanguage("makefile") ? "makefile" : null;
   const ext = name.includes(".") ? name.split(".").pop() : "";
-  const lang = EXT[ext] || null;
+  const lang = Object.hasOwn(EXT, ext) ? EXT[ext] : null; // nu "constructor", "__proto__" din Object.prototype
   return lang && hljs.getLanguage(lang) ? lang : null;
 }
 
