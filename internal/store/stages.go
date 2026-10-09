@@ -71,7 +71,7 @@ func listStages(q querier, projectID int64) ([]Stage, error) {
 // CountStageTasks: cate task-uri sunt acum in etapa.
 func (s *Store) CountStageTasks(stageID int64) (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE stage_id = ?`, stageID).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE stage_id = ? AND status != 'archived'`, stageID).Scan(&n)
 	return n, err
 }
 
@@ -101,11 +101,15 @@ func (s *Store) SaveStages(projectID int64, stages []Stage) ([]Stage, error) {
 			continue
 		}
 		var n int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE stage_id = ?`, o.ID).Scan(&n); err != nil {
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE stage_id = ? AND status != 'archived'`, o.ID).Scan(&n); err != nil {
 			return nil, err
 		}
 		if n > 0 {
 			return nil, StageInUseError(o.Name)
+		}
+		// task-urile arhivate din etapa raman fara etapa (la Restore apar in "No stage")
+		if _, err := tx.Exec(`UPDATE tasks SET stage_id = NULL WHERE stage_id = ? AND status = 'archived'`, o.ID); err != nil {
+			return nil, err
 		}
 		if _, err := tx.Exec(`DELETE FROM stages WHERE id = ?`, o.ID); err != nil {
 			return nil, err

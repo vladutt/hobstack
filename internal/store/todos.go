@@ -99,7 +99,7 @@ func (s *Store) ListFillIns(projectID int64) ([]FillIn, error) {
 		SUM(CASE WHEN d.done_at IS NULL THEN 1 ELSE 0 END), COUNT(*),
 		(SELECT text FROM task_todos x WHERE x.task_id = t.id AND x.done_at IS NULL ORDER BY position LIMIT 1)
 		FROM tasks t JOIN task_todos d ON d.task_id = t.id
-		WHERE t.project_id = ? GROUP BY t.id HAVING SUM(CASE WHEN d.done_at IS NULL THEN 1 ELSE 0 END) > 0
+		WHERE t.project_id = ? AND t.status != 'archived' GROUP BY t.id HAVING SUM(CASE WHEN d.done_at IS NULL THEN 1 ELSE 0 END) > 0
 		ORDER BY t.number`, projectID)
 	if err != nil {
 		return nil, err
