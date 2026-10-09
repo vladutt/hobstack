@@ -113,6 +113,14 @@ Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-fi
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
 modala (preview imagine/PDF/Markdown/text, Download, versiuni, "From subtasks"), eticheta 📎 N pe card; HTML/SVG nu
 se servesc inline (serveStored, comun cu fisierele urcate).
+Gata (cont Claude per proiect, spec in docs/superpowers/specs/2026-10-09-foreman-claude-accounts-design.md):
+claude_accounts (migrarea 025; token din `claude setup-token`, camp privat, nu iese din API) + projects.account_id (NULL =
+Default, CLI-ul logat). runner.Spec.Env pune CLAUDE_CODE_OAUTH_TOKEN si scoate variabilele de cont mostenite (doar pe
+proiectele cu cont; Default mosteneste mediul neatins). Settings > Claude accounts: Check (runner.Check, haiku fara setarile
+utilizatorului, sub o zecime de cent) si claude auth status pentru Default. Schimbarea contului cere echipa oprita si
+reseteaza sesiunile (ca New chat); o eroare de autentificare (runner.IsAuthError) pune proiectul pe pauza, task-ul inapoi in
+Queued si cardul "Claude account failed" in Needs you. Wizard-ul alege contul la pasul 1; draft-ul si wizard-ul pe folder
+folosesc contul proiectului.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

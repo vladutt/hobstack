@@ -1,7 +1,7 @@
 # Foreman: cont Claude per proiect
 
 Data: 2026-10-09
-Status: spec (neimplementat).
+Status: implementat (2026-10-09).
 
 ## Scop
 
