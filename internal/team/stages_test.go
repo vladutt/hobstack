@@ -182,10 +182,10 @@ func TestUserTaskDecidedByUser(t *testing.T) {
 	if id := decisionOwner(task, mustAgents(t, f)); id != 0 {
 		t.Fatalf("un task al utilizatorului nu il decide agentul %d", id)
 	}
-	if err := f.tm.UserDecide(task.ID, false, ""); err == nil {
+	if err := f.tm.UserDecide(task.ID, false, "", nil); err == nil {
 		t.Fatal("trimis inapoi fara feedback trebuia refuzat")
 	}
-	if err := f.tm.UserDecide(task.ID, false, "mai incearca"); err != nil {
+	if err := f.tm.UserDecide(task.ID, false, "mai incearca", nil); err != nil {
 		t.Fatal(err)
 	}
 	back := f.wantStatus(t, 1, store.StatusQueued)
@@ -194,7 +194,7 @@ func TestUserTaskDecidedByUser(t *testing.T) {
 	}
 	back.StageID, back.Status, back.ReviewStage = nil, store.StatusReview, store.StageLead
 	f.st.SaveTask(&back)
-	if err := f.tm.UserDecide(back.ID, true, ""); err != nil {
+	if err := f.tm.UserDecide(back.ID, true, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	f.wantStatus(t, 1, store.StatusDone)

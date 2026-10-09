@@ -191,14 +191,14 @@ func TestEventsUserTaskAndAssign(t *testing.T) {
 
 	task.Status, task.ReviewStage, task.AssigneeID = store.StatusReview, store.StageLead, f.vera.ID
 	f.st.SaveTask(&task)
-	if err := f.tm.UserDecide(task.ID, false, "mai incearca"); err != nil {
+	if err := f.tm.UserDecide(task.ID, false, "mai incearca", nil); err != nil {
 		t.Fatal(err)
 	}
 	wantEvent(t, f, task.ID, "sent_back", "You", "You sent it back: mai incearca")
 	task, _ = f.st.GetTask(task.ID)
 	task.Status, task.ReviewStage = store.StatusReview, store.StageLead
 	f.st.SaveTask(&task)
-	if err := f.tm.UserDecide(task.ID, true, ""); err != nil {
+	if err := f.tm.UserDecide(task.ID, true, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	wantEvent(t, f, task.ID, "user_accepted", "You", "You accepted")

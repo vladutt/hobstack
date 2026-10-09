@@ -380,7 +380,7 @@ func TestUserAcceptDeliversToo(t *testing.T) {
 	if err := f.st.SaveTask(&task); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.tm.UserDecide(task.ID, true, ""); err != nil {
+	if err := f.tm.UserDecide(task.ID, true, "", nil); err != nil {
 		t.Fatalf("accept: %v", err)
 	}
 	r, _ = f.st.GetProjectRequest(r.ID)
@@ -610,7 +610,7 @@ func TestRootReportDoneGoesThroughReviewer(t *testing.T) {
 	if r, _ = f.st.GetProjectRequest(r.ID); r.Status != store.ReqApproved {
 		t.Fatalf("inca nelivrata: %+v", r)
 	}
-	if err := f.tm.UserDecide(task.ID, true, ""); err != nil {
+	if err := f.tm.UserDecide(task.ID, true, "", nil); err != nil {
 		t.Fatalf("accept: %v", err)
 	}
 	r, _ = f.st.GetProjectRequest(r.ID)

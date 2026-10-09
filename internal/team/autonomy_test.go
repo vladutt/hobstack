@@ -101,7 +101,7 @@ func TestAutonomyUserTaskDecidedByRoot(t *testing.T) {
 
 	// utilizatorul tot poate decide din board
 	t3 := userTaskInReview(t, f, f.rook)
-	if err := f.tm.UserDecide(t3.ID, true, ""); err != nil {
+	if err := f.tm.UserDecide(t3.ID, true, "", nil); err != nil {
 		t.Fatalf("utilizatorul decide si in modul autonom: %v", err)
 	}
 	f.wantStatus(t, 3, store.StatusDone)
@@ -232,7 +232,7 @@ func TestAutonomyUserSendBackNeverAutoDone(t *testing.T) {
 	if err := f.st.SaveTask(&task); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.tm.UserDecide(task.ID, false, "inca o data"); err != nil {
+	if err := f.tm.UserDecide(task.ID, false, "inca o data", nil); err != nil {
 		t.Fatal(err)
 	}
 	f.wantStatus(t, 1, store.StatusBlocked)

@@ -329,7 +329,9 @@ func (t *Team) sendToStage(task *store.Task, st store.Stage, feedback string, ag
 }
 
 // UserDecide: utilizatorul decide un task al lui (creat din board) ajuns la final.
-func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
+// answers sunt raspunsurile la intrebarile cu optiuni ale task-ului (pot lipsi);
+// fara raspunsuri comportamentul e cel de dinainte de intrebari.
+func (t *Team) UserDecide(taskID int64, accept bool, feedback string, answers []store.DecisionAnswer) error {
 	t.work.Lock()
 	defer t.work.Unlock()
 	task, err := t.st.GetTask(taskID)
@@ -345,7 +347,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if task.Status != store.StatusReview || task.ReviewStage != store.StageLead || decisionOwner(task, agents) != 0 {
 		return ErrNotUserDecision
 	}
-	return t.decideAsUser(task, agents, accept, feedback, 0, nil)
+	return t.decideWithAnswers(task, agents, accept, feedback, answers)
 }
 
 // decideAsUser aplica decizia utilizatorului (accept / send back) pe un task din Review.

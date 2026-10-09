@@ -254,12 +254,12 @@ func TestConvSendBackBlockedInAutonomy(t *testing.T) {
 func TestConvUserDecide(t *testing.T) {
 	f := setup(t)
 	task := userTaskInReview(t, f, f.rook)
-	if err := f.tm.UserDecide(task.ID, false, "mai incearca"); err != nil {
+	if err := f.tm.UserDecide(task.ID, false, "mai incearca", nil); err != nil {
 		t.Fatal(err)
 	}
 	wantMsg(t, f, task.ID, "sent_back", "You", "Rook", "mai incearca")
 	toLeadReview(t, f, task)
-	if err := f.tm.UserDecide(task.ID, true, ""); err != nil {
+	if err := f.tm.UserDecide(task.ID, true, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	wantMsg(t, f, task.ID, "user_accepted", "You", "Rook", "Accepted")

@@ -169,6 +169,12 @@ func (s *Server) decideTask(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Action   string `json:"action"`
 		Feedback string `json:"feedback"`
+		// raspunsurile la intrebarile cu optiuni ale task-ului (optionale)
+		Answers []struct {
+			ID      int64    `json:"id"`
+			Choices []string `json:"choices"`
+			Other   string   `json:"other"`
+		} `json:"answers"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -178,10 +184,16 @@ func (s *Server) decideTask(w http.ResponseWriter, r *http.Request) {
 		fail(w, badRequest("action must be accept or send_back"))
 		return
 	}
-	err = s.team.UserDecide(id, in.Action == "accept", in.Feedback)
+	answers := make([]store.DecisionAnswer, len(in.Answers))
+	for i, a := range in.Answers {
+		answers[i] = store.DecisionAnswer{ID: a.ID, Choices: a.Choices, Other: a.Other}
+	}
+	err = s.team.UserDecide(id, in.Action == "accept", in.Feedback, answers)
 	switch {
 	case errors.Is(err, team.ErrNotUserDecision):
 		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, store.ErrBadAnswer): // alegere necunoscuta, prea multe alegeri, other prea lung
+		fail(w, badRequest(err.Error()))
 	case err != nil && in.Action == "send_back" && strings.TrimSpace(in.Feedback) == "": // lipseste feedback-ul
 		fail(w, badRequest(err.Error()))
 	case err != nil:

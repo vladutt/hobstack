@@ -122,6 +122,12 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 	if todos == nil {
 		todos = []store.Todo{}
 	}
+	// intrebarile cu optiuni puse de agenti (lista goala cand nu sunt)
+	decisions, err := s.st.ListDecisions(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	// cine a lasat punctele (nu neaparat asignatul curent): la el ajung comentariile
 	todosBy, todosByID := "", int64(0)
 	if len(todos) > 0 {
@@ -130,8 +136,9 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"todos":   todos, // puncte lasate utilizatorului
-		"todosBy": todosBy, "todosById": todosByID,
+		"todos":     todos, // puncte lasate utilizatorului
+		"decisions": decisions,
+		"todosBy":   todosBy, "todosById": todosByID,
 		"recurring": recurring,
 		"task":      task, "events": slim, "assignee": assignee, "stage": stage,
 		"conversation": conv, "working": working, "workingAgentId": workingID,

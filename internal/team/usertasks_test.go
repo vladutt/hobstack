@@ -28,7 +28,7 @@ func TestUserTaskWithoutStages(t *testing.T) {
 	if !f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatalf("trebuia sa decida utilizatorul: %+v", got)
 	}
-	if err := f.tm.UserDecide(got.ID, false, "mai adauga teste"); err != nil {
+	if err := f.tm.UserDecide(got.ID, false, "mai adauga teste", nil); err != nil {
 		t.Fatal(err)
 	}
 	if back := f.wantStatus(t, 1, store.StatusQueued); back.AssigneeID != f.rook.ID || back.Feedback != "mai adauga teste" {
