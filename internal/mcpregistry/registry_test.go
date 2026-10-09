@@ -252,10 +252,127 @@ func TestSuggestName(t *testing.T) {
 		"a/" + strings.Repeat("abcde", 10):           strings.Repeat("abcde", 8),
 		"a/" + strings.Repeat("x", 39) + "_y":        strings.Repeat("x", 39),
 		"a/!!!":                                      "mcp",
+		"a/x":                                        "mcp-x",
+		"a/team":                                     "team-mcp",
+		"a/Team":                                     "team-mcp",
 	}
 	for in, want := range cases {
 		if got := SuggestName(in); got != want {
 			t.Errorf("SuggestName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestNewClientRejectsNonHTTPURL(t *testing.T) {
+	for _, v := range []string{"file:///etc/passwd", "ftp://x.example", "not a url", "http://"} {
+		t.Setenv("FOREMAN_MCP_REGISTRY_URL", v)
+		if c := NewClient(); c.BaseURL != DefaultBaseURL {
+			t.Errorf("%q: BaseURL = %q", v, c.BaseURL)
+		}
+	}
+	t.Setenv("FOREMAN_MCP_REGISTRY_URL", "https://reg.example/")
+	if c := NewClient(); c.BaseURL != "https://reg.example" {
+		t.Errorf("BaseURL = %q", c.BaseURL)
+	}
+}
+
+// pageServer serveste un raspuns JSON scris in test.
+func pageServer(t *testing.T, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestSearchRuntimeArgsIdentifiersEnv(t *testing.T) {
+	pkg := func(name, extra string) string {
+		return `{"server":{"name":"io.x/` + name + `","version":"1.0.0","packages":[{` + extra + `,"transport":{"type":"stdio"}}]}}`
+	}
+	body := `{"servers":[` + strings.Join([]string{
+		pkg("rt-optional", `"registryType":"npm","identifier":"pkg-a","version":"1.0.0","runtimeArguments":[{"type":"named","name":"--registry","value":"https://evil.example"},{"type":"positional","value":"--yes"}]`),
+		pkg("rt-required", `"registryType":"oci","identifier":"ghcr.io/x/y","version":"1.0.0","runtimeArguments":[{"type":"positional","value":"-v","isRequired":true}]`),
+		pkg("id-dash", `"registryType":"npm","identifier":"-rf","version":"1.0.0"`),
+		pkg("id-shell", `"registryType":"npm","identifier":"pkg;rm","version":"1.0.0"`),
+		pkg("id-space", `"registryType":"pypi","identifier":"pkg x","version":"1.0.0"`),
+		pkg("ver-dash", `"registryType":"npm","identifier":"pkg-b","version":"--foo"`),
+		pkg("ver-space", `"registryType":"pypi","identifier":"pkg-c","version":"1.0 --x"`),
+		pkg("env-lower", `"registryType":"npm","identifier":"pkg-d","version":"1.0.0","environmentVariables":[{"name":"api_key"}]`),
+		pkg("env-path", `"registryType":"npm","identifier":"pkg-e","version":"1.0.0","environmentVariables":[{"name":"PATH"}]`),
+		pkg("env-ok", `"registryType":"npm","identifier":"@scope/pkg-f","version":"1.0.0","environmentVariables":[{"name":"API_KEY"}]`),
+	}, ",") + `],"metadata":{}}`
+	list, _, err := testClient(pageServer(t, body).URL).Search(context.Background(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := byName(list)
+	for _, skip := range []string{"id-dash", "id-shell", "id-space", "ver-dash", "ver-space"} {
+		if s, ok := m["io.x/"+skip]; ok {
+			t.Errorf("%s should be skipped: %+v", skip, s)
+		}
+	}
+	if s := m["io.x/rt-optional"]; !s.Installable || !reflect.DeepEqual(s.Args, []string{"-y", "pkg-a@1.0.0"}) {
+		t.Errorf("optional runtime args must be dropped: %+v", s)
+	}
+	if s := m["io.x/rt-required"]; s.Installable || s.Reason != ReasonNeedsArgs {
+		t.Errorf("required runtime arg: %+v", s)
+	}
+	for _, n := range []string{"env-lower", "env-path"} {
+		if s := m["io.x/"+n]; s.Installable || s.Reason != ReasonEnvNames {
+			t.Errorf("%s: %+v", n, s)
+		}
+	}
+	if s := m["io.x/env-ok"]; !s.Installable {
+		t.Errorf("env-ok: %+v", s)
+	}
+}
+
+func TestSearchCacheReturnsCopies(t *testing.T) {
+	srv, n := fixtureServer(t, "servers.json", 200, "application/json")
+	c := testClient(srv.URL)
+	first, _, err := c.Search(context.Background(), "docker", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := byName(first)["io.github.friendlygeorge/docker-mcp-server"]
+	wantArgs := append([]string(nil), want.Args...)
+	wantEnv := append([]EnvVar(nil), want.Env...)
+	// apelantul modifica rezultatul
+	for i := range first {
+		first[i].Name = "changed"
+		if len(first[i].Args) > 0 {
+			first[i].Args[0] = "changed"
+		}
+		if len(first[i].Env) > 0 {
+			first[i].Env[0].Name = "changed"
+		}
+	}
+	// cautarea cu spatii in jur foloseste aceeasi intrare din cache
+	second, _, err := c.Search(context.Background(), "  docker ", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(n); got != 1 {
+		t.Fatalf("requests = %d, want 1", got)
+	}
+	got, ok := byName(second)["io.github.friendlygeorge/docker-mcp-server"]
+	if !ok || !reflect.DeepEqual(got.Args, wantArgs) || !reflect.DeepEqual(got.Env, wantEnv) {
+		t.Fatalf("cache was mutated: %+v", got)
+	}
+}
+
+func TestSearchTrimsQuery(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query().Get("search")
+		w.Write([]byte(`{"servers":[]}`))
+	}))
+	defer srv.Close()
+	if _, _, err := testClient(srv.URL).Search(context.Background(), "  slack \n", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got != "slack" {
+		t.Fatalf("search = %q", got)
 	}
 }

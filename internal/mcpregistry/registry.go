@@ -14,9 +14,11 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // DefaultBaseURL e registrul oficial; in teste se schimba prin FOREMAN_MCP_REGISTRY_URL.
@@ -26,6 +28,8 @@ const DefaultBaseURL = "https://registry.modelcontextprotocol.io"
 const (
 	ReasonNeedsArgs    = "Needs arguments Foreman can't fill in yet"
 	ReasonNeedsHeaders = "Needs headers; not supported yet"
+	ReasonEnvNames     = "Uses environment variable names Foreman can't store"
+	ReasonCredential   = "Has a credential in its arguments or URL; move it to env in your Claude config, then install"
 )
 
 // pageLimit e cate servere cerem pe pagina.
@@ -85,8 +89,9 @@ type cacheEntry struct {
 // NewClient foloseste FOREMAN_MCP_REGISTRY_URL daca e setat (teste), altfel registrul oficial;
 // timeout 10 s si cache 10 min.
 func NewClient() *Client {
+	// doar URL-uri http/https cu host; orice altceva => registrul oficial
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("FOREMAN_MCP_REGISTRY_URL")), "/")
-	if base == "" {
+	if u, err := url.Parse(base); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		base = DefaultBaseURL
 	}
 	return &Client{
@@ -99,11 +104,12 @@ func NewClient() *Client {
 // Search intoarce serverele instalabile (sau afisabile cu motiv) si cursorul paginii urmatoare.
 // Erorile de retea / raspunsurile ciudate sunt ErrUnavailable si nu intra in cache.
 func (c *Client) Search(ctx context.Context, search, cursor string) ([]Server, string, error) {
+	search = strings.TrimSpace(search)
 	key := cacheKey{search, cursor}
 	c.mu.Lock()
 	if e, ok := c.cache[key]; ok && time.Since(e.at) < c.TTL {
 		c.mu.Unlock()
-		return e.servers, e.next, nil
+		return copyServers(e.servers), e.next, nil
 	}
 	c.mu.Unlock()
 
@@ -122,9 +128,20 @@ func (c *Client) Search(ctx context.Context, search, cursor string) ([]Server, s
 			delete(c.cache, k)
 		}
 	}
-	c.cache[key] = cacheEntry{servers: servers, next: next, at: time.Now()}
+	c.cache[key] = cacheEntry{servers: copyServers(servers), next: next, at: time.Now()}
 	c.mu.Unlock()
 	return servers, next, nil
+}
+
+// copyServers: copie adanca, ca apelantul sa nu poata schimba ce sta in cache.
+func copyServers(in []Server) []Server {
+	out := make([]Server, len(in))
+	for i, s := range in {
+		s.Args = slices.Clone(s.Args)
+		s.Env = slices.Clone(s.Env)
+		out[i] = s
+	}
+	return out
 }
 
 func (c *Client) fetch(ctx context.Context, search, cursor string) ([]Server, string, error) {
@@ -281,7 +298,7 @@ func normalize(e apiEntry) (Server, bool) {
 
 func fromPackage(base Server, p apiPackage) (Server, bool) {
 	runtime, ok := runtimes[p.RegistryType]
-	if !ok || p.Transport.Type != "stdio" || p.Identifier == "" {
+	if !ok || p.Transport.Type != "stdio" || !safeIdentifier.MatchString(p.Identifier) || !safeVersion(p.Version) {
 		return Server{}, false
 	}
 	s := base
@@ -296,11 +313,21 @@ func fromPackage(base Server, p apiPackage) (Server, bool) {
 		s.Env = append(s.Env, EnvVar{Name: v.Name, Description: v.Description, Required: v.IsRequired, Secret: v.IsSecret})
 	}
 
-	rtArgs, ok1 := buildArgs(p.RuntimeArguments)
-	pkgArgs, ok2 := buildArgs(p.PackageArguments)
-	if !ok1 || !ok2 {
+	// argumentele pentru runtime (npx / uvx / docker) pot schimba de unde vine pachetul
+	// (de ex. --registry) sau ce vede containerul (-v): cele optionale le ignoram,
+	// iar unul obligatoriu face serverul neinstalabil
+	pkgArgs, ok := buildArgs(p.PackageArguments)
+	for _, a := range p.RuntimeArguments {
+		if a.IsRequired {
+			ok = false
+		}
+	}
+	if !ok {
 		s.Installable = false
 		s.Reason = ReasonNeedsArgs
+	} else if !validEnvNames(s.Env) {
+		s.Installable = false
+		s.Reason = ReasonEnvNames
 	}
 
 	var args []string
@@ -310,23 +337,51 @@ func fromPackage(base Server, p apiPackage) (Server, bool) {
 		if p.Version != "" {
 			id += "@" + p.Version
 		}
-		args = append(append([]string{"-y"}, rtArgs...), id)
+		args = []string{"-y", id}
 	case "pypi":
 		id := p.Identifier
 		if p.Version != "" {
 			id += "==" + p.Version
 		}
-		args = append(rtArgs, id)
+		args = []string{id}
 	case "oci":
 		args = []string{"run", "-i", "--rm"}
 		for _, v := range s.Env {
 			args = append(args, "-e", v.Name)
 		}
-		args = append(args, rtArgs...)
 		args = append(args, ociImage(p.Identifier, p.Version))
 	}
 	s.Args = append(args, pkgArgs...)
 	return s, true
+}
+
+// safeIdentifier: identificatorul unui pachet nu poate incepe cu "-" (ar deveni optiune) si nu are
+// caractere ciudate (spatii, ; etc.).
+var safeIdentifier = regexp.MustCompile(`^[A-Za-z0-9@][A-Za-z0-9._/@:+-]*$`)
+
+// safeVersion: versiunea nu incepe cu "-" si nu are spatii.
+func safeVersion(v string) bool {
+	return !strings.HasPrefix(v, "-") && !strings.ContainsFunc(v, unicode.IsSpace)
+}
+
+// Copie a regulii din library.ValidSecretName (internal/library/validate.go): numele variabilelor devin
+// Secrets ale elementului din Library, deci trebuie sa treaca aceeasi validare. Copiata ca sa nu legam
+// pachetul de library (si de store); tine-le sincronizate.
+var envNameRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
+
+var reservedEnv = []string{"PATH", "HOME", "SHELL", "LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "IFS", "PS4"}
+
+func validEnvName(n string) bool {
+	return envNameRe.MatchString(n) && !slices.Contains(reservedEnv, n) && !strings.HasPrefix(n, "DYLD_")
+}
+
+func validEnvNames(env []EnvVar) bool {
+	for _, v := range env {
+		if !validEnvName(v.Name) {
+			return false
+		}
+	}
+	return true
 }
 
 // ociImage adauga ":<version>" doar daca identificatorul nu are deja tag sau digest.
@@ -419,6 +474,13 @@ func SuggestName(name string) string {
 	}
 	if len(n) > 40 {
 		n = strings.TrimRight(n[:40], "-")
+	}
+	// numele din Library au minim 2 caractere, iar "team" e serverul MCP al aplicatiei
+	if len(n) < 2 {
+		n = "mcp-" + n
+	}
+	if n == "team" {
+		n = "team-mcp"
 	}
 	return n
 }
