@@ -124,6 +124,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/recurring/{id}/run", s.runRecurring)
 	mux.HandleFunc("GET /api/tasks/{id}", s.getTask)
 	mux.HandleFunc("GET /api/tasks/{id}/changes", s.getTaskChanges)
+	mux.HandleFunc("GET /api/tasks/{id}/modified", s.getTaskModified)
+	mux.HandleFunc("GET /api/tasks/{id}/file", s.getTaskFile)
 	mux.HandleFunc("GET /api/tasks/{id}/flow", s.getTaskFlow)
 	mux.HandleFunc("GET /api/tasks/{id}/files", s.getTaskFiles)
 	mux.HandleFunc("GET /api/task-files/{id}", s.serveTaskFile)
