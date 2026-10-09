@@ -31,7 +31,8 @@ Verificat cu claude 2.1.295:
 
 ## Date
 
-Migrarea 026 (025 e rezervata de spec-ul pentru mutarea/stergerea task-urilor):
+Migrarea 025 (`025_claude_accounts.sql`). Migrarile se aplica dupa pozitie, nu dupa nume: daca `task-move-delete` (care
+are si el o 025 planificata) ajunge primul pe main, aceasta devine 026 inainte de merge.
 
 ```
 claude_accounts
@@ -47,16 +48,18 @@ projects.account_id  INTEGER REFERENCES claude_accounts(id)   -- NULL = Default 
 
 - Token-ul nu iese niciodata din API: raspunsurile au `hasToken` si `tokenHint` (ultimele 4 caractere).
 - `DeleteAccount` refuza daca un proiect il foloseste (`ErrAccountInUse`, "Used by N projects").
-- Store: `Accounts()`, `Account(id)`, `AddAccount`, `UpdateAccountToken`, `RenameAccount`, `DeleteAccount`,
-  `SetAccountCheck(id, err string)` (gol = reusit: seteaza `checked_at`, goleste `last_error`), `ProjectAccountEnv(pid)`.
+- Store: `Accounts()`, `Account(id)`, `AddAccount`, `UpdateAccount(id, name, token)` (gol = neschimbat), `DeleteAccount`,
+  `SetAccountCheck(id, err string)` (gol = reusit: seteaza `checked_at`, goleste `last_error`), `ProjectAccount(pid)`
+  (nil = Default; `Account.Env()` da mediul), `AccountProjects(id)`, `SetProjectAccount(pid, id, nota)`.
 
 ## Rulare
 
 - `runner.Spec` primeste `Env []string` (perechi `K=V` adaugate peste mediu).
-- `Manager.Start`: `cmd.Env = cleanEnv(os.Environ())` + `spec.Env`. `cleanEnv` scoate **mereu**
-  `CLAUDE_CODE_OAUTH_TOKEN` si `ANTHROPIC_API_KEY` mostenite din shell-ul care a pornit foreman, ca un proiect pe
-  Default sa nu ia alt cont din mediu.
-- `store.ProjectAccountEnv(pid)` intoarce `["CLAUDE_CODE_OAUTH_TOKEN=..."]` sau nil pentru Default.
+- `Manager.Start`: cu `spec.Env` nevid, `cmd.Env = cleanEnv(os.Environ())` + `spec.Env`; `cleanEnv` scoate
+  `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`,
+  `CLAUDE_CODE_USE_VERTEX` mostenite (altfel ar castiga in fata token-ului contului). Pe Default (`spec.Env` gol) mediul
+  ramane neatins: Default = exact ce ar face `claude` din acelasi shell.
+- `store.ProjectAccount(pid)` intoarce contul (nil = Default); `Account.Env()` = `["CLAUDE_CODE_OAUTH_TOKEN=..."]`.
 - Cine il foloseste (contul proiectului in care ruleaza agentul):
   - run-urile echipei (`internal/team/run.go`), inclusiv conversatiile din chat;
   - draft-ul de agent (`internal/draft`);
@@ -68,10 +71,10 @@ projects.account_id  INTEGER REFERENCES claude_accounts(id)   -- NULL = Default 
 
 ## Erori de autentificare (fail closed)
 
-- Daca `account_id` e setat dar contul nu mai exista sau nu are token: run-ul nu porneste; `startFailed` (pauza +
-  nota "Cannot start <agent>: Claude account <name> has no token. The project is paused.").
-- Un run care se termina cu eroare de autentificare: `runner.IsAuthError(outcome)` cauta in `Error`/`Result`
-  (case-insensitive) `401`, `authentication_error`, `invalid api key`, `oauth token`, `/login`. Atunci:
+- Contul nu poate lipsi (FK + `DeleteAccount` refuza) si nu poate avea token gol (validare la Add/Update); orice eroare la
+  citirea contului face run-ul sa nu porneasca (`startFailed`: pauza + nota).
+- Un run care se termina cu eroare de autentificare: `runner.IsAuthError(o.Error)` cauta (case-insensitive)
+  `authentication_error`, `invalid api key`, `oauth token`, `not logged in`, `/login`, `api error: 401`. Atunci:
   `SetAccountCheck(id, mesaj)`, proiectul trece pe pauza (anti-bucla, ca la `startFailed`), task-ul revine in Queued.
   Pe Default doar pauza + nota (nu avem rand de cont).
 - "Needs you": cardul **Claude account failed** apare pentru proiectul al carui cont are `last_error` nevid:
@@ -101,7 +104,8 @@ altfel mesajul merge in `last_error`. Costa cat un mesaj scurt; nu intra in Tota
 
 ## API
 
-- `GET /api/accounts` → lista (fara token) + `projects` (cate proiecte il folosesc) + `default` (email, abonament).
+- `GET /api/accounts` → lista (fara token) + `projects` (cate proiecte il folosesc); `GET /api/accounts/default` → email,
+  abonament (separat: `claude auth status` dureaza ~0.5 s).
 - `POST /api/accounts` `{name, token}`; `PUT /api/accounts/{id}` `{name?, token?}`; `DELETE /api/accounts/{id}`.
 - `POST /api/accounts/{id}/check`.
 - Proiect: `accountId` (0/absent = Default) in GET/POST/PUT; `accountName` in lista de proiecte.
@@ -135,7 +139,7 @@ care nu sunt pe Default.
 
 ## Ordine
 
-1. Migrarea 026 + store (conturi, `account_id`, schimbarea contului cu reset de sesiuni).
+1. Migrarea 025 + store (conturi, `account_id`, schimbarea contului cu reset de sesiuni).
 2. runner: `Spec.Env`, `cleanEnv`, `IsAuthError`; folosit in team, draft, setup.
 3. Erori de autentificare: pauza, `last_error`, cardul din Needs you.
 4. API conturi + Check + default.
