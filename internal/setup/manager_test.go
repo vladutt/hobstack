@@ -393,3 +393,30 @@ func argAfter(args []string, flag string) string {
 	}
 	return ""
 }
+
+func TestStartAsCarriesAccount(t *testing.T) {
+	m, f := newTest(t)
+	env := []string{"CLAUDE_CODE_OAUTH_TOKEN=work"}
+	s, err := m.StartAs(Account{ID: 7, Env: env}, nil, "notes app", "sonnet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.AccountID != 7 || len(f.specs) != 1 || len(f.specs[0].Env) != 1 || f.specs[0].Env[0] != env[0] {
+		t.Fatalf("session=%+v env=%v", s, f.specs[0].Env)
+	}
+	if _, err := m.Start(nil, "notes", "sonnet"); err != nil {
+		t.Fatal(err)
+	}
+	if f.specs[1].Env != nil {
+		t.Fatalf("Start fara cont: Env = %v", f.specs[1].Env)
+	}
+	dir := t.TempDir()
+	in := FolderInput{Project: store.Project{ID: 3, Name: "Acme", Folders: []store.Folder{{ID: 1, Name: "app", Path: dir}}},
+		Folder: store.Folder{ID: 1, Name: "app", Path: dir}, Env: env}
+	if _, err := m.StartFolder(in, "", "sonnet"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.specs[2].Env; len(got) != 1 || got[0] != env[0] {
+		t.Fatalf("StartFolder: Env = %v", got)
+	}
+}

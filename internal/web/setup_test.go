@@ -404,3 +404,31 @@ func TestSetupChatAndUndo(t *testing.T) {
 		t.Fatalf("undo a doua oara: %d", code)
 	}
 }
+
+func TestSetupWithAccount(t *testing.T) {
+	e := withSetup(t)
+	acct := e.addAccount(t, "Work", "sk-ant-oat01-token-1234")
+	code, raw := e.do(t, "POST", "/api/setup", map[string]any{"description": "notes app", "model": "sonnet", "accountId": acct})
+	var sess struct {
+		ID        string
+		AccountID int64
+	}
+	json.Unmarshal(raw, &sess)
+	if code != http.StatusCreated || sess.AccountID != acct {
+		t.Fatalf("POST /api/setup: %d %s", code, raw)
+	}
+	if code, _ := e.do(t, "POST", "/api/setup", map[string]any{"description": "x", "model": "sonnet", "accountId": 999}); code != http.StatusBadRequest {
+		t.Fatalf("cont necunoscut: %d", code)
+	}
+	proposal := map[string]any{"name": "Notes", "goal": "g", "context": "c",
+		"agents": []map[string]any{{"name": "Ana", "role": "Lead", "model": "sonnet", "reportsTo": ""}}}
+	code, raw = e.do(t, "POST", "/api/projects/setup", map[string]any{"setupId": sess.ID, "workdir": t.TempDir(), "proposal": proposal})
+	var p struct {
+		ID        int64
+		AccountID *int64
+	}
+	json.Unmarshal(raw, &p)
+	if code != http.StatusCreated || p.AccountID == nil || *p.AccountID != acct {
+		t.Fatalf("proiect din wizard: %d %s", code, raw)
+	}
+}

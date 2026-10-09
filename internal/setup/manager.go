@@ -52,6 +52,12 @@ type Starter interface {
 	Stop(runID string) error
 }
 
+// Account: contul Claude pe care ruleaza analistul (ID 0 + Env nil = Default, CLI-ul logat).
+type Account struct {
+	ID  int64
+	Env []string
+}
+
 // Session e o analiza din wizard. Traieste doar in memorie. Ruleaza pe server
 // si cand pagina wizard-ului e inchisa; pagina Proiecte o arata ca un card.
 type Session struct {
@@ -63,6 +69,7 @@ type Session struct {
 	Model       string    `json:"model"`     // modelul analistului, pentru Retry
 	ProjectID   int64     `json:"projectId"` // 0 = proiect nou; altfel modul folder (agenti pentru un folder existent)
 	FolderID    int64     `json:"folderId"`
+	AccountID   int64     `json:"accountId"` // contul ales la pasul 1 (0 = Default); devine contul proiectului creat
 	Status      string    `json:"status"`
 	Proposal    *Proposal `json:"proposal"`
 	Error       string    `json:"error"`
@@ -82,6 +89,7 @@ type Session struct {
 	tempDir string   // folderul gol folosit cand nu exista folder de proiect; traieste cat sesiunea
 	cwd     string   // folderul in care ruleaza analistul (Claude tine sesiunile pe cwd, pentru --resume)
 	addDirs []string // celelalte foldere pe care analistul le poate citi (--add-dir)
+	env     []string // mediul run-urilor (token-ul contului); nu iese in JSON
 	hidden  bool     // ascunsa din lista (Dismiss sau proiect creat din ea)
 
 	existing    []string // modul folder: numele agentilor care exista deja
@@ -120,8 +128,13 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-// Start valideaza cererea si porneste analistul.
+// Start porneste analistul pe contul implicit.
 func (m *Manager) Start(workdirs []string, description, model string) (Session, error) {
+	return m.StartAs(Account{}, workdirs, description, model)
+}
+
+// StartAs valideaza cererea si porneste analistul pe contul dat.
+func (m *Manager) StartAs(acct Account, workdirs []string, description, model string) (Session, error) {
 	description = strings.TrimSpace(description)
 	if err := tooLong("description", description, 4000); err != nil {
 		return Session{}, err
@@ -163,8 +176,8 @@ func (m *Manager) Start(workdirs []string, description, model string) (Session, 
 
 	m.cleanupOld()
 	s := &Session{ID: randomHex(8), RunID: runner.NewID(), Title: titleFor(dirs, description),
-		Workdirs: dirs, Description: description, Model: model,
-		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16), Chat: []ChatMessage{}}
+		Workdirs: dirs, Description: description, Model: model, AccountID: acct.ID,
+		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16), Chat: []ChatMessage{}, env: acct.Env}
 	if len(dirs) > 0 {
 		s.cwd, s.addDirs = dirs[0], dirs[1:]
 	} else {
@@ -184,6 +197,7 @@ func (m *Manager) Start(workdirs []string, description, model string) (Session, 
 		ID: s.RunID, Key: "setup-" + s.ID, Dir: s.cwd,
 		Args:   m.args(s, model, turnPrompt(s)),
 		Prompt: turnPrompt(s),
+		Env:    s.env,
 	}
 	if _, err := m.starter.Start(spec, func(o runner.Outcome) { m.finish(s.ID, o) }); err != nil {
 		m.finish(s.ID, runner.Outcome{RunID: s.RunID, Status: "failed", Error: err.Error()})
@@ -197,6 +211,7 @@ type FolderInput struct {
 	Project store.Project
 	Folder  store.Folder
 	Team    []store.Agent
+	Env     []string // contul proiectului (Server.projectEnv)
 }
 
 // StartFolder porneste analistul pentru un folder dintr-un proiect existent:
@@ -222,7 +237,7 @@ func (m *Manager) StartFolder(in FolderInput, description, model string) (Sessio
 		Workdirs: []string{dir}, Description: description, Model: model,
 		ProjectID: in.Project.ID, FolderID: in.Folder.ID,
 		Status: StatusRunning, CreatedAt: time.Now(), token: randomHex(16), Chat: []ChatMessage{},
-		existing: existing, brief: folderBrief(in), projectName: in.Project.Name, cwd: dir}
+		existing: existing, brief: folderBrief(in), projectName: in.Project.Name, cwd: dir, env: in.Env}
 	for _, f := range in.Project.Folders {
 		if filepath.Clean(f.Path) != dir {
 			s.addDirs = append(s.addDirs, f.Path) // celelalte foldere: doar citire
@@ -233,7 +248,7 @@ func (m *Manager) StartFolder(in FolderInput, description, model string) (Sessio
 	m.tokens[s.token] = s.ID
 	m.mu.Unlock()
 
-	spec := runner.Spec{ID: s.RunID, Key: "setup-" + s.ID, Dir: s.cwd, Args: m.args(s, model, turnPrompt(s)), Prompt: turnPrompt(s)}
+	spec := runner.Spec{ID: s.RunID, Key: "setup-" + s.ID, Dir: s.cwd, Args: m.args(s, model, turnPrompt(s)), Prompt: turnPrompt(s), Env: s.env}
 	if _, err := m.starter.Start(spec, func(o runner.Outcome) { m.finish(s.ID, o) }); err != nil {
 		m.finish(s.ID, runner.Outcome{RunID: s.RunID, Status: "failed", Error: err.Error()})
 		return Session{}, err
@@ -393,7 +408,7 @@ func (m *Manager) Chat(id, message string, current Proposal) (Session, error) {
 	s.token = randomHex(16)
 	m.tokens[s.token] = s.ID
 	args := append(m.args(s, s.Model, turn), "--resume", s.claudeSession)
-	spec := runner.Spec{ID: s.ChatRunID, Key: "setup-" + s.ID, Dir: s.cwd, Args: args, Prompt: turn}
+	spec := runner.Spec{ID: s.ChatRunID, Key: "setup-" + s.ID, Dir: s.cwd, Args: args, Prompt: turn, Env: s.env}
 	m.mu.Unlock()
 
 	if _, err := m.starter.Start(spec, func(o runner.Outcome) { m.finish(s.ID, o) }); err != nil {

@@ -41,6 +41,7 @@ func (s *Server) startSetup(w http.ResponseWriter, r *http.Request) {
 		Workdirs    []string `json:"workdirs"`
 		Description string   `json:"description"`
 		Model       string   `json:"model"`
+		AccountID   int64    `json:"accountId"` // 0 = Default
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -49,7 +50,19 @@ func (s *Server) startSetup(w http.ResponseWriter, r *http.Request) {
 	if len(in.Workdirs) == 0 && in.Workdir != "" {
 		in.Workdirs = []string{in.Workdir} // API-ul vechi: un singur folder
 	}
-	sess, err := s.wizard.Start(in.Workdirs, in.Description, in.Model)
+	var acct wizard.Account
+	if in.AccountID != 0 {
+		a, err := s.st.Account(in.AccountID)
+		if errors.Is(err, store.ErrNotFound) {
+			fail(w, badRequest("unknown Claude account; reload the page"))
+			return
+		} else if err != nil {
+			fail(w, err)
+			return
+		}
+		acct = wizard.Account{ID: a.ID, Env: a.Env()}
+	}
+	sess, err := s.wizard.StartAs(acct, in.Workdirs, in.Description, in.Model)
 	if err != nil {
 		setupFail(w, err)
 		return
@@ -152,6 +165,17 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 		}
 		p.Folders = append(p.Folders, store.Folder{Name: name, Path: dir, Context: f.Context})
 	}
+	// contul ales la pasul 1 ramane pe sesiune (si cand pagina wizard-ului a fost redeschisa)
+	if s.wizard != nil && in.SetupID != "" {
+		if sess, ok := s.wizard.Get(in.SetupID); ok && sess.AccountID != 0 {
+			ref, err := s.accountRef(sess.AccountID)
+			if err != nil {
+				fail(w, err)
+				return
+			}
+			p.AccountID = ref
+		}
+	}
 	if _, err := s.st.CreateProjectWithTeam(&p, in.Proposal.Members()); errors.Is(err, store.ErrConflict) {
 		writeErr(w, http.StatusBadRequest, "an agent with this name already exists in the project")
 		return
@@ -218,7 +242,12 @@ func (s *Server) startFolderSetup(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	sess, err := s.wizard.StartFolder(wizard.FolderInput{Project: p, Folder: folder, Team: team}, in.Description, in.Model)
+	env, err := s.projectEnv(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	sess, err := s.wizard.StartFolder(wizard.FolderInput{Project: p, Folder: folder, Team: team, Env: env}, in.Description, in.Model)
 	if err != nil {
 		setupFail(w, err)
 		return

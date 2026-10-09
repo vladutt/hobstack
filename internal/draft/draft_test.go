@@ -118,3 +118,14 @@ func TestDraftBusyMissingDirAndTimeout(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestDraftCarriesEnv(t *testing.T) {
+	m, f := newTest(t)
+	env := []string{"CLAUDE_CODE_OAUTH_TOKEN=work"}
+	if _, err := m.Start(Input{ProjectID: 1, Dir: t.TempDir(), Ask: "a QA agent", Model: "haiku", Env: env}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.specs[0].Env; len(got) != 1 || got[0] != env[0] {
+		t.Fatalf("Env = %v", got)
+	}
+}

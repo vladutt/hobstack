@@ -35,8 +35,13 @@ func (s *Server) startDraft(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	env, err := s.projectEnv(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	d, err := s.drafts.Start(draft.Input{ProjectID: id, Dir: p.Workdir, Brief: draftBrief(p, agents),
-		Names: agentNames(agents), Ask: in.Ask, Model: in.Model})
+		Names: agentNames(agents), Ask: in.Ask, Model: in.Model, Env: env})
 	switch {
 	case errors.Is(err, draft.ErrBusy):
 		writeErr(w, http.StatusConflict, err.Error())

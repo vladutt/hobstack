@@ -47,6 +47,7 @@ type Input struct {
 	Brief      string
 	Names      []string
 	Ask, Model string
+	Env        []string // contul Claude al proiectului (nil = Default)
 }
 
 type Proposal struct {
@@ -131,7 +132,7 @@ func (m *Manager) Start(in Input) (Draft, error) {
 		m.mu.Unlock()
 	}
 	turn := turnPrompt(in.Brief, ask)
-	spec := runner.Spec{ID: d.runID, Key: "draft-" + d.ID, Dir: dir, Args: m.args(d, in.Model, turn), Prompt: turn}
+	spec := runner.Spec{ID: d.runID, Key: "draft-" + d.ID, Dir: dir, Args: m.args(d, in.Model, turn), Prompt: turn, Env: in.Env}
 	if _, err := m.starter.Start(spec, func(o runner.Outcome) { m.finish(d.ID, o) }); err != nil {
 		m.fail(d.ID, err.Error())
 		return Draft{}, err
