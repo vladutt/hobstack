@@ -81,6 +81,10 @@ func (t *Team) stuckKind(task store.Task, agents []store.Agent, tasks []store.Ta
 				return "", store.Agent{}, false // asteapta raspunsul utilizatorului
 			}
 		}
+		// o cerere de acces deschisa pe task = asteapta aprobarea utilizatorului (e deja in "Needs you")
+		if waiting, err := t.st.HasOpenAccessRequest(a.ID, task.ID); err != nil || waiting {
+			return "", store.Agent{}, false
+		}
 		return stuckOrphan, a, true
 	}
 	return "", store.Agent{}, false

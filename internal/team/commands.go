@@ -170,8 +170,67 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 	return nil
 }
 
-// wakeForCommand pune task-ul cererii inapoi in coada si lasa agentului un mesaj nelivrat. Se apeleaza cu t.work blocat.
+// ErrNotToolRequest: tool-ul nu se poate porni din aceasta cerere.
+var ErrNotToolRequest = errors.New("only shell access can be enabled from here")
+
+// EnableTool adauga tool-ul ("shell" sau "packages") agentului cererii, inchide cererea si il trezeste.
+// Shell: pentru o cerere de tool Bash sau o comanda calculata; packages: doar pentru o cerere de tool Bash.
+func (t *Team) EnableTool(accessID int64, tool string) error {
+	t.work.Lock()
+	r, err := t.st.GetAccessRequest(accessID)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = store.ErrNotFound
+	}
+	if err != nil {
+		t.work.Unlock()
+		return err
+	}
+	if r.Dismissed {
+		t.work.Unlock()
+		return ErrRequestClosed
+	}
+	if r.Tool != "Bash" || r.Kind == store.AccessAsk || (tool == "packages" && r.Kind != store.AccessTool) {
+		t.work.Unlock()
+		return ErrNotToolRequest
+	}
+	a, err := t.st.GetAgent(r.AgentID)
+	if err != nil {
+		t.work.Unlock()
+		return err
+	}
+	if !slices.Contains(a.Tools, tool) {
+		a.Tools = append(a.Tools, tool)
+		if err := t.st.UpdateAgent(a); err != nil {
+			t.work.Unlock()
+			return err
+		}
+		t.emit(a.ProjectID, "agent", map[string]int64{"id": a.ID})
+	}
+	if err := t.st.DismissAccessRequest(r.ID); err != nil {
+		t.work.Unlock()
+		return err
+	}
+	msg := "You now have the Shell tool (enabled by the user). Run your command again if you still need it."
+	if tool == "packages" {
+		msg = "You may now install packages (enabled by the user). Run your command again if you still need it."
+	}
+	if err := t.wakeAgent(r, msg); err != nil {
+		t.work.Unlock()
+		return err
+	}
+	t.emit(r.ProjectID, "access", map[string]int64{"agentId": r.AgentID})
+	t.work.Unlock()
+	t.Kick(r.ProjectID)
+	return nil
+}
+
+// wakeForCommand: wakeAgent cu mesajul pentru un prefix permis. Se apeleaza cu t.work blocat.
 func (t *Team) wakeForCommand(r store.AccessRequest, how string) error {
+	return t.wakeAgent(r, fmt.Sprintf("You may now run commands starting with %q (%s by the user). Run your command again if you still need it.", r.Prefix, how))
+}
+
+// wakeAgent pune task-ul cererii inapoi in coada si lasa agentului un mesaj nelivrat. Se apeleaza cu t.work blocat.
+func (t *Team) wakeAgent(r store.AccessRequest, msg string) error {
 	a, err := t.st.GetAgent(r.AgentID)
 	if err != nil {
 		return err
@@ -181,7 +240,6 @@ func (t *Team) wakeForCommand(r store.AccessRequest, how string) error {
 			return err
 		}
 	}
-	msg := fmt.Sprintf("You may now run commands starting with %q (%s by the user). Run your command again if you still need it.", r.Prefix, how)
 	_, err = t.addUserMessage(a, clip(msg), nil, true, true)
 	return err
 }

@@ -389,3 +389,33 @@ func TestNoShellDenialSkipsGrantedAndBlocked(t *testing.T) {
 		t.Fatalf("doar make build: %+v", reqs)
 	}
 }
+
+func TestEnableShellWakesAgent(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Stash", f.rook, store.StatusInProgress)
+	f.st.RecordCommandRequest(f.p.ID, f.rook.ID, &task.ID, "git stash", "git stash")
+	f.st.RecordAccessDenial(f.p.ID, f.rook.ID, nil, "WebFetch", "https://x.dev", "")
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if err := f.tm.EnableTool(reqs[1].ID, "shell"); !errors.Is(err, ErrNotToolRequest) {
+		t.Fatalf("WebFetch: %v", err)
+	}
+	if err := f.tm.EnableTool(reqs[0].ID, "packages"); !errors.Is(err, ErrNotToolRequest) {
+		t.Fatalf("packages pe o comanda: %v", err)
+	}
+	if err := f.tm.EnableTool(reqs[0].ID, "shell"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.st.GetAgent(f.rook.ID)
+	if !slices.Contains(got.Tools, "shell") || !slices.Contains(got.Tools, "git") {
+		t.Fatalf("%v", got.Tools)
+	}
+	if !f.hasMessage(f.rook.ID, "You now have the Shell tool (enabled by the user).") {
+		t.Fatal("Rook nu a fost trezit")
+	}
+	f.wantStatus(t, task.Number, store.StatusQueued)
+	if err := f.tm.EnableTool(reqs[0].ID, "shell"); !errors.Is(err, ErrRequestClosed) {
+		t.Fatalf("a doua oara: %v", err)
+	}
+}

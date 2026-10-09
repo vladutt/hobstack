@@ -316,3 +316,13 @@ func TestSystemBlockedCommands(t *testing.T) {
 		t.Fatal("fara comenzi blocate nu apare linia")
 	}
 }
+
+// refuzurile: in toate modurile, fara ask_user (TestSystemAutonomy cere ca modul autonom sa nu-l pomeneasca)
+func TestSystemDenied(t *testing.T) {
+	for _, p := range []store.Project{{Name: "X"}, {Name: "X", Autonomy: true}} {
+		got := System(p, store.Agent{Name: "A"}, Links{BossName: "Boss"})
+		if !strings.Contains(got, "Command and tool permissions are set in Foreman") || strings.Contains(got, "a decision, a permission") {
+			t.Errorf("autonomy=%v:\n%s", p.Autonomy, got)
+		}
+	}
+}

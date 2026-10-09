@@ -9,6 +9,7 @@ import (
 
 	"foreman/internal/prompt"
 	"foreman/internal/store"
+	"foreman/internal/team"
 )
 
 // accessView e o cerere de acces deschisa, asa cum o vede UI-ul.
@@ -103,35 +104,20 @@ func (s *Server) enablePackages(w http.ResponseWriter, r *http.Request) {
 	s.enableTool(w, r, "packages")
 }
 
-// enableTool adauga tool-ul ("shell" sau "packages") la tool-urile agentului
-// (restul campurilor raman) si inchide cererea.
+// enableTool porneste tool-ul ("shell" sau "packages") prin team, care trezeste agentul.
 func (s *Server) enableTool(w http.ResponseWriter, r *http.Request, tool string) {
-	req, err := s.getAccess(r)
+	id, err := pathID(r)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	if req.Tool != "Bash" || req.Prefix != "" {
-		writeErr(w, http.StatusConflict, "only shell access can be enabled from here")
-		return
-	}
-	a, err := s.st.GetAgent(req.AgentID)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	if !slices.Contains(a.Tools, tool) {
-		a.Tools = append(a.Tools, tool)
-		if err := s.st.UpdateAgent(a); err != nil {
-			fail(w, err)
+	if err := s.team.EnableTool(id, tool); err != nil {
+		if errors.Is(err, team.ErrNotToolRequest) || errors.Is(err, team.ErrRequestClosed) {
+			writeErr(w, http.StatusConflict, err.Error())
 			return
 		}
-		s.hub.Publish(a.ProjectID, "agent", map[string]int64{"id": a.ID})
-	}
-	if err := s.st.DismissAccessRequest(req.ID); err != nil {
 		fail(w, err)
 		return
 	}
-	s.hub.Publish(req.ProjectID, "access", map[string]int64{"agentId": req.AgentID})
 	w.WriteHeader(http.StatusNoContent)
 }

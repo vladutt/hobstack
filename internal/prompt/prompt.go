@@ -55,7 +55,11 @@ type TurnContext struct {
 	Stages    string     // pentru lideri, intr-un proiect cu etape: etapele si agentii lor
 }
 
-const howAsk = `If you need a decision, a permission or information that only the user can give, call mcp__team__ask_user with a clear question (and short options if it is a choice), then stop. Do not guess, and do not just end your message with a question.`
+const howAsk = `If you need a decision or information that only the user can give, call mcp__team__ask_user with a clear question (and short options if it is a choice), then stop. Do not guess, and do not just end your message with a question.`
+
+// howDenied: permisiunile vin din Foreman; un refuz ajunge singur in "Needs you".
+// Nu pomeneste ask_user: in modul autonom promptul nu are voie sa-l contina.
+const howDenied = `Command and tool permissions are set in Foreman, not in Claude Code settings. If something is denied, do not ask the user to allow it and do not suggest editing settings files or changing the permission mode: the denial already appears in the user's Needs you list, and approving it wakes you up. Say in one line what was denied and why you need it, then stop; do not report that work as finished while you wait. When you are told it is now allowed, run it again.`
 
 const howAskWait = `Do not call report_done while you wait for the answer.`
 
@@ -218,6 +222,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 	default:
 		how = append(how, howAsk, howAskWait)
 	}
+	how = append(how, howDenied)
 	if len(l.BlockedCommands) > 0 {
 		how = append(how, "These commands are blocked in this project; do not try them: "+strings.Join(l.BlockedCommands, ", ")+".")
 	}

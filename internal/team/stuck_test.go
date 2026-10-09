@@ -457,3 +457,14 @@ func TestStuckEmitsWhenItBecomesVisible(t *testing.T) {
 		t.Fatalf("eveniment repetat: %d", n)
 	}
 }
+
+// un orfan care asteapta o aprobare de comanda nu e blocat
+func TestStuckOrphanWaitingForAccess(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "A", f.rook, store.StatusInProgress)
+	f.st.RecordCommandRequest(f.p.ID, f.rook.ID, &task.ID, "git stash", "git stash")
+	f.tm.CheckStuck(task.UpdatedAt.Add(6 * time.Minute))
+	if got, _ := f.st.GetTask(task.ID); got.Status != store.StatusInProgress || got.NudgedAt != nil {
+		t.Fatalf("%+v", got)
+	}
+}
