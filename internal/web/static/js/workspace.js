@@ -1442,6 +1442,16 @@ export async function workspaceView(root, projectId, route) {
         onClose: () => { location.hash = `#/p/${projectId}/tasks`; },
         actions: {
           taskAction, decide, assign, assignable, deleteTask,
+          // "Watch live": inchide modala si deschide doar chat-ul agentului, pe pagina curenta (nu pe Team)
+          watchAgent: (agentId) => {
+            window.addEventListener("hashchange", () => {
+              state.panel = "chat";
+              setDrawer(true);
+              select(agentId, "chat");
+              renderHeader();
+            }, { once: true });
+            location.hash = `#/p/${projectId}/tasks`;
+          },
           // inchide modala (prin adresa) si deschide panoul Recurring
           openRecurring: () => {
             if (boardPanel !== "recurring") toggleRecurring();

@@ -105,7 +105,12 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   // typing: deasupra comentariilor, "Vex is working…" / "Vex is writing…" cat timp agentul ruleaza pe task
   // (doar tipul evenimentelor din stream-ul run-ului, nu continutul)
   const typingText = el("span", {});
-  const typingLink = el("a", { class: "typing-link", hidden: true }, "Watch live");
+  const typingLink = el("a", { class: "typing-link", hidden: true, onclick: (e) => {
+    // click simplu: chat-ul agentului langa board; Cmd/Ctrl/mijloc deschid linkul catre Team, ca inainte
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0 || !data?.workingAgentId) return;
+    e.preventDefault();
+    actions.watchAgent(data.workingAgentId);
+  } }, "Watch live");
   const typingBox = el("div", { class: "typing", hidden: true, "aria-live": "polite" },
     el("span", { class: "typing-dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")), typingText, typingLink);
   let liveRunId = null, liveES = null, liveMode = "working";
