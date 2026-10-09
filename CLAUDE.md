@@ -108,6 +108,12 @@ Bash, MCP dupa mcp__<nume>__*, doar run-uri pe task).
 Gata (reguli pentru comenzi, spec in docs/superpowers/specs/2026-10-08-foreman-command-rules-design.md): command_rules
 (globale + override pe proiect, migrarea 023), Allow / Ask / Block pe prefixe pentru agentii cu Shell, pagina Settings;
 refuzurile pe Ask ajung in Needs you cu Allow once (command_grants) / Allow in this project / Block.
+Gata (aprobari pe task, spec in docs/superpowers/specs/2026-10-09-foreman-task-grants-design.md): un grant din Needs you
+(command_grants.task_id, migrarea 029) tine pe toate run-urile agentului pe task (NULL = chat, pana la New chat) si intra in
+--settings ca Bash(prefix:*) in allow ("Allow once" a devenit "Allow "<prefix>" on T-N"); agentii fara Shell primesc cereri pe
+prefix calculat (prompt.NoShellRequests / CommandPrefix, access_requests.kind 'command'); Enable Shell / Allow package installs
+trezesc agentul (team.EnableTool); un task cu cerere de acces deschisa nu e "stuck"; promptul (howDenied) spune ca
+permisiunile vin din Foreman si ca agentul nu cere aprobari in chat.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din

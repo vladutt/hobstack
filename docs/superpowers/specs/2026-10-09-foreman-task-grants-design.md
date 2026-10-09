@@ -1,7 +1,7 @@
 # Foreman: aprobarea unei comenzi din "Needs you" tine pe tot task-ul
 
 Data: 2026-10-09
-Status: spec, de implementat.
+Status: implementat (2026-10-09).
 
 ## Problema
 
@@ -32,7 +32,7 @@ reguli Allow pe proiect pentru agentii fara Shell.
 
 ## 1. Date: `command_grants` pe task
 
-Migrarea 028:
+Migrarea 029 (028 era deja luata de account_usage):
 
 ```sql
 DROP INDEX command_grants_open;
@@ -108,7 +108,7 @@ Team (`internal/team/commands.go`):
 - `AllowCommandInProject` / `BlockCommandInProject`: neschimbate, doar pentru cererile pe o regula Ask (un agent fara
   Shell nu primeste nimic dintr-o regula Allow, iar Block pe un prefix calculat nu e cerut); altfel 409 cu mesaj clar.
   Cererile Ask si cele calculate se deosebesc printr-o coloana noua `access_requests.kind` ('ask' / 'command', in
-  migrarea 028; randurile vechi cu prefix sunt 'ask').
+  migrarea 029; randurile vechi cu prefix sunt 'ask').
 - `EnableTool(accessID, tool)` muta logica din `web.enableTool` in team si cheama `wakeForCommand` (cu un mesaj
   "You now have the Shell tool" / "...can install packages"): **repara bug-ul** in care agentul nu era trezit.
 
@@ -133,7 +133,7 @@ O constanta noua `howDenied`, adaugata pentru toti agentii (in toate modurile, i
 > Command and tool permissions are set in Foreman, not in Claude Code settings. If something is denied, do not ask the
 > user to allow it and do not suggest editing settings files or changing the
 > permission mode: the denial already appears in the user's Needs you list, and approving it wakes you up. Say in one
-> line what was denied and why you need it, then stop without calling report_done for that work. When you are told it is
+> line what was denied and why you need it, then stop; do not report that work as finished while you wait. When you are told it is
 > now allowed, run it again.
 
 Textul nu pomeneste ask_user (in modul autonom promptul nu are voie sa-l contina, `TestSystemAutonomy`); descrierea
