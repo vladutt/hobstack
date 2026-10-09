@@ -88,7 +88,8 @@ docker cargo make kubectl`, plus `php artisan` (doua cuvinte, apoi comanda artis
 - `git stash push -u -m "x" -- app/` -> `git stash`
 - `ls -la` -> `ls`
 - `php artisan migrate --force` -> `php artisan migrate`
-- `git -C dir status` -> `git` (al doilea cuvant e flag: prefixul ramane primul cuvant)
+- `git -C dir status` -> fara prefix (al doilea cuvant e flag; `git` ar insemna tot git-ul): ramane cererea de tool
+  (Enable Shell). La fel interpretoarele si wrapper-ele (bash, sh, env, sudo, xargs, python, node, php fara artisan...).
 
 Cererile se comaseaza ca acum (agent + tool + prefix, `count++`). O comanda compusa care are nevoie de doua prefixe da
 doua carduri (rar). De verificat la implementare cu `claude` real: daca `cd <folder> && ...` produce un refuz pe `cd`;
