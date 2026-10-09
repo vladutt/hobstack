@@ -19,17 +19,8 @@ func (s *Store) StartNewChat(agentID int64, text string) (Message, error) {
 	if err := tx.QueryRow(`SELECT project_id FROM agents WHERE id = ?`, agentID).Scan(&projectID); err != nil {
 		return Message{}, notFound(err)
 	}
-	ts := now()
-	res, err := tx.Exec(`INSERT INTO messages (project_id, agent_id, kind, author, text, run_id, delivered, created_at)
-		VALUES (?, ?, ?, '', ?, NULL, 1, ?)`, projectID, agentID, KindEvent, text, ts)
+	id, ts, err := newChatTx(tx, projectID, agentID, text)
 	if err != nil {
-		return Message{}, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return Message{}, err
-	}
-	if _, err := tx.Exec(`UPDATE agents SET session_id = '', prompt_hash = '', chat_from = ? WHERE id = ?`, id, agentID); err != nil {
 		return Message{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -37,6 +28,25 @@ func (s *Store) StartNewChat(agentID int64, text string) (Message, error) {
 	}
 	return Message{ID: id, ProjectID: projectID, AgentID: agentID, Kind: KindEvent, Text: text,
 		Delivered: true, CreatedAt: parseTime(ts), Attachments: []Attachment{}}, nil
+}
+
+// newChatTx scrie nota in thread-ul agentului, ii sterge sesiunea Claude si muta inceputul
+// chat-ului la nota (in tranzactia data). Intoarce id-ul notei si momentul ei.
+func newChatTx(tx *sql.Tx, projectID, agentID int64, text string) (int64, string, error) {
+	ts := now()
+	res, err := tx.Exec(`INSERT INTO messages (project_id, agent_id, kind, author, text, run_id, delivered, created_at)
+		VALUES (?, ?, ?, '', ?, NULL, 1, ?)`, projectID, agentID, KindEvent, text, ts)
+	if err != nil {
+		return 0, "", err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, "", err
+	}
+	if _, err := tx.Exec(`UPDATE agents SET session_id = '', prompt_hash = '', chat_from = ? WHERE id = ?`, id, agentID); err != nil {
+		return 0, "", err
+	}
+	return id, ts, nil
 }
 
 // ListChat intoarce chat-ul curent al agentului: mesajele de la ultimul "New chat"
