@@ -124,12 +124,14 @@ func (t *Team) decideCommand(accessID int64, apply func(store.AccessRequest) (st
 		ok := slices.Contains(rules, store.CommandRule{Prefix: r.Prefix, Mode: store.CmdAsk})
 		if r.Kind == store.AccessCommand {
 			// prefix calculat: permis cat timp nu e pe Block si nu e un refuz fix pentru tool-urile agentului
+			// (o regula Ask pusa intre timp nu conteaza: grant-ul o ridica)
 			a, err := t.st.GetAgent(r.AgentID)
 			if err != nil {
 				t.work.Unlock()
 				return err
 			}
-			ok = !prompt.AlwaysDeniedBash(r.Prefix, a.Tools, rules)
+			mode, _ := prompt.DenyingRule(r.Prefix, rules)
+			ok = mode != store.CmdBlock && !prompt.AlwaysDeniedBash(r.Prefix, a.Tools, nil)
 		}
 		if !ok {
 			t.work.Unlock()

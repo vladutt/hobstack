@@ -152,3 +152,24 @@ func TestAccessRequestsKeptPerTask(t *testing.T) {
 		t.Fatal("T-1 si-a pierdut cererea")
 	}
 }
+
+// Stop team / restart nu repun in coada un task care asteapta o aprobare
+func TestRequeueSkipsTasksWaitingForAccess(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	waiting := Task{ProjectID: p.ID, Title: "a", AssigneeID: lead.ID}
+	free := Task{ProjectID: p.ID, Title: "b", AssigneeID: lead.ID}
+	for _, tk := range []*Task{&waiting, &free} {
+		s.CreateTask(tk) // CreateTask pune mereu Queued
+		tk.Status = StatusInProgress
+		s.SaveTask(tk)
+	}
+	s.RecordCommandRequest(p.ID, lead.ID, &waiting.ID, "git stash", "git stash")
+	ids, err := s.RequeueInProgress(p.ID)
+	if err != nil || len(ids) != 1 || ids[0] != free.ID {
+		t.Fatalf("%v %v", ids, err)
+	}
+	if ids, _ := s.RequeueAllInProgress(); len(ids) != 0 {
+		t.Fatalf("restart: %v", ids)
+	}
+}

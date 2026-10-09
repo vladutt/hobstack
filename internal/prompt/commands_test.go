@@ -179,13 +179,36 @@ func TestNoShellRequests(t *testing.T) {
 		// prefix prea larg (flag in locul subcomenzii, interpretor): doar Enable Shell
 		{"git -C app stash", git, nil, []Request{{"", store.AccessTool}}, false},
 		{"bash -c 'git stash'", git, nil, []Request{{"", store.AccessTool}}, false},
+		// cd si filtrele de citire le permite claude singur: fara card pentru ele;
+		// "cd dir && git ..." il refuza oricum fara Shell (verificat cu claude 2.1.295): ramane Enable Shell
+		{"cd sub && git log --oneline -1", git, nil, []Request{{"", store.AccessTool}}, false},
+		{"git stash list | head -1", git, nil, []Request{{"git stash", store.AccessCommand}}, false},
+		// variante de instalare: refuz fix (Allow package installs), nu prefix
+		{"npm i lodash", git, nil, []Request{{"", store.AccessTool}}, false},
+		{"yarn add x && pnpm add y", git, nil, []Request{{"", store.AccessTool}}, false},
+		// prefix cu caractere de shell: nu se poate aproba ca prefix
+		{"~/bin/deploy --prod", git, nil, []Request{{"", store.AccessTool}}, false},
 		// doua bucati necunoscute, fara duplicate
-		{"cd app && make build && make test", nil, nil, []Request{{"cd", store.AccessCommand}, {"make build", store.AccessCommand}, {"make test", store.AccessCommand}}, false},
+		{"cd app && make build && make test", nil, nil, []Request{{"make build", store.AccessCommand}, {"make test", store.AccessCommand}}, false},
 	}
 	for _, c := range cases {
 		got, blocked := NoShellRequests(c.cmd, c.tools, rules, c.granted)
 		if !slices.Equal(got, c.want) || blocked != c.blocked {
 			t.Errorf("%q: %+v %v, vrea %+v %v", c.cmd, got, blocked, c.want, c.blocked)
+		}
+	}
+}
+
+func TestNeedsPackagesVariants(t *testing.T) {
+	for _, c := range []string{"npm i x", "npm add x", "npm ci", "yarn add x", "pnpm add x", "pnpm i", "pnpm install",
+		"bun add x", "pip3 install x", "composer install", "go install x@latest", "cargo add x", "cargo install x", "gem install x"} {
+		if !NeedsPackages(c) || !AlwaysDeniedBash(c, []string{"git"}, nil) || AlwaysDeniedBash(c, []string{"packages"}, nil) {
+			t.Errorf("%q", c)
+		}
+	}
+	for _, c := range []string{"npm init", "npm test", "npm run build", "go test ./...", "composer dump-autoload"} {
+		if NeedsPackages(c) {
+			t.Errorf("%q nu e instalare", c)
 		}
 	}
 }

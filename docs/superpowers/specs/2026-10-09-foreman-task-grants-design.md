@@ -160,3 +160,15 @@ ar fi refuzat din nou. Store: `HasOpenAccessRequest(agentID, taskID int64) (bool
   acces deschisa nu e "stuck".
 - web: `allow-task`, `allow-project` refuzat pentru agent fara Shell, `hasShell` in `accessView`.
 - UI: verificat cu screenshot (cardul cu prefix calculat si cel Ask).
+
+## Dupa review (2026-10-09)
+
+- Cererile se comaseaza doar pe acelasi task (sau tot in chat); agentul e trezit dupa ultima aprobare de pe task.
+- Enable Shell inchide toate cererile Bash de tool/comanda ale agentului; Allow in this project doar pentru agentii cu Shell.
+- Verificat cu claude 2.1.295 (`dontAsk`, agent cu doar `git`): `pwd`, `ls`, `cat`, `head`, `tail`, `wc`, `sort`, `uniq`,
+  `grep`, `echo`, `find` (si in pipe) si `cd` singur sunt permise de claude fara reguli, deci nu fac carduri.
+  `cd sub && git ...` e refuzat chiar cu `Bash(cd:*)` in allow (cu Shell trece): ramane Enable Shell.
+- Un task cu o cerere de acces deschisa asteapta ca la o intrebare: nu merge in review la un run oprit fara report_done si nu
+  e repus in coada la Stop team / restart.
+- Un prefix calculat se refuza la aprobare doar pe Block / refuz fix (o regula Ask o ridica grant-ul); prefixele trec prin
+  NormalizePrefix; instalarile de pachete au mai multe variante in refuzul fix.

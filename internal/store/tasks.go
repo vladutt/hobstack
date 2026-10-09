@@ -198,12 +198,13 @@ const notWaitingParent = ` AND NOT EXISTS (SELECT 1 FROM tasks sub WHERE sub.par
 
 // notWaitingAnswer: un task al carui agent asteapta raspunsul utilizatorului
 // ramane In progress; raspunsul il pune inapoi in coada.
-const notWaitingAnswer = ` AND id NOT IN (SELECT task_id FROM questions WHERE status = 'open' AND task_id IS NOT NULL)`
+const notWaitingAnswer = ` AND id NOT IN (SELECT task_id FROM questions WHERE status = 'open' AND task_id IS NOT NULL)` +
+	` AND id NOT IN (SELECT task_id FROM access_requests WHERE dismissed = 0 AND task_id IS NOT NULL)`
 
 // RequeueInProgress muta task-urile In progress ale proiectului inapoi in Queued
 // (la Stop team: procesele au fost oprite, munca se reia mai tarziu) si curata
 // nudged_at, ca orice schimbare de stare. Cele care
-// asteapta sub-task-uri sau un raspuns de la utilizator raman In progress.
+// asteapta sub-task-uri, un raspuns sau o aprobare de la utilizator raman In progress.
 // Intoarce id-urile task-urilor mutate efectiv (pentru istoric).
 func (s *Store) RequeueInProgress(projectID int64) ([]int64, error) {
 	return s.queryIDs(`UPDATE tasks SET status = 'queued', updated_at = ?, nudged_at = NULL

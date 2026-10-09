@@ -333,11 +333,17 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		t.taskEvent(task, "waiting_subtasks", a.Name, "Waiting for subtasks "+strings.Join(open, ", "))
 		return t.note(ar.projectID, a.ID, fmt.Sprintf("%s is waiting for its subtasks: %s.", task.Ref(), strings.Join(open, ", ")), true)
 	}
-	// regula: task-ul asteapta cat timp are orice intrebare deschisa pe el
+	// regula: task-ul asteapta cat timp are orice intrebare deschisa pe el,
+	// sau o cerere de acces a agentului (aprobarea din "Needs you" il pune inapoi in coada)
 	waiting, err := t.st.HasOpenQuestionForTask(task.ID)
 	if err != nil {
 		return err
 	}
+	approval, err := t.st.HasOpenAccessRequest(a.ID, task.ID)
+	if err != nil {
+		return err
+	}
+	waiting = waiting || approval
 	switch o.Status {
 	case store.RunStopped:
 		if waiting {
@@ -370,6 +376,9 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	default:
 		// a intrebat utilizatorul (ask_user): task-ul asteapta raspunsul, nu merge in review
 		if waiting {
+			if approval {
+				return t.note(ar.projectID, a.ID, task.Ref()+" is waiting for your approval in Needs you.", true)
+			}
 			return t.note(ar.projectID, a.ID, task.Ref()+" is waiting for your answer.", true)
 		}
 		// run-ul a intrebat, dar utilizatorul a raspuns deja (in timpul run-ului):

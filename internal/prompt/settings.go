@@ -26,7 +26,10 @@ var toolRules = map[string][]string{
 // packageRules sunt instalarile de pachete: refuzate implicit, permise doar
 // agentilor cu tool-ul "packages" (merge si fara "shell").
 var packageRules = []string{
-	"Bash(npm install:*)", "Bash(composer require:*)", "Bash(go get:*)", "Bash(pip install:*)",
+	"Bash(npm install:*)", "Bash(npm i:*)", "Bash(npm add:*)", "Bash(npm ci:*)",
+	"Bash(yarn add:*)", "Bash(pnpm add:*)", "Bash(pnpm install:*)", "Bash(pnpm i:*)", "Bash(bun add:*)",
+	"Bash(composer require:*)", "Bash(composer install:*)", "Bash(go get:*)", "Bash(go install:*)",
+	"Bash(pip install:*)", "Bash(pip3 install:*)", "Bash(cargo add:*)", "Bash(cargo install:*)", "Bash(gem install:*)",
 }
 
 // alwaysAllow: citirea si tool-urile echipei sunt permise oricarui agent.

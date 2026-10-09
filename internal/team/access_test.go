@@ -58,3 +58,15 @@ func TestDenialsIgnoreFixedDenyList(t *testing.T) {
 		t.Fatalf("refuzurile fixe nu sunt cereri de acces: %+v", rs)
 	}
 }
+
+// un run oprit dupa un refuz (fara report_done) asteapta aprobarea: task-ul ramane In progress, nu merge in review
+func TestDeniedRunWaitsForApproval(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := runTaskWithDenials(t, f, []runner.Denial{{Tool: "Bash", Detail: "git stash"}})
+	f.wantStatus(t, task.Number, store.StatusInProgress)
+	if !f.hasMessage(f.rook.ID, "T-1 is waiting for your approval in Needs you.") {
+		t.Fatal("lipseste nota")
+	}
+}

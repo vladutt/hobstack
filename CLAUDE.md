@@ -112,8 +112,12 @@ Gata (aprobari pe task, spec in docs/superpowers/specs/2026-10-09-foreman-task-g
 (command_grants.task_id, migrarea 029) tine pe toate run-urile agentului pe task (NULL = chat, pana la New chat) si intra in
 --settings ca Bash(prefix:*) in allow ("Allow once" a devenit "Allow "<prefix>" on T-N"); agentii fara Shell primesc cereri pe
 prefix calculat (prompt.NoShellRequests / CommandPrefix, access_requests.kind 'command'); Enable Shell / Allow package installs
-trezesc agentul (team.EnableTool); un task cu cerere de acces deschisa nu e "stuck"; promptul (howDenied) spune ca
-permisiunile vin din Foreman si ca agentul nu cere aprobari in chat.
+trezesc agentul (team.EnableTool); un task cu cerere de acces deschisa nu e "stuck", nu merge in review cand run-ul se
+opreste fara report_done si nu e repus in coada la Stop team / restart; promptul (howDenied) spune ca permisiunile vin din
+Foreman si ca agentul nu cere aprobari in chat. Fara card pentru comenzile pe care claude le permite singur (cd, ls, cat, head,
+tail, grep... verificat cu claude 2.1.295) si fara prefix pentru interpretoare/wrapper-e sau `git -C` (raman Enable Shell);
+`cd dir && git ...` e refuzat de claude fara Shell chiar cu Bash(cd:*). Instalarile (npm i, yarn/pnpm/bun add, pip3, cargo,
+gem, composer install, go install) sunt in refuzul fix fara tool-ul packages.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din

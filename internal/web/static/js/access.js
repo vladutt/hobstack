@@ -22,7 +22,8 @@ export function accessBox(r, { agent, projectId, onDone, onOpen }) {
   };
   if (r.prefix) {
     // ask = regula Ask (cu Shell); command = comanda in afara tool-urilor unui agent fara Shell
-    const where = r.ref ? `on ${r.ref}` : "in this chat";
+    // dupa taskId, nu dupa ref: un task care lipseste din lista proiectului tot pe task primeste grant-ul
+    const where = r.taskId ? `on ${r.ref || "this task"}` : "in this chat";
     return el("div", { class: "question access cmd-ask" },
       el("div", { class: "question-head" }, agent ? avatar(agent.name, kindOf(agent), 20) : null,
         el("span", { class: "label" }, r.kind === "ask" ? "COMMAND · ASK" : "COMMAND"),

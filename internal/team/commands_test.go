@@ -498,3 +498,22 @@ func TestAllowInProjectSkipsAgentsWithoutShell(t *testing.T) {
 		t.Fatalf("Vera trezita degeaba: %+v", p)
 	}
 }
+
+// un prefix calculat aprobat pe task trece si daca intre timp a devenit regula Ask (grant-ul ridica Ask)
+func TestNoShellAllowWhenRuleIsAskNow(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Stash", f.rook, store.StatusInProgress)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: task.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git stash"}})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	f.st.SetCommandRules(f.p.ID, []store.CommandRule{{Prefix: "git stash", Mode: store.CmdAsk}})
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := f.st.CommandGrants(f.rook.ID, task.ID); len(g) != 1 {
+		t.Fatalf("grants = %v", g)
+	}
+}

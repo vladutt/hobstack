@@ -395,3 +395,48 @@ func TestMigrationUnpausesProjects(t *testing.T) {
 		t.Fatalf("dupa migrare: %+v %v", p, err)
 	}
 }
+
+// migrarea 029 pe o baza veche (pana la 028), cu date: grant-urile folosite dispar,
+// cele nefolosite devin de chat, cererile cu prefix devin 'ask'
+func TestMigrationTaskGrantsOnOldData(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := migrations.ReadDir("migrations")
+	for i, e := range entries[:28] {
+		body, _ := migrations.ReadFile("migrations/" + e.Name())
+		if _, err := db.Exec(string(body)); err != nil {
+			t.Fatalf("%s: %v", e.Name(), err)
+		}
+		db.Exec(fmt.Sprintf("PRAGMA user_version = %d", i+1))
+	}
+	ts := "2026-10-01T00:00:00Z"
+	for _, q := range []string{
+		`INSERT INTO projects (id, name, workdir, created_at) VALUES (1, 'P', '/tmp/p', '` + ts + `')`,
+		`INSERT INTO agents (id, project_id, name, position, created_at) VALUES (1, 1, 'Rook', 'worker', '` + ts + `')`,
+		`INSERT INTO command_grants (project_id, agent_id, prefix, created_at, used_at) VALUES (1, 1, 'git push', '` + ts + `', '` + ts + `')`,
+		`INSERT INTO command_grants (project_id, agent_id, prefix, created_at) VALUES (1, 1, 'rm -rf', '` + ts + `')`,
+		`INSERT INTO access_requests (project_id, agent_id, tool, detail, prefix, created_at, updated_at) VALUES (1, 1, 'Bash', 'git push', 'git push', '` + ts + `', '` + ts + `')`,
+		`INSERT INTO access_requests (project_id, agent_id, tool, detail, prefix, created_at, updated_at) VALUES (1, 1, 'WebFetch', 'x', '', '` + ts + `', '` + ts + `')`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if g, _ := s.CommandGrants(1, 0); len(g) != 1 || g[0] != "rm -rf" {
+		t.Fatalf("grants de chat: %v", g)
+	}
+	reqs, _ := s.ListOpenAccessRequests(1)
+	if len(reqs) != 2 || reqs[0].Kind != AccessAsk || reqs[1].Kind != AccessTool {
+		t.Fatalf("%+v", reqs)
+	}
+}

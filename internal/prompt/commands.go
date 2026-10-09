@@ -193,6 +193,13 @@ var wrapperCommands = map[string]bool{
 	"deno": true, "bun": true, "osascript": true,
 }
 
+// readOnlyCommands: comenzi pe care claude le permite singur (si in pipe), fara reguli in allow
+// (verificat cu claude 2.1.295 in modul dontAsk): nu fac cereri.
+var readOnlyCommands = map[string]bool{
+	"cd": true, "pwd": true, "ls": true, "cat": true, "head": true, "tail": true, "wc": true,
+	"sort": true, "uniq": true, "grep": true, "echo": true, "find": true,
+}
+
 // CommandPrefix: prefixul pe care il aprobi pentru o comanda (o bucata, fara && / |):
 // primul cuvant, plus subcomanda la uneltele cu subcomenzi ("git stash", "php artisan migrate").
 // "" = nu se poate aproba ca prefix (prea larg): un interpretor / wrapper, sau o unealta cu
@@ -267,13 +274,14 @@ func NoShellRequests(cmd string, tools []string, rules []store.CommandRule, gran
 			}
 		case bashMatches(part, denyFor(tools)):
 			add(Request{"", store.AccessTool})
-		case BashAllowed(part, tools, granted):
-			// deja permisa
+		case BashAllowed(part, tools, granted), readOnlyCommands[firstWord(part)]:
+			// deja permisa (de tool-uri, grant-uri sau de claude insusi)
 		default:
-			if pfx := CommandPrefix(part); pfx != "" {
+			if pfx, err := NormalizePrefix(CommandPrefix(part)); err == nil {
 				add(Request{pfx, store.AccessCommand})
 			} else {
-				add(Request{"", store.AccessTool}) // prea larg pentru un prefix: doar Enable Shell
+				// prea larg sau cu caractere de shell: nu se poate aproba ca prefix, doar Enable Shell
+				add(Request{"", store.AccessTool})
 			}
 		}
 	}
@@ -281,4 +289,12 @@ func NoShellRequests(cmd string, tools []string, rules []store.CommandRule, gran
 		reqs = []Request{{"", store.AccessTool}}
 	}
 	return reqs, blocked
+}
+
+// firstWord: primul cuvant al unei bucati de comanda.
+func firstWord(cmd string) string {
+	if f := strings.Fields(cmd); len(f) > 0 {
+		return f[0]
+	}
+	return ""
 }
