@@ -118,6 +118,12 @@ Foreman si ca agentul nu cere aprobari in chat. Fara card pentru comenzile pe ca
 tail, grep... verificat cu claude 2.1.295) si fara prefix pentru interpretoare/wrapper-e sau `git -C` (raman Enable Shell);
 `cd dir && git ...` e refuzat de claude fara Shell chiar cu Bash(cd:*). Instalarile (npm i, yarn/pnpm/bun add, pip3, cargo,
 gem, composer install, go install) sunt in refuzul fix fara tool-ul packages.
+Gata (chat doar de citire, spec in docs/superpowers/specs/2026-10-09-foreman-chat-read-only-design.md): un run fara task
+(chat, notificari, comentarii) primeste prompt.ReadOnlyTools (fara write/shell/packages, git doar citire: git-read) si linia
+prompt.ReadOnlyTurn; system prompt-ul ramane acelasi (sesiunea continua). Modificarile se fac pe task: tool-ul MCP
+start_task (doar in run-urile fara task) creeaza un task Queued pentru agent, fara etape, CreatorID gol, ByUser pentru
+cererile din chat, max 3 deschise (evenimentul self_started). Refuzurile Edit/Write/Bash din run-urile fara task nu fac
+cereri de acces. Verificat cu claude 2.1.295: Edit, redirectarea >, tee si git commit sunt refuzate, git log trece.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din

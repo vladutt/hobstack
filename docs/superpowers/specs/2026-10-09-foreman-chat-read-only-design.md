@@ -1,7 +1,7 @@
 # Foreman: modificarile se fac doar pe task (chat doar de citire)
 
 Data: 2026-10-09
-Status: spec, de implementat.
+Status: implementat (2026-10-09).
 
 ## Problema
 
