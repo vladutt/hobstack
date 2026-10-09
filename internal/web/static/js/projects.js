@@ -86,7 +86,7 @@ function setupCard(s, refresh) {
   const retry = act(async () => {
     const next = s.projectId
       ? await api(`/api/projects/${s.projectId}/folders/${s.folderId}/setup`, { method: "POST", body: { description: s.description, model: s.model } })
-      : await api("/api/setup", { method: "POST", body: { workdirs: s.workdirs, description: s.description, model: s.model } });
+      : await api("/api/setup", { method: "POST", body: { workdirs: s.workdirs, description: s.description, model: s.model, accountId: s.accountId || 0 } });
     await api(`/api/setup/${s.id}`, { method: "DELETE" });
     location.hash = `#/setup/${next.id}`;
   });
