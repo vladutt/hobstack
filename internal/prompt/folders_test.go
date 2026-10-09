@@ -54,8 +54,9 @@ func TestSettingsScopesWriteToHome(t *testing.T) {
 			Allow []string `json:"allow"`
 		} `json:"permissions"`
 	}
-	json.Unmarshal([]byte(Settings([]string{"write"}, "/code/probe-landing", nil, nil, nil)), &cfg)
-	for _, want := range []string{"Edit(//code/probe-landing/**)", "Write(//code/probe-landing/**)", "NotebookEdit(//code/probe-landing/**)"} {
+	json.Unmarshal([]byte(Settings([]string{"write"}, []string{"/code/probe-landing", "/home/u/.foreman/projects/5/files"}, nil, nil, nil)), &cfg)
+	for _, want := range []string{"Edit(//code/probe-landing/**)", "Write(//code/probe-landing/**)", "NotebookEdit(//code/probe-landing/**)",
+		"Write(//home/u/.foreman/projects/5/files/**)", "Edit(//home/u/.foreman/projects/5/files/**)"} {
 		if !slices.Contains(cfg.Permissions.Allow, want) {
 			t.Errorf("allow nu contine %s: %v", want, cfg.Permissions.Allow)
 		}

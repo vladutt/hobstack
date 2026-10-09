@@ -206,6 +206,16 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	return nil
 }
 
+// writeDirs: unde scrie agentul cu tool-ul write: folderul lui si folderul cu fisierele
+// proiectului (promptul howFiles ii spune ca poate salva livrabilele si acolo).
+func (t *Team) writeDirs(p store.Project, a store.Agent) []string {
+	dirs := []string{store.HomeFolder(a, p.Folders).Path}
+	if dir := t.filesDir(p.ID); dir != "" {
+		dirs = append(dirs, dir)
+	}
+	return dirs
+}
+
 // args construieste linia de comanda pentru claude.
 func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build, cmdDeny, granted []string) []string {
 	args := []string{
@@ -216,7 +226,7 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string,
 		// setarile globale ale utilizatorului raman; .claude/settings.json din
 		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
 		"--setting-sources", "user",
-		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, cmdDeny, granted),
+		"--settings", prompt.Settings(a.Tools, t.writeDirs(p, a), lb.Allow, cmdDeny, granted),
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
 		"--mcp-config", mcpCfg,
