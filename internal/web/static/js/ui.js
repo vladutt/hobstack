@@ -93,7 +93,7 @@ export function avatar(name, kind, size = 32) {
 export function topbar(crumbs, ...right) {
   if (typeof crumbs === "string") {
     return el("header", { class: "topbar" },
-      el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "F"),
+      el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "H"),
       el("nav", { class: "mainnav", "aria-label": "Main" },
         [["projects", "Projects", "#/"], ["library", "Library", "#/library/tools"], ["settings", "Settings", "#/settings"]].map(([id, label, href]) =>
           el("a", { class: "navlink" + (id === crumbs ? " active" : ""), href, "aria-current": id === crumbs ? "page" : null }, label))),
@@ -105,7 +105,7 @@ export function topbar(crumbs, ...right) {
     parts.push(href ? el("a", { class: "crumb", href }, text) : el("span", { class: "crumb current" }, text));
   });
   return el("header", { class: "topbar" },
-    el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "F"),
+    el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "H"),
     el("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, parts),
     el("div", { class: "topbar-right" }, right));
 }
