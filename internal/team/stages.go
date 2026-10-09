@@ -326,12 +326,39 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 	if task.Status != store.StatusReview || task.ReviewStage != store.StageLead || decisionOwner(task, agents) != 0 {
 		return ErrNotUserDecision
 	}
+	return t.decideAsUser(task, agents, accept, feedback, 0, nil)
+}
+
+// decideAsUser aplica decizia utilizatorului (accept / send back) pe un task din Review.
+// owner e agentul care ar fi decis in locul lui (0 = decizia era a utilizatorului):
+// istoricul spune "instead of <nume>" si decidentul primeste o nota in coada.
+// Daca owner e reviewer-ul, afla in coada si liderul care ar fi decis dupa el.
+// target (optional) e etapa in care se intoarce un task trimis inapoi; nil = etapa
+// lui (sau prima). Se apeleaza cu t.work blocat.
+func (t *Team) decideAsUser(task store.Task, agents []store.Agent, accept bool, feedback string, owner int64, target *store.Stage) error {
+	instead := ""
+	var lead store.Agent // decidentul de dupa reviewer, cand utilizatorul trece peste reviewer
+	hasLead := false
+	if owner != 0 {
+		instead = " (instead of " + agentName(agents, owner) + ")"
+		if task.ReviewStage == store.StageReviewer {
+			if d, ok := decider(task, agents, t.autonomyOf(task.ProjectID)); ok && d.ID != owner {
+				lead, hasLead = d, true
+			}
+		}
+	}
 	if accept {
 		task.Status, task.ReviewStage, task.StageID = store.StatusDone, store.StageNone, nil
 		if err := t.st.SaveTask(&task); err != nil {
 			return err
 		}
-		t.taskMsg(task, "user_accepted", actorUser, agentName(agents, task.AssigneeID), "You accepted", "Accepted")
+		t.taskMsg(task, "user_accepted", actorUser, agentName(agents, task.AssigneeID), "You accepted"+instead, "Accepted")
+		if owner != 0 {
+			t.note(task.ProjectID, owner, "The user decided "+task.Ref()+" for you: accepted.", false)
+		}
+		if hasLead {
+			t.note(task.ProjectID, lead.ID, "The user accepted "+task.Ref()+instead+".", false)
+		}
 		t.emit(task.ProjectID, "task", task)
 		// task-ul e deja Done: afterDone trezeste parintele unui sub-task acceptat si livreaza
 		// raportul unei cereri dintr-un proiect legat, ca pe celelalte drumuri de accept
@@ -350,7 +377,7 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 		return err
 	}
 	// destinatarul: asignatul (cu etape il schimba sendToStage)
-	sent := taskNote{kind: "sent_back", actor: actorUser, text: "You sent it back: " + feedback,
+	sent := taskNote{kind: "sent_back", actor: actorUser, text: "You sent it back" + instead + ": " + feedback,
 		to: agentName(agents, task.AssigneeID), body: feedback}
 	// decizia utilizatorului nu declanseaza niciodata acceptul automat: regulile de azi
 	if len(stages) == 0 {
@@ -358,15 +385,22 @@ func (t *Team) UserDecide(taskID int64, accept bool, feedback string) error {
 		if _, err := t.rejectTask(&task, feedback, agents, 0, sent, false); err != nil {
 			return err
 		}
-		t.Kick(task.ProjectID)
-		return nil
+	} else {
+		if target == nil {
+			target = &stages[0]
+			if i := stageIndex(stages, task.StageID); i >= 0 {
+				target = &stages[i]
+			}
+		}
+		if _, err := t.sendToStage(&task, *target, feedback, agents, 0, sent, false); err != nil {
+			return err
+		}
 	}
-	target := stages[0]
-	if i := stageIndex(stages, task.StageID); i >= 0 {
-		target = stages[i]
+	if owner != 0 {
+		t.note(task.ProjectID, owner, "The user decided "+task.Ref()+" for you: sent back: "+feedback, false)
 	}
-	if _, err := t.sendToStage(&task, target, feedback, agents, 0, sent, false); err != nil {
-		return err
+	if hasLead {
+		t.note(task.ProjectID, lead.ID, "The user sent "+task.Ref()+" back"+instead+": "+feedback, false)
 	}
 	t.Kick(task.ProjectID)
 	return nil

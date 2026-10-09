@@ -129,14 +129,23 @@ export function field(label, input, hint) {
 }
 
 let toastTimer;
-// kind: "error" (implicit) sau "ok" pentru confirmari scurte
-export function toast(message, kind = "error") {
+// kind: "error" (implicit) sau "ok" pentru confirmari scurte.
+// action: { label, onClick } pune un buton in toast (ex. Undo); toast-ul sta atunci mai mult.
+export function toast(message, kind = "error", action = null) {
   const box = document.getElementById("toast");
-  box.textContent = message;
+  box.replaceChildren(document.createTextNode(message));
+  if (action) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "toast-action";
+    b.textContent = action.label;
+    b.addEventListener("click", () => { box.hidden = true; action.onClick(); });
+    box.append(" ", b);
+  }
   box.classList.toggle("ok", kind === "ok");
   box.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { box.hidden = true; }, 5000);
+  toastTimer = setTimeout(() => { box.hidden = true; }, action ? 8000 : 5000);
 }
 
 export function clock(iso) {

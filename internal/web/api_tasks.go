@@ -308,7 +308,7 @@ func (s *Server) commentTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.team.UserComment(id, in.Text); err != nil {
-		if errors.Is(err, team.ErrNoAssignee) {
+		if errors.Is(err, team.ErrNoAssignee) || errors.Is(err, team.ErrArchived) {
 			writeErr(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -339,6 +339,10 @@ func (s *Server) setTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.team.UserSetTodo(id, pos, in.Done); err != nil {
+		if errors.Is(err, team.ErrArchived) { // task sters: intai Restore
+			writeErr(w, http.StatusConflict, err.Error())
+			return
+		}
 		fail(w, err) // fail traduce store.ErrNotFound in 404
 		return
 	}

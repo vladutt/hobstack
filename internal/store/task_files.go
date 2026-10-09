@@ -69,8 +69,8 @@ func (s *Store) ListTaskFiles(taskID int64) ([]TaskFile, error) {
 // ListDescendantFiles: fisierele sub-task-urilor (recursiv), in ordinea numerelor de task.
 func (s *Store) ListDescendantFiles(taskID int64) ([]TaskFile, error) {
 	return s.queryTaskFiles(`WITH RECURSIVE sub(id) AS (
-			SELECT id FROM tasks WHERE parent_task_id = ?
-			UNION ALL SELECT t.id FROM tasks t JOIN sub ON t.parent_task_id = sub.id)
+			SELECT id FROM tasks WHERE parent_task_id = ? AND status != 'archived'
+			UNION ALL SELECT t.id FROM tasks t JOIN sub ON t.parent_task_id = sub.id WHERE t.status != 'archived')
 		SELECT `+prefixCols("f.", taskFileCols)+` FROM task_files f JOIN tasks t ON t.id = f.task_id
 		WHERE f.task_id IN (SELECT id FROM sub) ORDER BY t.number, f.id DESC`, taskID)
 }
@@ -115,7 +115,7 @@ func (s *Store) CountTaskFiles(projectID int64) (map[int64]int, error) {
 func (s *Store) CountTaskFilesTree(taskID int64) (int, error) {
 	var n int
 	err := s.db.QueryRow(`WITH RECURSIVE sub(id) AS (
-			SELECT ? UNION ALL SELECT t.id FROM tasks t JOIN sub ON t.parent_task_id = sub.id)
+			SELECT ? UNION ALL SELECT t.id FROM tasks t JOIN sub ON t.parent_task_id = sub.id WHERE t.status != 'archived')
 		SELECT COUNT(*) FROM task_files WHERE task_id IN (SELECT id FROM sub)`, taskID).Scan(&n)
 	return n, err
 }

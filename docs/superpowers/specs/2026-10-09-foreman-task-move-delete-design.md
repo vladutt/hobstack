@@ -1,7 +1,7 @@
 # Foreman: mutarea task-urilor intre coloane (drag & drop) si stergerea lor (arhivare)
 
 Data: 2026-10-09
-Status: spec aprobat in chat, de implementat.
+Status: implementat (2026-10-09).
 
 ## Scop
 
@@ -64,7 +64,7 @@ coloanele cand tragi: permise (evidentiate), nepermise (estompate, cu motivul in
 
 ### Date
 
-Migrarea 025:
+Migrarea 026 (025 e luata de conturile Claude, intrate in paralel):
 
 ```
 ALTER TABLE tasks ADD COLUMN archived_from TEXT NOT NULL DEFAULT '';  -- statusul dinainte ('' = nearhivat)
@@ -152,7 +152,7 @@ recente primele, cu numarul de sub-task-uri din grup.
 
 ## Etape
 
-1. Migrare 025 + store (status archived, grup, restaurare, listare) + auditul interogarilor.
+1. Migrare 026 + store (status archived, grup, restaurare, listare) + auditul interogarilor.
 2. team: `ArchiveTask`, `RestoreTask`, garzile din finish / reconciliere / tool-uri MCP.
 3. team: `MoveTask` (tabelul de mutari, `MoveToStage`, Reopen, Close).
 4. web: endpoint-uri + filtrele din "Needs you" si din vederea proiectului.

@@ -247,6 +247,8 @@ type projectDetail struct {
 	FillIns []store.FillIn `json:"fillIns"`
 	// LibraryProposals: propunerile Library deschise (mereu non-nil)
 	LibraryProposals []store.LibraryItem `json:"libraryProposals"`
+	// Archived: task-uri sterse (radacini), pentru "Deleted (N)"
+	Archived int `json:"archived"`
 }
 
 // card calculeaza ce se afiseaza pe cardul proiectului.
@@ -413,6 +415,11 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	archived, err := s.st.CountArchivedRoots(p.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	views := make([]taskView, len(tasks))
 	fromProject := map[int64]string{} // cache: id proiect sursa -> nume
 	for i, t := range tasks {
@@ -437,7 +444,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	if c.fills == nil {
 		c.fills = []store.FillIn{}
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring, Links: links, WorkRequests: workReqs, FillIns: c.fills, LibraryProposals: proposals}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring, Links: links, WorkRequests: workReqs, FillIns: c.fills, LibraryProposals: proposals, Archived: archived}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)
