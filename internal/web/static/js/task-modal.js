@@ -9,6 +9,7 @@ import { renderMarkdown, changeStats, statBadge } from "./md.js";
 // Etichetele starilor unui task (pill-ul din antetul modalei).
 const STATUS = {
   queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done",
+  archived: "Deleted",
 };
 
 // Peste cate caractere o bula din conversatie se arata scurtata.
@@ -626,6 +627,16 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       const nudge = el("button", { type: "button", class: "btn small" }, "Nudge");
       nudge.addEventListener("click", run(nudge, () => actions.taskAction(t, "nudge")));
       parts.push(el("div", { class: "actions" }, el("span", { class: "hint" }, "No one is moving this task."), nudge));
+    }
+    // Delete: ultimul, discret (rosu la hover); confirmarea si Undo sunt in workspace (actions.deleteTask)
+    if (t.status !== "archived") {
+      const del = el("button", { type: "button", class: "btn ghost small danger-hover" }, "Delete");
+      del.addEventListener("click", run(del, async () => {
+        const ok = await actions.deleteTask(t);
+        if (ok) onClose();
+        return ok;
+      }));
+      parts.push(el("div", { class: "actions modal-delete" }, el("span", { class: "grow" }), del));
     }
     actionsBox.hidden = !parts.length;
     actionsBox.replaceChildren(...parts); // replaceChildren nativ nu aplatizeaza array-uri

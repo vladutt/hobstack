@@ -14,9 +14,12 @@ import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
 import { renderMarkdown } from "./md.js";
 import { libraryProposalBox, librarySharePrompt } from "./library-cards.js";
+import { moveAction, moveTask } from "./board-move.js";
+import { deletedPanel } from "./deleted.js";
 
 const SUB_STATUS = {
   queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done",
+  archived: "Deleted",
 };
 const COLUMNS = [
   { title: "Queued", statuses: ["queued"] },
@@ -154,7 +157,11 @@ export async function workspaceView(root, projectId, route) {
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
   const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter by folder" });
   const subsOpen = new Set(); // grupurile desfasurate pe board (id-ul radacinii); raman la refresh
-  let boardPanel = null; // "stages" | "task" | "recurring" | null
+  let boardPanel = null; // "stages" | "task" | "recurring" | "deleted" | null
+  let dragging = null; // task-ul tras acum pe board (null = niciunul)
+  let dragFrom = null, dragOver = null; // coloana de unde a plecat cardul si cea peste care e acum
+  let cardMenu = null; // meniul "⋯" deschis ({ btn, close }); unul singur odata
+  let boardStale = false; // un refresh venit cat tragi / cat e meniul deschis: se deseneaza dupa
   let recurring = null; // panoul Recurring cand e deschis ({ el, update })
   const boardHint = el("p", { class: "hint board-hint" }, "Every project is different: set up your own columns (work stages) with the Columns button.");
   const filesList = el("div", { class: "files-list" });
@@ -654,6 +661,9 @@ export async function workspaceView(root, projectId, route) {
 
   // renderBoard: coloanele implicite, sau etapele proiectului + "La lider" + "Gata"
   function renderBoard() {
+    // cat tragi un card sau e deschis meniul lui, board-ul nu se redeseneaza (cardul ar disparea de sub mouse)
+    if (dragging || cardMenu) { boardStale = true; return; }
+    boardStale = false;
     const p = state.project;
     const byId = new Map(p.agents.map((a) => [a.id, a]));
     const stages = p.stages || [];
@@ -692,7 +702,7 @@ export async function workspaceView(root, projectId, route) {
     // celelalte coloane fiecare task are cardul lui, in coloana statusului sau
     const single = (t) => ({ root: t, subs: [], follows: [] });
     const groups = [
-      ...p.tasks.filter((t) => t.status !== "done").map(single),
+      ...p.tasks.filter((t) => t.status !== "done" && t.status !== "archived").map(single),
       ...doneGroups(taskGroups(p.tasks)),
     ].filter((g) => passes(g.root) || g.subs.some((s) => passes(s.task)));
     // in fiecare coloana, cele mai recente primele: ultima activitate din grup (radacina sau
@@ -717,11 +727,17 @@ export async function workspaceView(root, projectId, route) {
       type: "button", class: "btn ghost small" + (boardPanel === id ? " active" : ""),
       "aria-pressed": String(boardPanel === id), onclick,
     }, label);
-    boardTools.replaceChildren(toggle("recurring", "\u21bb Recurring", toggleRecurring), toggle("stages", "Columns", toggleStages));
+    // Deleted (N): doar cand exista task-uri sterse (sau panoul e deschis, ca sa se poata inchide)
+    const archived = p.archived || 0;
+    boardTools.replaceChildren(...[
+      archived > 0 || boardPanel === "deleted" ? toggle("deleted", archived ? `Deleted (${archived})` : "Deleted", toggleDeleted) : null,
+      toggle("recurring", "\u21bb Recurring", toggleRecurring), toggle("stages", "Columns", toggleStages),
+    ].filter(Boolean));
     if (!stages.length) {
       board.className = "board";
+      // tintele de drop: Queued si Done; In progress si Review primesc task-uri doar prin munca agentilor
       board.replaceChildren(...COLUMNS.map((c, i) => column(c.title, inCol("c" + i), byId, null,
-        { add: i === 0, page: i === COLUMNS.length - 1 })));
+        { add: i === 0, page: i === COLUMNS.length - 1, target: i === 0 ? "queued" : i === COLUMNS.length - 1 ? "done" : null })));
       boardHint.hidden = false;
       return;
     }
@@ -730,10 +746,10 @@ export async function workspaceView(root, projectId, route) {
     // task-uri fara etapa inca deschise (create inainte de coloane): altfel n-ar aparea nicaieri
     const loose = inCol("loose");
     board.replaceChildren(
-      ...(loose.length ? [column("No stage", loose, byId)] : []),
-      ...stages.map((s, i) => column(s.name, inCol("s" + s.id), byId, s, { add: i === 0 })),
-      column("With lead", inCol("lead"), byId),
-      column("Done", inCol("done"), byId, null, { page: true }));
+      ...(loose.length ? [column("No stage", loose, byId, null, { target: null })] : []),
+      ...stages.map((s, i) => column(s.name, inCol("s" + s.id), byId, s, { add: i === 0, target: "stage:" + s.id })),
+      column("With lead", inCol("lead"), byId, null, { target: null }),
+      column("Done", inCol("done"), byId, null, { page: true, target: "done" }));
   }
 
   // doneGroups: grupurile din Done, din grupurile complete (arbore + fir): raman doar membrii gata.
@@ -761,11 +777,29 @@ export async function workspaceView(root, projectId, route) {
 
   // column: o coloana a board-ului; items sunt grupuri (radacina + descendentii ei).
   // opts.add: "+ Add a task" sub carduri; opts.page: arata doar primele state.doneShown carduri.
+  // opts.target: ce inseamna sa lasi un card aici ("queued" | "done" | "stage:<id>"); lipsa = nu primeste carduri.
   function column(title, items, byId, stage, opts = {}) {
     const agents = stage ? stage.agentIds.map((id) => byId.get(id)).filter(Boolean) : [];
     const visible = opts.page ? items.slice(0, state.doneShown) : items;
     const hidden = items.length - visible.length;
-    return el("div", { class: "col" + (items.length ? "" : " empty-col") },
+    const target = opts.target || null;
+    return el("div", {
+      class: "col" + (items.length ? "" : " empty-col"),
+      "data-target": target || "", "data-title": title,
+      // preventDefault pe dragover = aici se poate lasa cardul
+      ondragover: (e) => {
+        if (!dragging) return;
+        dragOver = e.currentTarget; // coloana de sub card (pentru motivul refuzului la dragend)
+        if (moveAction(dragging, target).ok) e.preventDefault();
+      },
+      ondragleave: (e) => { if (!e.currentTarget.contains(e.relatedTarget) && dragOver === e.currentTarget) dragOver = null; },
+      ondrop: async (e) => {
+        e.preventDefault();
+        const t = dragging;
+        endDrag();
+        if (t && await moveTask(t, target, askReason)) reload();
+      },
+    },
       el("div", { class: "col-head" },
         el("span", { class: "col-title" }, title, stage?.kind === "check" && el("span", { class: "tag col-kind" }, "check")),
         el("span", { class: "col-count" }, items.length)),
@@ -872,7 +906,7 @@ export async function workspaceView(root, projectId, route) {
   // compacte (doar Done se grupeaza); click pe un rand deschide modala task-ului (ca un card)
   function groupCard(g, byId) {
     const members = new Set([g.root.id, ...g.subs.map((s) => s.task.id)]);
-    const card = taskCard(g.root, byId.get(g.root.assigneeId), byId, members);
+    const card = cardWrap(g.root, taskCard(g.root, byId.get(g.root.assigneeId), byId, members));
     if (!g.subs.length) return card;
     const n = g.subs.length;
     const label = (open) => `${open ? "\u25be" : "\u25b8"} ${n} more done`;
@@ -927,6 +961,190 @@ export async function workspaceView(root, projectId, route) {
     if (boardPanel === "recurring") return closePanel();
     recurring = recurringPanel({ projectId, project: state.project, assignable, onClose: closePanel, onChanged: reload });
     showPanel("recurring", recurring.el);
+  }
+
+  // toggleDeleted: panoul cu task-urile sterse (Restore)
+  function toggleDeleted() {
+    if (boardPanel === "deleted") return closePanel();
+    openDeleted();
+  }
+  // openDeleted: (re)deschide panoul cu lista proaspata (si dupa un Delete / Undo facut in alta parte)
+  function openDeleted() {
+    showPanel("deleted", deletedPanel({ projectId, onClose: closePanel, onChanged: reload }).el);
+  }
+
+  // ---------- mutare, meniul cardului, stergere ----------
+
+  // startDrag: coloanele arata unde se poate lasa cardul (drop-ok) si unde nu (drop-no, cu motivul)
+  // Coloana de unde pleaca cardul (from) ramane neschimbata cand nu-l primeste (lasat acolo, nu se misca);
+  // un task blocat in etapa lui o vede ca tinta (acolo = Unblock).
+  function startDrag(t, from = null) {
+    closeCardMenu();
+    dragging = t;
+    dragFrom = from;
+    dragOver = null;
+    for (const col of board.querySelectorAll(".col")) {
+      const a = moveAction(t, col.dataset.target || null);
+      if (col === from && !a.ok) continue;
+      col.classList.add(a.ok ? "drop-ok" : "drop-no");
+      col.title = a.ok ? `${a.label} T-${t.number}` : a.why;
+    }
+  }
+  function endDrag() {
+    if (!dragging) return;
+    dragging = dragFrom = dragOver = null;
+    for (const col of board.querySelectorAll(".col")) { col.classList.remove("drop-ok", "drop-no"); col.removeAttribute("title"); }
+    if (boardStale) renderBoard();
+  }
+
+  // dropTargets: coloanele board-ului care primesc carduri ({ target, title }), in ordinea de pe ecran
+  function dropTargets() {
+    return [...board.querySelectorAll(".col")]
+      .filter((c) => c.dataset.target)
+      .map((c) => ({ target: c.dataset.target, title: c.dataset.title }));
+  }
+
+  // cardWrap: cardul plus butonul "⋯" (un buton nu poate sta in alt buton, deci stau alaturi)
+  function cardWrap(t, card) {
+    const btn = el("button", {
+      type: "button", class: "card-menu-btn", "aria-label": "Task actions", title: "Task actions",
+      "aria-haspopup": "menu", "aria-expanded": "false",
+      onclick: (e) => { e.stopPropagation(); openCardMenu(t, btn); },
+    }, "⋯");
+    return el("div", { class: "card-wrap" }, card, btn);
+  }
+
+  // openCardMenu: meniul cardului (Move to… / Delete); se inchide la Esc, click in afara, scroll si dupa o alegere.
+  // Sta pe document.body cu position: fixed, ca sa nu fie taiat de board-ul care se deruleaza.
+  function openCardMenu(t, btn) {
+    const again = cardMenu?.btn === btn;
+    closeCardMenu();
+    if (again) return; // al doilea click pe acelasi ⋯ doar inchide
+    const pick = (fn) => async () => { closeCardMenu(); await fn(); };
+    const cols = dropTargets();
+    const targets = cols.map((c) => ({ ...c, a: moveAction(t, c.target) })).filter((c) => c.a.ok);
+    const sub = el("div", { class: "card-menu-sub", role: "group", "aria-label": "Move to", hidden: true },
+      targets.length
+        ? targets.map((c) => el("button", {
+          type: "button", role: "menuitem",
+          onclick: pick(async () => { if (await moveTask(t, c.target, askReason)) reload(); }),
+        }, `${c.a.label} → ${c.title}`))
+        : el("span", { class: "card-menu-note" }, moveAction(t, cols[0]?.target || null).why));
+    const moveBtn = el("button", {
+      type: "button", role: "menuitem", "aria-expanded": "false",
+      onclick: () => {
+        sub.hidden = !sub.hidden;
+        moveBtn.setAttribute("aria-expanded", String(!sub.hidden));
+        if (!sub.hidden) sub.querySelector("button")?.focus();
+      },
+    }, "Move to…");
+    const menu = el("div", { class: "card-menu", role: "menu", "aria-label": `Actions for T-${t.number}` },
+      moveBtn, sub,
+      el("button", { type: "button", role: "menuitem", class: "danger", onclick: pick(() => deleteTask(t)) }, "Delete"));
+    document.body.append(menu);
+    // sub buton, aliniat la dreapta lui; ramane in ecran
+    const r = btn.getBoundingClientRect();
+    const w = menu.offsetWidth;
+    menu.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
+    menu.style.top = `${r.bottom + 4}px`;
+    btn.setAttribute("aria-expanded", "true");
+    const onDown = (e) => { if (!menu.contains(e.target) && e.target !== btn) closeCardMenu(); };
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); closeCardMenu(); btn.focus(); } };
+    const onScroll = (e) => { if (!menu.contains(e.target)) closeCardMenu(); };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", closeCardMenu);
+    cardMenu = {
+      btn,
+      close() {
+        document.removeEventListener("mousedown", onDown, true);
+        document.removeEventListener("keydown", onKey);
+        window.removeEventListener("scroll", onScroll, true);
+        window.removeEventListener("resize", closeCardMenu);
+        menu.remove();
+        btn.setAttribute("aria-expanded", "false");
+      },
+    };
+    moveBtn.focus();
+  }
+  function closeCardMenu() {
+    if (!cardMenu) return;
+    const m = cardMenu;
+    cardMenu = null;
+    m.close();
+    if (boardStale) renderBoard();
+  }
+
+  // askReason: fereastra pentru Send back / Reopen; intoarce textul (nevid) sau null la Cancel
+  function askReason(label, t) {
+    return new Promise((resolve) => {
+      const text = el("textarea", { rows: 4, placeholder: "What should change? The agent reads this.", "aria-label": "Reason" });
+      const ok = el("button", { type: "submit", class: "btn primary" }, label);
+      const titleId = `reason-${t.id}`;
+      const form = el("form", {
+        class: "reason-form",
+        onsubmit: (e) => {
+          e.preventDefault();
+          const v = text.value.trim();
+          if (!v) { text.focus(); return; }
+          done(v);
+        },
+      },
+        el("h2", { id: titleId }, `${label} T-${t.number}`),
+        el("p", { class: "hint" }, t.title),
+        text,
+        el("div", { class: "actions" }, el("span", { class: "grow" }),
+          el("button", { type: "button", class: "btn ghost", onclick: () => done(null) }, "Cancel"), ok));
+      const dialog = el("div", { class: "modal reason-modal", role: "dialog", "aria-modal": "true", "aria-labelledby": titleId }, form);
+      const overlay = el("div", { class: "modal-overlay" }, dialog);
+      let downOnOverlay = false;
+      overlay.addEventListener("mousedown", (e) => { downOnOverlay = e.target === overlay; });
+      overlay.addEventListener("click", (e) => { if (downOnOverlay && e.target === overlay) done(null); });
+      const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); done(null); } };
+      document.addEventListener("keydown", onKey);
+      document.body.append(overlay);
+      text.focus();
+      function done(v) {
+        document.removeEventListener("keydown", onKey);
+        overlay.remove();
+        resolve(v);
+      }
+    });
+  }
+
+  // deleteTask: sterge (arhiveaza) task-ul cu sub-task-urile lui, dupa confirmare; toast cu Undo.
+  // Folosit de meniul cardului si de modala (actions.deleteTask). Intoarce true daca s-a sters.
+  async function deleteTask(t) {
+    const tasks = state.project.tasks || [];
+    // sub-task-urile din grup, la orice adancime (serverul arhiveaza tot arborele)
+    const subs = new Set();
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const x of tasks) {
+        if (x.id !== t.id && !subs.has(x.id) && (x.parentTaskId === t.id || subs.has(x.parentTaskId))) { subs.add(x.id); grew = true; }
+      }
+    }
+    const ids = new Set([t.id, ...subs]);
+    const busy = (state.project.agents || []).find((a) => ids.has(a.workingTaskId));
+    const n = subs.size;
+    let msg = `Delete T-${t.number}` + (n ? ` and its ${n} ${n === 1 ? "subtask" : "subtasks"}` : "") +
+      `? You can restore ${n ? "them" : "it"} from Deleted.`;
+    if (busy) msg += `\n${busy.name} is working on it; the run will be stopped.`;
+    if (!confirm(msg)) return false;
+    try {
+      await api(`/api/tasks/${t.id}`, { method: "DELETE" });
+    } catch (err) { toast(err.message); return false; }
+    toast(`Deleted T-${t.number}`, "ok", { label: "Undo", onClick: async () => {
+      try {
+        await api(`/api/tasks/${t.id}/restore`, { method: "POST" });
+        await reload();
+        if (boardPanel === "deleted") openDeleted();
+      } catch (err) { toast(err.message); }
+    } });
+    await reload();
+    if (boardPanel === "deleted") openDeleted();
+    return true;
   }
 
   // agentii care pot lua un task: legati; intr-o etapa, doar cei din etapa
@@ -1076,6 +1294,18 @@ export async function workspaceView(root, projectId, route) {
     return el("button", {
       type: "button", class: "task" + (blocked ? " is-blocked" : "") + (decides ? " is-yours" : ""), "data-task-id": t.id,
       onclick: () => { location.hash = `#/p/${projectId}/tasks/${t.id}`; },
+      draggable: "true",
+      ondragstart: (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(t.id));
+        startDrag(t, e.currentTarget.closest(".col"));
+      },
+      // dragend fara drop (drop-ul face endDrag inainte): lasat pe o coloana care nu-l primeste -> motivul
+      ondragend: () => {
+        const why = dragging && dragOver && dragOver !== dragFrom ? moveAction(dragging, dragOver.dataset.target || null).why : null;
+        endDrag();
+        if (why) toast(why);
+      },
     },
       labels.length ? el("span", { class: "task-labels" }, labels) : null,
       el("span", { class: "task-title" }, t.title),
@@ -1106,7 +1336,7 @@ export async function workspaceView(root, projectId, route) {
         projectId, taskId, project: state.project, info, ...keepFlow,
         onClose: () => { location.hash = `#/p/${projectId}/tasks`; },
         actions: {
-          taskAction, decide, assign, assignable,
+          taskAction, decide, assign, assignable, deleteTask,
           // inchide modala (prin adresa) si deschide panoul Recurring
           openRecurring: () => {
             if (boardPanel !== "recurring") toggleRecurring();
