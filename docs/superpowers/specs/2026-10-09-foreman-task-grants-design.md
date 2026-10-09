@@ -131,10 +131,13 @@ UI (`static/js/access.js`), ambele feluri de card cu prefix arata la fel ("COMMA
 O constanta noua `howDenied`, adaugata pentru toti agentii (in toate modurile, inclusiv full autonomy):
 
 > Command and tool permissions are set in Foreman, not in Claude Code settings. If something is denied, do not ask the
-> user to allow it (not in chat and not with ask_user) and do not suggest editing settings files or changing the
+> user to allow it and do not suggest editing settings files or changing the
 > permission mode: the denial already appears in the user's Needs you list, and approving it wakes you up. Say in one
 > line what was denied and why you need it, then stop without calling report_done for that work. When you are told it is
 > now allowed, run it again.
+
+Textul nu pomeneste ask_user (in modul autonom promptul nu are voie sa-l contina, `TestSystemAutonomy`); descrierea
+tool-ului ask_user spune ca nu e pentru comenzi refuzate.
 
 `howAsk` devine "If you need a decision or information that only the user can give..." (fara "a permission").
 
