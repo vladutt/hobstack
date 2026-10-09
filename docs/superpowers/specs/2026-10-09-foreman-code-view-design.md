@@ -1,7 +1,7 @@
 # Foreman: cod colorat, tab-ul Modified si modala de fisier cu marcaje
 
 Data: 2026-10-09
-Status: spec, de implementat.
+Status: implementat (2026-10-09).
 
 ## Scop
 
