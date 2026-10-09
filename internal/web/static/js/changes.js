@@ -35,7 +35,7 @@ export function diffBlock(path, hunks) {
 // changesView: tab-ul "Changes" al unui task. Starea "diff deschis" (cheie: run + cale)
 // ramane intre reincarcari ale datelor.
 // Intoarce { el, show(data, hasSubtasks), error(msg) }; data = raspunsul GET /api/tasks/{id}/changes.
-export function changesView() {
+export function changesView({ openFile } = {}) {
   const root = el("div", { class: "changes" }, el("p", { class: "hint" }, "Loading..."));
   const open = new Set();
 
@@ -68,7 +68,9 @@ export function changesView() {
       body.hidden = !open.has(key);
       btn.setAttribute("aria-expanded", String(open.has(key)));
     });
-    return el("div", { class: "change" }, btn, body);
+    // "View file": modala cu fisierul de acum (clicul pe nume ramane cel care deschide diff-ul)
+    const view = openFile ? el("button", { type: "button", class: "btn small change-view", onclick: () => openFile(f.path) }, "View file") : null;
+    return el("div", { class: "change" }, el("div", { class: "change-row" }, btn, view), body);
   }
 
   function runNode(run) {

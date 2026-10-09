@@ -1346,3 +1346,33 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 650; }
 .diff-sign { display: inline-block; width: 1.2em; opacity: .7; user-select: none; }
+
+/* modala de fisier: cod cu numere de linie si marcaje pe margine (peste modala de task) */
+.fv-overlay { z-index: 60; }
+.modal.fv { display: flex; flex-direction: column; max-width: 1100px; height: min(860px, 100%); }
+.fv-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.fv-head .change-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+.fv-file, .fv-diff { overflow: auto; flex: 1; min-height: 0; padding: 8px 0 16px; }
+.fv-file > .hint, .fv-diff > .change-run { padding: 0 18px; }
+.fv-code { font: 12.5px/1.6 var(--mono); font-variant-ligatures: none; width: max-content; min-width: 100%; }
+.fv-line { display: flex; position: relative; }
+.fv-num { width: 4.2em; text-align: right; padding-right: 10px; color: var(--dim); user-select: none; flex: none; }
+.fv-gutter { width: 3px; flex: none; margin-right: 12px; }
+.fv-added { background: rgba(95, 208, 168, .07); }
+.fv-added .fv-gutter { background: var(--green); }
+.fv-modified { background: rgba(140, 158, 255, .08); }
+.fv-modified .fv-gutter { background: var(--blue); }
+.fv-del-before::before { content: ""; position: absolute; left: calc(4.2em - 3px); top: -4px; border: 4px solid transparent; border-left-color: var(--red); }
+.fv-text { white-space: pre; padding-right: 18px; }
+.fv-diff .diff { margin: 6px 18px 14px; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; background: var(--deep); }
+.change-row { display: flex; align-items: center; gap: 6px; }
+.change-row .change-file { flex: 1; min-width: 0; }
+.modified { display: grid; gap: 4px; }
+.modified-row { display: flex; gap: 10px; align-items: center; width: 100%; }
+.modified-ref { color: var(--amber); font-size: 12px; }
+.modified-meta { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.md-file-link { cursor: pointer; }
+.md-file-link code { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+/* <code> din blocurile colorate nu ia stilul codului din text (fundal, padding) */
+.md-pre code, .md-pre code.hljs { background: none; border: 0; padding: 0; border-radius: 0; font: inherit; color: inherit; }
