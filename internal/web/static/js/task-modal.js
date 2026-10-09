@@ -245,7 +245,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     // prima data scoatem "Loading..." si punem nodurile stabile
     if (!body.contains(tabsSection)) body.replaceChildren(decideSlot, todoBox, topBox, reportBox, filesBox, tabsSection, typingBox, commentForm);
     // task sters: fara comentarii (serverul le refuza, agentul nu mai lucreaza pe el); Restore e in zona de actiuni
-    commentForm.style.display = t.status === "archived" ? "none" : "";
+    // cand decide utilizatorul, nota din zona de actiune inlocuieste comentariile (pleaca cu Accept / Send back)
+    commentForm.style.display = t.status === "archived" || userDecides(t) ? "none" : "";
     syncTyping();
 
     const topNow = JSON.stringify([t.description, t.feedback]);
@@ -280,7 +281,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   function renderTodos() {
     const list = data.todos || [];
     const archived = data.task.status === "archived"; // task sters: bifele sunt doar de citit
-    const key = JSON.stringify([data.todosBy, archived, list.map((x) => [x.position, x.text, x.kind, !!x.doneAt])]);
+    const mine = userDecides(data.task);
+    const key = JSON.stringify([data.todosBy, archived, mine, list.map((x) => [x.position, x.text, x.kind, !!x.doneAt])]);
     if (key === todoKey) return;
     todoKey = key;
     if (!list.length) { todoBox.replaceChildren(); return; }
@@ -289,7 +291,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     const steps = list.some((x) => x.kind === "step");
     todoBox.replaceChildren(el("section", { class: "left-for-you" },
       el("div", { class: "lfy-head" }, el("span", { class: "dot", style: "background:var(--amber)" }),
-        el("strong", {}, steps ? "Your steps" : "Left for you"), el("span", { class: "hint" }, `${who} finished the work but needs these from you.`),
+        el("strong", {}, steps ? "Your steps" : "Left for you"), el("span", { class: "hint" }, steps ? `${who} needs you to do these. Tick them as you go.` : `${who} finished the work but needs these from you.`),
         el("span", { class: "grow" }), el("span", { class: "lfy-count" }, `${done} of ${list.length}`)),
       el("div", { class: "lfy-list" }, list.map((x) => {
         const box = el("input", { type: "checkbox", checked: !!x.doneAt, disabled: archived, onchange: async () => {
@@ -302,6 +304,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
           x.kind === "step" ? el("span", { class: "lfy-tag" }, "step") : null);
       })),
       el("p", { class: "hint" }, archived ? "Restore the task to answer these."
+        : mine ? "Add them in the note below; they go out with Accept or Send back."
         : `Answer in the comments below. ${who} updates the work and ticks them off.`)));
   }
 
@@ -636,12 +639,17 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     return a ? a.name : "The root lead";
   }
 
+  // userDecides: utilizatorul poate decide task-ul din board (si in modul autonom, unde decide radacina)
+  function userDecides(t) {
+    return t.status === "review" && (project.userCanDecide || []).includes(t.id);
+  }
+
   // renderActions: zona se reconstruieste doar cand se schimba ce trebuie aratat
   // (starea, decizia utilizatorului, stuck, asignatul); altfel butoanele si
   // textarea raman pe loc la fiecare refresh.
   function renderActions(t, stuck) {
     // mine: utilizatorul poate decide din board (si in modul autonom, unde decide radacina)
-    const mine = t.status === "review" && (project.userCanDecide || []).includes(t.id);
+    const mine = userDecides(t);
     // byRoot: in modul autonom decide radacina asignatului; utilizatorul poate si el
     const byRoot = mine && !(project.userDecides || []).includes(t.id) ? rootName(t.assigneeId) : null;
     // intrebarile deschise intra in cheie: un raport nou reconstruieste caseta Decide

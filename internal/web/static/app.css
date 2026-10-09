@@ -1088,8 +1088,8 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
   .decide { padding: 16px; }
   .decide-other { max-width: none; }
   .decide-opts { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .decide-buttons { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .decide-btn { width: 100%; }
+  .decide-buttons { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .decide-btn { width: 100%; padding: 0 12px; }
 }
 .typing { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 4px 2px -4px; }
 .typing[hidden], .typing-link[hidden] { display: none; }
