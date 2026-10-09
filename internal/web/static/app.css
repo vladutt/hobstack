@@ -1489,3 +1489,6 @@ input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
   .lib-form-foot { padding: 14px 18px 18px; flex-wrap: wrap; }
 }
 .mcp-section > .hint, .mcp-dialog p { margin: 0; }
+/* butoanele raman la vedere si cu multe variabile (telefon) */
+.mcp-dialog .lib-form-foot { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); z-index: 1; }
+.mcp-dialog .hint[hidden] { display: none; }

@@ -6,13 +6,18 @@ import { newForm } from "./library.js";
 // serverele din configurarile Claude ale utilizatorului si fereastra de Install.
 // Numele, descrierile si comenzile vin din afara (registru / fisiere de configurare): doar prin el() / textContent.
 
-const NAME_RE = /^[a-z0-9-]+$/;
+// aceeasi regula ca safeName din internal/library, plus "team" rezervat pentru MCP (validate.go)
+const NAME_RE = /^[a-z][a-z0-9-]{1,39}$/;
+const RESERVED = new Set(["team"]);
+const NAME_HINT = "2-40 characters, starting with a letter; lowercase letters, digits and dashes.";
 const MAX_DESC = 300; // serverul refuza descrierile mai lungi
 
 // kindText: "local · npx" / "remote"
 const kindText = (s) => (s.kind === "remote" ? "remote" : "local" + (s.runtime ? " · " + s.runtime : ""));
+// quoteArg: argumentele goale sau cu spatii apar intre ghilimele (JSON), ca sa se vada exact ce se trimite
+const quoteArg = (a) => (a === "" || /\s/.test(a) ? JSON.stringify(a) : a);
 // commandText: comanda exacta (local) sau URL-ul (remote)
-const commandText = (s) => (s.kind === "remote" ? s.url : [s.command, ...(s.args || [])].join(" "));
+const commandText = (s) => (s.kind === "remote" ? s.url : [s.command, ...(s.args || [])].map(quoteArg).join(" "));
 
 // truncate: taie la max caractere (pe runes, nu pe unitati UTF-16), cu "…" la final
 function truncate(text, max) {
@@ -154,9 +159,11 @@ export async function mcpAddView(root, projectId) {
   // proba picata -> eroarea + "Install without test" -> a doua confirmare -> skipTest.
   function installDialog(s) {
     const name = el("input", { type: "text", id: "mcp-name", value: s.name || "", autocomplete: "off", spellcheck: "false" });
-    const nameHint = el("span", { class: "hint" }, "Lowercase letters, digits and dashes.");
+    const nameHint = el("span", { class: "hint" }, NAME_HINT);
     const enable = project ? el("input", { type: "checkbox", checked: true }) : null;
     const values = new Map(); // nume variabila -> input (doar cu proiect)
+    const missing = new Map(); // nume variabila -> mesajul "Required" de sub input
+    let busy = false; // cat ruleaza proba / instalarea fereastra nu se inchide
     const cmd = commandText(s);
     const local = s.kind !== "remote";
 
@@ -174,9 +181,17 @@ export async function mcpAddView(root, projectId) {
               values.set(v.name, input);
             }
             input.id = input.id || `mcp-env-${values.size}-${v.name}`;
+            let warn = missing.get(v.name);
+            if (!warn) {
+              warn = el("span", { class: "hint bad", role: "alert", hidden: true },
+                `Required \u2014 fill it in or uncheck Enable in ${project.name}.`);
+              missing.set(v.name, warn);
+              input.addEventListener("input", () => { if (input.value) warn.hidden = true; });
+            }
             return el("div", { class: "field" },
               el("label", { for: input.id, class: "mcp-env-label" }, el("span", { class: "mono" }, v.name), badges(v)),
               input,
+              v.required ? warn : null,
               v.description ? el("span", { class: "hint" }, v.description) : null);
           }),
           el("p", { class: "hint" }, `Saved as ${project.name}'s secrets on this machine and used for the test. Never shown again.`));
@@ -193,16 +208,32 @@ export async function mcpAddView(root, projectId) {
 
     const body = el("div", { class: "lib-form-body" });
     const foot = el("div", { class: "lib-form-foot" });
-    const close = () => { overlay.remove(); };
+    const close = () => { if (!busy) overlay.remove(); };
     const btn = (label, cls, onclick) => el("button", { type: "button", class: "btn " + cls, onclick }, label);
     const cmdBlock = () => el("pre", { class: "md-pre mcp-exact" }, cmd);
 
     function validName() {
       const v = name.value.trim();
-      const ok = NAME_RE.test(v);
-      nameHint.textContent = ok || !v ? "Lowercase letters, digits and dashes." : "Use only lowercase letters, digits and dashes.";
+      const reserved = RESERVED.has(v);
+      const ok = NAME_RE.test(v) && !reserved;
+      nameHint.textContent = reserved ? `"${v}" is reserved for Foreman's own MCP server.` : NAME_HINT;
       nameHint.classList.toggle("bad", !ok && !!v);
       return ok;
+    }
+
+    // requiredFilled: cu proiectul bifat, variabilele obligatorii goale sunt marcate sub input (fara proiect nu se cer)
+    function requiredFilled() {
+      if (!enable?.checked) return true;
+      let first = null;
+      for (const v of s.env) {
+        if (!v.required) continue;
+        const input = values.get(v.name);
+        const empty = !input || !input.value;
+        missing.get(v.name).hidden = !empty;
+        if (empty && !first) first = input;
+      }
+      first?.focus();
+      return !first;
     }
     name.addEventListener("input", validName);
 
@@ -220,6 +251,7 @@ export async function mcpAddView(root, projectId) {
       ].filter(Boolean));
       const install = btn("Install", "primary", () => {
         if (!validName()) { name.focus(); return; }
+        if (!requiredFilled()) return;
         if (local) confirmStep(false); else send(install, false);
       });
       foot.replaceChildren(btn("Cancel", "ghost", close), el("span", { class: "grow" }), install);
@@ -262,16 +294,21 @@ export async function mcpAddView(root, projectId) {
         if (Object.keys(secretValues).length) payload.secretValues = secretValues;
       }
       const text = button.textContent;
+      busy = true;
       foot.querySelectorAll("button").forEach((b) => { b.disabled = true; });
       button.classList.add("busy");
       button.textContent = local && !skipTest ? "Testing…" : "Installing…";
       try {
         const it = await postInstall(payload);
+        busy = false;
+        toast(withProject ? `${it.name} installed in ${project.name}` : `${it.name} is in the library`, "ok");
+        // pagina parasita intre timp (Back in browser): doar toast-ul, fara navigare
         if (closed) return;
         close();
-        toast(withProject ? `${it.name} installed in ${project.name}` : `${it.name} is in the library`, "ok");
         location.hash = `#/library/item/${it.id}`;
       } catch (err) {
+        busy = false;
+        if (closed) { toast(err.message); return; }
         button.classList.remove("busy");
         button.textContent = text;
         foot.querySelectorAll("button").forEach((b) => { b.disabled = false; });
