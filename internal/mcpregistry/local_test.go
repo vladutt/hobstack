@@ -133,7 +133,7 @@ func TestLocalServersRedactsCredentials(t *testing.T) {
 		"c-flag":   {"-y", "x-mcp", "--api-key=<hidden>"},
 		"d-next":   {"-y", "x-mcp", "--token", "<hidden>"},
 		"e-env":    {"run", "-i", "--rm", "-e", "GITHUB_TOKEN=<hidden>", "ghcr.io/x/y"},
-		"f-bearer": {"mcp-remote", "https://h.example/mcp", "--header", "<hidden>"},
+		"f-bearer": {"mcp-remote", "https://h.example/mcp", "--header", "Authorization: <hidden>"},
 		"h-at":     {"-y", "pg-mcp", "--db=postgres://u:<hidden>@h/db", "redis://:<hidden>@r:6379"},
 	}
 	for name, args := range wantArgs {

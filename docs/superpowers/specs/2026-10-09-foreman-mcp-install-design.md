@@ -67,6 +67,12 @@ Construirea comenzii din registru (doar `packages` cu `transport.type = "stdio"`
 - Cererile catre registru le face serverul foreman (GET, fara credentiale), cu timeout 10 s si cache in memorie 10 min
   pe (search, cursor); browserul nu iese din localhost.
 - Valorile variabilelor din configurarile Claude nu se citesc in UI si nu se salveaza (doar numele).
+- Credentialele din comanda, argumentele si URL-urile din configurarile Claude (parola / token in URL, parametri si
+  optiuni cu nume de credential, NAME=valoare, header-e, JSON cu chei de credential, si in argumentele cu spatii) devin
+  `<hidden>` inainte sa iasa din server, iar serverul nu se poate instala ("Has a credential in its arguments or URL; move it
+  to env in your Claude config, then install"). Limita acceptata: un secret aflat doar in calea unui URL sau o valoare fara
+  nume dupa care sa fie recunoscut (de ex. calea unui webhook Slack) nu poate fi gasit; utilizatorul confirma comanda
+  exacta inainte de Install.
 - Numele, descrierea si comanda din registru sunt date externe: afisate prin `el()`, comanda trece prin validarea
   existenta (`library.ValidateInput`).
 

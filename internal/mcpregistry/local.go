@@ -2,10 +2,8 @@ package mcpregistry
 
 import (
 	"encoding/json"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"slices"
 	"sort"
@@ -150,19 +148,16 @@ func toLocal(source, name string, c configServer) (LocalServer, bool) {
 	}
 
 	// credentialele din argumente / URL se ascund aici, ca valoarea sa nu iasa din proces
-	hidden := false
-	for i, a := range s.Args {
-		if i > 0 && secretFlag(s.Args[i-1]) && !strings.HasPrefix(a, "-") {
-			s.Args[i], hidden = Hidden, true
-			continue
-		}
-		if r, ok := redactArg(a); ok {
-			s.Args[i], hidden = r, true
-		}
+	// Limita acceptata: un secret aflat doar in calea unui URL sau o valoare goala fara nume dupa care
+	// sa-l recunoastem (de ex. calea unui webhook Slack) nu poate fi gasit; utilizatorul confirma comanda la Install.
+	var hidden, h bool
+	s.Args, hidden = redactList(s.Args)
+	if r, hc := redactList([]string{s.Command}); hc {
+		s.Command, hidden = r[0], true
 	}
 	if s.URL != "" {
-		if r, ok := redactURL(s.URL); ok {
-			s.URL, hidden = r, true
+		if s.URL, h = redactURL(s.URL); h {
+			hidden = true
 		}
 	}
 
@@ -177,98 +172,6 @@ func toLocal(source, name string, c configServer) (LocalServer, bool) {
 		s.Installable, s.Reason = false, ReasonEnvNames
 	}
 	return s, true
-}
-
-// Hidden inlocuieste valoarea unui credential gasit in argumente sau in URL.
-const Hidden = "<hidden>"
-
-// secretKey: nume de optiune / variabila / parametru care arata a credential.
-var secretKey = regexp.MustCompile(`(?i)(key|token|secret|passw(or)?d|pwd|auth|credential|bearer|session|cookie)`)
-
-// envAssign: NAME=value (de ex. dupa docker -e / --env).
-var envAssign = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)=`)
-
-// secretFlag: "--token" / "-api-key" fara "=": valoarea e argumentul urmator.
-func secretFlag(a string) bool {
-	return strings.HasPrefix(a, "-") && !strings.Contains(a, "=") && secretKey.MatchString(strings.TrimLeft(a, "-"))
-}
-
-// redactArg intoarce argumentul cu credentialele inlocuite si true daca a ascuns ceva.
-func redactArg(a string) (string, bool) {
-	low := strings.ToLower(a)
-	if strings.Contains(low, "bearer ") || strings.Contains(low, "authorization:") {
-		return Hidden, true
-	}
-	if strings.HasPrefix(a, "-") {
-		if name, val, ok := strings.Cut(a, "="); ok {
-			if secretKey.MatchString(strings.TrimLeft(name, "-")) {
-				return name + "=" + Hidden, true
-			}
-			if r, ok := redactURL(val); ok {
-				return name + "=" + r, true
-			}
-		}
-		return a, false
-	}
-	if m := envAssign.FindStringSubmatch(a); m != nil {
-		if secretKey.MatchString(m[1]) {
-			return m[1] + "=" + Hidden, true
-		}
-		if r, ok := redactURL(a[len(m[0]):]); ok {
-			return m[0] + r, true
-		}
-		return a, false
-	}
-	return redactURL(a)
-}
-
-// urlPrefix: "scheme://" la inceputul unui argument.
-var urlPrefix = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*://`)
-
-// redactURL ascunde parola din user:parola@ si valorile parametrilor cu nume de credential.
-// Lucreaza pe text (nu prin url.Parse, care refuza unele parole si ar lasa valoarea sa treaca),
-// ca restul URL-ului sa ramana exact cum era.
-func redactURL(raw string) (string, bool) {
-	m := urlPrefix.FindString(raw)
-	if m == "" {
-		return raw, false
-	}
-	rest, hidden := raw[len(m):], false
-	// autoritatea se termina la primul "/", "?" sau "#"; "@" din parola e luat cu LastIndex
-	end := strings.IndexAny(rest, "/?#")
-	if end < 0 {
-		end = len(rest)
-	}
-	if at := strings.LastIndex(rest[:end], "@"); at >= 0 {
-		if colon := strings.Index(rest[:at], ":"); colon >= 0 {
-			rest = rest[:colon+1] + Hidden + rest[at:]
-			hidden = true
-		}
-	}
-	if q := strings.Index(rest, "?"); q >= 0 {
-		query, frag, hasFrag := strings.Cut(rest[q+1:], "#")
-		parts := strings.Split(query, "&")
-		changed := false
-		for i, p := range parts {
-			k, _, _ := strings.Cut(p, "=")
-			key, err := url.QueryUnescape(k)
-			if err != nil {
-				key = k
-			}
-			if secretKey.MatchString(key) {
-				parts[i] = k + "=" + Hidden
-				changed = true
-			}
-		}
-		if changed {
-			rest = rest[:q+1] + strings.Join(parts, "&")
-			if hasFrag {
-				rest += "#" + frag
-			}
-			hidden = true
-		}
-	}
-	return m + rest, hidden
 }
 
 // readJSON intoarce false daca fisierul lipseste sau nu e JSON valid.
