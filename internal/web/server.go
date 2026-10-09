@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"foreman/internal/draft"
 	"foreman/internal/events"
 	"foreman/internal/library"
+	"foreman/internal/mcpregistry"
 	"foreman/internal/models"
 	"foreman/internal/runner"
 	wizard "foreman/internal/setup" // alias: in pachetul web, "setup" e helper-ul din teste
@@ -53,13 +55,17 @@ type Server struct {
 	drafts  *draft.Manager  // nil = "Let AI draft this agent" nu e disponibil
 	lib     *library.Lib    // nil = rutele Library raspund 503
 
+	registry *mcpregistry.Client    // registrul MCP (cautare din Library -> Add MCP server)
+	home     func() (string, error) // folderul utilizatorului pentru configurarile Claude (testele dau unul temporar)
+
 	codeCache *codefiles.Cache // fisierele de cod pentru @ in chat (cateva secunde in memorie)
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
 	dirs Dirs, pick func(context.Context) (string, error), canPick bool) *Server {
 	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick,
-		codeCache: codefiles.NewCache(30 * time.Second)}
+		codeCache: codefiles.NewCache(30 * time.Second),
+		registry:  mcpregistry.NewClient(), home: os.UserHomeDir}
 }
 
 // SetSetup activeaza wizard-ul "Proiect nou cu AI".
@@ -171,6 +177,9 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/library", s.listLibrary)
 	mux.HandleFunc("POST /api/library", s.createLibraryItem)
+	mux.HandleFunc("GET /api/library/registry", s.searchRegistry)
+	mux.HandleFunc("GET /api/library/local-mcp", s.localMCP)
+	mux.HandleFunc("POST /api/library/install-mcp", s.installMCP)
 	mux.HandleFunc("GET /api/library/{id}", s.getLibraryItem)
 	mux.HandleFunc("GET /api/library/{id}/files/{path...}", s.libraryFile)
 	mux.HandleFunc("POST /api/library/{id}/publish", s.publishLibraryItem)
