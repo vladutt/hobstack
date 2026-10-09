@@ -25,6 +25,9 @@ func (t *Team) todoTask(c mcp.Caller, ref string) (store.Task, store.Agent, erro
 	if err != nil {
 		return task, store.Agent{}, err
 	}
+	if task.Status == store.StatusArchived {
+		return task, store.Agent{}, fmt.Errorf("%s was deleted by the user", task.Ref())
+	}
 	a, err := t.st.GetAgent(c.AgentID)
 	if err != nil {
 		return task, a, err

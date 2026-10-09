@@ -67,7 +67,7 @@ func (t *Team) ArchiveTask(taskID int64) (int, error) {
 		t.note(task.ProjectID, agentID, text, true)
 	}
 	if d, ok := decider(task, agents, t.autonomyOf(task.ProjectID)); ok && !working[d.ID] {
-		t.note(task.ProjectID, d.ID, fmt.Sprintf("The user deleted %s: %s. Do not wait for it.", task.Ref(), task.Title), true)
+		t.note(task.ProjectID, d.ID, fmt.Sprintf("The user deleted %s: %s. Do not wait for it.", task.Ref(), task.Title), false)
 	}
 	t.emit(task.ProjectID, "task", task)
 	t.Kick(task.ProjectID)

@@ -68,6 +68,11 @@ func TestArchiveSubtaskUnblocksParent(t *testing.T) {
 	if !f.hasMessage(f.lead.ID, "The user deleted "+sub.Ref()) {
 		t.Fatal("liderul nu a fost anuntat")
 	}
+	// decidentul primeste nota in coada (nelivrata): o citeste la urmatorul tur
+	msgs, _ := f.st.ListMessages(f.lead.ID)
+	if last := msgs[len(msgs)-1]; !strings.Contains(last.Text, "The user deleted "+sub.Ref()) || last.Delivered {
+		t.Fatalf("nota decidentului trebuia sa fie in coada: %+v", last)
+	}
 	// parintele se arhiveaza separat; restaurarea sub-task-ului cere intai parintele
 	if _, err := f.tm.ArchiveTask(parent.ID); err != nil {
 		t.Fatal(err)
@@ -93,5 +98,30 @@ func TestRecurringNotBlockedByDeletedOccurrence(t *testing.T) {
 	}
 	if _, err := f.tm.RunRecurringNow(r.ID); err != nil {
 		t.Fatalf("aparitia stearsa blocheaza: %v", err)
+	}
+}
+
+func TestArchivedCurrentTaskRejectedByTools(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "Build page", f.rook, store.StatusInProgress)
+	if _, err := f.tm.ArchiveTask(task.ID); err != nil {
+		t.Fatal(err)
+	}
+	c := f.workerCaller(f.rook, task.ID)
+	want := task.Ref() + " was deleted by the user"
+	if _, err := f.tm.AskUser(c, "Which color?", nil); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("ask_user: %v", err)
+	}
+	if qs, _ := f.st.ListOpenQuestions(f.p.ID); len(qs) != 0 {
+		t.Fatalf("intrebare orfana: %+v", qs)
+	}
+	if _, err := f.tm.LeaveForUser(c, "", []string{"check it"}); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("leave_for_user: %v", err)
+	}
+	if _, err := f.tm.TickLeftForUser(c, "", []int{1}); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("tick_left_for_user: %v", err)
+	}
+	if _, _, err := f.tm.parentTaskFor(c); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("parentTaskFor: %v", err)
 	}
 }
