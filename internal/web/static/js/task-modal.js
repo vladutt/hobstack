@@ -7,7 +7,7 @@ import { flowView } from "./flow.js";
 import { agentPicker } from "./agent-picker.js";
 import { taskFilesView } from "./task-files.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
-import { decideBox } from "./decide.js";
+import { decideBox, todoCopy } from "./decide.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
 const STATUS = {
@@ -276,7 +276,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     renderActions(t, stuck);
   }
 
-  // renderTodos: "Left for you" cu checklist ("Your steps" cand are si pasi de facut, cu eticheta "step");
+  // renderTodos: "Left for you" cu checklist (titlul si textele dupa continut, din todoCopy; pasii au eticheta "step");
   // un click bifeaza / debifeaza pe server
   function renderTodos() {
     const list = data.todos || [];
@@ -288,10 +288,10 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     if (!list.length) { todoBox.replaceChildren(); return; }
     const done = list.filter((x) => x.doneAt).length;
     const who = data.todosBy || data.assignee || "The agent";
-    const steps = list.some((x) => x.kind === "step");
+    const copy = todoCopy(list, who, { mine, archived });
     todoBox.replaceChildren(el("section", { class: "left-for-you" },
       el("div", { class: "lfy-head" }, el("span", { class: "dot", style: "background:var(--amber)" }),
-        el("strong", {}, steps ? "Your steps" : "Left for you"), el("span", { class: "hint" }, steps ? `${who} needs you to do these. Tick them as you go.` : `${who} finished the work but needs these from you.`),
+        el("strong", {}, copy.title), el("span", { class: "hint" }, copy.head),
         el("span", { class: "grow" }), el("span", { class: "lfy-count" }, `${done} of ${list.length}`)),
       el("div", { class: "lfy-list" }, list.map((x) => {
         const box = el("input", { type: "checkbox", checked: !!x.doneAt, disabled: archived, onchange: async () => {
@@ -303,9 +303,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
         return el("label", { class: "check lfy-item" + (x.doneAt ? " done" : "") }, box, el("span", {}, x.text),
           x.kind === "step" ? el("span", { class: "lfy-tag" }, "step") : null);
       })),
-      el("p", { class: "hint" }, archived ? "Restore the task to answer these."
-        : mine ? "Add them in the note below; they go out with Accept or Send back."
-        : `Answer in the comments below. ${who} updates the work and ticks them off.`)));
+      el("p", { class: "hint" }, copy.foot)));
   }
 
   // collapsible: text markdown lung, taiat la cateva randuri cu "Show more" (starea prin get/set)
@@ -680,7 +678,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       dbox = null;
       decideSlot.replaceChildren();
     }
-    // comentariile raman sub tab-uri (si cand decide utilizatorul: nota de decizie e separata)
+    // formularul de comentarii sta sub tab-uri; cand decide utilizatorul e ascuns (render), iar ce ar fi
+    // scris acolo merge in nota din caseta Decide, care pleaca cu Accept / Send back
     if (!body.contains(commentForm)) body.append(commentForm);
     if (t.status === "blocked") {
       const accept = el("button", { type: "button", class: "btn small primary" }, "Accept");

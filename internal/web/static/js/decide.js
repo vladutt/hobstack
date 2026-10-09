@@ -108,3 +108,26 @@ export function decideBox({ decisions, onSubmit, hint = "", note = "" }) {
     dirty: () => !!noteInput.value.trim() || collectAnswers(open, state).length > 0,
   };
 }
+
+// todoCopy: textele casetei "Left for you" dupa ce contine (valori, pasi sau amandoua).
+// Valorile le scrie utilizatorul (in nota de decizie cand decide el, altfel in comentarii);
+// pasii ii face el si ii bifeaza. mine: utilizatorul decide task-ul; archived: task sters.
+export function todoCopy(list, who, { mine = false, archived = false } = {}) {
+  const steps = list.some((x) => x.kind === "step");
+  const values = list.some((x) => x.kind !== "step");
+  let title = "Left for you", head = `${who} finished the work but needs these from you.`;
+  let foot = mine ? "Add them in the note below; they go out with Accept or Send back."
+    : `Answer in the comments below. ${who} updates the work and ticks them off.`;
+  if (steps && !values) {
+    title = "Your steps";
+    head = `${who} needs you to do these.`;
+    foot = "Tick them as you go.";
+  } else if (steps) {
+    title = "Left for you · steps";
+    head = `${who} needs these from you.`;
+    foot = mine ? "Add the values in the note below (they go out with Accept or Send back); tick the steps as you go."
+      : "Answer the values in the comments below; tick the steps as you go.";
+  }
+  if (archived) foot = "Restore the task to answer these.";
+  return { title, head, foot };
+}
