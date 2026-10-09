@@ -796,8 +796,9 @@ export async function workspaceView(root, projectId, route) {
       ondrop: async (e) => {
         e.preventDefault();
         const t = dragging;
+        const inPlace = dragFrom === e.currentTarget; // lasat pe coloana de unde a plecat
         endDrag();
-        if (t && await moveTask(t, target, askReason)) reload();
+        if (t && await moveTask(t, target, askReason, { confirmUnblock: inPlace })) reload();
       },
     },
       el("div", { class: "col-head" },
@@ -1027,7 +1028,7 @@ export async function workspaceView(root, projectId, route) {
       targets.length
         ? targets.map((c) => el("button", {
           type: "button", role: "menuitem",
-          onclick: pick(async () => { if (await moveTask(t, c.target, askReason)) reload(); }),
+          onclick: pick(async () => { if (await moveTask(t, c.target, askReason, { confirmUnblock: true })) reload(); }),
         }, `${c.a.label} → ${c.title}`))
         : el("span", { class: "card-menu-note" }, moveAction(t, cols[0]?.target || null).why));
     const moveBtn = el("button", {
@@ -1035,6 +1036,7 @@ export async function workspaceView(root, projectId, route) {
       onclick: () => {
         sub.hidden = !sub.hidden;
         moveBtn.setAttribute("aria-expanded", String(!sub.hidden));
+        place(); // lista deschisa poate sa nu mai incapa sub buton
         if (!sub.hidden) sub.querySelector("button")?.focus();
       },
     }, "Move to…");
@@ -1042,11 +1044,32 @@ export async function workspaceView(root, projectId, route) {
       moveBtn, sub,
       el("button", { type: "button", role: "menuitem", class: "danger", onclick: pick(() => deleteTask(t)) }, "Delete"));
     document.body.append(menu);
-    // sub buton, aliniat la dreapta lui; ramane in ecran
-    const r = btn.getBoundingClientRect();
-    const w = menu.offsetWidth;
-    menu.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
-    menu.style.top = `${r.bottom + 4}px`;
+    // place: sub buton, aliniat la dreapta lui; daca nu incape dedesubt se deschide deasupra.
+    // Ramane in ecran (8px margine); mai inalt decat ecranul -> se deruleaza in interior.
+    function place() {
+      const m = 8, gap = 4;
+      const r = btn.getBoundingClientRect();
+      const vh = window.innerHeight;
+      menu.style.maxHeight = "";
+      menu.style.overflowY = "";
+      menu.style.top = "0px";
+      const w = menu.offsetWidth;
+      menu.style.left = `${Math.max(m, Math.min(r.right - w, window.innerWidth - w - m))}px`;
+      let h = menu.offsetHeight;
+      if (h > vh - 2 * m) {
+        menu.style.maxHeight = `${vh - 2 * m}px`;
+        menu.style.overflowY = "auto";
+        h = vh - 2 * m;
+      }
+      let top = r.bottom + gap;
+      if (top + h > vh - m) {
+        // deasupra: marginea de jos a meniului la 4px deasupra butonului
+        const above = r.top - gap - h;
+        top = above >= m ? above : Math.max(m, vh - m - h);
+      }
+      menu.style.top = `${top}px`;
+    }
+    place();
     btn.setAttribute("aria-expanded", "true");
     const onDown = (e) => { if (!menu.contains(e.target) && e.target !== btn) closeCardMenu(); };
     const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); closeCardMenu(); btn.focus(); } };
@@ -1076,10 +1099,14 @@ export async function workspaceView(root, projectId, route) {
     if (boardStale) renderBoard();
   }
 
-  // askReason: fereastra pentru Send back / Reopen; intoarce textul (nevid) sau null la Cancel
-  function askReason(label, t) {
+  // askReason: fereastra pentru Send back / Reopen; intoarce textul (nevid) sau null la Cancel.
+  // opts.optional (confirmarea la Unblock): nota poate lipsi, atunci intoarce "".
+  function askReason(label, t, opts = {}) {
     return new Promise((resolve) => {
-      const text = el("textarea", { rows: 4, placeholder: "What should change? The agent reads this.", "aria-label": "Reason" });
+      const text = el("textarea", {
+        rows: 4, "aria-label": opts.optional ? "Note (optional)" : "Reason",
+        placeholder: opts.optional ? "Optional: anything the agent should know before it resumes." : "What should change? The agent reads this.",
+      });
       const ok = el("button", { type: "submit", class: "btn primary" }, label);
       const titleId = `reason-${t.id}`;
       const form = el("form", {
@@ -1087,12 +1114,13 @@ export async function workspaceView(root, projectId, route) {
         onsubmit: (e) => {
           e.preventDefault();
           const v = text.value.trim();
-          if (!v) { text.focus(); return; }
+          if (!v && !opts.optional) { text.focus(); return; }
           done(v);
         },
       },
         el("h2", { id: titleId }, `${label} T-${t.number}`),
         el("p", { class: "hint" }, t.title),
+        opts.optional ? el("p", { class: "hint" }, "The task goes back to work. A note is optional; it becomes the agent's feedback.") : null,
         text,
         el("div", { class: "actions" }, el("span", { class: "grow" }),
           el("button", { type: "button", class: "btn ghost", onclick: () => done(null) }, "Cancel"), ok));
@@ -1297,7 +1325,8 @@ export async function workspaceView(root, projectId, route) {
       draggable: "true",
       ondragstart: (e) => {
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", String(t.id));
+        // tip propriu (nu text/plain): lasat pe chat sau pe un camp nu lipeste id-ul; board-ul citeste doar `dragging`
+        e.dataTransfer.setData("application/x-foreman-task", String(t.id));
         startDrag(t, e.currentTarget.closest(".col"));
       },
       // dragend fara drop (drop-ul face endDrag inainte): lasat pe o coloana care nu-l primeste -> motivul

@@ -215,6 +215,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
 
     // prima data scoatem "Loading..." si punem nodurile stabile
     if (!body.contains(tabsSection)) body.replaceChildren(todoBox, topBox, reportBox, filesBox, tabsSection, typingBox, commentForm);
+    // task sters: fara comentarii (serverul le refuza, agentul nu mai lucreaza pe el); Restore e in zona de actiuni
+    commentForm.style.display = t.status === "archived" ? "none" : "";
     syncTyping();
 
     const topNow = JSON.stringify([t.description, t.feedback]);
@@ -247,7 +249,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   // renderTodos: "Left for you" cu checklist; un click bifeaza / debifeaza pe server
   function renderTodos() {
     const list = data.todos || [];
-    const key = JSON.stringify([data.todosBy, list.map((x) => [x.position, x.text, !!x.doneAt])]);
+    const archived = data.task.status === "archived"; // task sters: bifele sunt doar de citit
+    const key = JSON.stringify([data.todosBy, archived, list.map((x) => [x.position, x.text, !!x.doneAt])]);
     if (key === todoKey) return;
     todoKey = key;
     if (!list.length) { todoBox.replaceChildren(); return; }
@@ -258,7 +261,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
         el("strong", {}, "Left for you"), el("span", { class: "hint" }, `${who} finished the work but needs these from you.`),
         el("span", { class: "grow" }), el("span", { class: "lfy-count" }, `${done} of ${list.length}`)),
       el("div", { class: "lfy-list" }, list.map((x) => {
-        const box = el("input", { type: "checkbox", checked: !!x.doneAt, onchange: async () => {
+        const box = el("input", { type: "checkbox", checked: !!x.doneAt, disabled: archived, onchange: async () => {
           box.disabled = true;
           try { await api(`/api/tasks/${taskId}/todos/${x.position}`, { method: "PUT", body: { done: box.checked } }); load(); }
           catch (err) { box.checked = !box.checked; toast(err.message); }
@@ -266,7 +269,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
         } });
         return el("label", { class: "check lfy-item" + (x.doneAt ? " done" : "") }, box, el("span", {}, x.text));
       })),
-      el("p", { class: "hint" }, `Answer in the comments below. ${who} updates the work and ticks them off.`)));
+      el("p", { class: "hint" }, archived ? "Restore the task to answer these."
+        : `Answer in the comments below. ${who} updates the work and ticks them off.`)));
   }
 
   // collapsible: text markdown lung, taiat la cateva randuri cu "Show more" (starea prin get/set)
@@ -627,6 +631,25 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       const nudge = el("button", { type: "button", class: "btn small" }, "Nudge");
       nudge.addEventListener("click", run(nudge, () => actions.taskAction(t, "nudge")));
       parts.push(el("div", { class: "actions" }, el("span", { class: "hint" }, "No one is moving this task."), nudge));
+    }
+    // task sters (deschis prin Back sau un link): doar nota si Restore. Un sub-task sters impreuna cu
+    // parintele se readuce cu tot grupul (Restore pe radacina grupului).
+    if (t.status === "archived") {
+      const rootId = t.archivedRoot || t.id;
+      const restore = el("button", { type: "button", class: "btn small primary" }, "Restore");
+      restore.addEventListener("click", run(restore, async () => {
+        try {
+          await api(`/api/tasks/${rootId}/restore`, { method: "POST" });
+          load();
+          return true;
+        } catch (err) {
+          toast(err.message);
+          return false;
+        }
+      }));
+      parts.push(el("div", { class: "actions" },
+        el("span", { class: "hint" }, rootId === t.id ? "This task was deleted." : "This task was deleted together with its parent task; Restore brings back the whole group."),
+        el("span", { class: "grow" }), restore));
     }
     // Delete: ultimul, discret (rosu la hover); confirmarea si Undo sunt in workspace (actions.deleteTask)
     if (t.status !== "archived") {

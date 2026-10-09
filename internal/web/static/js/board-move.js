@@ -34,14 +34,16 @@ export function moveAction(t, target) {
   return { ok: false, why: "Tasks can't be moved there." };
 }
 
-// moveTask: cere motivul daca trebuie (askReason(label, t) -> text sau null la Cancel), apoi muta.
+// moveTask: cere motivul daca trebuie (askReason(label, t, opts) -> text sau null la Cancel), apoi muta.
+// opts.confirmUnblock: un Unblock cere intai confirmare, cu o nota optionala pentru agent
+// (cardul lasat pe coloana lui si "Move to…": o tragere pe loc din greseala nu deblocheaza nimic).
 // Intoarce true daca mutarea a reusit (apelantul reincarca board-ul).
-export async function moveTask(t, target, askReason) {
+export async function moveTask(t, target, askReason, opts = {}) {
   const a = moveAction(t, target);
   if (!a.ok) { toast(a.why); return false; }
   let reason = "";
-  if (a.needsReason) {
-    reason = await askReason(a.label, t);
+  if (a.needsReason || (a.label === "Unblock" && opts.confirmUnblock)) {
+    reason = await askReason(a.label, t, { optional: !a.needsReason });
     if (reason == null) return false;
   }
   try {
