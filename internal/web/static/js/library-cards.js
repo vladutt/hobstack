@@ -143,7 +143,10 @@ export function libraryInstalls(projectId) {
   }
   api("/api/info").catch(() => ({})).then((i) => { windows = i.os === "windows"; load(); });
   return el("section", { class: "section" },
-    el("h2", {}, "Library", el("span", { class: "hint" }, " · tools, skills and servers for this project")),
+    el("div", { class: "section-head" },
+      el("h2", {}, "Library", el("span", { class: "hint" }, " · tools, skills and servers for this project")),
+      // cautare + Install direct in proiect (pagina Add MCP server primeste proiectul)
+      el("a", { class: "btn small", href: `#/library/mcp/add?project=${projectId}` }, "Add MCP server")),
     el("p", { class: "hint" }, "Changes save immediately and apply on each agent's next run. Secrets are stored on this machine and never shown again."),
     list);
 }

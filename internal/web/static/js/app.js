@@ -7,9 +7,11 @@ import { newProjectView } from "./new-project.js";
 import { newAgentView } from "./new-agent.js";
 import { settingsView } from "./settings.js";
 import { libraryView, libraryItemView } from "./library.js";
+import { mcpAddView } from "./mcp-add.js";
 
 // Rute in hash: #/, #/new, #/setup, #/setup/<id>, #/setup/folder/<proiect>/<folder>, #/p/3/edit si pagina proiectului cu tab-uri:
-// #/p/3/tasks, #/p/3/team, #/p/3/team/7, #/p/3/files, #/library/tools|skills|mcp, #/library/item/<id>.
+// #/p/3/tasks, #/p/3/team, #/p/3/team/7, #/p/3/files, #/library/tools|skills|mcp, #/library/mcp/add[?project=<id>],
+// #/library/item/<id>.
 // Fiecare view primeste elementul in care deseneaza si poate intoarce o
 // functie de curatare (inchide stream-uri, opreste timere) sau un obiect
 // { cleanup, update }. Cand ruta noua are aceeasi cheie (acelasi proiect),
@@ -18,6 +20,7 @@ const routes = [
   { pattern: /^#\/?$/, view: (root) => projectsView(root) },
   { pattern: /^#\/setup\/folder\/(\d+)\/(\d+)$/, view: (root, m) => setupView(root, null, { projectId: Number(m[1]), folderId: Number(m[2]) }) },
   { pattern: /^#\/setup(?:\/([0-9a-f]+))?$/, view: (root, m) => setupView(root, m[1] || null) },
+  { pattern: /^#\/library\/mcp\/add(?:\?project=(\d+))?$/, view: (root, m) => mcpAddView(root, m[1] ? Number(m[1]) : null) },
   { pattern: /^#\/library\/(tools|skills|mcp)$/, view: (root, m) => libraryView(root, m[1]) },
   { pattern: /^#\/library\/item\/(\d+)(?:\?tab=(\w+))?$/, view: (root, m) => libraryItemView(root, Number(m[1]), m[2]) },
   { pattern: /^#\/library\/?$/, view: () => { location.hash = "#/library/tools"; } },

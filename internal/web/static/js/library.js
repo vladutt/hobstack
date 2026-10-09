@@ -159,7 +159,9 @@ export async function libraryView(root, path) {
   const nameKind = kind === "mcp" ? "server" : kind;
   root.append(
     topbar("library", el("span", { class: "grow" }), search,
-      el("button", { class: "btn primary", type: "button", onclick: () => newForm(kind, reload) }, cfg.add)),
+      // MCP: pagina cu cautare in registru (formularul manual e acolo, "Add manually")
+      kind === "mcp" ? el("a", { class: "btn primary", href: "#/library/mcp/add" }, cfg.add)
+        : el("button", { class: "btn primary", type: "button", onclick: () => newForm(kind, reload) }, cfg.add)),
     body);
 
   let closed = false;
@@ -469,7 +471,7 @@ export async function libraryItemView(root, id, tab) {
 
 // ---------- formular "New tool / skill / server" ----------
 
-function newForm(kind, onCreated) {
+export function newForm(kind, onCreated) {
   const cfg = KINDS[kind];
   const name = el("input", { type: "text", placeholder: kind === "skill" ? "romanian-ui-copy" : "pdf-offer", autocomplete: "off" });
   const desc = el("input", { type: "text", placeholder: "One line: what it does and when to use it" });
