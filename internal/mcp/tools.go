@@ -92,6 +92,24 @@ var reportTool = Tool{
 			"items":       map[string]any{"type": "string"},
 			"description": "Optional: up to 10 values only the user can give (e.g. Company registration number), which you left as placeholders. The user answers in the task's comments.",
 		},
+		"decisions": map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"question": str("The question for the user (max 300 characters)"),
+					"options":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "2 to 5 short choices (max 120 characters each)"},
+					"multi":    map[string]any{"type": "boolean", "description": "true if the user may pick several options (default false)"},
+				},
+				"required": []string{"question", "options"},
+			},
+			"description": "Optional: up to 5 questions the user answers by picking an option (e.g. whether to open a follow-up task). Use these instead of asking in the summary.",
+		},
+		"user_steps": map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string"},
+			"description": "Optional: up to 10 things only the user can do (set .env variables, restart a container, run a seeder, a manual check). They appear as a checklist for the user.",
+		},
 		"files": map[string]any{
 			"type":        "array",
 			"items":       map[string]any{"type": "string"},

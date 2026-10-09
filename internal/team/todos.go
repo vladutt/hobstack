@@ -89,22 +89,38 @@ func (t *Team) openItems(task store.Task) string {
 }
 
 func (t *Team) LeaveForUser(c mcp.Caller, ref string, items []string) (string, error) {
+	return t.leave(c, ref, items, "value")
+}
+
+// LeaveSteps: pasii pe care ii poate face doar utilizatorul (user_steps); aceeasi lista ca valorile, cu kind "step".
+func (t *Team) LeaveSteps(c mcp.Caller, ref string, steps []string) (string, error) {
+	return t.leave(c, ref, steps, "step")
+}
+
+func (t *Team) leave(c mcp.Caller, ref string, items []string, kind string) (string, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
 	task, a, err := t.todoTask(c, ref)
 	if err != nil {
 		return "", err
 	}
-	n, err := t.st.AddTodos(task.ID, items, "value")
+	n, err := t.st.AddTodos(task.ID, items, kind)
 	if err != nil {
 		return "", err
 	}
 	if n > 0 {
-		t.taskMsg(task, "left_for_user", a.Name, actorUser, fmt.Sprintf("%s left %d %s for you", a.Name, n, plural(n, "item", "items")),
+		noun, nouns := "item", "items"
+		if kind == "step" {
+			noun, nouns = "step", "steps"
+		}
+		t.taskMsg(task, "left_for_user", a.Name, actorUser, fmt.Sprintf("%s left %d %s for you", a.Name, n, plural(n, noun, nouns)),
 			"- "+strings.Join(items, "\n- "))
 		t.emit(c.ProjectID, "task", task)
 	}
 	head := fmt.Sprintf("%d %s left for the user; they answer in the task's comments.", n, plural(n, "item", "items"))
+	if kind == "step" {
+		head = fmt.Sprintf("%d %s left for the user.", n, plural(n, "step", "steps"))
+	}
 	if n == 0 {
 		head = "No new items; they were already listed."
 	}

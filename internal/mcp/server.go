@@ -58,6 +58,8 @@ type Backend interface {
 	SendBack(c Caller, task, feedback string) (string, error)
 	ReportDone(c Caller, task, summary string) (string, error)
 	LeaveForUser(c Caller, task string, items []string) (string, error)
+	LeaveSteps(c Caller, task string, steps []string) (string, error)
+	AskDecisions(c Caller, task string, qs []DecisionInput) (string, error)
 	AttachFiles(c Caller, task string, paths []string) (string, error)
 	TickLeftForUser(c Caller, task string, items []int) (string, error)
 	CommentTask(c Caller, task, text string) (string, error)
@@ -189,6 +191,14 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		if err := validLeftForUser(left); err != nil {
 			return toolResult(err.Error(), true)
 		}
+		steps := argList(p.Arguments, "user_steps")
+		if err := validSteps(steps); err != nil {
+			return toolResult(err.Error(), true)
+		}
+		decisions := argDecisions(p.Arguments, "decisions")
+		if err := validDecisions(decisions); err != nil {
+			return toolResult(err.Error(), true)
+		}
 		files := argList(p.Arguments, "files")
 		if err := validFiles(files); err != nil {
 			return toolResult(err.Error(), true)
@@ -199,6 +209,22 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 			extra, lerr := s.backend.LeaveForUser(c, arg("task"), left)
 			if lerr != nil {
 				text += " Note: the items for the user were NOT saved (" + lerr.Error() + "). Write them in your next comment_task so the user sees them: " + strings.Join(left, "; ") + "."
+			} else {
+				text += " " + extra
+			}
+		}
+		if err == nil && len(steps) > 0 {
+			extra, serr := s.backend.LeaveSteps(c, arg("task"), steps)
+			if serr != nil {
+				text += " Note: the steps for the user were NOT saved (" + serr.Error() + "). Write them in your next comment_task: " + strings.Join(steps, "; ") + "."
+			} else {
+				text += " " + extra
+			}
+		}
+		if err == nil && len(decisions) > 0 {
+			extra, derr := s.backend.AskDecisions(c, arg("task"), decisions)
+			if derr != nil {
+				text += " Note: the questions for the user were NOT saved (" + derr.Error() + ")."
 			} else {
 				text += " " + extra
 			}
@@ -308,6 +334,73 @@ func validLeftForUser(items []string) error {
 		n := len([]rune(strings.TrimSpace(it)))
 		if n == 0 || n > 200 {
 			return errors.New("left_for_user: each item must be 1-200 characters")
+		}
+	}
+	return nil
+}
+
+// DecisionInput: o intrebare cu optiuni data la report_done
+type DecisionInput struct {
+	Question string
+	Options  []string
+	Multi    bool
+}
+
+// Limitele pentru decisions / user_steps (store-ul nu valideaza, doar MCP).
+const (
+	MaxDecisions = 5
+	MaxSteps     = 10
+)
+
+// argDecisions citeste lista de obiecte {question, options, multi}; multi lipsa = false.
+func argDecisions(args map[string]any, key string) []DecisionInput {
+	raw, _ := args[key].([]any)
+	out := []DecisionInput{}
+	for _, v := range raw {
+		m, _ := v.(map[string]any)
+		q, _ := m["question"].(string)
+		multi, _ := m["multi"].(bool)
+		d := DecisionInput{Question: q, Multi: multi, Options: []string{}}
+		opts, _ := m["options"].([]any)
+		for _, o := range opts {
+			if s, ok := o.(string); ok {
+				d.Options = append(d.Options, s)
+			} else {
+				d.Options = append(d.Options, "") // invalid: prins la validare
+			}
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+func validDecisions(qs []DecisionInput) error {
+	if len(qs) > MaxDecisions {
+		return fmt.Errorf("decisions: at most %d questions", MaxDecisions)
+	}
+	for _, q := range qs {
+		if n := len([]rune(strings.TrimSpace(q.Question))); n == 0 || n > 300 {
+			return errors.New("decisions: each question must be 1-300 characters")
+		}
+		if len(q.Options) < 2 || len(q.Options) > 5 {
+			return errors.New("decisions: each question needs 2-5 options")
+		}
+		for _, o := range q.Options {
+			if n := len([]rune(strings.TrimSpace(o))); n == 0 || n > 120 {
+				return errors.New("decisions: each option must be 1-120 characters")
+			}
+		}
+	}
+	return nil
+}
+
+func validSteps(items []string) error {
+	if len(items) > MaxSteps {
+		return fmt.Errorf("user_steps: at most %d steps", MaxSteps)
+	}
+	for _, it := range items {
+		if n := len([]rune(strings.TrimSpace(it))); n == 0 || n > 300 {
+			return errors.New("user_steps: each step must be 1-300 characters")
 		}
 	}
 	return nil

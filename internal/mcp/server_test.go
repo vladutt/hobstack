@@ -46,6 +46,18 @@ func (f *fakeBackend) LeaveForUser(c Caller, task string, items []string) (strin
 	f.calls = append(f.calls, "leave|"+task+"|"+strings.Join(items, ";"))
 	return "2 items left for the user", f.err
 }
+func (f *fakeBackend) LeaveSteps(c Caller, task string, steps []string) (string, error) {
+	f.calls = append(f.calls, "steps|"+task+"|"+strings.Join(steps, ";"))
+	return "2 steps left for the user.", f.err
+}
+func (f *fakeBackend) AskDecisions(c Caller, task string, qs []DecisionInput) (string, error) {
+	var parts []string
+	for _, q := range qs {
+		parts = append(parts, fmt.Sprintf("%s?%s?%v", q.Question, strings.Join(q.Options, "/"), q.Multi))
+	}
+	f.calls = append(f.calls, "decisions|"+task+"|"+strings.Join(parts, ";"))
+	return fmt.Sprintf("%d decisions waiting for the user.", len(qs)), f.err
+}
 func (f *fakeBackend) AttachFiles(c Caller, task string, paths []string) (string, error) {
 	f.calls = append(f.calls, "attach|"+task+"|"+strings.Join(paths, ";"))
 	return "Attached 2 files.", f.err
@@ -670,5 +682,50 @@ func TestCallStartTask(t *testing.T) {
 	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"start_task","arguments":{"title":"x"}}}`)
 	if raw, _ := json.Marshal(resp); !strings.Contains(string(raw), "not available") {
 		t.Fatalf("worker pe task: %s", raw)
+	}
+}
+
+func reportArgs(extra string) string {
+	return `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"report_done","arguments":{"summary":"done",` + extra + `}}}`
+}
+
+func TestReportDoneDecisionsAndSteps(t *testing.T) {
+	fb, ts := setup(t)
+	_, resp := rpc(t, ts, "worker", reportArgs(`"decisions":[{"question":"Open a follow-up?","options":["Yes","No"]},{"question":"Which?","options":["A","B","C"],"multi":true}],"user_steps":["Set .env","Restart"]`))
+	text, isErr := toolText(t, resp)
+	if isErr || !strings.Contains(text, "2 decisions waiting for the user.") || !strings.Contains(text, "2 steps left for the user.") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	want := []string{"report_done||done", "steps||Set .env;Restart", "decisions||Open a follow-up??Yes/No?false;Which??A/B/C?true"}
+	if got := strings.Join(fb.calls[len(fb.calls)-3:], " | "); got != strings.Join(want, " | ") {
+		t.Fatalf("ordine = %q", got)
+	}
+}
+
+func TestReportDoneDecisionsInvalid(t *testing.T) {
+	long := strings.Repeat("x", 121)
+	six := strings.TrimSuffix(strings.Repeat(`{"question":"Q?","options":["a","b"]},`, 6), ",")
+	steps11 := strings.TrimSuffix(strings.Repeat(`"s",`, 11), ",")
+	cases := map[string]struct{ args, want string }{
+		"6 intrebari":     {`"decisions":[` + six + `]`, "at most 5"},
+		"o optiune":       {`"decisions":[{"question":"Q?","options":["a"]}]`, "2-5"},
+		"6 optiuni":       {`"decisions":[{"question":"Q?","options":["a","b","c","d","e","f"]}]`, "2-5"},
+		"optiune lunga":   {`"decisions":[{"question":"Q?","options":["a","` + long + `"]}]`, "1-120"},
+		"intrebare goala": {`"decisions":[{"question":" ","options":["a","b"]}]`, "1-300"},
+		"intrebare lunga": {`"decisions":[{"question":"` + strings.Repeat("q", 301) + `","options":["a","b"]}]`, "1-300"},
+		"11 pasi":         {`"user_steps":[` + steps11 + `]`, "at most 10"},
+		"pas gol":         {`"user_steps":[" "]`, "1-300"},
+		"pas lung":        {`"user_steps":["` + strings.Repeat("s", 301) + `"]`, "1-300"},
+	}
+	for name, c := range cases {
+		fb, ts := setup(t)
+		_, resp := rpc(t, ts, "worker", reportArgs(c.args))
+		text, isErr := toolText(t, resp)
+		if !isErr || !strings.Contains(text, c.want) {
+			t.Errorf("%s: %q %v", name, text, isErr)
+		}
+		if len(fb.calls) != 0 {
+			t.Errorf("%s: report_done a rulat desi era invalid: %v", name, fb.calls)
+		}
 	}
 }

@@ -371,3 +371,13 @@ func TestTaskTurnUserFilesCap(t *testing.T) {
 		t.Fatalf("limita de 50:\n%s", got)
 	}
 }
+
+func TestLeftForUserMentionsDecisionsAndSteps(t *testing.T) {
+	if !strings.Contains(howLeftForUser, "decisions") || !strings.Contains(howLeftForUser, "user_steps") {
+		t.Fatal(howLeftForUser)
+	}
+	got := System(store.Project{Name: "X"}, store.Agent{Name: "A", ParentID: ptrID(1)}, Links{BossName: "Boss"})
+	if !strings.Contains(got, "user_steps") {
+		t.Fatalf("%s", got)
+	}
+}
