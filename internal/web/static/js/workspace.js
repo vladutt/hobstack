@@ -1307,13 +1307,15 @@ export async function workspaceView(root, projectId, route) {
 
   // decide: utilizatorul decide un task creat de el, ajuns dupa ultima etapa.
   // feedback e obligatoriu la send_back (il scrie in modala). Intoarce true daca a reusit.
-  async function decide(t, action, feedback = "") {
-    if (action === "send_back" && !feedback.trim()) {
+  // answers: raspunsurile la intrebarile task-ului ([{ id, choices, other }], din decide.js); Send back
+  // cere text sau cel putin un raspuns.
+  async function decide(t, action, feedback = "", answers = []) {
+    if (action === "send_back" && !feedback.trim() && !answers.length) {
       toast(`Write what needs to change in ${ref(t)}.`);
       return false;
     }
     try {
-      await api(`/api/tasks/${t.id}/decide`, { method: "POST", body: { action, feedback } });
+      await api(`/api/tasks/${t.id}/decide`, { method: "POST", body: { action, feedback, answers } });
       await reload();
       return true;
     } catch (err) { toast(err.message); return false; }

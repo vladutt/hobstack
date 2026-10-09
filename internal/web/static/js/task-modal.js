@@ -7,6 +7,7 @@ import { flowView } from "./flow.js";
 import { agentPicker } from "./agent-picker.js";
 import { taskFilesView } from "./task-files.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
+import { decideBox } from "./decide.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
 const STATUS = {
@@ -21,7 +22,7 @@ const LONG_TEXT = 600;
 // - project: proiectul curent (agenti, userDecides, userCanDecide, stuck); refresh(project) il inlocuieste.
 // - onClose(): cerut la Esc / click pe fundal / x (apelantul schimba adresa si cheama destroy).
 // - actions: functiile din workspace, ca sa nu dublam cererile:
-//   taskAction(t, "accept"|"unblock"|"nudge"), decide(t, action, feedback), assign(t, agentId),
+//   taskAction(t, "accept"|"unblock"|"nudge"), decide(t, action, feedback, answers), assign(t, agentId),
 //   assignable(stageId) -> agenti, waitingOn(t) -> numele la care asteapta un task din review,
 //   openRecurring() -> inchide modala si deschide panoul Recurring.
 //   Actiunile intorc true daca au reusit.
@@ -72,7 +73,11 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   // nodurile corpului raman pe loc intre refresh-uri (scroll-ul, tab-ul, "Show more" nu se pierd);
   // se rescrie doar continutul care s-a schimbat
   const todoBox = el("div", { class: "modal-top" });
-  let todoKey = null;     // ce s-a desenat ultima data in caseta "Left for you"
+  let todoKey = null;     // ce s-a desenat ultima data in caseta "Left for you" / "Your steps"
+  // Decide: intrebarile fara raspuns, cand decide utilizatorul; caseta (cu alegerile si nota) ramane
+  // pe loc pana se schimba intrebarile sau nu mai decide utilizatorul
+  const decideSlot = el("div", { class: "modal-top" });
+  let dbox = null;
   const topBox = el("div", { class: "modal-top" });
   const convPane = el("div", { class: "conv", id: `conv-${taskId}`, role: "tabpanel", hidden: true });
   const histPane = el("div", { id: `hist-${taskId}`, role: "tabpanel", hidden: true });
@@ -164,7 +169,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
 
   // requestClose: feedback-ul netrimis nu se pierde in tacere
   function requestClose() {
-    if (commentInput.value.trim() && !confirm("Discard your unsent text?")) return;
+    if ((commentInput.value.trim() || dbox?.dirty()) && !confirm("Discard your unsent text?")) return;
     onClose();
   }
 
@@ -215,6 +220,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     actionsBox.hidden = true;
     actionsBox.replaceChildren();
     actionsKey = null;
+    decideSlot.replaceChildren();
+    dbox = null;
     todoKey = topKey = histKey = convKey = reportKey = flowKey = filesKey = null;
     chgCount = null; // la urmatorul succes se reincarca tot
   }
@@ -236,7 +243,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     renderSide(t, agent, who, waiting, stuck, queuedInStage);
 
     // prima data scoatem "Loading..." si punem nodurile stabile
-    if (!body.contains(tabsSection)) body.replaceChildren(todoBox, topBox, reportBox, filesBox, tabsSection, typingBox, commentForm);
+    if (!body.contains(tabsSection)) body.replaceChildren(decideSlot, todoBox, topBox, reportBox, filesBox, tabsSection, typingBox, commentForm);
     // task sters: fara comentarii (serverul le refuza, agentul nu mai lucreaza pe el); Restore e in zona de actiuni
     commentForm.style.display = t.status === "archived" ? "none" : "";
     syncTyping();
@@ -268,19 +275,21 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     renderActions(t, stuck);
   }
 
-  // renderTodos: "Left for you" cu checklist; un click bifeaza / debifeaza pe server
+  // renderTodos: "Left for you" cu checklist ("Your steps" cand are si pasi de facut, cu eticheta "step");
+  // un click bifeaza / debifeaza pe server
   function renderTodos() {
     const list = data.todos || [];
     const archived = data.task.status === "archived"; // task sters: bifele sunt doar de citit
-    const key = JSON.stringify([data.todosBy, archived, list.map((x) => [x.position, x.text, !!x.doneAt])]);
+    const key = JSON.stringify([data.todosBy, archived, list.map((x) => [x.position, x.text, x.kind, !!x.doneAt])]);
     if (key === todoKey) return;
     todoKey = key;
     if (!list.length) { todoBox.replaceChildren(); return; }
     const done = list.filter((x) => x.doneAt).length;
     const who = data.todosBy || data.assignee || "The agent";
+    const steps = list.some((x) => x.kind === "step");
     todoBox.replaceChildren(el("section", { class: "left-for-you" },
       el("div", { class: "lfy-head" }, el("span", { class: "dot", style: "background:var(--amber)" }),
-        el("strong", {}, "Left for you"), el("span", { class: "hint" }, `${who} finished the work but needs these from you.`),
+        el("strong", {}, steps ? "Your steps" : "Left for you"), el("span", { class: "hint" }, `${who} finished the work but needs these from you.`),
         el("span", { class: "grow" }), el("span", { class: "lfy-count" }, `${done} of ${list.length}`)),
       el("div", { class: "lfy-list" }, list.map((x) => {
         const box = el("input", { type: "checkbox", checked: !!x.doneAt, disabled: archived, onchange: async () => {
@@ -289,7 +298,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
           catch (err) { box.checked = !box.checked; toast(err.message); }
           box.disabled = false;
         } });
-        return el("label", { class: "check lfy-item" + (x.doneAt ? " done" : "") }, box, el("span", {}, x.text));
+        return el("label", { class: "check lfy-item" + (x.doneAt ? " done" : "") }, box, el("span", {}, x.text),
+          x.kind === "step" ? el("span", { class: "lfy-tag" }, "step") : null);
       })),
       el("p", { class: "hint" }, archived ? "Restore the task to answer these."
         : `Answer in the comments below. ${who} updates the work and ticks them off.`)));
@@ -634,7 +644,10 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     const mine = t.status === "review" && (project.userCanDecide || []).includes(t.id);
     // byRoot: in modul autonom decide radacina asignatului; utilizatorul poate si el
     const byRoot = mine && !(project.userDecides || []).includes(t.id) ? rootName(t.assigneeId) : null;
-    const key = [t.status, mine, byRoot, stuck].join("|");
+    // intrebarile deschise intra in cheie: un raport nou reconstruieste caseta Decide
+    const open = mine ? (data.decisions || []).filter((d) => !d.answeredAt) : [];
+    const openKey = JSON.stringify(open.map((d) => [d.id, d.question, d.options, d.multi]));
+    const key = [t.status, mine, byRoot, stuck, openKey].join("|");
     if (key === actionsKey) return;
     actionsKey = key;
 
@@ -647,22 +660,20 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     };
     const parts = [];
     if (mine) {
-      const accept = el("button", { type: "button", class: "btn small primary" }, "Accept");
-      const back = el("button", { type: "button", class: "btn small" }, "Send back");
-      accept.addEventListener("click", run(accept, () => actions.decide(t, "accept", "")));
-      back.addEventListener("click", run(back, async () => {
-        const text = commentInput.value.trim();
-        if (!text) { commentInput.focus(); return false; }
-        const ok = await actions.decide(t, "send_back", text);
-        if (ok) commentInput.value = "";
-        return ok;
-      }));
+      // Decide + zona de actiune (decide.js); nota scrisa se pastreaza cand caseta se reconstruieste
       const hint = byRoot ? `${byRoot} decides this; you can decide it too.` : "You decide this task.";
-      parts.push(el("p", { class: "hint" }, `${hint} Send back sends your reply as feedback.`), commentForm,
-        el("div", { class: "actions" }, accept, back));
-    } else if (!body.contains(commentForm)) {
-      body.append(commentForm); // nu mai decide utilizatorul: formularul revine sub tab-uri
+      dbox = decideBox({
+        decisions: open, hint, note: dbox ? dbox.note() : "",
+        onSubmit: (action, feedback, answers) => actions.decide(t, action, feedback, answers),
+      });
+      decideSlot.replaceChildren(...(dbox.el ? [dbox.el] : []));
+      parts.push(dbox.actions);
+    } else {
+      dbox = null;
+      decideSlot.replaceChildren();
     }
+    // comentariile raman sub tab-uri (si cand decide utilizatorul: nota de decizie e separata)
+    if (!body.contains(commentForm)) body.append(commentForm);
     if (t.status === "blocked") {
       const accept = el("button", { type: "button", class: "btn small primary" }, "Accept");
       const unblock = el("button", { type: "button", class: "btn small" }, "Unblock");
