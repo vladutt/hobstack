@@ -1,0 +1,607 @@
+{
+  "servers": [
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.friendlygeorge/docker-mcp-server",
+        "description": "MCP server for Docker — containers, health checks, Compose, logs, monitoring for AI agents",
+        "title": "Docker MCP Server",
+        "repository": {
+          "url": "https://github.com/friendlygeorge/docker-mcp-server",
+          "source": "github"
+        },
+        "version": "0.3.5",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "@supernova123/docker-mcp-server",
+            "version": "0.3.5",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "description": "Docker socket path (default: /var/run/docker.sock)",
+                "format": "string",
+                "name": "DOCKER_HOST"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-06-15T20:36:26.794939Z",
+          "publishedAt": "2026-06-15T20:36:26.794939Z",
+          "updatedAt": "2026-06-15T20:36:26.794939Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.friendlygeorge/docker-mcp-server",
+        "description": "MCP server for Docker — containers, health checks, Compose, logs, monitoring for AI agents",
+        "title": "Docker MCP Server",
+        "repository": {
+          "url": "https://github.com/friendlygeorge/docker-mcp-server",
+          "source": "github"
+        },
+        "version": "0.3.4",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "@supernova123/docker-mcp-server",
+            "version": "0.3.4",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "description": "Docker socket path (default: /var/run/docker.sock)",
+                "format": "string",
+                "name": "DOCKER_HOST"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-06-15T20:36:26.794939Z",
+          "publishedAt": "2026-06-15T20:36:26.794939Z",
+          "updatedAt": "2026-06-15T20:36:26.794939Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.cunicopia-dev/whoop-postgres-mcp",
+        "description": "Sync WHOOP recovery, sleep, strain, and workouts into Postgres and query them from any MCP client.",
+        "title": "WHOOP MCP",
+        "repository": {
+          "url": "https://github.com/cunicopia-dev/whoop-mcp",
+          "source": "github"
+        },
+        "version": "0.1.0",
+        "packages": [
+          {
+            "registryType": "pypi",
+            "identifier": "whoop-postgres-mcp",
+            "version": "0.1.0",
+            "runtimeHint": "uvx",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "description": "Client ID of your WHOOP developer app (developer.whoop.com).",
+                "isRequired": true,
+                "format": "string",
+                "isSecret": true,
+                "name": "WHOOP_CLIENT_ID"
+              },
+              {
+                "description": "Client secret of your WHOOP developer app.",
+                "isRequired": true,
+                "format": "string",
+                "isSecret": true,
+                "name": "WHOOP_CLIENT_SECRET"
+              },
+              {
+                "description": "OAuth redirect URI, exactly as registered on the WHOOP app (e.g. http://localhost:8765/callback).",
+                "isRequired": true,
+                "format": "string",
+                "name": "WHOOP_REDIRECT_URI"
+              },
+              {
+                "description": "Postgres DSN the server syncs into and reads from (e.g. postgresql://user:pass@localhost:5432/whoop). Tokens are stored in this database.",
+                "isRequired": true,
+                "format": "string",
+                "isSecret": true,
+                "name": "WHOOP_DB_URL"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-13T11:46:41.936223Z",
+          "publishedAt": "2026-09-13T11:46:41.936223Z",
+          "updatedAt": "2026-09-13T11:46:41.936223Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "io.github.dockersamples/mcp-docker-release-information",
+        "description": "MCP server providing Docker Desktop release notes and security information.",
+        "repository": {
+          "url": "https://github.com/dockersamples/mcp-docker-release-information",
+          "source": "github"
+        },
+        "version": "0.3.0",
+        "packages": [
+          {
+            "registryType": "oci",
+            "identifier": "docker.io/dockersamples/mcp-docker-release-information:0.3.0",
+            "transport": {
+              "type": "stdio"
+            }
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2025-09-10T18:54:52.764339Z",
+          "publishedAt": "2025-09-10T18:54:52.764339Z",
+          "updatedAt": "2025-09-10T18:54:52.764339Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.n24q02m/better-notion-mcp",
+        "description": "Markdown-first MCP server for Notion API with 8 composite tools and 39 actions.",
+        "repository": {
+          "url": "https://github.com/n24q02m/better-notion-mcp.git",
+          "source": "github"
+        },
+        "version": "2.41.6",
+        "packages": [
+          {
+            "registryType": "oci",
+            "identifier": "docker.io/n24q02m/better-notion-mcp:latest",
+            "runtimeHint": "docker",
+            "transport": {
+              "type": "stdio"
+            },
+            "environmentVariables": [
+              {
+                "description": "Notion integration token. Create at https://www.notion.so/my-integrations",
+                "isRequired": true,
+                "isSecret": true,
+                "name": "NOTION_TOKEN"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-13T04:35:27.659169Z",
+          "publishedAt": "2026-09-13T04:35:27.659169Z",
+          "updatedAt": "2026-09-13T04:35:27.659169Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.j0hanz/filesystem-mcp",
+        "description": "Secure filesystem MCP server for reading, writing, searching, diffing, and patching files.",
+        "title": "Filesystem MCP",
+        "repository": {
+          "url": "https://github.com/j0hanz/filesystem-mcp",
+          "source": "github",
+          "id": "1115057681"
+        },
+        "version": "2.7.5",
+        "websiteUrl": "https://github.com/j0hanz/filesystem-mcp",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "@j0hanz/filesystem-mcp",
+            "version": "2.7.5",
+            "runtimeHint": "npx",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "description": "Directory path the server is allowed to access. Repeat for multiple directories.",
+                "format": "filepath",
+                "type": "positional",
+                "valueHint": "allowed_directory",
+                "isRepeated": true
+              },
+              {
+                "description": "Allow the current working directory as an additional access root.",
+                "format": "boolean",
+                "type": "named",
+                "name": "--allow-cwd"
+              },
+              {
+                "description": "Disable all write, edit, move, and delete tools.",
+                "format": "boolean",
+                "type": "named",
+                "name": "--read-only"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "Allowed directories; ':'-separated on Unix, ';'-separated on Windows. Alternative to positional arguments.",
+                "format": "string",
+                "name": "FS_ALLOWED_DIRS"
+              }
+            ]
+          },
+          {
+            "registryType": "oci",
+            "identifier": "ghcr.io/j0hanz/filesystem-mcp:2.7.5",
+            "runtimeHint": "docker",
+            "transport": {
+              "type": "stdio"
+            },
+            "runtimeArguments": [
+              {
+                "description": "Keep stdin open for stdio transport.",
+                "isRequired": true,
+                "format": "boolean",
+                "type": "named",
+                "name": "-i"
+              },
+              {
+                "description": "Remove the container on exit.",
+                "isRequired": true,
+                "format": "boolean",
+                "type": "named",
+                "name": "--rm"
+              },
+              {
+                "description": "Mount the directory to expose to the server.",
+                "isRequired": true,
+                "value": "{host_dir}:/workspace:ro",
+                "variables": {
+                  "host_dir": {
+                    "description": "Host directory path to expose to the server.",
+                    "isRequired": true,
+                    "format": "filepath"
+                  }
+                },
+                "type": "named",
+                "name": "-v",
+                "isRepeated": true
+              }
+            ],
+            "packageArguments": [
+              {
+                "description": "Container path of the mounted directory.",
+                "isRequired": true,
+                "default": "/workspace",
+                "type": "positional",
+                "valueHint": "/workspace"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "Allowed directories inside the container, ':'-separated. Alternative to positional arguments.",
+                "format": "string",
+                "name": "FS_ALLOWED_DIRS"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-09T11:12:06.804377Z",
+          "publishedAt": "2026-10-09T11:12:06.804377Z",
+          "updatedAt": "2026-10-09T11:12:06.804377Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-16/server.schema.json",
+        "name": "io.github.bluwork/postgres-scout-mcp",
+        "description": "Scout your PostgreSQL databases with AI - safety features, monitoring, and data quality",
+        "repository": {
+          "url": "https://github.com/bluwork/postgres-scout-mcp",
+          "source": "github"
+        },
+        "version": "1.0.3",
+        "packages": [
+          {
+            "registryType": "npm",
+            "registryBaseUrl": "https://registry.npmjs.org",
+            "identifier": "postgres-scout-mcp",
+            "version": "1.0.3",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "description": "Server mode: read-only (default) or read-write",
+                "format": "string",
+                "value": "read-only",
+                "type": "",
+                "name": "--mode"
+              },
+              {
+                "description": "PostgreSQL connection URI",
+                "format": "string",
+                "value": "postgresql://localhost:5432/postgres",
+                "type": "",
+                "valueHint": "postgresql-uri"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-03-07T12:33:52.786638Z",
+          "publishedAt": "2026-03-07T12:33:52.786638Z",
+          "updatedAt": "2026-03-07T12:33:52.786638Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+        "name": "ai.waystation/postgres",
+        "description": "Connect to your PostgreSQL database to query data and schemas.",
+        "repository": {
+          "url": "https://github.com/waystation-ai/mcp",
+          "source": "github"
+        },
+        "version": "0.3.1",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://waystation.ai/postgres/mcp"
+          },
+          {
+            "type": "sse",
+            "url": "https://waystation.ai/postgres/mcp/sse"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2025-09-09T14:46:09.489652Z",
+          "publishedAt": "2025-09-09T14:46:09.489652Z",
+          "updatedAt": "2025-09-09T14:46:09.489652Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "dev.reapx/docker-containers",
+        "description": "Scrape Docker Hub container images, tags, pulls and publisher metadata. Pay per row.",
+        "title": "reapx Docker containers - Hub images, tags and pulls",
+        "version": "1.0.0",
+        "websiteUrl": "https://reapx.dev",
+        "icons": [
+          {
+            "src": "https://reapx.dev/reapx-avatar.png",
+            "mimeType": "image/png",
+            "sizes": [
+              "512x512"
+            ]
+          }
+        ],
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.apify.com/?actors=reapx/docker-hub-scraper",
+            "headers": [
+              {
+                "description": "Your own Apify API token as 'Bearer <token>'. Get one free at https://console.apify.com/account/integrations, or buy a prepaid, spend-capped token with no signup at https://agi.apify.com. Runs bill to your own account, per result returned.",
+                "isRequired": true,
+                "isSecret": true,
+                "name": "Authorization"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "deprecated",
+          "statusChangedAt": "2026-08-06T00:50:16.613318Z",
+          "statusMessage": "Sources retired. Current tools: dev.reapx/public-sources",
+          "publishedAt": "2026-08-05T03:28:04.428713Z",
+          "updatedAt": "2026-08-06T00:50:16.613318Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.0design/aindf",
+        "description": "Read-only MCP server for one AINDF design-system bundle: look up what it offers, validate screens.",
+        "title": "AINDF",
+        "repository": {
+          "url": "https://github.com/0design/ai-native-design-framework",
+          "source": "github",
+          "subfolder": "packages/aindf-kit"
+        },
+        "version": "0.2.1",
+        "websiteUrl": "https://github.com/0design/ai-native-design-framework",
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "@ai-native-design-framework/kit",
+            "version": "0.2.1",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "description": "Run the MCP server over stdio",
+                "value": "mcp",
+                "type": "positional"
+              },
+              {
+                "description": "Path to the design system's AINDF bundle (made with `aindf bundle`)",
+                "isRequired": true,
+                "format": "filepath",
+                "type": "positional",
+                "valueHint": "bundle_path"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-08T15:16:57.649917Z",
+          "publishedAt": "2026-10-08T15:16:57.649917Z",
+          "updatedAt": "2026-10-08T15:16:57.649917Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "com.devart/mcp-postgresql",
+        "description": "Schema-aware read/write access to PostgreSQL through Devart dotConnect ADO.NET data provider.",
+        "title": "Devart MCP Server for PostgreSQL (ADO.NET)",
+        "repository": {
+          "url": "https://github.com/devart-ai-connectivity/devart-mcp-server-postgresql",
+          "source": "github"
+        },
+        "version": "1.1.0",
+        "packages": [
+          {
+            "registryType": "nuget",
+            "registryBaseUrl": "https://api.nuget.org/v3/index.json",
+            "identifier": "Devart.Mcp.PostgreSql",
+            "version": "1.1.0",
+            "transport": {
+              "type": "stdio"
+            },
+            "packageArguments": [
+              {
+                "value": "run",
+                "type": "positional"
+              }
+            ],
+            "environmentVariables": [
+              {
+                "description": "A dotConnect for PostgreSQL connection string.",
+                "isRequired": true,
+                "value": "Server={server};Port={port};Database={database};User Id={user};Password={password};Unicode=True;License Key={license_key};",
+                "isSecret": true,
+                "variables": {
+                  "database": {
+                    "description": "Database to connect to.",
+                    "isRequired": true
+                  },
+                  "license_key": {
+                    "description": "Devart dotConnect for PostgreSQL license key, from the Devart Customer Portal.",
+                    "isRequired": true,
+                    "isSecret": true
+                  },
+                  "password": {
+                    "description": "Password for the role.",
+                    "isRequired": true,
+                    "isSecret": true
+                  },
+                  "port": {
+                    "description": "Port the PostgreSQL server listens on.",
+                    "isRequired": true,
+                    "default": "5432"
+                  },
+                  "server": {
+                    "description": "PostgreSQL host name or network address.",
+                    "isRequired": true,
+                    "default": "localhost"
+                  },
+                  "user": {
+                    "description": "PostgreSQL role to authenticate as.",
+                    "isRequired": true,
+                    "default": "postgres"
+                  }
+                },
+                "name": "DEVART_MCP_POSTGRESQL_CONNECTION"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-23T12:29:00.801751Z",
+          "publishedAt": "2026-09-23T12:29:00.801751Z",
+          "updatedAt": "2026-09-23T12:29:00.801751Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        "name": "io.github.Yash-0620/postgres-mcp-secured",
+        "description": "Enterprise PostgreSQL MCP secured by Aegis Zero-Trust to block unauthorized SQL injections.",
+        "title": "Postgres Secured (Aegis Zero-Trust)",
+        "repository": {
+          "url": "https://github.com/Yash-0620/postgres-mcp",
+          "source": "github"
+        },
+        "version": "1.0.2",
+        "websiteUrl": "https://aegis-cloud-console.vercel.app/"
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-05-31T09:24:07.844286Z",
+          "publishedAt": "2026-05-31T09:24:07.844286Z",
+          "updatedAt": "2026-05-31T09:24:07.844286Z",
+          "isLatest": true
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "nextCursor": "io.github.Yash-0620/postgres-mcp-secured:1.0.2",
+    "count": 12
+  }
+}
