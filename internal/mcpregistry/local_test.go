@@ -44,13 +44,13 @@ func TestLocalServers(t *testing.T) {
 	got := LocalServers(home)
 	want := []LocalServer{
 		{Source: "Claude Code", Name: "Context7_Docs", Kind: "local", Command: "npx", Args: []string{"-y", "@upstash/context7-mcp"},
-			Env: []EnvVar{{Name: "A_FLAG"}, {Name: "CTX_TOKEN"}}, SuggestedName: "context7-docs", Installable: true},
+			Env: []EnvVar{{Name: "A_FLAG", Stored: true}, {Name: "CTX_TOKEN", Stored: true}}, SuggestedName: "context7-docs", Installable: true},
 		{Source: "Claude Code", Name: "zeta", Kind: "remote", URL: "https://mcp.example.com/mcp", SuggestedName: "zeta",
 			Reason: ReasonNeedsHeaders},
 		{Source: "Claude Code", Name: "pg", Kind: "local", Command: "uvx", Args: []string{"postgres-mcp"},
-			Env: []EnvVar{{Name: "DATABASE_URL"}}, SuggestedName: "pg", Installable: true},
+			Env: []EnvVar{{Name: "DATABASE_URL", Stored: true}}, SuggestedName: "pg", Installable: true},
 		{Source: "Claude Desktop", Name: "filesystem", Kind: "local", Command: "npx",
-			Args: []string{"-y", "@modelcontextprotocol/server-filesystem", "/tmp"}, Env: []EnvVar{{Name: "FS_KEY"}}, SuggestedName: "filesystem", Installable: true},
+			Args: []string{"-y", "@modelcontextprotocol/server-filesystem", "/tmp"}, Env: []EnvVar{{Name: "FS_KEY", Stored: true}}, SuggestedName: "filesystem", Installable: true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got  %+v\nwant %+v", got, want)

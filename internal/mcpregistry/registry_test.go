@@ -132,7 +132,7 @@ func TestSearchNormalizes(t *testing.T) {
 	if py.Kind != "local" || py.Runtime != "uvx" || py.Command != "uvx" || !reflect.DeepEqual(py.Args, []string{"whoop-postgres-mcp==0.1.0"}) || !py.Installable {
 		t.Fatalf("pypi: %+v", py)
 	}
-	if len(py.Env) != 4 || py.Env[0] != (EnvVar{Name: "WHOOP_CLIENT_ID", Description: "Client ID of your WHOOP developer app (developer.whoop.com).", Required: true, Secret: true}) {
+	if len(py.Env) != 4 || py.Env[0] != (EnvVar{Name: "WHOOP_CLIENT_ID", Description: "Client ID of your WHOOP developer app (developer.whoop.com).", Required: true, Secret: true, Stored: true}) {
 		t.Fatalf("pypi env: %+v", py.Env)
 	}
 	if py.Env[2].Secret || !py.Env[2].Required || py.Env[2].Name != "WHOOP_REDIRECT_URI" {

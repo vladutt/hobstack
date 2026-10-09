@@ -168,13 +168,28 @@ export async function mcpAddView(root, projectId) {
     const local = s.kind !== "remote";
 
     const envBox = el("div", { class: "mcp-env" });
+    // stored = devine secret in Library (din registru doar cele obligatorii, din configurarile Claude toate);
+    // celelalte sunt doar afisate: un secret fara valoare ar opri serverul pentru agenti
+    const stored = s.env.filter((v) => v.stored);
+    const optional = s.env.filter((v) => !v.stored);
     function drawEnv() {
       if (!s.env.length) { envBox.replaceChildren(); return; }
       const badges = (v) => [v.required ? el("span", { class: "mcp-badge req" }, "required") : null,
         v.secret ? el("span", { class: "mcp-badge" }, "secret") : null];
+      const listItem = (v) => el("li", {},
+        el("span", { class: "mcp-env-label" }, el("span", { class: "mono" }, v.name), badges(v)),
+        v.description ? el("span", { class: "hint" }, v.description) : null);
+      // variabilele optionale: doar informatie, fara camp (nu se salveaza)
+      const optionalBlock = () => optional.length ? [
+        el("ul", { class: "mcp-env-list" }, optional.map((v) => el("li", {},
+          el("span", { class: "mcp-env-label" }, el("span", { class: "mono" }, v.name),
+            el("span", { class: "mcp-badge" }, "optional")),
+          v.description ? el("span", { class: "hint" }, v.description) : null))),
+        el("p", { class: "hint" }, "Optional \u2014 not stored; set it in your environment if needed."),
+      ] : [];
       if (enable?.checked) {
         envBox.replaceChildren(el("span", { class: "label" }, "Environment variables"),
-          ...s.env.map((v) => {
+          ...stored.map((v) => {
             let input = values.get(v.name);
             if (!input) {
               input = el("input", { type: "password", autocomplete: "new-password", spellcheck: "false" });
@@ -194,13 +209,13 @@ export async function mcpAddView(root, projectId) {
               v.required ? warn : null,
               v.description ? el("span", { class: "hint" }, v.description) : null);
           }),
-          el("p", { class: "hint" }, `Saved as ${project.name}'s secrets on this machine and used for the test. Never shown again.`));
+          ...(stored.length ? [el("p", { class: "hint" }, `Saved as ${project.name}'s secrets on this machine and used for the test. Never shown again.`)] : []),
+          ...optionalBlock());
       } else {
         envBox.replaceChildren(el("span", { class: "label" }, "Environment variables"),
-          el("ul", { class: "mcp-env-list" }, s.env.map((v) => el("li", {},
-            el("span", { class: "mcp-env-label" }, el("span", { class: "mono" }, v.name), badges(v)),
-            v.description ? el("span", { class: "hint" }, v.description) : null))),
-          el("p", { class: "hint" }, "Set the values per project in Instructions > Library after installing."));
+          ...(stored.length ? [el("ul", { class: "mcp-env-list" }, stored.map(listItem)),
+            el("p", { class: "hint" }, "Set the values per project in Instructions > Library after installing.")] : []),
+          ...optionalBlock());
       }
     }
     enable?.addEventListener("change", drawEnv);
@@ -225,7 +240,7 @@ export async function mcpAddView(root, projectId) {
     function requiredFilled() {
       if (!enable?.checked) return true;
       let first = null;
-      for (const v of s.env) {
+      for (const v of stored) {
         if (!v.required) continue;
         const input = values.get(v.name);
         const empty = !input || !input.value;
@@ -285,7 +300,7 @@ export async function mcpAddView(root, projectId) {
       const payload = {
         name: name.value.trim(), description: s.description, kind: local ? "local" : "remote",
         command: local ? s.command : "", args: local ? s.args : [], url: local ? "" : s.url,
-        secrets: s.env.map((v) => v.name), skipTest,
+        secrets: stored.map((v) => v.name), skipTest,
       };
       if (withProject) {
         payload.projectId = project.id;

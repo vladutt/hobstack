@@ -36,8 +36,9 @@ Fereastra de install arata:
 - **Name in Library**: sugerat din numele serverului (`io.github.user/foo-mcp` -> `foo-mcp`), forma `[a-z0-9-]`, unic;
   editabil.
 - **Ce va rula**: pentru local, comanda exacta construita (vezi mai jos); pentru remote, URL-ul.
-- **Variabile de mediu**: lista numelor (cu descrierea din registru si "required" / "secret"). Toate devin `Secrets`
-  ale elementului (nume; valorile se dau per proiect in Instructions > Library, ca azi). Din configurarile Claude se iau
+- **Variabile de mediu**: lista numelor (cu descrierea din registru si "required" / "secret"). Din registru doar variabilele
+  obligatorii devin `Secrets` (cele optionale sunt afisate, nu se salveaza, pentru ca un secret fara valoare opreste
+  serverul pentru agenti); din configurarile Claude toate. Valorile se dau per proiect in Instructions > Library, ca azi. Din configurarile Claude se iau
   doar numele variabilelor, NICIODATA valorile.
 - Bifa "Enable in <proiectul curent>" daca utilizatorul a venit dintr-un proiect (link "Add MCP server" din
   Instructions > Library), altfel lipsa.

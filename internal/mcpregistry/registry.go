@@ -47,6 +47,11 @@ type EnvVar struct {
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required"`
 	Secret      bool   `json:"secret"`
+	// Stored: variabila devine Secret al elementului din Library (valoarea se cere si se salveaza per proiect).
+	// Din registru doar cele obligatorii: un secret fara valoare opreste serverul pentru agenti
+	// (library.missingSecret), iar o variabila optionala lasata goala nu trebuie sa faca asta.
+	// Din configurarile Claude toate (le-a pus utilizatorul).
+	Stored bool `json:"stored"`
 }
 
 // Server e un rezultat normalizat din registru.
@@ -310,7 +315,7 @@ func fromPackage(base Server, p apiPackage) (Server, bool) {
 		if v.Name == "" {
 			continue
 		}
-		s.Env = append(s.Env, EnvVar{Name: v.Name, Description: v.Description, Required: v.IsRequired, Secret: v.IsSecret})
+		s.Env = append(s.Env, EnvVar{Name: v.Name, Description: v.Description, Required: v.IsRequired, Secret: v.IsSecret, Stored: v.IsRequired})
 	}
 
 	// argumentele pentru runtime (npx / uvx / docker) pot schimba de unde vine pachetul
@@ -346,6 +351,7 @@ func fromPackage(base Server, p apiPackage) (Server, bool) {
 		args = []string{id}
 	case "oci":
 		args = []string{"run", "-i", "--rm"}
+		// si cele optionale: docker sare peste -e NAME cand variabila nu e setata in mediu
 		for _, v := range s.Env {
 			args = append(args, "-e", v.Name)
 		}

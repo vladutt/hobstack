@@ -404,3 +404,54 @@ func TestInstallMCPProjectInstallFailsUndoes(t *testing.T) {
 		t.Fatalf("reincercare: %d %s", code, raw)
 	}
 }
+
+// TestInstallMCPRegistryOptionalEnv: din registru doar variabilele obligatorii devin secrete (stored); un server
+// instalat cu secretele marcate stored si doar valoarea celei obligatorii ajunge in --mcp-config pentru proiect.
+// Daca si cea optionala ar fi secret, lipsa valorii ei ar opri serverul pentru agenti.
+func TestInstallMCPRegistryOptionalEnv(t *testing.T) {
+	body := `{"servers":[{"server":{"name":"io.github.x/vehicles","title":"Vehicles","description":"V","version":"1.0.0",
+		"packages":[{"registryType":"npm","identifier":"vehicles-mcp","version":"1.0.0","transport":{"type":"stdio"},
+		"environmentVariables":[{"name":"VEH_TOKEN","isRequired":true,"isSecret":true},{"name":"VEH_DEBUG"}]}]},
+		"_meta":{"io.modelcontextprotocol.registry/official":{"status":"active","isLatest":true}}}],"metadata":{"count":1}}`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(ts.Close)
+	t.Setenv("FOREMAN_MCP_REGISTRY_URL", ts.URL)
+	e := setupLib(t)
+	p := e.project(t)
+
+	code, _, raw := e.get(t, "/api/library/registry?search=vehicles")
+	if code != http.StatusOK {
+		t.Fatalf("%d %s", code, raw)
+	}
+	var out registryOut
+	if err := json.Unmarshal(raw, &out); err != nil || len(out.Servers) != 1 {
+		t.Fatalf("%v %s", err, raw)
+	}
+	s := out.Servers[0]
+	if len(s.Env) != 2 || !s.Env[0].Stored || s.Env[1].Stored || s.Env[1].Required {
+		t.Fatalf("env: %+v", s.Env)
+	}
+	// ca mcp-add.js: secretele sunt doar variabilele stored
+	var secrets []string
+	for _, v := range s.Env {
+		if v.Stored {
+			secrets = append(secrets, v.Name)
+		}
+	}
+	code, raw = e.do(t, "POST", "/api/library/install-mcp", map[string]any{"name": "vehicles", "description": "V",
+		"kind": "local", "command": "env", "args": helperArgs(), "secrets": secrets, "skipTest": true,
+		"projectId": p.ID, "secretValues": map[string]string{"VEH_TOKEN": "tok-123"}})
+	if code != http.StatusCreated {
+		t.Fatalf("%d %s", code, raw)
+	}
+	b, err := e.lib.Build(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := b.MCPServers["vehicles"]; !ok {
+		t.Fatalf("serverul lipseste din --mcp-config: %+v", b.TurnLines)
+	}
+}

@@ -144,7 +144,7 @@ func toLocal(source, name string, c configServer) (LocalServer, bool) {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		s.Env = append(s.Env, EnvVar{Name: k})
+		s.Env = append(s.Env, EnvVar{Name: k, Stored: true})
 	}
 
 	// credentialele din argumente / URL se ascund aici, ca valoarea sa nu iasa din proces
