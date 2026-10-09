@@ -33,6 +33,8 @@ func (t *Team) authFailed(ar activeRun, a store.Agent, msg string) error {
 			if err := t.st.SaveTask(&task); err != nil {
 				return err
 			}
+			t.taskEvent(task, "requeued", actorForeman, fmt.Sprintf("%s failed to sign in; back in the queue until you fix it", label))
+			t.emit(ar.projectID, "task", task)
 		}
 	}
 	t.emit(ar.projectID, "project", map[string]int64{"id": ar.projectID})

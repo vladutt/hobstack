@@ -69,6 +69,16 @@ projects.account_id  INTEGER REFERENCES claude_accounts(id)   -- NULL = Default 
   creare devine `projects.account_id`.
 - Probele din Library nu ruleaza `claude`; neschimbate.
 
+## Riscuri cunoscute
+
+- Token-ul e in mediul procesului `claude`, deci si in cel al comenzilor Bash, al serverelor MCP stdio si al tool-urilor din
+  Library: un agent cu Shell il poate citi (`printenv`) si ar ajunge in log / chat. Pe Default credentialele stau in keychain.
+  claude 2.1.295 are `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` (scoate credentialele din subprocese), dar porneste si un
+  "subprocess sandbox" cu efecte asupra permisiunilor; nu e activat pana nu e testat cu un token real (hint-ul din Settings
+  spune riscul).
+- Setarile utilizatorului (`--setting-sources user`) pot avea un bloc `env` / `apiKeyHelper` care castiga in fata token-ului;
+  `cleanEnv` curata doar mediul procesului.
+
 ## Erori de autentificare (fail closed)
 
 - Contul nu poate lipsi (FK + `DeleteAccount` refuza) si nu poate avea token gol (validare la Add/Update); orice eroare la

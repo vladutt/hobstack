@@ -119,9 +119,11 @@ func (s *Server) stopSetup(w http.ResponseWriter, r *http.Request) {
 // din wizard, intr-o singura tranzactie.
 func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		SetupID  string          `json:"setupId"` // sesiunea din care vine; dispare din lista dupa creare
-		Workdir  string          `json:"workdir"`
-		Proposal wizard.Proposal `json:"proposal"`
+		SetupID string `json:"setupId"` // sesiunea din care vine; dispare din lista dupa creare
+		Workdir string `json:"workdir"`
+		// AccountID: contul ales la pasul 1, trimis si de pagina; conteaza cand sesiunea a disparut (restart, expirata)
+		AccountID int64           `json:"accountId"`
+		Proposal  wizard.Proposal `json:"proposal"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -165,17 +167,20 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 		}
 		p.Folders = append(p.Folders, store.Folder{Name: name, Path: dir, Context: f.Context})
 	}
-	// contul ales la pasul 1 ramane pe sesiune (si cand pagina wizard-ului a fost redeschisa)
+	// contul ales la pasul 1: din sesiune (si cand pagina wizard-ului a fost redeschisa); fara sesiune
+	// (restart, expirata) din corp, ca proiectul sa nu ajunga pe Default fara sa stii
+	accountID := in.AccountID
 	if s.wizard != nil && in.SetupID != "" {
-		if sess, ok := s.wizard.Get(in.SetupID); ok && sess.AccountID != 0 {
-			ref, err := s.accountRef(sess.AccountID)
-			if err != nil {
-				fail(w, err)
-				return
-			}
-			p.AccountID = ref
+		if sess, ok := s.wizard.Get(in.SetupID); ok {
+			accountID = sess.AccountID
 		}
 	}
+	ref, err := s.accountRef(accountID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	p.AccountID = ref
 	if _, err := s.st.CreateProjectWithTeam(&p, in.Proposal.Members()); errors.Is(err, store.ErrConflict) {
 		writeErr(w, http.StatusBadRequest, "an agent with this name already exists in the project")
 		return

@@ -82,3 +82,19 @@ func TestAuthErrorOnDefaultPauses(t *testing.T) {
 		t.Fatal("lipseste nota din thread")
 	}
 }
+
+func TestAuthErrorRecordsTaskEvent(t *testing.T) {
+	f := setup(t)
+	useAccount(t, f)
+	task := f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunFailed, Error: "Failed to authenticate. API Error: 401 OAuth access token is invalid."})
+	events, err := f.st.ListTaskEvents(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := events[len(events)-1]
+	if last.Kind != "requeued" || !strings.Contains(last.Text, "Claude account Work") {
+		t.Fatalf("ultimul eveniment: %+v", last)
+	}
+}

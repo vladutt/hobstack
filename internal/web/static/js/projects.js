@@ -211,7 +211,8 @@ export async function projectFormView(root, id) {
   const autonomy = el("input", { type: "checkbox", checked: !!p.autonomy });
   // contul Claude: Default (CLI-ul logat) sau un cont din Settings
   let accounts = [];
-  try { accounts = await api("/api/accounts"); } catch { /* doar Default */ }
+  let accountsLoaded = false; // fara lista nu stim contul: Save nu trimite accountId (ramane neschimbat)
+  try { accounts = await api("/api/accounts"); accountsLoaded = true; } catch { /* doar Default */ }
   const currentAccount = String(p.accountId || 0);
   const account = el("select", { value: currentAccount },
     el("option", { value: "0" }, "Default · the logged-in CLI"),
@@ -264,7 +265,7 @@ export async function projectFormView(root, id) {
       name: name.value, goal: goal.value, context: context.value, folders: folders.values(),
       maxParallel: Number(parallel.value) || 0, budgetUsd: Number(budget.value) || 0,
       autonomy: autonomy.checked,
-      accountId: Number(account.value),
+      ...(accountsLoaded && account.value !== "" ? { accountId: Number(account.value) } : {}),
     };
     try {
       const saved = id

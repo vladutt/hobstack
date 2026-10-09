@@ -415,7 +415,7 @@ export async function setupView(root, id, target = null) {
       try {
         if (fm) { await createInFolder(proposal, fm); return; }
         const proj = await api("/api/projects/setup", { method: "POST", body: {
-          setupId: session?.id, workdir: form.workdirs[0] || "", proposal,
+          setupId: session?.id, workdir: form.workdirs[0] || "", proposal, accountId: form.accountId || 0,
         } });
         location.hash = `#/p/${proj.id}/team`;
       } catch (err) {

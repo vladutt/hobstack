@@ -432,3 +432,19 @@ func TestSetupWithAccount(t *testing.T) {
 		t.Fatalf("proiect din wizard: %d %s", code, raw)
 	}
 }
+
+// sesiunea wizard-ului a disparut (restart / expirata): contul vine din corp, nu cade pe Default
+func TestCreateFromSetupWithoutSessionKeepsAccount(t *testing.T) {
+	e := withSetup(t)
+	acct := e.addAccount(t, "Work", "sk-ant-oat01-token-1234")
+	proposal := map[string]any{"name": "Notes", "goal": "g", "context": "c",
+		"agents": []map[string]any{{"name": "Ana", "role": "Lead", "model": "sonnet", "reportsTo": ""}}}
+	code, raw := e.do(t, "POST", "/api/projects/setup", map[string]any{"setupId": "gone", "accountId": acct, "workdir": t.TempDir(), "proposal": proposal})
+	var p struct {
+		AccountID *int64
+	}
+	json.Unmarshal(raw, &p)
+	if code != http.StatusCreated || p.AccountID == nil || *p.AccountID != acct {
+		t.Fatalf("fara sesiune: %d %s", code, raw)
+	}
+}
