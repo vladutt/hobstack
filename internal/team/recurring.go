@@ -219,7 +219,7 @@ func (t *Team) openOccurrence(r store.RecurringTask) (store.Task, bool) {
 	if err != nil {
 		return store.Task{}, false // sters: nu blocheaza
 	}
-	return task, task.Status != store.StatusDone
+	return task, task.Status != store.StatusDone && task.Status != store.StatusArchived
 }
 
 func derefID(p *int64) int64 {

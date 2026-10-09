@@ -859,6 +859,9 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 	if task.AssigneeID != worker.ID {
 		return "", fmt.Errorf("%s is not assigned to you", task.Ref())
 	}
+	if task.Status == store.StatusArchived {
+		return "", fmt.Errorf("%s was deleted by the user", task.Ref())
+	}
 	if task.Status != store.StatusInProgress {
 		return "", fmt.Errorf("%s is no longer in progress (status %s)", task.Ref(), task.Status)
 	}
@@ -1105,6 +1108,9 @@ func (t *Team) findTask(projectID int64, ref string) (store.Task, error) {
 	task, err := t.st.GetTaskByNumber(projectID, n)
 	if errors.Is(err, store.ErrNotFound) {
 		return store.Task{}, fmt.Errorf("task T-%d does not exist", n)
+	}
+	if err == nil && task.Status == store.StatusArchived {
+		return store.Task{}, fmt.Errorf("%s was deleted by the user", task.Ref())
 	}
 	return task, err
 }
