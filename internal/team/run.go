@@ -67,9 +67,14 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 	}
 
-	// fisierele puse de utilizator pe task: agentul le citeste din task-files/<task>/
-	if len(t.userFileRefs(p.ID, taskID)) > 0 {
-		extraArgs = append(extraArgs, "--add-dir", config.TaskFilesDir(t.filesRoot, p.ID, taskID))
+	// fisierele de pe task-uri (ale utilizatorului si livrabilele): orice run le poate citi,
+	// si chat-ul / notificarile, unde ajunge nota "The user attached ..." cu caile lor
+	if t.filesRoot != "" {
+		dir := config.ProjectTaskFilesDir(t.filesRoot, p.ID)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		extraArgs = append(extraArgs, "--add-dir", dir)
 	}
 
 	// Library: pluginul proiectului (skill-uri, scripturi) si serverele MCP instalate.

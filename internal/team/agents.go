@@ -29,6 +29,9 @@ func CheckAgentFields(a *store.Agent) error {
 	if a.Name == "" {
 		return errors.New("agent name is required")
 	}
+	if store.ReservedAgentName(a.Name) {
+		return errors.New(store.ErrReservedName)
+	}
 	if !models.Valid(a.Model) {
 		return errors.New("unknown model: " + a.Model)
 	}

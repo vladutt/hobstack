@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -356,5 +357,17 @@ func TestTaskTurnUserFiles(t *testing.T) {
 	}
 	if got := TaskTurn(TurnContext{}, task, nil, nil, []FileRef{}); strings.Contains(got, "Files from the user") {
 		t.Fatalf("fara fisiere nu apare blocul: %q", got)
+	}
+}
+
+func TestTaskTurnUserFilesCap(t *testing.T) {
+	var files []FileRef
+	for i := 0; i < 53; i++ {
+		files = append(files, FileRef{Name: fmt.Sprint(i), Path: fmt.Sprint("/t/", i)})
+	}
+	got := TaskTurn(TurnContext{}, store.Task{Number: 1, Title: "A"}, nil, nil, files)
+	if strings.Count(got, "\n- /t/") != 50 || !strings.Contains(got, "- /t/49 (49)") || strings.Contains(got, "/t/50") ||
+		!strings.Contains(got, "- ... and 3 more files") {
+		t.Fatalf("limita de 50:\n%s", got)
 	}
 }

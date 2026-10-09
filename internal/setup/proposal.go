@@ -140,6 +140,9 @@ func ValidateProposal(p *Proposal, strictTools bool, external []string) error {
 		if a.Name == "" {
 			return ValidationError("every agent must have a name")
 		}
+		if store.ReservedAgentName(a.Name) {
+			return ValidationError(store.ErrReservedName)
+		}
 		key := strings.ToLower(a.Name)
 		if _, dup := index[key]; dup {
 			return ValidationError("there is already an agent named " + a.Name + " in the proposal")

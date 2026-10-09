@@ -3,9 +3,11 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"foreman/internal/config"
@@ -165,5 +167,36 @@ func TestCreateTaskWithFiles(t *testing.T) {
 	json.Unmarshal(raw, &task)
 	if res := getUserFiles(t, e, task.ID); len(res.User) != 0 {
 		t.Fatalf("%+v", res)
+	}
+}
+
+// cel mult 50 de fisiere ale utilizatorului pe task: la upload si la creare
+func TestUserFilesCapAPI(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Rook")
+	task := store.Task{ProjectID: p.ID, Title: "Logo", AssigneeID: w.ID}
+	if err := e.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	fifty := map[string][]byte{}
+	for i := 0; i < 50; i++ {
+		fifty[fmt.Sprintf("f%d.txt", i)] = []byte("x")
+	}
+	path := "/api/tasks/" + itoa(task.ID) + "/files"
+	if code, raw := upload(t, e, path, nil, fifty, true); code != http.StatusCreated {
+		t.Fatalf("50: %d %s", code, raw)
+	}
+	code, raw := upload(t, e, path, nil, map[string][]byte{"one-more.txt": []byte("x")}, true)
+	if code != http.StatusBadRequest || !strings.Contains(string(raw), "at most 50") {
+		t.Fatalf("51: %d %s", code, raw)
+	}
+	fifty["extra.txt"] = []byte("x")
+	code, raw = upload(t, e, "/api/projects/"+itoa(p.ID)+"/tasks", map[string]string{"title": "Many", "assigneeId": itoa(w.ID)}, fifty, true)
+	if code != http.StatusBadRequest || !strings.Contains(string(raw), "at most 50") {
+		t.Fatalf("creare cu 51: %d %s", code, raw)
+	}
+	if tasks, _ := e.st.ListTasks(p.ID); len(tasks) != 1 {
+		t.Fatalf("%+v", tasks)
 	}
 }

@@ -135,9 +135,12 @@ POST /api/projects/{id}/tasks multipart) si in tab-ul Files din modala (mereu vi
 sterse; POST /api/tasks/{id}/files, 50 MB / 200 MB ca la proiect). Tot in task_files, fara migrare: agent_id NULL si autorul
 "You" (store.UserFileAuthor, TaskFile.FromUser); GET /files le intoarce separat ("user", sectiunea "From you"). Fisierele se
 scriu intai in staging (task-files/.staging-*, taskfiles.Save), iar team.UserCreateTaskWithFiles / AddUserFiles le muta cu
-rename si le adauga sub t.work inainte de Kick (la eroare task-ul abia creat se sterge). Tura pe task are blocul "Files from
-the user" (prompt.TaskTurn) si run-ul primeste --add-dir pe task-files/<task>; pe un task inceput (in lucru, review, blocat,
-gata) asignatul primeste o nota in coada; evenimentul user_files intra in istoric si in conversatie.
+rename si le adauga sub t.work inainte de Kick (la eroare task-ul abia creat se sterge); max 50 pe task (TooManyFilesError,
+400). Tura pe task are blocul "Files from the user" (prompt.TaskTurn, max 50 randuri): ale task-ului, apoi ale firului
+(ThreadID) si ale parintelui, fara dubluri. Orice run al proiectului primeste --add-dir pe projects/<pid>/task-files. Upload pe
+un task in lucru / blocat: nota in coada cu caile ("- <cale> (<nume>)") + Kick; review / done: doar evenimentul; in coada:
+nimic. Evenimentul user_files (cu caile) intra in istoric si in conversatie. Numele de agent "You" e rezervat
+(store.ReservedAgentName: CheckAgentFields, propunerea din wizard, draft-ul).
 Gata (cont Claude per proiect, spec in docs/superpowers/specs/2026-10-09-foreman-claude-accounts-design.md):
 claude_accounts (migrarea 025; token din `claude setup-token`, camp privat, nu iese din API) + projects.account_id (NULL =
 Default, CLI-ul logat). runner.Spec.Env pune CLAUDE_CODE_OAUTH_TOKEN si scoate variabilele de cont mostenite (doar pe

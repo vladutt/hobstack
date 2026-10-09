@@ -19,6 +19,7 @@ import (
 	"foreman/internal/models"
 	"foreman/internal/prompt"
 	"foreman/internal/runner"
+	"foreman/internal/store"
 )
 
 const (
@@ -259,6 +260,8 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 	switch {
 	case p.Name == "" || len([]rune(p.Name)) > 40:
 		return "", errors.New("name: 1-40 characters")
+	case store.ReservedAgentName(p.Name):
+		return "", errors.New(store.ErrReservedName)
 	case has(p.Name):
 		return "", fmt.Errorf("an agent named %s already exists; pick another name", p.Name)
 	case strings.TrimSpace(p.Role) == "" || len([]rune(p.Role)) > 80:

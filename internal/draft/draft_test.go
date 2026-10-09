@@ -78,6 +78,10 @@ func TestDraftProposeAndReady(t *testing.T) {
 	if _, err := b.ProposeAgent(c, bad); err == nil || !strings.Contains(err.Error(), "already") {
 		t.Fatalf("nume duplicat acceptat: %v", err)
 	}
+	you, _ := json.Marshal(map[string]any{"name": "You", "role": "x", "responsibilities": "y"})
+	if _, err := b.ProposeAgent(c, you); err == nil || !strings.Contains(err.Error(), `"You" is reserved for the user`) {
+		t.Fatalf("numele You acceptat: %v", err)
+	}
 	good, _ := json.Marshal(map[string]any{"name": "Herald", "role": "Mail dev", "responsibilities": "e-mails", "reportsTo": "Foreman", "tools": []string{"write"}, "model": "sonnet"})
 	if _, err := b.ProposeAgent(c, good); err != nil {
 		t.Fatal(err)

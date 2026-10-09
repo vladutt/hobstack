@@ -53,7 +53,12 @@ func ProjectFilesDir(projectsRoot string, id int64) string {
 	return filepath.Join(projectsRoot, strconv.FormatInt(id, 10), "files")
 }
 
+// ProjectTaskFilesDir: folderul cu fisierele de pe task-urile unui proiect (task-files/<task>/ sub el).
+func ProjectTaskFilesDir(projectsRoot string, projectID int64) string {
+	return filepath.Join(projectsRoot, strconv.FormatInt(projectID, 10), "task-files")
+}
+
 // TaskFilesDir: copiile fisierelor predate pe un task (report_done files).
 func TaskFilesDir(projectsRoot string, projectID, taskID int64) string {
-	return filepath.Join(projectsRoot, strconv.FormatInt(projectID, 10), "task-files", strconv.FormatInt(taskID, 10))
+	return filepath.Join(ProjectTaskFilesDir(projectsRoot, projectID), strconv.FormatInt(taskID, 10))
 }

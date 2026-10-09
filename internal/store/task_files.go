@@ -24,6 +24,14 @@ type TaskFile struct {
 // UserFileAuthor: agent_name pentru fisierele puse de utilizator pe task (agent_id ramane NULL).
 const UserFileAuthor = "You"
 
+// ReservedAgentName: "You" (oricum scris) e utilizatorul: in istoric, conversatii si fisiere.
+func ReservedAgentName(name string) bool {
+	return strings.EqualFold(strings.TrimSpace(name), UserFileAuthor)
+}
+
+// ErrReservedName: textul refuzului pentru un agent numit "You".
+const ErrReservedName = `"You" is reserved for the user; choose another name`
+
 // FromUser: fisierul l-a pus utilizatorul (nu e livrabilul unui agent).
 // Un agent sters are tot agent_id NULL, dar numele lui ramane in agent_name.
 func (f TaskFile) FromUser() bool { return f.AgentID == nil && f.AgentName == UserFileAuthor }
@@ -100,9 +108,9 @@ func (s *Store) ListTaskFiles(taskID int64) ([]TaskFile, error) {
 	return s.queryTaskFiles(`SELECT `+taskFileCols+` FROM task_files WHERE task_id = ? ORDER BY id DESC`, taskID)
 }
 
-// ListUserTaskFiles: fisierele puse de utilizator pe task, in ordinea in care au venit.
+// ListUserTaskFiles: fisierele puse de utilizator pe task, cel mai nou primul.
 func (s *Store) ListUserTaskFiles(taskID int64) ([]TaskFile, error) {
-	return s.queryTaskFiles(`SELECT `+taskFileCols+` FROM task_files WHERE task_id = ? AND agent_id IS NULL AND agent_name = ? ORDER BY id`,
+	return s.queryTaskFiles(`SELECT `+taskFileCols+` FROM task_files WHERE task_id = ? AND agent_id IS NULL AND agent_name = ? ORDER BY id DESC`,
 		taskID, UserFileAuthor)
 }
 

@@ -39,6 +39,7 @@ func TestValidateProposalErrors(t *testing.T) {
 		"their own reviewer":             func(p *Proposal) { p.Agents[1].ReviewedBy = "Bob" },
 		"only the write and git tools":   func(p *Proposal) { p.Agents[1].Tools = []string{"shell"} },
 		"project name":                   func(p *Proposal) { p.Name = "  " },
+		`"You" is reserved for the user`: func(p *Proposal) { p.Agents[1].Name = "you" },
 		"at least one agent":             func(p *Proposal) { p.Agents = nil },
 		"at most 12 agents": func(p *Proposal) {
 			for i := 0; i < 11; i++ {

@@ -167,6 +167,9 @@ func (t *Team) userCreateTask(projectID int64, title, description string, agentI
 		assigned = "Assigned to " + a.Name
 		to = a.Name
 	}
+	if err := checkUserFilesCap(task, 0, len(origin.files)); err != nil {
+		return store.Task{}, err
+	}
 	if err := t.st.CreateTask(&task); err != nil {
 		return store.Task{}, err
 	}
@@ -184,7 +187,7 @@ func (t *Team) userCreateTask(projectID int64, title, description string, agentI
 	}
 	t.taskMsg(task, "created", actor, to, created, briefBody(task.Title, task.Description))
 	if len(userFiles) > 0 {
-		t.userFilesEvent(task, to, fileNames(userFiles))
+		t.userFilesEvent(task, to, t.fileLines(task, userFiles))
 	}
 	t.taskEvent(task, "assigned", actor, assigned)
 	if a, ok := store.FindAgent(agents, task.AssigneeID); ok && task.StageID == nil {

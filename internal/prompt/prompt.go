@@ -311,7 +311,8 @@ func Context(c TurnContext) string {
 }
 
 // TaskTurn e mesajul cu care porneste un agent pe un task.
-// userFiles: fisierele puse de utilizator pe task (calea absoluta a copiei); blocul apare doar cand exista.
+// userFiles: fisierele puse de utilizator pe task si pe cele continuate (calea absoluta a copiei);
+// blocul apare doar cand exista, cu cel mult maxFiles randuri.
 func TaskTurn(c TurnContext, t store.Task, subtasks, notes []string, userFiles []FileRef) string {
 	var parts []string
 	if ctx := Context(c); ctx != "" {
@@ -325,7 +326,11 @@ func TaskTurn(c TurnContext, t store.Task, subtasks, notes []string, userFiles [
 	if len(userFiles) > 0 {
 		var b strings.Builder
 		b.WriteString("Files from the user (read them with Read):")
-		for _, f := range userFiles {
+		for i, f := range userFiles {
+			if i == maxFiles { // ca la FilesBlock: apelantul pune primele fisierele cele mai noi
+				fmt.Fprintf(&b, "\n- ... and %d more files", len(userFiles)-maxFiles)
+				break
+			}
 			fmt.Fprintf(&b, "\n- %s (%s)", f.Path, f.Name)
 		}
 		parts = append(parts, b.String())

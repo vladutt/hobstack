@@ -247,12 +247,13 @@ func fail(w http.ResponseWriter, err error) {
 	var le store.LinkError
 	var re team.RecurringError
 	var ae team.AssignError
+	var tmf team.TooManyFilesError
 	var are team.AgentRequestError
 	var pre team.ProjectRequestError
 	switch {
 	case errors.As(err, &br):
 		writeErr(w, http.StatusBadRequest, br.Error())
-	case errors.As(err, &re), errors.As(err, &ae):
+	case errors.As(err, &re), errors.As(err, &ae), errors.As(err, &tmf):
 		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.As(err, &le):
 		writeErr(w, http.StatusBadRequest, le.Error())

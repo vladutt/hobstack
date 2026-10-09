@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -130,6 +131,10 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 			fail(w, err)
 			return
 		}
+	}
+	if len(uploads) > team.MaxUserFiles { // refuzat inainte de scrierea pe disc (team verifica din nou)
+		fail(w, badRequest(fmt.Sprintf("a task can have at most %d of your files; you chose %d", team.MaxUserFiles, len(uploads))))
+		return
 	}
 	var task store.Task
 	if len(uploads) > 0 {
