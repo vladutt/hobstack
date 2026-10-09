@@ -122,8 +122,9 @@ export async function workspaceView(root, projectId, route) {
   const agentReqList = el("div", { class: "needs-agent-requests" });
   const workReqList = el("div", { class: "needs-work-requests" });
   const libraryList = el("div", { class: "needs-library" });
+  const accountList = el("div", { class: "needs-account" });
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
-    needsTitle, questionsBox, fillList, stuckList, accessList, agentReqList, workReqList, libraryList);
+    needsTitle, accountList, questionsBox, fillList, stuckList, accessList, agentReqList, workReqList, libraryList);
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
   const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
@@ -134,6 +135,7 @@ export async function workspaceView(root, projectId, route) {
   let agentReqKey = null;  // id-urile cererilor de agent desenate ultima data
   let libraryKey = null;   // id-urile propunerilor Library desenate ultima data
   let workReqKey = null;   // id-urile cererilor de lucru desenate ultima data
+  let accountKey = null;   // eroarea contului desenata ultima data
   let accessKey = null;    // id:count ale cererilor de acces desenate ultima data
   const canvas = teamCanvas({
     onSelect: (id) => select(id),
@@ -308,6 +310,19 @@ export async function workspaceView(root, projectId, route) {
     });
   }
 
+  // accountNode: contul Claude al proiectului a cazut la autentificare; proiectul e pe pauza
+  function accountNode(p) {
+    return el("div", { class: "question access" },
+      el("div", { class: "question-head" },
+        el("span", { class: "label" }, "CLAUDE ACCOUNT"),
+        el("strong", {}, `Claude account ${p.accountName} failed`)),
+      el("p", { class: "question-text" }, el("code", {}, p.accountError)),
+      el("p", { class: "question-text hint" }, p.paused
+        ? "The project is paused. Replace the token or check the account in Settings, then Start team."
+        : "Agents can't run on this account until you replace the token or check it again in Settings."),
+      el("div", { class: "actions" }, el("a", { class: "btn small primary", href: "#/settings" }, "Open Settings")));
+  }
+
   // accessNode: caseta unei cereri de acces (un tool refuzat unui agent)
   function accessNode(r) {
     return accessBox(r, {
@@ -356,7 +371,7 @@ export async function workspaceView(root, projectId, route) {
     const workReqs = state.project.workRequests || [];
     const fills = state.project.fillIns || [];
     const proposals = state.project.libraryProposals || [];
-    const total = proposals.length + questions.length + fills.length + stuck.length + access.length + agentReqs.length + workReqs.length;
+    const total = proposals.length + questions.length + fills.length + stuck.length + access.length + agentReqs.length + workReqs.length + (state.project.accountError ? 1 : 0);
     needsTitle.replaceChildren(el("span", {}, "Needs you"), el("span", { class: "col-count" }, total));
     needsChip.textContent = `${total} ${total === 1 ? "needs" : "need"} you`;
     needsChip.hidden = !total || state.tab === "tasks";
@@ -395,6 +410,11 @@ export async function workspaceView(root, projectId, route) {
     if (lKey !== libraryKey) {
       libraryKey = lKey;
       libraryList.replaceChildren(...proposals.map((p) => libraryProposalBox(p, { onDone: reload })));
+    }
+    const acKey = state.project.accountError ? `${state.project.accountName}:${state.project.accountError}` : "";
+    if (acKey !== accountKey) {
+      accountKey = acKey;
+      accountList.replaceChildren(...(acKey ? [accountNode(state.project)] : []));
     }
   }
 
@@ -593,6 +613,7 @@ export async function workspaceView(root, projectId, route) {
       [["Projects", "#/"], [p.name, null]],
       el("span", { class: "topbar-status" }, status,
         p.autonomy ? el("span", { class: "status-chip auto", title: "Agents don't ask you questions; the root lead decides" }, "Autonomous") : null,
+        p.accountName ? el("span", { class: "status-chip account", title: "Claude account used by this project's agents" }, p.accountName) : null,
         needsChip),
       el("span", { class: "grow" }),
       p.agents.length ? stack : null,

@@ -13,7 +13,9 @@ import { foremanChat } from "./foreman-chat.js";
 // existent si propune agenti noi; echipa existenta nu se schimba.
 export async function setupView(root, id, target = null) {
   const info = await api("/api/info");
-  const form = { workdirs: [""], description: "", model: "sonnet" };
+  let accounts = [];
+  try { accounts = await api("/api/accounts"); } catch { /* doar Default */ }
+  const form = { workdirs: [""], description: "", model: "sonnet", accountId: 0 };
   let session = null;   // {id, runId}
   let stream = null;    // EventSource-ul analizei
   let closed = false;
@@ -87,6 +89,10 @@ export async function setupView(root, id, target = null) {
     const description = el("textarea", { value: form.description, rows: 5, maxlength: 4000,
       placeholder: "What do you want to do? e.g. refactor checkout and add payment tests. Required if you do not pick a folder." });
     const model = modelSelect();
+    // contul pe care ruleaza analiza; devine contul proiectului creat
+    const account = accounts.length ? el("select", { value: String(form.accountId) },
+      el("option", { value: "0" }, "Default · the logged-in CLI"),
+      accounts.map((a) => el("option", { value: String(a.id) }, a.name))) : null;
     const go = el("button", { type: "submit", class: "btn primary" }, "Analyze");
     body.replaceChildren(el("form", { class: "section wizard-step", onsubmit: start },
       el("h2", {}, "1. What to analyze"),
@@ -97,11 +103,12 @@ export async function setupView(root, id, target = null) {
         el("span", { class: "hint" }, "The folders are not modified: the AI only reads. Several folders = one project with several parts (e.g. client + landing page). Empty = new project; the folder is created at the end.")),
       field("What do you want to do?", description),
       field("Model for the analysis", model, "Sonnet is a good balance; Haiku is faster."),
+      account && field("Claude account", account, "The analysis and the new project's agents run on this account."),
       el("div", { class: "actions" }, go)));
 
     async function start(e) {
       e.preventDefault();
-      Object.assign(form, { workdirs: inputs.map((i) => i.value.trim()).filter(Boolean), description: description.value.trim(), model: model.value });
+      Object.assign(form, { workdirs: inputs.map((i) => i.value.trim()).filter(Boolean), description: description.value.trim(), model: model.value, accountId: Number(account?.value || 0) });
       go.disabled = true;
       try {
         await begin();
@@ -512,7 +519,7 @@ export async function setupView(root, id, target = null) {
       stepChoose();
       return cleanup;
     }
-    Object.assign(form, { workdirs: session.workdirs || [], description: session.description, model: session.model || form.model });
+    Object.assign(form, { workdirs: session.workdirs || [], description: session.description, model: session.model || form.model, accountId: session.accountId || 0 });
     if (session.status === "running") stepAnalyze();
     else if (session.status === "ready") stepReview(session.proposal);
     else stepFailed(session);

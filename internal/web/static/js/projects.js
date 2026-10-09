@@ -113,7 +113,7 @@ function setupCard(s, refresh) {
 // radical, ca o zi cu 250 de run-uri sa nu faca invizibile zilele cu 5).
 function projectRow(p, peak) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0) + (p.fillIns || 0) + (p.libraryProposals || 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru
+  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0) + (p.fillIns || 0) + (p.libraryProposals || 0) + (p.accountError ? 1 : 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru, contul Claude cazut
   const href = `#/p/${p.id}`;
   const lead = p.team.find((m) => m.isRoot) || p.team[0];
   const shown = p.team.slice(0, 3);
@@ -147,7 +147,8 @@ function projectRow(p, peak) {
     el("td", {}, el("div", { class: "p-name" },
       el("a", { href }, p.name,
         asks ? el("span", { class: "badge-needs-you" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null,
-        p.autonomy ? el("span", { class: "badge-auto", title: "Agents don't ask you questions" }, "autonomous") : null),
+        p.autonomy ? el("span", { class: "badge-auto", title: "Agents don't ask you questions" }, "autonomous") : null,
+        p.accountName ? el("span", { class: "badge-account", title: "Claude account used by this project" }, p.accountName) : null),
       el("span", { class: "p-sub", title: p.goal || "" },
         el("span", { class: `p-state ${state}` }, p.status), p.goal ? " \u00b7 " + p.goal : ""))),
     el("td", { class: "hide-xs" }, lead ? el("span", { class: "p-lead" }, avatar(lead.name, kindOf(lead), 30), lead.name) : el("span", { class: "hint" }, "\u2014")),
@@ -208,6 +209,16 @@ export async function projectFormView(root, id) {
   const budget = el("input", { type: "number", min: 0.05, max: 100, step: 0.05, value: p.budgetUsd || "", placeholder: "no limit" });
 
   const autonomy = el("input", { type: "checkbox", checked: !!p.autonomy });
+  // contul Claude: Default (CLI-ul logat) sau un cont din Settings
+  let accounts = [];
+  try { accounts = await api("/api/accounts"); } catch { /* doar Default */ }
+  const currentAccount = String(p.accountId || 0);
+  const account = el("select", { value: currentAccount },
+    el("option", { value: "0" }, "Default · the logged-in CLI"),
+    accounts.map((a) => el("option", { value: String(a.id) }, a.name)));
+  const accountNote = el("p", { class: "hint warn", hidden: true },
+    "Agents start new Claude sessions on the new account. Earlier messages stay saved. Stop the team first if it is working.");
+  account.addEventListener("change", () => { accountNote.hidden = !id || account.value === currentAccount; });
   const formId = `project-form-${id || "new"}`;
   root.append(
     topbar([["Projects", "#/"], ...(id ? [[p.name, `#/p/${id}`]] : []), [id ? "Instructions" : "New project", null]],
@@ -236,6 +247,8 @@ export async function projectFormView(root, id) {
               field("Parallel workers", parallel),
               field("Budget per run (USD)", budget)),
             el("p", { class: "hint" }, "Both are optional: leave them empty for no limit. The budget only matters if you use an API key (with a subscription you do not pay per run); when set, a run stops once it reaches it. Agents that report directly to you do not count toward the limit."),
+            field("Claude account", account, accounts.length ? "Which subscription the agents use." : "Add other accounts in Settings."),
+            accountNote,
             el("label", { class: "check toggle-row" }, autonomy,
               el("span", { class: "grow" }, el("strong", {}, "Full autonomy"),
                 el("span", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."))),
@@ -251,6 +264,7 @@ export async function projectFormView(root, id) {
       name: name.value, goal: goal.value, context: context.value, folders: folders.values(),
       maxParallel: Number(parallel.value) || 0, budgetUsd: Number(budget.value) || 0,
       autonomy: autonomy.checked,
+      accountId: Number(account.value),
     };
     try {
       const saved = id
