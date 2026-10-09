@@ -82,24 +82,23 @@ func OpenCatalog(path, baseURL string) (*Catalog, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	db, err := openCatalogDB(path)
+	db, v, err := openCatalogDB(path)
 	if err != nil {
-		return nil, err
-	}
-	var v int
-	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
-		db.Close()
-		return nil, err
+		// fisier stricat (nu e SQLite): il stergem o data si o luam de la zero
+		if err := removeCatalogFiles(path); err != nil {
+			return nil, err
+		}
+		if db, v, err = openCatalogDB(path); err != nil {
+			return nil, err
+		}
 	}
 	if v != catalogVersion {
 		// fisier nou (versiunea 0) sau schema necunoscuta: o luam de la zero
 		db.Close()
-		for _, p := range []string{path, path + "-wal", path + "-shm"} {
-			if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return nil, err
-			}
+		if err := removeCatalogFiles(path); err != nil {
+			return nil, err
 		}
-		if db, err = openCatalogDB(path); err != nil {
+		if db, _, err = openCatalogDB(path); err != nil {
 			return nil, err
 		}
 		if _, err := db.Exec(catalogSchema + fmt.Sprintf("PRAGMA user_version = %d;", catalogVersion)); err != nil {
@@ -117,18 +116,30 @@ func OpenCatalog(path, baseURL string) (*Catalog, error) {
 	}, nil
 }
 
+// removeCatalogFiles sterge fisierul catalogului si fisierele WAL ale lui.
+func removeCatalogFiles(path string) error {
+	for _, p := range []string{path, path + "-wal", path + "-shm"} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 // openCatalogDB: acelasi DSN ca in store (WAL, busy_timeout), o singura conexiune.
-func openCatalogDB(path string) (*sql.DB, error) {
+// Intoarce si user_version; orice eroare (de ex. fisierul nu e SQLite) inchide baza.
+func openCatalogDB(path string) (*sql.DB, int, error) {
 	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	db.SetMaxOpenConns(1)
-	if err := db.Ping(); err != nil {
+	var v int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil {
 		db.Close()
-		return nil, err
+		return nil, 0, err
 	}
-	return db, nil
+	return db, v, nil
 }
 
 // Close inchide fisierul.
@@ -258,11 +269,21 @@ func (c *Catalog) saveError(err error) {
 
 // fullSync: version=latest, pagina cu pagina din full_cursor. Fiecare pagina se scrie intr-o
 // tranzactie impreuna cu cursorul urmator, deci o eroare / un restart continua de unde a ramas.
+// full_started (inceputul primei incercari) se salveaza o data si devine last_sync_at la final,
+// ca actualizarea sa nu piarda ce s-a schimbat intre incercari.
 func (c *Catalog) fullSync(ctx context.Context, start time.Time) error {
+	if _, ok, err := c.getMeta("full_started"); err != nil {
+		return err
+	} else if !ok {
+		if err := setMeta(c.db, "full_started", start.Format(time.RFC3339)); err != nil {
+			return err
+		}
+	}
 	cursor, _, err := c.getMeta("full_cursor")
 	if err != nil {
 		return err
 	}
+	restarted := false
 	for first := true; ; first = false {
 		if !first {
 			if err := sleepCtx(ctx, c.pause); err != nil {
@@ -276,6 +297,17 @@ func (c *Catalog) fullSync(ctx context.Context, start time.Time) error {
 			q.Set("cursor", cursor)
 		}
 		entries, next, err := c.fetchPage(ctx, q)
+		var se *statusError
+		if err != nil && cursor != "" && !restarted && errors.As(err, &se) && isClientError(se.Code) {
+			// cursorul salvat nu mai e valid (de ex. registrul s-a schimbat): reluam de la prima
+			// pagina, o singura data; randurile deja scrise raman (upsert)
+			restarted = true
+			if err := deleteMeta(c.db, "full_cursor"); err != nil {
+				return err
+			}
+			cursor = ""
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -287,7 +319,7 @@ func (c *Catalog) fullSync(ctx context.Context, start time.Time) error {
 		if err != nil {
 			return err
 		}
-		if err := writeFullPage(tx, entries, next, start); err != nil {
+		if err := writeFullPage(tx, entries, next); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -301,8 +333,13 @@ func (c *Catalog) fullSync(ctx context.Context, start time.Time) error {
 	}
 }
 
+// isClientError: 4xx, in afara de 429 (prea multe cereri, se reincearca).
+func isClientError(code int) bool {
+	return code >= 400 && code < 500 && code != http.StatusTooManyRequests
+}
+
 // writeFullPage scrie o pagina din prima sincronizare si cursorul urmator (sau finalul).
-func writeFullPage(tx *sql.Tx, entries []rawEntry, next string, start time.Time) error {
+func writeFullPage(tx *sql.Tx, entries []rawEntry, next string) error {
 	for _, e := range entries {
 		// deprecated se trateaza ca deleted in catalog (normalize il accepta pentru clientul live)
 		if isGone(e.entry) {
@@ -318,14 +355,15 @@ func writeFullPage(tx *sql.Tx, entries []rawEntry, next string, start time.Time)
 	if next != "" {
 		return setMeta(tx, "full_cursor", next)
 	}
-	// ultima pagina: catalogul e gata
+	// ultima pagina: catalogul e gata; last_sync_at = inceputul primei incercari
+	if _, err := tx.Exec(`INSERT INTO meta (key, value) SELECT 'last_sync_at', value FROM meta WHERE key = 'full_started'
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`); err != nil {
+		return err
+	}
 	if err := setMeta(tx, "full_done", "1"); err != nil {
 		return err
 	}
-	if err := setMeta(tx, "last_sync_at", start.Format(time.RFC3339)); err != nil {
-		return err
-	}
-	return deleteMeta(tx, "full_cursor", "last_error", "last_error_at")
+	return deleteMeta(tx, "full_cursor", "full_started", "last_error", "last_error_at")
 }
 
 // update cere ce s-a schimbat de la ultima sincronizare (cu o ora suprapunere), toate paginile.
@@ -387,15 +425,18 @@ func (c *Catalog) update(ctx context.Context, start time.Time) error {
 }
 
 // applyUpdate aplica o intrare din actualizare:
-//   - active + isLatest + normalize o accepta -> upsert (versiunea noua inlocuieste randul);
 //   - deleted / deprecated pe versiunea din catalog -> randul se sterge;
-//   - active + isLatest dar normalize o refuza, pe versiunea din catalog -> randul se sterge;
-//   - altfel (de ex. isLatest=false, o versiune veche) -> nimic.
+//   - active + latest + normalize o accepta -> upsert (versiunea noua inlocuieste randul);
+//   - active + latest dar normalize o refuza -> randul se sterge dupa nume (orice versiune),
+//     pentru ca versiunea din catalog nu mai e ultima;
+//   - altfel (isLatest=false, o versiune veche) -> nimic.
+//
+// Fara _meta oficial intrarea conteaza ca active + latest; isLatest lipsa = latest (ca in normalize).
 func applyUpdate(tx *sql.Tx, e rawEntry) error {
-	status, latest := "", false
+	status, latest := "active", true
 	if o := e.entry.Meta.Official; o != nil {
 		status = o.Status
-		latest = o.IsLatest != nil && *o.IsLatest
+		latest = o.IsLatest == nil || *o.IsLatest
 	}
 	switch {
 	case isGone(e.entry):
@@ -404,7 +445,8 @@ func applyUpdate(tx *sql.Tx, e rawEntry) error {
 		if _, ok := normalize(e.entry); ok {
 			return upsertEntry(tx, e.entry, e.raw)
 		}
-		return deleteVersion(tx, e.entry.Server.Name, e.entry.Server.Version)
+		_, err := tx.Exec(`DELETE FROM servers WHERE name = ?`, e.entry.Server.Name)
+		return err
 	}
 	return nil
 }
@@ -453,6 +495,10 @@ func (c *Catalog) fetchPage(ctx context.Context, q url.Values) ([]rawEntry, stri
 		entries, next, err := c.fetchPageOnce(ctx, q)
 		if err == nil {
 			return entries, next, nil
+		}
+		var se *statusError
+		if errors.As(err, &se) && isClientError(se.Code) {
+			return nil, "", err // un 4xx nu se rezolva reincercand
 		}
 		if attempt >= len(c.retryDelays) || ctx.Err() != nil {
 			return nil, "", err
@@ -541,7 +587,8 @@ func (c *Catalog) Search(query, cursor string) ([]Server, string, error) {
 	if len(words) > 0 {
 		whole := strings.Join(words, " ")
 		// segmentul de dupa ultimul "/" nu are "/", deci un text cu "/" nu poate fi egal cu el.
-		// Atentie: lower() din SQLite schimba doar literele ASCII (numele din registru sunt ASCII).
+		// Limitare: lower() din SQLite schimba doar literele ASCII, iar textul e trecut prin
+		// strings.ToLower; pentru nume cu litere non-ASCII potrivirea exacta poate lipsi.
 		exact := "0"
 		if !strings.Contains(whole, "/") {
 			suffix := "/" + whole

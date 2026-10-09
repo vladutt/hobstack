@@ -149,6 +149,14 @@ func copyServers(in []Server) []Server {
 	return out
 }
 
+// statusError: registrul a raspuns cu alt status decat 200. E tot ErrUnavailable (errors.Is),
+// dar catalogul are nevoie de cod (un 4xx nu se reincearca).
+type statusError struct{ Code int }
+
+func (e *statusError) Error() string { return fmt.Sprintf("%v: status %d", ErrUnavailable, e.Code) }
+
+func (e *statusError) Is(target error) bool { return target == ErrUnavailable }
+
 // getPage face GET /v0/servers?<q> si intoarce corpul (max maxBody); timeout-ul vine din hc.
 // Orice problema (retea, status != 200) e ErrUnavailable. Folosit de Client si de Catalog.
 func getPage(ctx context.Context, hc *http.Client, baseURL string, q url.Values) ([]byte, error) {
@@ -163,7 +171,7 @@ func getPage(ctx context.Context, hc *http.Client, baseURL string, q url.Values)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: status %d", ErrUnavailable, resp.StatusCode)
+		return nil, &statusError{Code: resp.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {

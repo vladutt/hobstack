@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -104,6 +105,20 @@ func unbuildable(name, version, updatedAt string) map[string]any {
 	srv := e["server"].(map[string]any)
 	delete(srv, "packages")
 	srv["remotes"] = []any{map[string]any{"type": "websocket", "url": "wss://example.com"}}
+	return e
+}
+
+// noMeta e o intrare construibila fara _meta.
+func noMeta(name, version string) map[string]any {
+	e := regEntry(name, version, "active", true, "")
+	delete(e, "_meta")
+	return e
+}
+
+// noIsLatest e o intrare activa cu _meta oficial dar fara isLatest.
+func noIsLatest(name, version, updatedAt string) map[string]any {
+	e := regEntry(name, version, "active", true, updatedAt)
+	delete(e["_meta"].(map[string]any)["io.modelcontextprotocol.registry/official"].(map[string]any), "isLatest")
 	return e
 }
 
@@ -278,8 +293,10 @@ func TestCatalogUpdate(t *testing.T) {
 			return 200, page("",
 				regEntry("io.github.a/other", "0.9.0", "deleted", false, "2026-10-10T05:00:00Z"),
 				regEntry("io.github.a/dep", "1.0.0", "deprecated", true, "2026-10-10T06:00:00Z"),
-				unbuildable("io.github.a/broken", "1.0.0", "2026-10-10T07:00:00Z"),
+				unbuildable("io.github.a/broken", "1.1.0", "2026-10-10T07:00:00Z"),
 				unbuildable("io.github.a/weird", "1.0.0", "2026-10-10T08:00:00Z"),
+				noMeta("io.github.a/nometa", "1.0.0"),
+				noIsLatest("io.github.a/nolatest", "1.0.0", "2026-10-10T09:00:00Z"),
 			)
 		}
 		return 404, nil
@@ -299,15 +316,17 @@ func TestCatalogUpdate(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"io.github.a/keep":   "1.0.0",
-		"io.github.a/new":    "1.0.0",
-		"io.github.a/bump":   "1.1.0",
-		"io.github.a/old":    "2.0.0", // isLatest=false ignorat
-		"io.github.a/gone":   "",      // deleted pe versiunea curenta
-		"io.github.a/other":  "1.0.0", // deleted pe alta versiune
-		"io.github.a/dep":    "",      // deprecated = deleted
-		"io.github.a/broken": "",      // normalize refuza acum aceeasi versiune
-		"io.github.a/weird":  "",      // fara pachet / remote construibil
+		"io.github.a/keep":     "1.0.0",
+		"io.github.a/new":      "1.0.0",
+		"io.github.a/bump":     "1.1.0",
+		"io.github.a/old":      "2.0.0", // isLatest=false ignorat
+		"io.github.a/gone":     "",      // deleted pe versiunea curenta
+		"io.github.a/other":    "1.0.0", // deleted pe alta versiune
+		"io.github.a/dep":      "",      // deprecated = deleted
+		"io.github.a/broken":   "",      // ultima versiune nu se poate construi: randul (orice versiune) se sterge
+		"io.github.a/weird":    "",      // fara pachet / remote construibil
+		"io.github.a/nometa":   "1.0.0", // fara _meta oficial = active + latest
+		"io.github.a/nolatest": "1.0.0", // isLatest lipsa = latest
 	}
 	for name, v := range want {
 		if got := rowVersion(t, c, name); got != v {
@@ -512,5 +531,97 @@ func TestOpenCatalogResetsUnknownSchema(t *testing.T) {
 	c = testCatalog(t, path, "http://127.0.0.1:9")
 	if st := c.Status(); st.Count != 1 {
 		t.Fatalf("count after reopen = %d", st.Count)
+	}
+}
+
+func TestCatalogFullSyncKeepsFirstStart(t *testing.T) {
+	f, srv := newFakeRegistry(t)
+	f.setHandler(func(q url.Values) (int, any) {
+		if q.Get("cursor") == "c2" {
+			return 500, nil
+		}
+		return threePages(q)
+	})
+	c := testCatalog(t, filepath.Join(t.TempDir(), "cat.db"), srv.URL)
+	first := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	c.now = func() time.Time { return first }
+	if err := c.Sync(context.Background()); err == nil {
+		t.Fatal("expected error")
+	}
+	f.setHandler(threePages)
+	c.now = func() time.Time { return first.Add(2 * time.Hour) }
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := metaValue(t, c, "last_sync_at"); v != "2026-10-10T12:00:00Z" {
+		t.Fatalf("last_sync_at = %q", v)
+	}
+	if _, ok := metaValue(t, c, "full_started"); ok {
+		t.Fatal("full_started still set")
+	}
+}
+
+func TestCatalogFullSyncRestartsOnStaleCursor(t *testing.T) {
+	f, srv := newFakeRegistry(t)
+	f.setHandler(func(q url.Values) (int, any) {
+		if q.Get("cursor") == "stale" {
+			return 400, map[string]any{"title": "Bad Request"}
+		}
+		return threePages(q)
+	})
+	c := testCatalog(t, filepath.Join(t.TempDir(), "cat.db"), srv.URL)
+	seed(t, c, regEntry("io.github.old/kept", "1.0.0", "active", true, "2025-01-01T00:00:00Z"))
+	if _, err := c.db.Exec(`INSERT INTO meta (key, value) VALUES ('full_cursor', 'stale'), ('full_started', '2026-10-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var cursors []string
+	for _, q := range f.requests() {
+		cursors = append(cursors, q.Get("cursor"))
+	}
+	if strings.Join(cursors, ",") != "stale,,c2,c3" {
+		t.Fatalf("cursors = %q", cursors)
+	}
+	if st := c.Status(); st.Count != 6 || st.State != "ready" {
+		t.Fatalf("status = %+v", st)
+	}
+	if v, _ := metaValue(t, c, "last_sync_at"); v != "2026-10-01T00:00:00Z" {
+		t.Fatalf("last_sync_at = %q", v)
+	}
+}
+
+func TestCatalogFullSyncRetries429(t *testing.T) {
+	f, srv := newFakeRegistry(t)
+	var calls atomic.Int32
+	f.setHandler(func(q url.Values) (int, any) {
+		if calls.Add(1) <= 2 {
+			return 429, nil
+		}
+		return 200, page("")
+	})
+	c := testCatalog(t, filepath.Join(t.TempDir(), "cat.db"), srv.URL)
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := calls.Load(); n != 3 {
+		t.Fatalf("calls = %d", n)
+	}
+}
+
+func TestOpenCatalogReplacesCorruptFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cat.db")
+	garbage := []byte(strings.Repeat("this is not a sqlite database\x00\xff", 200))
+	if err := os.WriteFile(path, garbage, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := testCatalog(t, path, "http://127.0.0.1:9")
+	if st := c.Status(); st.Count != 0 || st.State != "building" {
+		t.Fatalf("status = %+v", st)
+	}
+	seed(t, c, regEntry("io.github.a/one", "1.0.0", "active", true, "2026-01-01T00:00:00Z"))
+	if st := c.Status(); st.Count != 1 {
+		t.Fatalf("count = %d", st.Count)
 	}
 }
