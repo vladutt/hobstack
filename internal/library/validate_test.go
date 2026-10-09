@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // "team" e serverul MCP al aplicatiei: un server din Library nu poate purta numele lui.

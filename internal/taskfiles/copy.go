@@ -1,5 +1,5 @@
 // Package taskfiles copiaza fisierele predate de agenti pe un task (report_done files).
-// Copierea o face foreman, deci verificam ca fisierul e intr-un folder al proiectului:
+// Copierea o face hobstack, deci verificam ca fisierul e intr-un folder al proiectului:
 // altfel un agent ar putea "preda" orice fisier de pe masina, iar UI-ul l-ar servi.
 package taskfiles
 
@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // MaxSize: cat poate avea un fisier predat (ca la upload).

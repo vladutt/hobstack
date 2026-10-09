@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func (s *Server) answerQuestion(w http.ResponseWriter, r *http.Request) {

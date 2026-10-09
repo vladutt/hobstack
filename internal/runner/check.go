@@ -17,7 +17,7 @@ import (
 // cu ele, pluginurile instalate umflau contextul la ~130k tokeni ($0.13 pe verificare,
 // masurat cu claude 2.1.295); asa costa sub o zecime de cent.
 func (m *Manager) Check(ctx context.Context, env []string) error {
-	dir, err := os.MkdirTemp("", "foreman-check-")
+	dir, err := os.MkdirTemp("", "hobstack-check-")
 	if err != nil {
 		return err
 	}

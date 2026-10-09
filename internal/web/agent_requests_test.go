@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // requestFromLead face o cerere add_agent de la radacina proiectului (fara autonomy, deci cerere deschisa).

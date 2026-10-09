@@ -50,11 +50,11 @@ func byName(list []Server) map[string]Server {
 }
 
 func TestNewClientReadsEnv(t *testing.T) {
-	t.Setenv("FOREMAN_MCP_REGISTRY_URL", "http://127.0.0.1:9/")
+	t.Setenv("HOBSTACK_MCP_REGISTRY_URL", "http://127.0.0.1:9/")
 	if c := NewClient(); c.BaseURL != "http://127.0.0.1:9" {
 		t.Fatalf("BaseURL = %q", c.BaseURL)
 	}
-	t.Setenv("FOREMAN_MCP_REGISTRY_URL", "")
+	t.Setenv("HOBSTACK_MCP_REGISTRY_URL", "")
 	c := NewClient()
 	if c.BaseURL != "https://registry.modelcontextprotocol.io" {
 		t.Fatalf("BaseURL = %q", c.BaseURL)
@@ -174,7 +174,7 @@ func TestSearchNormalizes(t *testing.T) {
 	}
 
 	arg := m["io.github.0design/aindf"]
-	if arg.Installable || arg.Reason != "Needs arguments Foreman can't fill in yet" || arg.Kind != "local" {
+	if arg.Installable || arg.Reason != "Needs arguments HobStack can't fill in yet" || arg.Kind != "local" {
 		t.Fatalf("required arg: %+v", arg)
 	}
 }
@@ -265,12 +265,12 @@ func TestSuggestName(t *testing.T) {
 
 func TestNewClientRejectsNonHTTPURL(t *testing.T) {
 	for _, v := range []string{"file:///etc/passwd", "ftp://x.example", "not a url", "http://"} {
-		t.Setenv("FOREMAN_MCP_REGISTRY_URL", v)
+		t.Setenv("HOBSTACK_MCP_REGISTRY_URL", v)
 		if c := NewClient(); c.BaseURL != DefaultBaseURL {
 			t.Errorf("%q: BaseURL = %q", v, c.BaseURL)
 		}
 	}
-	t.Setenv("FOREMAN_MCP_REGISTRY_URL", "https://reg.example/")
+	t.Setenv("HOBSTACK_MCP_REGISTRY_URL", "https://reg.example/")
 	if c := NewClient(); c.BaseURL != "https://reg.example" {
 		t.Errorf("BaseURL = %q", c.BaseURL)
 	}

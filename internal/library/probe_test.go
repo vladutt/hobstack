@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // TestHelperMCP e un server MCP minimal: testul se re-porneste ca proces.
 func TestHelperMCP(t *testing.T) {
-	if os.Getenv("FOREMAN_HELPER_MCP") != "1" {
+	if os.Getenv("HOBSTACK_HELPER_MCP") != "1" {
 		return
 	}
 	sc := bufio.NewScanner(os.Stdin)
@@ -37,10 +37,10 @@ func TestHelperMCP(t *testing.T) {
 			r = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "t", "version": "1"}}
 		case "tools/list":
 			tools := []any{map[string]any{"name": "list_vehicles"}, map[string]any{"name": "get_vehicle"}}
-			if os.Getenv("FOREMAN_TEST_SECRET") != "" { // mediul Foreman nu trebuie sa ajunga la server
+			if os.Getenv("HOBSTACK_TEST_SECRET") != "" { // mediul HobStack nu trebuie sa ajunga la server
 				tools = append(tools, map[string]any{"name": "leaked_secret"})
 			}
-			if os.Getenv("FOREMAN_HELPER_EXTRA") != "" { // mediul dat explicit ajunge
+			if os.Getenv("HOBSTACK_HELPER_EXTRA") != "" { // mediul dat explicit ajunge
 				tools = append(tools, map[string]any{"name": "extra_env"})
 			}
 			r = map[string]any{"tools": tools}
@@ -52,7 +52,7 @@ func TestHelperMCP(t *testing.T) {
 }
 
 func TestProbeMCP(t *testing.T) {
-	names, err := ProbeMCP(os.Args[0], []string{"-test.run=TestHelperMCP"}, map[string]string{"FOREMAN_HELPER_MCP": "1"}, 5*time.Second)
+	names, err := ProbeMCP(os.Args[0], []string{"-test.run=TestHelperMCP"}, map[string]string{"HOBSTACK_HELPER_MCP": "1"}, 5*time.Second)
 	if err != nil || strings.Join(names, ",") != "list_vehicles,get_vehicle" {
 		t.Fatalf("%v %v", names, err)
 	}
@@ -66,8 +66,8 @@ func TestProbeMCP(t *testing.T) {
 }
 
 func TestProbeMCPScrubbedEnv(t *testing.T) {
-	t.Setenv("FOREMAN_TEST_SECRET", "s3cret")
-	env := map[string]string{"FOREMAN_HELPER_MCP": "1", "FOREMAN_HELPER_EXTRA": "1"}
+	t.Setenv("HOBSTACK_TEST_SECRET", "s3cret")
+	env := map[string]string{"HOBSTACK_HELPER_MCP": "1", "HOBSTACK_HELPER_EXTRA": "1"}
 	names, err := ProbeMCP(os.Args[0], []string{"-test.run=TestHelperMCP"}, env, 5*time.Second)
 	if err != nil || strings.Join(names, ",") != "list_vehicles,get_vehicle,extra_env" {
 		t.Fatalf("%v %v", names, err)
@@ -132,7 +132,7 @@ func proposeMCP(t *testing.T, st *store.Store, lib *Lib, p store.Project, name, 
 func TestPublishLocalMCPProbes(t *testing.T) {
 	st, lib, _ := newEnv(t)
 	p := project(t, st)
-	it := proposeMCP(t, st, lib, p, "vehicles", "env", []string{"FOREMAN_HELPER_MCP=1", os.Args[0], "-test.run=TestHelperMCP", "${DIR}"})
+	it := proposeMCP(t, st, lib, p, "vehicles", "env", []string{"HOBSTACK_HELPER_MCP=1", os.Args[0], "-test.run=TestHelperMCP", "${DIR}"})
 	if _, err := lib.Publish(it.ID, ""); err != nil {
 		t.Fatal(err)
 	}

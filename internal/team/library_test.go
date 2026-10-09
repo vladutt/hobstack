@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/library"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/library"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // instalam in proiect un skill publicat si un server MCP, apoi pornim un run.

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/runner"
-	"foreman/internal/schedule"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/schedule"
+	"hobstack/internal/store"
 )
 
 func TestArchiveStopsRunAndRestores(t *testing.T) {

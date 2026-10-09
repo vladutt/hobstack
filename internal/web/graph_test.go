@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 func TestAgentLinksValidation(t *testing.T) {

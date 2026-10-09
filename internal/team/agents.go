@@ -8,10 +8,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"foreman/internal/mcp"
-	"foreman/internal/models"
-	"foreman/internal/prompt"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/models"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
 )
 
 // MaxAddedAgents: cati agenti (in echipa sau ceruti) poate adauga un lider.

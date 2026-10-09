@@ -21,14 +21,14 @@ import (
 	"unicode"
 )
 
-// DefaultBaseURL e registrul oficial; in teste se schimba prin FOREMAN_MCP_REGISTRY_URL.
+// DefaultBaseURL e registrul oficial; in teste se schimba prin HOBSTACK_MCP_REGISTRY_URL.
 const DefaultBaseURL = "https://registry.modelcontextprotocol.io"
 
 // Motivele afisate in UI cand un server nu se poate instala.
 const (
-	ReasonNeedsArgs    = "Needs arguments Foreman can't fill in yet"
+	ReasonNeedsArgs    = "Needs arguments HobStack can't fill in yet"
 	ReasonNeedsHeaders = "Needs headers; not supported yet"
-	ReasonEnvNames     = "Uses environment variable names Foreman can't store"
+	ReasonEnvNames     = "Uses environment variable names HobStack can't store"
 	ReasonCredential   = "Has a credential in its arguments or URL; move it to env in your Claude config, then install"
 )
 
@@ -91,11 +91,11 @@ type cacheEntry struct {
 	at      time.Time
 }
 
-// NewClient foloseste FOREMAN_MCP_REGISTRY_URL daca e setat (teste), altfel registrul oficial;
+// NewClient foloseste HOBSTACK_MCP_REGISTRY_URL daca e setat (teste), altfel registrul oficial;
 // timeout 10 s si cache 10 min.
 func NewClient() *Client {
 	// doar URL-uri http/https cu host; orice altceva => registrul oficial
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv("FOREMAN_MCP_REGISTRY_URL")), "/")
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("HOBSTACK_MCP_REGISTRY_URL")), "/")
 	if u, err := url.Parse(base); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		base = DefaultBaseURL
 	}

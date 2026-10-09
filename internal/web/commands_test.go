@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func TestCommandSettingsAPI(t *testing.T) {

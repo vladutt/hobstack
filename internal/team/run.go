@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/config"
-	"foreman/internal/library"
-	"foreman/internal/mcp"
-	"foreman/internal/prompt"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/library"
+	"hobstack/internal/mcp"
+	"hobstack/internal/prompt"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // startRun porneste un run pentru agent. taskID = 0 inseamna run fara task
@@ -399,7 +399,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		}
 		t.taskEvent(task, "failed", a.Name, fmt.Sprintf("%s's run failed: %s", a.Name, o.Error))
 		if task.Status == store.StatusBlocked {
-			t.taskEvent(task, "blocked", actorForeman, "Blocked: no one can decide, you decide")
+			t.taskEvent(task, "blocked", actorHobStack, "Blocked: no one can decide, you decide")
 		}
 		t.emit(ar.projectID, "task", task)
 		if !hasBoss {
@@ -439,7 +439,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		return err
 	}
 	if o.Status == store.RunStopped {
-		t.taskEvent(task, "requeued", actorForeman, "Stopped; back in the queue")
+		t.taskEvent(task, "requeued", actorHobStack, "Stopped; back in the queue")
 	}
 	t.emit(ar.projectID, "task", task)
 	return nil

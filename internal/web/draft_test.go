@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/draft"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/draft"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 type draftStarter struct{ specs []runner.Spec }

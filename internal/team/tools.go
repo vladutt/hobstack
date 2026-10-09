@@ -9,8 +9,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // MaxSendBacks: dupa atatea trimiteri inapoi, task-ul se blocheaza si decide utilizatorul.
@@ -413,7 +413,7 @@ func markDone(task *store.Task) {
 // t.work, deci se poate chema si cu lock-ul tinut (ca in AcceptTask).
 // Se apeleaza cu t.work blocat.
 func (t *Team) autoAccepted(task store.Task, text string) {
-	t.taskEvent(task, "accepted", actorForeman, text)
+	t.taskEvent(task, "accepted", actorHobStack, text)
 	t.emit(task.ProjectID, "task", task)
 	// task-ul e deja Done: o eroare la trezirea parintelui nu il strica
 	if err := t.afterDone(task); err != nil {
@@ -514,7 +514,7 @@ func (t *Team) toReview(task *store.Task, assignee store.Agent, agents []store.A
 		return store.Agent{}, nil
 	}
 	if task.Status == store.StatusBlocked {
-		t.taskEvent(*task, "blocked", actorForeman, "Blocked: no one can check it, you decide")
+		t.taskEvent(*task, "blocked", actorHobStack, "Blocked: no one can check it, you decide")
 	}
 	switch {
 	case !hasWho && task.ByUser:
@@ -569,7 +569,7 @@ func (t *Team) afterDone(task store.Task) error {
 	if err := t.st.SaveTask(&parent); err != nil {
 		return err
 	}
-	t.taskEvent(parent, "requeued", actorForeman, "All subtasks are done; back in the queue")
+	t.taskEvent(parent, "requeued", actorHobStack, "All subtasks are done; back in the queue")
 	t.emit(parent.ProjectID, "task", parent)
 	text := fmt.Sprintf("All subtasks for %s are done; %s is back in the queue so you can check it and report it.", parent.Ref(), parent.Ref())
 	return t.note(parent.ProjectID, parent.AssigneeID, text, true)
@@ -622,7 +622,7 @@ func (t *Team) rejectTask(task *store.Task, feedback string, agents []store.Agen
 		if failedRun {
 			reason += ": the last run failed, you decide"
 		}
-		t.taskEvent(*task, "blocked", actorForeman, reason)
+		t.taskEvent(*task, "blocked", actorHobStack, reason)
 		ids := map[int64]bool{extra: true}
 		if w, ok := store.FindAgent(agents, task.AssigneeID); ok && w.ReviewerID != nil {
 			ids[*w.ReviewerID] = true
@@ -1023,7 +1023,7 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 			return "", err
 		}
 		t.record(task, approved)
-		t.taskEvent(task, "blocked", actorForeman, "Blocked: no one can decide, you decide")
+		t.taskEvent(task, "blocked", actorHobStack, "Blocked: no one can decide, you decide")
 		t.note(c.ProjectID, worker.ID, noDeciderText(task, worker), true)
 		t.emit(c.ProjectID, "task", task)
 		return fmt.Sprintf("%s is blocked: no one can decide. The user decides.", task.Ref()), nil

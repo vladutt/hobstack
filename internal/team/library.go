@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"foreman/internal/library"
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/library"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // maxOpenProposals: cate propuneri deschise poate avea un proiect.

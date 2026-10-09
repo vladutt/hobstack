@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func argAfter(args []string, flag string) string {

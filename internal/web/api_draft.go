@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"foreman/internal/draft"
-	"foreman/internal/store"
+	"hobstack/internal/draft"
+	"hobstack/internal/store"
 )
 
 func (s *Server) startDraft(w http.ResponseWriter, r *http.Request) {

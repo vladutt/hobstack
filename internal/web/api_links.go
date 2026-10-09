@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // linkView e un proiect legat, asa cum il vede UI-ul.

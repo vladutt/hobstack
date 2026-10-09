@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/config"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/store"
 )
 
 type userFilesRes struct {
@@ -48,7 +48,7 @@ func TestUploadTaskFiles(t *testing.T) {
 	e.addTaskFile(t, task, "logo.png", "image/png", "png")
 	path := "/api/tasks/" + itoa(task.ID) + "/files"
 
-	// fara X-Foreman: refuzat de garda (un formular strain nu poate urca)
+	// fara X-HobStack: refuzat de garda (un formular strain nu poate urca)
 	if code, _ := upload(t, e, path, nil, map[string][]byte{"brief.txt": []byte("hi")}, false); code != http.StatusUnsupportedMediaType {
 		t.Fatalf("fara header: %d", code)
 	}

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/config"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/store"
 )
 
 // stage scrie fisierele in folderul de staging, ca upload-ul din web.

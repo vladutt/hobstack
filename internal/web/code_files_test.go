@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func TestCodeFilesAPI(t *testing.T) {

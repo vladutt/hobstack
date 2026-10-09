@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"foreman/internal/runner"
+	"hobstack/internal/runner"
 )
 
 func TestNewChatStartsFreshSession(t *testing.T) {

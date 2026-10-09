@@ -5,7 +5,7 @@ import { el, svg, toneOf } from "./ui.js";
 
 const RANGES = [["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["all", "All time"]];
 const PREV_LABEL = { today: "vs yesterday", "7d": "vs prev 7 days", "30d": "vs prev 30 days" };
-const RANGE_KEY = "foreman-stats-range";
+const RANGE_KEY = "hobstack-stats-range";
 const TASK_STATUS = { queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done" };
 
 function savedRange() {

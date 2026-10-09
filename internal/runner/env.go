@@ -7,7 +7,7 @@ import (
 )
 
 // authVars aleg contul (sau furnizorul) cu care ruleaza claude. Un run cu cont propriu
-// (Spec.Env) nu le mosteneste din shell-ul care a pornit foreman: o cheie API sau un
+// (Spec.Env) nu le mosteneste din shell-ul care a pornit hobstack: o cheie API sau un
 // gateway mostenit ar castiga in fata token-ului contului, iar munca ar ajunge pe alt cont.
 var authVars = []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
 	"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX"}

@@ -6,7 +6,7 @@ import { el } from "./ui.js";
 
 // ALL = toate proiectele; nu poate fi o categorie reala
 export const ALL = "\u0000all";
-const KEY = "foreman-category";
+const KEY = "hobstack-category";
 
 export function savedCategory() {
   try { return localStorage.getItem(KEY) ?? ALL; } catch { return ALL; }

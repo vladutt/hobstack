@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // MoveError: mutare refuzata, cu motivul pentru utilizator.

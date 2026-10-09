@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/schedule"
-	"foreman/internal/store"
+	"hobstack/internal/schedule"
+	"hobstack/internal/store"
 )
 
 // RecurringError e o eroare pe care o vede utilizatorul (web: 400).

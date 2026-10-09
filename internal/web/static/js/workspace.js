@@ -39,10 +39,10 @@ const DONE_PAGE = 12;
 // Pe ecrane inguste panoul acopera board-ul, deci acolo pornim mereu cu el inchis.
 function savedDrawer() {
   if (window.innerWidth <= 1100) return false;
-  try { return localStorage.getItem("foreman-drawer") === "1"; } catch { return false; }
+  try { return localStorage.getItem("hobstack-drawer") === "1"; } catch { return false; }
 }
 function saveDrawer(on) {
-  try { localStorage.setItem("foreman-drawer", on ? "1" : "0"); } catch {}
+  try { localStorage.setItem("hobstack-drawer", on ? "1" : "0"); } catch {}
 }
 
 // Tab-urile paginii de proiect; primul e cel implicit.
@@ -667,12 +667,12 @@ export async function workspaceView(root, projectId, route) {
 
   function buildOpenBar(editors) {
     let saved = null;
-    try { saved = localStorage.getItem("foreman-editor"); } catch {}
+    try { saved = localStorage.getItem("hobstack-editor"); } catch {}
     const known = editors.some((e) => e.id === saved);
     const select = el("select", {
       class: "select-small", "aria-label": "Editor",
       value: known ? saved : editors[0]?.id,
-      onchange: () => { try { localStorage.setItem("foreman-editor", select.value); } catch {} },
+      onchange: () => { try { localStorage.setItem("hobstack-editor", select.value); } catch {} },
     }, editors.map((e) => el("option", { value: e.id }, e.name)));
     return el("div", { class: "open-bar" },
       el("span", { class: "menu-label" }, "Open in"),
@@ -1405,7 +1405,7 @@ export async function workspaceView(root, projectId, route) {
       ondragstart: (e) => {
         e.dataTransfer.effectAllowed = "move";
         // tip propriu (nu text/plain): lasat pe chat sau pe un camp nu lipeste id-ul; board-ul citeste doar `dragging`
-        e.dataTransfer.setData("application/x-foreman-task", String(t.id));
+        e.dataTransfer.setData("application/x-hobstack-task", String(t.id));
         startDrag(t, e.currentTarget.closest(".col"));
       },
       // dragend fara drop (drop-ul face endDrag inainte): lasat pe o coloana care nu-l primeste -> motivul

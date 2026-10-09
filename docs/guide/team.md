@@ -64,13 +64,13 @@ The analyst reads the folder and sees your current team. It then proposes:
 - the folder's context;
 - a small team for that folder (usually a sub-lead and 1-3 workers) under one of your existing agents.
 
-Your existing agents are never changed. Review the proposal, adjust it (or ask the Foreman panel), then
+Your existing agents are never changed. Review the proposal, adjust it (or ask the HobStack panel), then
 click **Add agents**.
 
 ## Leads can add agents themselves
 
 A lead or root agent can add an agent to its own team. It does this when no current member fits part
-of the work, or to run independent sub-tasks in parallel. The rules are enforced by Foreman:
+of the work, or to run independent sub-tasks in parallel. The rules are enforced by HobStack:
 
 - the new agent always goes directly under the lead that adds it, in the lead's folder;
 - it can only get tools the lead has itself;

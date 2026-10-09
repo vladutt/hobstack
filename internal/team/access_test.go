@@ -3,8 +3,8 @@ package team
 import (
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func runTaskWithDenials(t *testing.T, f *fixture, d []runner.Denial) store.Task {

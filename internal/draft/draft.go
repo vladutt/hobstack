@@ -15,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"foreman/internal/mcp"
-	"foreman/internal/models"
-	"foreman/internal/prompt"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/models"
+	"hobstack/internal/prompt"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 const (

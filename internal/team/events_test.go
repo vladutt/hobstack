@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func TestTaskEventTruncatesText(t *testing.T) {
@@ -110,7 +110,7 @@ func TestEventsBlockedAfterSendBacks(t *testing.T) {
 		}
 	}
 	f.wantStatus(t, 1, store.StatusBlocked)
-	wantEvent(t, f, task.ID, "blocked", "Foreman", "Blocked after 3 send-backs")
+	wantEvent(t, f, task.ID, "blocked", "HobStack", "Blocked after 3 send-backs")
 
 	if err := f.tm.Unblock(task.ID); err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func TestEventsBlockedWithoutDecider(t *testing.T) {
 	f.fs.finish(f.fs.last(t, wes).ID, runner.Outcome{Status: "done", Result: "gata"})
 	f.wantStatus(t, 1, store.StatusBlocked)
 	wantEvent(t, f, task.ID, "reported", "Wes", "Wes finished without report_done")
-	wantEvent(t, f, task.ID, "blocked", "Foreman", "no one can check it")
+	wantEvent(t, f, task.ID, "blocked", "HobStack", "no one can check it")
 	want := []string{"started", "reported", "blocked"}
 	if got := eventKinds(t, f, task.ID); !slices.Equal(got, want) {
 		t.Fatalf("ordinea: %v", got)
@@ -306,7 +306,7 @@ func TestEventsWaitingSubtasks(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.wantStatus(t, 1, store.StatusQueued)
-	wantEvent(t, f, parent.ID, "requeued", "Foreman", "All subtasks are done")
+	wantEvent(t, f, parent.ID, "requeued", "HobStack", "All subtasks are done")
 }
 
 func TestEventsStuck(t *testing.T) {
@@ -318,8 +318,8 @@ func TestEventsStuck(t *testing.T) {
 	if err := f.tm.CheckStuck(b.UpdatedAt.Add(6 * time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	wantEvent(t, f, a.ID, "nudged", "Foreman", "Foreman nudged Lead")
-	wantEvent(t, f, b.ID, "requeued", "Foreman", "Foreman requeued it")
+	wantEvent(t, f, a.ID, "nudged", "HobStack", "HobStack nudged Lead")
+	wantEvent(t, f, b.ID, "requeued", "HobStack", "HobStack requeued it")
 }
 
 // countKind numara evenimentele de felul kind ale task-ului.
@@ -342,7 +342,7 @@ func TestStopRecordsRequeuedOnce(t *testing.T) {
 	if err := f.tm.Stop(f.p.ID); err != nil {
 		t.Fatal(err)
 	}
-	wantEvent(t, f, task.ID, "requeued", "Foreman", "Stopped; back in the queue")
+	wantEvent(t, f, task.ID, "requeued", "HobStack", "Stopped; back in the queue")
 	// finish(stopped) vine dupa Stop: task-ul nu mai e In progress, nu se dubleaza
 	f.fs.finish(run.ID, runner.Outcome{Status: "stopped"})
 	if n := countKind(t, f, task.ID, "requeued"); n != 1 {
@@ -373,7 +373,7 @@ func TestRecoverRecordsRequeuedSkipsWaiting(t *testing.T) {
 	if err := f.tm.Recover(); err != nil {
 		t.Fatal(err)
 	}
-	wantEvent(t, f, plain.ID, "requeued", "Foreman", "back in the queue")
+	wantEvent(t, f, plain.ID, "requeued", "HobStack", "back in the queue")
 	if n := countKind(t, f, parent.ID, "requeued"); n != 0 {
 		t.Fatalf("task-ul care asteapta sub-task-uri nu se pune in coada: %d", n)
 	}

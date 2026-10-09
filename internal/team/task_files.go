@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"foreman/internal/config"
-	"foreman/internal/mcp"
-	"foreman/internal/store"
-	"foreman/internal/taskfiles"
+	"hobstack/internal/config"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
+	"hobstack/internal/taskfiles"
 )
 
 // copyTaskFile e taskfiles.Copy; testele il inlocuiesc ca sa vada daca t.work e liber in timpul copierii.
@@ -75,7 +75,7 @@ func (t *Team) AttachFiles(c mcp.Caller, ref string, paths []string) (string, er
 			failed = append(failed, fmt.Sprintf("%s (%s)", key, err))
 			continue
 		}
-		// un fisier din fisierele proiectului: "research/leads.csv", nu calea lunga din ~/.foreman
+		// un fisier din fisierele proiectului: "research/leads.csv", nu calea lunga din ~/.hobstack
 		if rel, ok := taskfiles.RelIn(tg.files, cp.Path); ok {
 			cp.Path = rel
 		}

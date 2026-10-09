@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/config"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/store"
 )
 
 const maxFileView = 1 << 20 // 1 MB: peste atat modala nu arata continutul

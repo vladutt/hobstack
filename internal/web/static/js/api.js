@@ -16,12 +16,12 @@ export async function api(path, { method = "GET", body } = {}) {
 }
 
 // upload trimite un FormData (fisiere). Nu setam Content-Type: browserul pune
-// singur boundary-ul. Header-ul X-Foreman e cerut de server pe multipart,
+// singur boundary-ul. Header-ul X-HobStack e cerut de server pe multipart,
 // ca o pagina straina sa nu poata trimite upload-uri fara preflight.
 export async function upload(path, formData) {
   const res = await fetch(path, {
     method: "POST",
-    headers: { "X-Foreman": "1" },
+    headers: { "X-HobStack": "1" },
     body: formData,
   });
   if (res.status === 204 || res.status === 202) return null;

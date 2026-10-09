@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/config"
-	"foreman/internal/events"
-	"foreman/internal/picker"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/events"
+	"hobstack/internal/picker"
+	"hobstack/internal/store"
 )
 
 // upload trimite un request multipart; campul fisierelor se numeste "files".
@@ -37,7 +37,7 @@ func upload(t *testing.T, e *env, path string, fields map[string]string, files m
 	req, _ := http.NewRequest("POST", e.ts.URL+path, &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	if withHeader {
-		req.Header.Set("X-Foreman", "1")
+		req.Header.Set("X-HobStack", "1")
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/prompt"
-	"foreman/internal/store"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
 )
 
 var ErrNotBlocked = errors.New("the task is not blocked")
@@ -19,7 +19,7 @@ var ErrNotBlocked = errors.New("the task is not blocked")
 // Run proceseaza cererile Kick pana cand ctx e anulat. Porneste din main.
 // O data pe minut cauta si task-urile blocate (CheckStuck) si ruleaza sarcinile recurente (RunDue).
 func (t *Team) Run(ctx context.Context) {
-	// rularile ratate cat a fost inchis Foreman apar imediat
+	// rularile ratate cat a fost inchis HobStack apar imediat
 	if err := t.RunDue(t.now()); err != nil {
 		log.Printf("recurring: %v", err)
 	}
@@ -539,7 +539,7 @@ func (t *Team) relinkReviews(projectID int64) error {
 			return err
 		}
 		if !hasBoss {
-			t.taskEvent(*task, "blocked", actorForeman, "Blocked: the reviewer is gone and no one can decide, you decide")
+			t.taskEvent(*task, "blocked", actorHobStack, "Blocked: the reviewer is gone and no one can decide, you decide")
 		}
 		t.emit(projectID, "task", *task)
 		if !hasBoss {
@@ -809,6 +809,6 @@ func (t *Team) recordRequeued(ids []int64) {
 			log.Printf("task %d: %v", id, err)
 			continue
 		}
-		t.taskEvent(task, "requeued", actorForeman, "Stopped; back in the queue")
+		t.taskEvent(task, "requeued", actorHobStack, "Stopped; back in the queue")
 	}
 }

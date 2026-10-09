@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // limitele raportate de un run se salveaza pe contul proiectului (aici Default = 0)

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/config"
-	"foreman/internal/picker"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/picker"
+	"hobstack/internal/store"
 )
 
 const (

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 type folderInput struct {
@@ -69,7 +69,7 @@ func (in projectInput) folders(projectName, workspaces string) ([]store.Folder, 
 	paths := map[string]bool{}
 	for i := range out {
 		f := &out[i]
-		hint := projectName // un folder nou in ~/Foreman: slug din proiect (+ numele folderului)
+		hint := projectName // un folder nou in ~/HobStack: slug din proiect (+ numele folderului)
 		if i > 0 {
 			hint += " " + f.Name
 		}

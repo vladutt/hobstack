@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/runner"
+	"hobstack/internal/runner"
 )
 
 // readySession: o analiza terminata cu o propunere (Ana + Bob) si sesiunea Claude "sid-1".
@@ -61,7 +61,7 @@ func TestChatResumesWithCurrentProposal(t *testing.T) {
 		t.Fatalf("busy: %v", err)
 	}
 
-	// Foreman propune: pastreaza shell la Bob (ok); adauga shell la Vera (refuzat)
+	// HobStack propune: pastreaza shell la Bob (ok); adauga shell la Vera (refuzat)
 	b := m.Wrap(innerBackend{})
 	c, _ := b.Resolve(tokenOf(t, spec))
 	bad := `{"name":"Shop","goal":"g","context":"edited by the user","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Bob","role":"Dev","reportsTo":"Ana","tools":["write","shell"]},{"name":"Vera","role":"QA","reportsTo":"Ana","tools":["shell"]}]}`
@@ -77,7 +77,7 @@ func TestChatResumesWithCurrentProposal(t *testing.T) {
 	if got.Busy || got.Status != StatusReady || len(got.Proposal.Agents) != 3 || got.Version != s.Version+1 {
 		t.Fatalf("dupa chat: %+v", got)
 	}
-	if last := got.Chat[len(got.Chat)-1]; last.Role != "foreman" || last.Text != "Added Vera (QA)." {
+	if last := got.Chat[len(got.Chat)-1]; last.Role != "hobstack" || last.Text != "Added Vera (QA)." {
 		t.Fatalf("%+v", last)
 	}
 	// Undo readuce propunerea trimisa de utilizator (cu editarile lui)

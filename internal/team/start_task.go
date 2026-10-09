@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // MaxSelfStarted: cate task-uri deschise pornite cu start_task poate avea un agent (anti-bucla).

@@ -14,13 +14,13 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"foreman/internal/mcpregistry"
-	"foreman/internal/store"
+	"hobstack/internal/mcpregistry"
+	"hobstack/internal/store"
 )
 
 // TestHelperMCPWeb e un server MCP minimal (acelasi ca in testele internal/library): testul se re-porneste ca proces.
 func TestHelperMCPWeb(t *testing.T) {
-	if os.Getenv("FOREMAN_HELPER_MCP") != "1" {
+	if os.Getenv("HOBSTACK_HELPER_MCP") != "1" {
 		return
 	}
 	sc := bufio.NewScanner(os.Stdin)
@@ -39,7 +39,7 @@ func TestHelperMCPWeb(t *testing.T) {
 			r = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "t", "version": "1"}}
 		case "tools/list":
 			tok := os.Getenv("VEH_TOKEN")
-			if os.Getenv("FOREMAN_HELPER_FAIL") == "1" { // eroare care repeta valoarea secretului
+			if os.Getenv("HOBSTACK_HELPER_FAIL") == "1" { // eroare care repeta valoarea secretului
 				out, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": m.ID, "error": map[string]any{"code": 1, "message": "rejected token " + tok}})
 				fmt.Println(string(out))
 				continue
@@ -56,9 +56,9 @@ func TestHelperMCPWeb(t *testing.T) {
 	os.Exit(0)
 }
 
-// helperArgs: `env FOREMAN_HELPER_MCP=1 <test binary> -test.run=...` porneste serverul de test (proba are mediul curatat).
+// helperArgs: `env HOBSTACK_HELPER_MCP=1 <test binary> -test.run=...` porneste serverul de test (proba are mediul curatat).
 func helperArgs(extra ...string) []string {
-	return append(append([]string{"FOREMAN_HELPER_MCP=1"}, extra...), os.Args[0], "-test.run=^TestHelperMCPWeb$")
+	return append(append([]string{"HOBSTACK_HELPER_MCP=1"}, extra...), os.Args[0], "-test.run=^TestHelperMCPWeb$")
 }
 
 // fakeRegistry serveste testdata din mcpregistry; numara cererile.
@@ -79,7 +79,7 @@ func fakeRegistry(t *testing.T, status int) (*httptest.Server, *atomic.Int32) {
 		w.Write(raw)
 	}))
 	t.Cleanup(ts.Close)
-	t.Setenv("FOREMAN_MCP_REGISTRY_URL", ts.URL)
+	t.Setenv("HOBSTACK_MCP_REGISTRY_URL", ts.URL)
 	return ts, &n
 }
 
@@ -366,7 +366,7 @@ func TestInstallMCPSecretValues(t *testing.T) {
 func TestInstallMCPSecretNotInProbeError(t *testing.T) {
 	e := setupLib(t)
 	p := e.project(t)
-	body := installBody("vehicles", helperArgs("FOREMAN_HELPER_FAIL=1"))
+	body := installBody("vehicles", helperArgs("HOBSTACK_HELPER_FAIL=1"))
 	body["projectId"], body["secretValues"] = p.ID, map[string]string{"VEH_TOKEN": "tok-123"}
 	code, raw := e.do(t, "POST", "/api/library/install-mcp", body)
 	if code != http.StatusUnprocessableEntity {
@@ -418,7 +418,7 @@ func TestInstallMCPRegistryOptionalEnv(t *testing.T) {
 		w.Write([]byte(body))
 	}))
 	t.Cleanup(ts.Close)
-	t.Setenv("FOREMAN_MCP_REGISTRY_URL", ts.URL)
+	t.Setenv("HOBSTACK_MCP_REGISTRY_URL", ts.URL)
 	e := setupLib(t)
 	p := e.project(t)
 

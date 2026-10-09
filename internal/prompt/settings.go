@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // ValidTools sunt tool-urile pe care le poti bifa la un agent, in ordinea din UI.
@@ -19,7 +19,7 @@ var toolRules = map[string][]string{
 	"shell": {"Bash"},
 	"git": {"Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)",
 		"Bash(git commit:*)", "Bash(git checkout -b:*)"},
-	"web":      {"WebSearch", "WebFetch"},
+	"web": {"WebSearch", "WebFetch"},
 	// git-read: git doar pentru citire, in run-urile fara task (nume intern, nu apare in UI)
 	"git-read": {"Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)"},
 	"packages": packageRules,

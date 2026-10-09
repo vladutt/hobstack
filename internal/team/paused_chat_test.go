@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func pause(t *testing.T, f *fixture) {

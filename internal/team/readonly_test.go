@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/prompt"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/prompt"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // allowOf intoarce permissions.allow din --settings-ul unui run.

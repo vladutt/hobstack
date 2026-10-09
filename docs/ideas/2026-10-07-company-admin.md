@@ -5,7 +5,7 @@ adaugarea unui server optional; clientul local ramane ca acum.
 
 ## Ce vrea utilizatorul
 - O companie instaleaza un admin pe serverul ei si il da angajatilor si echipelor.
-- In admin se fac echipe de oameni si se trimit invitatii; fiecare om foloseste Foreman local,
+- In admin se fac echipe de oameni si se trimit invitatii; fiecare om foloseste HobStack local,
   conectat cu un cont la adminul companiei.
 - Motivul imediat: teste cu oameni care lucreaza in echipa pe proiecte asemanatoare.
 
@@ -21,17 +21,17 @@ adaugarea unui server optional; clientul local ramane ca acum.
   arata clar ce trimite.
 
 ## Forma tehnica propusa
-- Acelasi binar Go, alt mod (ex. `foreman admin --listen ...`); SQLite sau Postgres.
+- Acelasi binar Go, alt mod (ex. `hobstack admin --listen ...`); SQLite sau Postgres.
 - Protocol client <-> admin versionat de la prima zi (serverul si clientii se actualizeaza separat).
 - Autentificare: la inceput invitatii pe email cu token; SSO (Google, Microsoft, Okta) mai tarziu.
 
 ## De verificat
-- Ollama: Foreman depinde de Claude Code CLI (stream-json, MCP, permisiuni). De verificat daca
+- Ollama: HobStack depinde de Claude Code CLI (stream-json, MCP, permisiuni). De verificat daca
   Claude Code merge cu un endpoint local compatibil (ANTHROPIC_BASE_URL) sau daca trebuie un runner
   separat; si daca modelele locale fac fata orchestrarii prin tool-uri (lideri, task-uri, review).
 
 ## Ordinea
-1. Sabloane de echipa si reguli ca fisiere (ex. `.foreman/team.json` + fisier de reguli), format
+1. Sabloane de echipa si reguli ca fisiere (ex. `.hobstack/team.json` + fisier de reguli), format
    stabil si versionat: exact ce va distribui adminul mai tarziu. (Roadmap punctul 2.)
 2. Teste cu oameni, cu git ca mod de distributie a sabloanelor.
 3. Modul admin (echipe, invitatii, limite, distributia sabloanelor, cifre inapoi) doar daca

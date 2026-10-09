@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // autonomous porneste modul full autonomy pe proiectul fixture-ului.
@@ -139,7 +139,7 @@ func TestAutonomyUserTaskOnRootStaysForUser(t *testing.T) {
 	if !f.tm.UserDecides(got, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatalf("decide utilizatorul: %+v", got)
 	}
-	if hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptText) {
+	if hasEvent(t, f, got.ID, "accepted", actorHobStack, autoAcceptText) {
 		t.Fatal("fara accept automat")
 	}
 
@@ -175,7 +175,7 @@ func TestAutonomyRootAssigneeAutoDone(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := f.wantStatus(t, 1, store.StatusDone)
-	if !hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptText) {
+	if !hasEvent(t, f, got.ID, "accepted", actorHobStack, autoAcceptText) {
 		t.Fatal("lipseste evenimentul de accept automat")
 	}
 	if f.hasMessage(solo.ID, "The user decides") {
@@ -236,7 +236,7 @@ func TestAutonomyUserSendBackNeverAutoDone(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.wantStatus(t, 1, store.StatusBlocked)
-	if hasEvent(t, f, task.ID, "accepted", actorForeman, autoAcceptAfterText) {
+	if hasEvent(t, f, task.ID, "accepted", actorHobStack, autoAcceptAfterText) {
 		t.Fatal("decizia utilizatorului nu accepta automat")
 	}
 }
@@ -282,7 +282,7 @@ func TestAutonomyBlockedEscalatesToRoot(t *testing.T) {
 		t.Fatalf("al doilea blocaj: %q %v", text, err)
 	}
 	done := f.wantStatus(t, 1, store.StatusDone)
-	if !hasEvent(t, f, done.ID, "accepted", actorForeman, "Accepted automatically after repeated send-backs (full autonomy)") {
+	if !hasEvent(t, f, done.ID, "accepted", actorHobStack, "Accepted automatically after repeated send-backs (full autonomy)") {
 		t.Fatal("lipseste evenimentul de accept automat")
 	}
 	if !f.hasMessage(f.lead.ID, "accepted automatically after repeated send-backs") {
@@ -410,10 +410,10 @@ func TestAutonomyEscalatedFailedRunNotAutoDone(t *testing.T) {
 		t.Fatalf("%q %v", text, err)
 	}
 	got := f.wantStatus(t, 1, store.StatusBlocked)
-	if hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptAfterText) {
+	if hasEvent(t, f, got.ID, "accepted", actorHobStack, autoAcceptAfterText) {
 		t.Fatal("un run esuat nu se accepta automat")
 	}
-	if !hasEvent(t, f, got.ID, "blocked", actorForeman, "Blocked after 3 send-backs: the last run failed, you decide") {
+	if !hasEvent(t, f, got.ID, "blocked", actorHobStack, "Blocked after 3 send-backs: the last run failed, you decide") {
 		t.Fatal("lipseste evenimentul de blocare cu motivul")
 	}
 	if !f.hasMessage(f.lead.ID, "T-1 is blocked after 3 rejections or send-backs. The user decides.") {
@@ -450,7 +450,7 @@ func TestAutonomyStageRunWithoutReportNotAutoDone(t *testing.T) {
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, solo).ID, runner.Outcome{Status: store.RunDone, Result: "care varianta?"})
 	got := f.wantStatus(t, 1, store.StatusReview)
-	if hasEvent(t, f, got.ID, "accepted", actorForeman, autoAcceptText) {
+	if hasEvent(t, f, got.ID, "accepted", actorHobStack, autoAcceptText) {
 		t.Fatal("fara accept automat")
 	}
 }
@@ -466,7 +466,7 @@ func TestRecurringAutoAcceptOnRoot(t *testing.T) {
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, f.lead).ID, runner.Outcome{Status: store.RunDone, Result: "gata"})
 	got := f.wantStatus(t, 1, store.StatusDone)
-	if !hasEvent(t, f, got.ID, "accepted", actorForeman, recurringAcceptText) {
+	if !hasEvent(t, f, got.ID, "accepted", actorHobStack, recurringAcceptText) {
 		t.Fatal("lipseste acceptul automat")
 	}
 }

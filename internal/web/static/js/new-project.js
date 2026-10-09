@@ -15,7 +15,7 @@ export async function newProjectView(root) {
 
   const name = el("input", { type: "text", class: "np-name", maxlength: 80, required: true, placeholder: "e.g. Meridian Social", "aria-label": "Name" });
   const goal = el("textarea", { rows: 3, maxlength: 2000, placeholder: "e.g. A Laravel package that posts car listings to Facebook and Instagram: one Page per dealer, post on a button, mark “SOLD” when a listing is taken down.", "aria-label": "Goal" });
-  const repo = el("input", { type: "text", class: "np-path", placeholder: "code/my-project (empty = a new folder in ~/Foreman)", "aria-label": "Repository" });
+  const repo = el("input", { type: "text", class: "np-path", placeholder: "code/my-project (empty = a new folder in ~/HobStack)", "aria-label": "Repository" });
   const browse = info.canPickFolder ? el("button", { type: "button", class: "btn", onclick: () => pick(repo, browse).then(syncTilde) }, "Browse...") : null;
   // "~/" din fata campului dispare cand calea e absoluta (aleasa cu Browse sau scrisa)
   const syncTilde = () => repo.parentElement?.classList.toggle("abs", /^[/~]/.test(repo.value.trim()));

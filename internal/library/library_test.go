@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func newEnv(t *testing.T) (*store.Store, *Lib, string) {

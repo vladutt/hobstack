@@ -3,7 +3,7 @@ package team
 import (
 	"fmt"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // authFailed: run-ul a cazut la autentificare (token expirat sau revocat, CLI delogat).
@@ -33,7 +33,7 @@ func (t *Team) authFailed(ar activeRun, a store.Agent, msg string) error {
 			if err := t.st.SaveTask(&task); err != nil {
 				return err
 			}
-			t.taskEvent(task, "requeued", actorForeman, fmt.Sprintf("%s failed to sign in; back in the queue until you fix it", label))
+			t.taskEvent(task, "requeued", actorHobStack, fmt.Sprintf("%s failed to sign in; back in the queue until you fix it", label))
 			t.emit(ar.projectID, "task", task)
 		}
 	}

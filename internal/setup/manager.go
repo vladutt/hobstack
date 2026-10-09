@@ -15,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"foreman/internal/mcp"
-	"foreman/internal/models"
-	"foreman/internal/prompt"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/models"
+	"hobstack/internal/prompt"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 const (
@@ -32,14 +32,14 @@ const (
 var ErrNotFound = errors.New("the setup session does not exist (maybe the server was restarted)")
 
 var (
-	ErrBusy     = errors.New("Foreman is still working; wait for the answer")
+	ErrBusy     = errors.New("HobStack is still working; wait for the answer")
 	ErrNotReady = errors.New("the proposal is not ready yet")
 	// ErrNothingToUndo: istoricul de schimbari al sesiunii e gol
 	ErrNothingToUndo = errors.New("there is nothing to undo")
 )
 
-// ChatMessage: un mesaj din conversatia cu Foreman dupa analiza.
-// Role: "user", "foreman" sau "event" (stop, eroare, undo).
+// ChatMessage: un mesaj din conversatia cu HobStack dupa analiza.
+// Role: "user", "hobstack" sau "event" (stop, eroare, undo).
 type ChatMessage struct {
 	Role string    `json:"role"`
 	Text string    `json:"text"`
@@ -75,7 +75,7 @@ type Session struct {
 	Error       string    `json:"error"`
 	CreatedAt   time.Time `json:"createdAt"`
 
-	Chat      []ChatMessage `json:"chat"`      // conversatia cu Foreman dupa analiza; mereu non-nil
+	Chat      []ChatMessage `json:"chat"`      // conversatia cu HobStack dupa analiza; mereu non-nil
 	Busy      bool          `json:"busy"`      // un run de chat e in curs
 	ChatRunID string        `json:"chatRunId"` // run-ul de chat in curs
 	Version   int           `json:"version"`   // creste la fiecare propunere noua sau Undo
@@ -334,13 +334,13 @@ func (m *Manager) finishChat(s *Session, o runner.Outcome) {
 	case o.Status == "stopped":
 		s.Chat = append(s.Chat, ChatMessage{Role: "event", Text: "Stopped.", At: now})
 	case o.Status == "failed":
-		s.Chat = append(s.Chat, ChatMessage{Role: "event", Text: "Foreman failed: " + firstNonEmpty(o.Error, o.Result, "unknown error"), At: now})
+		s.Chat = append(s.Chat, ChatMessage{Role: "event", Text: "HobStack failed: " + firstNonEmpty(o.Error, o.Result, "unknown error"), At: now})
 	default:
-		s.Chat = append(s.Chat, ChatMessage{Role: "foreman", Text: firstNonEmpty(o.Result, "Done."), At: now})
+		s.Chat = append(s.Chat, ChatMessage{Role: "hobstack", Text: firstNonEmpty(o.Result, "Done."), At: now})
 	}
 }
 
-// Chat trimite un mesaj lui Foreman (analistul, reluat cu --resume) despre
+// Chat trimite un mesaj lui HobStack (analistul, reluat cu --resume) despre
 // propunere. current e propunerea din pagina, cu editarile utilizatorului.
 func (m *Manager) Chat(id, message string, current Proposal) (Session, error) {
 	message = strings.TrimSpace(message)
@@ -395,7 +395,7 @@ func (m *Manager) Chat(id, message string, current Proposal) (Session, error) {
 		return Session{}, ErrNotReady
 	}
 	// versiunea trimisa (cu editarile utilizatorului) devine propunerea curenta si
-	// intra in istoric: Undo dupa schimbarea lui Foreman o readuce exact asa
+	// intra in istoric: Undo dupa schimbarea lui HobStack o readuce exact asa
 	p := current
 	s.Proposal = &p
 	s.history = append(s.history, &p)
@@ -577,7 +577,7 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 		}
 	}
 	if busy {
-		// in chat: Foreman pastreaza tool-urile alese de utilizator, dar nu adauga shell sau web
+		// in chat: HobStack pastreaza tool-urile alese de utilizator, dar nu adauga shell sau web
 		if err := ValidateProposal(&p, false, existing); err != nil {
 			return "", err
 		}

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"foreman/internal/models"
-	"foreman/internal/prompt"
-	"foreman/internal/store"
+	"hobstack/internal/models"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
 )
 
 // Proposal e propunerea analistului (si, dupa editare, cea trimisa la creare).

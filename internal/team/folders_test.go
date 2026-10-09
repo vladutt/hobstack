@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // withFolders adauga proiectului fixture-ului un al doilea folder si il muta pe Rook acolo.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // ErrArchived: task-ul a fost sters de utilizator (tool-urile MCP primesc mesajul lui).

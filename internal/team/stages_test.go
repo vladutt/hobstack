@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // stagesFixture: Lead; Dev = Rook + Wes (lucru), QA = Vera (verificare).

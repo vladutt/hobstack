@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"foreman/internal/config"
-	"foreman/internal/events"
-	"foreman/internal/library"
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/events"
+	"hobstack/internal/library"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // Statusurile unui agent, afisate in UI si in lista echipei.

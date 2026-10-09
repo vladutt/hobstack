@@ -45,12 +45,12 @@ autonomy never approves these for you.
 
 ## Stuck tasks
 
-Foreman checks every minute for tasks that nobody is moving:
+HobStack checks every minute for tasks that nobody is moving:
 
 - a task waiting for a decision from an agent that is idle;
 - a task **In progress** with nothing running (for example after a failure).
 
-After 5 minutes without change, Foreman nudges the responsible agent once on its own. If the task is
+After 5 minutes without change, HobStack nudges the responsible agent once on its own. If the task is
 still stuck 5 minutes later, it appears in **Needs you** with **Nudge again** and **Open <agent>**, and
 its card gets a **stuck** label. Paused projects are not checked.
 

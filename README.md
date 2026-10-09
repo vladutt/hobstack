@@ -1,4 +1,4 @@
-# Foreman
+# HobStack
 
 Local Claude Code agent teams. A single Go binary, with a browser UI on 127.0.0.1.
 
@@ -8,16 +8,16 @@ that created the task. You can talk to any agent. Everything is visible live on 
 
 ## Running
 
-    go run ./cmd/foreman start
+    go run ./cmd/hobstack start
 
 Open http://127.0.0.1:7777. Options: `--port 8080`, `--no-open`.
-The project's working folder is optional: if you don't choose one, `~/Foreman/<name>` is used.
+The project's working folder is optional: if you don't choose one, `~/HobStack/<name>` is used.
 You need `claude` (Claude Code) in PATH, logged in.
 
 ## Build
 
-    go build -o foreman ./cmd/foreman
-    GOOS=darwin GOARCH=arm64 go build -o foreman-mac ./cmd/foreman
+    go build -o hobstack ./cmd/hobstack
+    GOOS=darwin GOARCH=arm64 go build -o hobstack-mac ./cmd/hobstack
 
 ## How it works
 
@@ -45,19 +45,19 @@ You need `claude` (Claude Code) in PATH, logged in.
 - The API accepts only Host 127.0.0.1/localhost and requires `Content-Type: application/json` on
   requests that change something (protection against web pages that would send requests
   to the app).
-- Files attached to a project live in `~/.foreman/projects/<id>/files/`; agents get them with
+- Files attached to a project live in `~/.hobstack/projects/<id>/files/`; agents get them with
   `--add-dir` and read them with Read (including images and PDFs).
 - On startup all projects are paused: nothing runs (or costs money) until you press "Start team".
 
 ## Data
 
-    ~/.foreman/foreman.db           projects, agents, tasks, runs, messages
-    ~/.foreman/logs/runs/<id>.jsonl raw log of each run
-    ~/.foreman/projects/<id>/files/ files attached to the project
+    ~/.hobstack/hobstack.db           projects, agents, tasks, runs, messages
+    ~/.hobstack/logs/runs/<id>.jsonl raw log of each run
+    ~/.hobstack/projects/<id>/files/ files attached to the project
 
 ## Structure
 
-    cmd/foreman/        CLI: start, clean shutdown on Ctrl+C
+    cmd/hobstack/        CLI: start, clean shutdown on Ctrl+C
     internal/config/    AppName and paths on disk
     internal/store/     SQLite (modernc.org/sqlite, no CGO)
     internal/prompt/    system prompt, turn message, permissions, MCP config

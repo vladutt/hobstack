@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"foreman/internal/library"
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/library"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // SetLibrary activeaza rutele /api/library (fara el raspund 503).

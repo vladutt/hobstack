@@ -76,7 +76,7 @@ and report what is broken".
   reach you.
 
 Each occurrence is a normal task on the board. If the previous one is still open, the next one is
-skipped. Recurring tasks only run while Foreman is running. If it was off at the scheduled time, one task
+skipped. Recurring tasks only run while HobStack is running. If it was off at the scheduled time, one task
 is created when it starts again (not one per missed time). As with any task, it waits in Queued until you
 press **Start team**.
 

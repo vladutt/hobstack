@@ -380,13 +380,13 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .msg.me .bubble { background: var(--me); color: var(--text); max-width: min(90%, 480px); }
 .pending { font-size: 11px; color: var(--amber); }
 .event { font-size: 12px; color: var(--muted); text-align: center; padding: 2px 8px; overflow-wrap: anywhere; }
-:is(.thread, .wizard, .foreman-chat) .live { border: 1px dashed var(--line-2); border-radius: 12px; padding: 12px; display: grid; gap: 8px; font-size: 13px; background: rgba(79, 195, 161, .03); }
+:is(.thread, .wizard, .hobstack-chat) .live { border: 1px dashed var(--line-2); border-radius: 12px; padding: 12px; display: grid; gap: 8px; font-size: 13px; background: rgba(79, 195, 161, .03); }
 .live-head { color: var(--teal); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .live-head::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); animation: pulse 1.4s ease-in-out infinite; }
 .live-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-:is(.thread, .wizard, .foreman-chat) .live details { background: var(--bg); border-radius: 7px; padding: 5px 9px; }
-:is(.thread, .wizard, .foreman-chat) .live summary { cursor: pointer; font-family: var(--mono); font-size: 11.5px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:is(.thread, .wizard, .foreman-chat) .live pre { margin: 6px 0 0; white-space: pre-wrap; font-size: 11.5px; max-height: 240px; overflow: auto; font-family: var(--mono); }
+:is(.thread, .wizard, .hobstack-chat) .live details { background: var(--bg); border-radius: 7px; padding: 5px 9px; }
+:is(.thread, .wizard, .hobstack-chat) .live summary { cursor: pointer; font-family: var(--mono); font-size: 11.5px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(.thread, .wizard, .hobstack-chat) .live pre { margin: 6px 0 0; white-space: pre-wrap; font-size: 11.5px; max-height: 240px; overflow: auto; font-family: var(--mono); }
 .err { color: var(--red); }
 .composer { border-top: 1px solid var(--line); padding: 14px 20px 16px; display: grid; position: relative; gap: 8px; }
 .composer form { display: flex; gap: 8px; align-items: center; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }
@@ -569,18 +569,18 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .wizard-main { min-width: 0; }
 .wizard-main[inert] { opacity: .6; }
 .wizard-side { position: sticky; top: calc(var(--topbar-h) + 16px); min-width: 0; }
-.foreman-chat { background: var(--deep); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h) - 140px); min-height: 360px; }
-.foreman-chat .fc-head { padding: 14px 16px; border-bottom: 1px solid var(--line); font-weight: 650; }
-.foreman-chat .fc-thread { flex: 1; overflow: auto; padding: 14px 16px; display: grid; gap: 10px; align-content: start; }
+.hobstack-chat { background: var(--deep); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; height: calc(100vh - var(--topbar-h) - 140px); min-height: 360px; }
+.hobstack-chat .fc-head { padding: 14px 16px; border-bottom: 1px solid var(--line); font-weight: 650; }
+.hobstack-chat .fc-thread { flex: 1; overflow: auto; padding: 14px 16px; display: grid; gap: 10px; align-content: start; }
 .fc-msg { max-width: 90%; padding: 9px 12px; border-radius: 11px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
 .fc-msg.user { justify-self: end; background: var(--me); }
-.fc-msg.foreman { justify-self: start; background: var(--them); }
+.fc-msg.hobstack { justify-self: start; background: var(--them); }
 .fc-msg.event { justify-self: center; color: var(--muted); font-size: 12px; }
 .fc-undo { margin-top: 6px; white-space: normal; }
 .fc-live { min-width: 0; }
 .fc-live .live-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.foreman-chat form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
-.foreman-chat textarea { flex: 1; min-width: 0; resize: vertical; }
+.hobstack-chat form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.hobstack-chat textarea { flex: 1; min-width: 0; resize: vertical; }
 .wizard-agent.changed, .folder-row.changed { outline: 2px solid var(--amber); outline-offset: 2px; transition: outline-color .6s; }
 
 /* ---------- etape (coloane proprii) ---------- */
@@ -817,7 +817,7 @@ a.flow-head:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px
   .ws-main { padding: 16px; }
   .wizard-review-cols { grid-template-columns: minmax(0, 1fr); }
   .wizard-side { position: static; }
-  .foreman-chat { height: 480px; }
+  .hobstack-chat { height: 480px; }
   .ptable .hide-sm { display: none; }
 }
 @media (max-width: 720px) {

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // markDelivered goleste coada agentului, ca sa fie idle pentru detector.
@@ -54,7 +54,7 @@ func TestStuckDecisionNudgedOnceThenVisible(t *testing.T) {
 	if len(notes) != 1 || !strings.Contains(notes[0].Text, "T-1 is waiting for your decision: call accept_task or send_back") {
 		t.Fatalf("Lead trebuia trezit cu o nota: %+v", notes)
 	}
-	if !f.hasMessage(f.lead.ID, "Foreman nudged "+f.lead.Name+": T-1 is waiting for a decision.") {
+	if !f.hasMessage(f.lead.ID, "HobStack nudged "+f.lead.Name+": T-1 is waiting for a decision.") {
 		t.Fatal("lipseste nota livrata din thread")
 	}
 	got, _ := f.st.GetTask(task.ID)
@@ -192,7 +192,7 @@ func TestStuckOrphanRequeued(t *testing.T) {
 	if got.NudgedAt == nil || !got.NudgedAt.Equal(now) {
 		t.Fatalf("nudged_at: %v (requeue trebuia facut inainte de SetTaskNudged)", got.NudgedAt)
 	}
-	if !f.hasMessage(f.rook.ID, "Foreman requeued T-1: it was in progress with nothing running.") {
+	if !f.hasMessage(f.rook.ID, "HobStack requeued T-1: it was in progress with nothing running.") {
 		t.Fatal("lipseste nota de requeue")
 	}
 	// queued nu e blocat: nimic vizibil
@@ -207,7 +207,7 @@ func TestStuckOrphanRequeued(t *testing.T) {
 	if again.Status != store.StatusQueued || again.NudgedAt == nil || !again.NudgedAt.Equal(now) || !again.UpdatedAt.Equal(got.UpdatedAt) {
 		t.Fatalf("repus din nou: %+v", again)
 	}
-	if n := countMessages(t, f, f.rook, "Foreman requeued T-1"); n != 1 {
+	if n := countMessages(t, f, f.rook, "HobStack requeued T-1"); n != 1 {
 		t.Fatalf("note de requeue: %d", n)
 	}
 	// Kick a fost cerut: reconcilierea il porneste pe Rook
@@ -266,7 +266,7 @@ func TestStuckOneNotePerAgent(t *testing.T) {
 	if len(notes) != 1 || !strings.Contains(notes[0].Text, "T-1, T-2 are waiting for your decision") {
 		t.Fatalf("%+v", notes)
 	}
-	if !f.hasMessage(f.lead.ID, "Foreman nudged "+f.lead.Name+": T-1, T-2 are waiting for a decision.") {
+	if !f.hasMessage(f.lead.ID, "HobStack nudged "+f.lead.Name+": T-1, T-2 are waiting for a decision.") {
 		t.Fatal("lipseste nota livrata")
 	}
 	for _, task := range []store.Task{a, b} {
@@ -384,7 +384,7 @@ func TestStuckOrphanTwiceBecomesVisible(t *testing.T) {
 	if got.Status != store.StatusInProgress {
 		t.Fatalf("repus a doua oara: %+v", got)
 	}
-	if n := countMessages(t, f, f.rook, "Foreman requeued T-1"); n != 1 {
+	if n := countMessages(t, f, f.rook, "HobStack requeued T-1"); n != 1 {
 		t.Fatalf("note de requeue: %d", n)
 	}
 	st, err := f.tm.StuckTasks(f.p.ID, t1.Add(stuckAfter))

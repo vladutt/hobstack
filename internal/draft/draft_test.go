@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
 )
 
 type fakeStarter struct {
@@ -60,7 +60,7 @@ func tokenOf(t *testing.T, s runner.Spec) string {
 }
 
 func input(dir string) Input {
-	return Input{ProjectID: 1, Dir: dir, Brief: "Project: Shop", Names: []string{"Foreman", "Forge"}, Ask: "someone for e-mails", Model: "sonnet"}
+	return Input{ProjectID: 1, Dir: dir, Brief: "Project: Shop", Names: []string{"HobStack", "Forge"}, Ask: "someone for e-mails", Model: "sonnet"}
 }
 
 func TestDraftProposeAndReady(t *testing.T) {
@@ -82,7 +82,7 @@ func TestDraftProposeAndReady(t *testing.T) {
 	if _, err := b.ProposeAgent(c, you); err == nil || !strings.Contains(err.Error(), `"You" is reserved for the user`) {
 		t.Fatalf("numele You acceptat: %v", err)
 	}
-	good, _ := json.Marshal(map[string]any{"name": "Herald", "role": "Mail dev", "responsibilities": "e-mails", "reportsTo": "Foreman", "tools": []string{"write"}, "model": "sonnet"})
+	good, _ := json.Marshal(map[string]any{"name": "Herald", "role": "Mail dev", "responsibilities": "e-mails", "reportsTo": "HobStack", "tools": []string{"write"}, "model": "sonnet"})
 	if _, err := b.ProposeAgent(c, good); err != nil {
 		t.Fatal(err)
 	}

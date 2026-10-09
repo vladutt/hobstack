@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"foreman/internal/prompt"
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 func (s *Server) getGlobalCommands(w http.ResponseWriter, r *http.Request) {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 type changesResp struct {

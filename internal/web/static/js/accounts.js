@@ -103,7 +103,7 @@ export function accountsSettings() {
     queueMicrotask(() => name.focus());
     return el("div", { class: "acct-add" },
       el("p", { class: "hint" }, "In a terminal, run ", el("code", {}, "claude setup-token"),
-        " and sign in with the other account in the browser. Paste the token it prints. It is stored in Foreman's database on this machine and never shown again in the UI. Agents of projects on this account run with it in their environment, so an agent with Shell (or a Library tool) could read it."),
+        " and sign in with the other account in the browser. Paste the token it prints. It is stored in HobStack's database on this machine and never shown again in the UI. Agents of projects on this account run with it in their environment, so an agent with Shell (or a Library tool) could read it."),
       el("div", { class: "acct-form" }, name, token,
         el("button", { type: "button", class: "btn small primary", disabled: !!busy, onclick: save }, busy === -1 ? "Checking…" : "Add and check"),
         el("button", { type: "button", class: "btn small", onclick: () => { adding = false; draw(); } }, "Cancel")));

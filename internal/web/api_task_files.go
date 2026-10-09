@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"foreman/internal/config"
-	"foreman/internal/store"
-	"foreman/internal/taskfiles"
-	"foreman/internal/team"
+	"hobstack/internal/config"
+	"hobstack/internal/store"
+	"hobstack/internal/taskfiles"
+	"hobstack/internal/team"
 )
 
 // fileVersion: o predare mai veche a aceleiasi cai.

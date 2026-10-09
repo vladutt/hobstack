@@ -7,9 +7,9 @@ import (
 	"slices"
 	"time"
 
-	"foreman/internal/prompt"
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 // accessView e o cerere de acces deschisa, asa cum o vede UI-ul.
@@ -29,7 +29,7 @@ type accessView struct {
 	CanEnableShell bool `json:"canEnableShell"`
 	// CanEnablePackages: comanda refuzata instaleaza pachete (npm install...) si
 	// agentul nu are inca "packages"
-	CanEnablePackages bool `json:"canEnablePackages"`
+	CanEnablePackages bool   `json:"canEnablePackages"`
 	Kind              string `json:"kind"`     // "" (tool) / "ask" / "command"
 	HasShell          bool   `json:"hasShell"` // fara Shell, "Allow in this project" nu are efect
 }

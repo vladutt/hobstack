@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 var proj = store.Project{Name: "ApiUnit", Goal: "Import din OpenAPI 3.1", Context: "Stack: PHP 8.3"}
@@ -322,7 +322,7 @@ func TestSystemBlockedCommands(t *testing.T) {
 func TestSystemDenied(t *testing.T) {
 	for _, p := range []store.Project{{Name: "X"}, {Name: "X", Autonomy: true}} {
 		got := System(p, store.Agent{Name: "A"}, Links{BossName: "Boss"})
-		if !strings.Contains(got, "Command and tool permissions are set in Foreman") || strings.Contains(got, "a decision, a permission") {
+		if !strings.Contains(got, "Command and tool permissions are set in HobStack") || strings.Contains(got, "a decision, a permission") {
 			t.Errorf("autonomy=%v:\n%s", p.Autonomy, got)
 		}
 	}

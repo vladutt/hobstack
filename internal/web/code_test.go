@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // codeSetup: un proiect cu un task al lui Beacon si doua fisiere modificate in folderul proiectului.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/library"
-	"foreman/internal/store"
+	"hobstack/internal/library"
+	"hobstack/internal/store"
 )
 
 type libEnv struct {

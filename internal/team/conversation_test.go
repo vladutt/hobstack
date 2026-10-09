@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // convMsgs intoarce comunicarile task-ului (evenimentele cu body), in ordine.
@@ -313,11 +313,11 @@ func TestConvNudge(t *testing.T) {
 		t.Fatalf("o nota pentru Lead: %+v", notes)
 	}
 	for _, task := range []store.Task{a, b} {
-		e := wantMsg(t, f, task.ID, "nudged", "Foreman", "Lead", notes[0].Text)
+		e := wantMsg(t, f, task.ID, "nudged", "HobStack", "Lead", notes[0].Text)
 		if !strings.Contains(e.Body, "T-1, T-2") {
 			t.Fatalf("body: %q", e.Body)
 		}
-		wantEvent(t, f, task.ID, "nudged", "Foreman", "Foreman nudged Lead")
+		wantEvent(t, f, task.ID, "nudged", "HobStack", "HobStack nudged Lead")
 	}
 	wantMsgKinds(t, f, c.ID)
 }

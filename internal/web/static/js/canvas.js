@@ -76,11 +76,11 @@ export function teamCanvas({ onSelect, onEdit, onChanged, onCreate, onDelete, on
   // "How a task travels": drumul unui task prin echipa reala; se poate ascunde (tinut minte)
   const travel = el("div", { class: "canvas-travel" });
   let travelHidden = false;
-  try { travelHidden = localStorage.getItem("foreman-travel") === "0"; } catch {}
+  try { travelHidden = localStorage.getItem("hobstack-travel") === "0"; } catch {}
   const travelToggle = el("button", { type: "button", class: "btn ghost small travel-toggle", onclick: () => setTravel(!travelHidden) });
   function setTravel(hidden) {
     travelHidden = hidden;
-    try { localStorage.setItem("foreman-travel", hidden ? "0" : "1"); } catch {}
+    try { localStorage.setItem("hobstack-travel", hidden ? "0" : "1"); } catch {}
     draw(); // si incadrarea: panoul deschis tine loc jos
   }
   const wrap = el("div", { class: "canvas-wrap", tabindex: "0" }, bar, svgEl, travel, zoomBar);

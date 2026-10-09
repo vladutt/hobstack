@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // linked creeaza proiectul Backend (cu radacina lui, "Lead") si il leaga de proiectul fixture-ului.

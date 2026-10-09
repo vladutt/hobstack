@@ -9,6 +9,17 @@ import { settingsView } from "./settings.js";
 import { libraryView, libraryItemView } from "./library.js";
 import { mcpAddView } from "./mcp-add.js";
 
+// Aplicatia se numea foreman: preferintele salvate ("foreman-drawer", "foreman-category"...) trec o data
+// pe cheile noi "hobstack-...", ca sa nu se piarda starea panourilor si filtrele.
+try {
+  for (const key of Object.keys(localStorage)) {
+    if (!key.startsWith("foreman-")) continue;
+    const next = "hobstack-" + key.slice("foreman-".length);
+    if (localStorage.getItem(next) === null) localStorage.setItem(next, localStorage.getItem(key));
+    localStorage.removeItem(key);
+  }
+} catch { /* fara localStorage: nimic de mutat */ }
+
 // Rute in hash: #/, #/new, #/setup, #/setup/<id>, #/setup/folder/<proiect>/<folder>, #/p/3/edit si pagina proiectului cu tab-uri:
 // #/p/3/tasks, #/p/3/team, #/p/3/team/7, #/p/3/files, #/library/tools|skills|mcp, #/library/mcp/add[?project=<id>],
 // #/library/item/<id>.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // maxEventText: lungimea maxima (in caractere) a textului unui eveniment.
@@ -47,8 +47,8 @@ func (t *Team) taskMsgAt(task store.Task, at time.Time, kind, from, to, text, bo
 
 // Actorii evenimentelor care nu sunt agenti.
 const (
-	actorUser    = "You"     // actiune din board
-	actorForeman = "Foreman" // automat (detector, blocare, scheduler)
+	actorUser     = "You"      // actiune din board
+	actorHobStack = "HobStack" // automat (detector, blocare, scheduler)
 )
 
 // taskNote e un eveniment pe care il inregistreaza un helper comun (toReview,

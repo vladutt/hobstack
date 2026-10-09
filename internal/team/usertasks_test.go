@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // proiect fara etape: utilizatorul da un task lui Rook, Rook il face, decide utilizatorul

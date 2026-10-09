@@ -9,9 +9,9 @@ import (
 	"slices"
 	"strings"
 
-	"foreman/internal/config"
-	"foreman/internal/prompt"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
 )
 
 // StagedFile e un fisier urcat de utilizator, deja scris pe disc in Dir/Stored (staging),

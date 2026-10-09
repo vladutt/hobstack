@@ -13,11 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/events"
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/events"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 // nopStarter: run-urile "pornesc" dar nu se termina niciodata.
@@ -148,7 +148,7 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 func TestInfoAndStatic(t *testing.T) {
 	e := setup(t)
-	if code, raw := e.do(t, "GET", "/api/info", nil); code != 200 || !strings.Contains(string(raw), `"name":"foreman"`) {
+	if code, raw := e.do(t, "GET", "/api/info", nil); code != 200 || !strings.Contains(string(raw), `"name":"HobStack"`) {
 		t.Fatalf("%d %s", code, raw)
 	}
 	if code, raw := e.do(t, "GET", "/", nil); code != 200 || !strings.Contains(string(raw), "<title>") {

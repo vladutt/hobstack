@@ -10,16 +10,19 @@ import (
 // bazei de date si textele afisate. Ca sa redenumesti aplicatia: schimbi
 // constanta, redenumesti cmd/<nume> si rulezi `go mod edit -module <nume>`
 // plus un replace pe importuri.
-const AppName = "foreman"
+const AppName = "hobstack"
+
+// DisplayName e numele afisat in UI (titlul paginii, panoul din wizard).
+const DisplayName = "HobStack"
 
 // Paths tine toate locatiile de pe disc folosite de aplicatie.
 type Paths struct {
-	Root string // ~/.foreman
-	DB   string // ~/.foreman/foreman.db
-	Logs string // ~/.foreman/logs/runs
+	Root string // ~/.hobstack
+	DB   string // ~/.hobstack/hobstack.db
+	Logs string // ~/.hobstack/logs/runs
 
-	Projects   string // ~/.foreman/projects (fisierele proiectelor)
-	Workspaces string // ~/Foreman (foldere implicite de lucru; nu se creeaza aici)
+	Projects   string // ~/.hobstack/projects (fisierele proiectelor)
+	Workspaces string // ~/HobStack (foldere implicite de lucru; nu se creeaza aici)
 }
 
 func Default() (Paths, error) {
@@ -34,7 +37,7 @@ func Default() (Paths, error) {
 		Logs: filepath.Join(root, "logs", "runs"),
 
 		Projects:   filepath.Join(root, "projects"),
-		Workspaces: filepath.Join(home, "Foreman"),
+		Workspaces: filepath.Join(home, "HobStack"),
 	}, nil
 }
 

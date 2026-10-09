@@ -80,7 +80,7 @@ Follow-up work can be linked to an earlier task, so related tasks show as **one 
 
 ## Runs
 
-Each time an agent works, Foreman starts a **run**: one headless Claude Code session. An agent has at
+Each time an agent works, HobStack starts a **run**: one headless Claude Code session. An agent has at
 most one run at a time. **Parallel workers** in the project settings limits how many agents (other
 than the ones reporting directly to you) run at the same time. **Budget per run** stops a run when it
 reaches that cost. It only matters if you pay per use with an API key.

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"foreman/internal/schedule"
+	"hobstack/internal/schedule"
 )
 
 // RecurringTask e o sarcina care creeaza singura task-uri pe un program.

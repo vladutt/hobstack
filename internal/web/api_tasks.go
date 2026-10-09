@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 // Butoanele de pe task-urile blocate: utilizatorul decide.

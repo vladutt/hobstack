@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func TestAskUserKeepsTaskWaiting(t *testing.T) {

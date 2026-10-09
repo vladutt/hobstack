@@ -18,7 +18,7 @@ func ProbeMCP(command string, args []string, env map[string]string, timeout time
 	return ProbeMCPIn("", command, args, env, timeout)
 }
 
-// probeEnvKeys: singurele variabile mostenite de serverul de proba; restul mediului Foreman (token-uri etc.) nu ajunge la el.
+// probeEnvKeys: singurele variabile mostenite de serverul de proba; restul mediului HobStack (token-uri etc.) nu ajunge la el.
 var probeEnvKeys = []string{"PATH", "HOME", "LANG", "TMPDIR", "SystemRoot", "TEMP"}
 
 // ProbeMCPIn ca ProbeMCP, dar porneste procesul in dir ("" = folderul curent) si cu mediu curatat.
@@ -58,7 +58,7 @@ func ProbeMCPIn(dir, command string, args []string, env map[string]string, timeo
 		_ = cmd.Wait()
 	}()
 
-	init := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"foreman","version":"1"}}}`
+	init := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"hobstack","version":"1"}}}`
 	for _, line := range []string{init,
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`} {

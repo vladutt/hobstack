@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/library"
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/library"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // TestHelperProposeMCP e un server MCP minimal: testul se re-porneste ca proces.
 func TestHelperProposeMCP(t *testing.T) {
-	if os.Getenv("FOREMAN_PROPOSE_MCP") != "1" {
+	if os.Getenv("HOBSTACK_PROPOSE_MCP") != "1" {
 		return
 	}
 	sc := bufio.NewScanner(os.Stdin)
@@ -36,7 +36,7 @@ func TestHelperProposeMCP(t *testing.T) {
 		case "initialize":
 			r = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "t", "version": "1"}}
 		case "tools/list":
-			if os.Getenv("FOREMAN_PROPOSE_SLEEP") != "" {
+			if os.Getenv("HOBSTACK_PROPOSE_SLEEP") != "" {
 				time.Sleep(time.Second)
 			}
 			r = map[string]any{"tools": []any{map[string]any{"name": "list_vehicles"}, map[string]any{"name": "get_vehicle"}}}

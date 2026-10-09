@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"slices"
 
-	"foreman/internal/prompt"
-	"foreman/internal/store"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
 )
 
 var ErrNotCommandRequest = errors.New("this request is not about a command")

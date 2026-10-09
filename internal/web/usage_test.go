@@ -5,16 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func TestStatsIncludesAccountUsage(t *testing.T) {
 	e := setup(t)
 	p := e.createProject(t, t.TempDir())
 	var res struct {
-		Account string             `json:"account"`
+		Account string              `json:"account"`
 		Usage   *store.AccountUsage `json:"usage"`
-		Totals  json.RawMessage    `json:"totals"`
+		Totals  json.RawMessage     `json:"totals"`
 	}
 	code, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID)+"/stats", nil)
 	json.Unmarshal(raw, &res)

@@ -1,11 +1,11 @@
-# Foreman user guide
+# HobStack user guide
 
-Foreman runs teams of Claude Code agents on your own machine. You describe what you want and a lead
+HobStack runs teams of Claude Code agents on your own machine. You describe what you want and a lead
 agent splits the work into tasks. The tasks go to the agents on its team, who do the work in your
 project folders and report back. You watch everything live in the browser. You step in only when
 an agent needs you.
 
-Foreman is a single program that runs locally. Its interface opens in your browser at
+HobStack is a single program that runs locally. Its interface opens in your browser at
 `http://127.0.0.1:7777`. It is not a cloud service. Your code stays on your machine and is sent only
 to Claude, the same way it is when you use Claude Code yourself.
 

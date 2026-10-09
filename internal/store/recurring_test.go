@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/schedule"
+	"hobstack/internal/schedule"
 )
 
 func recurringFixture(t *testing.T) (*Store, Project, Agent) {

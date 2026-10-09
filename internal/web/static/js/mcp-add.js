@@ -231,7 +231,7 @@ export async function mcpAddView(root, projectId) {
       const v = name.value.trim();
       const reserved = RESERVED.has(v);
       const ok = NAME_RE.test(v) && !reserved;
-      nameHint.textContent = reserved ? `"${v}" is reserved for Foreman's own MCP server.` : NAME_HINT;
+      nameHint.textContent = reserved ? `"${v}" is reserved for HobStack's own MCP server.` : NAME_HINT;
       nameHint.classList.toggle("bad", !ok && !!v);
       return ok;
     }
@@ -278,8 +278,8 @@ export async function mcpAddView(root, projectId) {
         el("h2", {}, skip ? "Install without test?" : `Install ${s.title}`),
         error ? el("div", { class: "mcp-dlg-error", role: "alert" }, el("strong", {}, "The test failed. "), error) : null,
         el("p", { class: "mcp-confirm" }, skip
-          ? "Foreman won't check that the server starts. Agents will run this command unverified:"
-          : "Foreman will run this command to test it:"),
+          ? "HobStack won't check that the server starts. Agents will run this command unverified:"
+          : "HobStack will run this command to test it:"),
         cmdBlock(),
         skip ? null : el("p", { class: "hint" }, "It starts the server once, asks for its tools and stops it. It may download the package first (up to 30 s)."),
       ].filter(Boolean));

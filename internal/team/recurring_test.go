@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/schedule"
-	"foreman/internal/store"
+	"hobstack/internal/schedule"
+	"hobstack/internal/store"
 )
 
 var daily9 = schedule.Spec{Kind: schedule.KindDaily, At: "09:00"}
@@ -77,7 +77,7 @@ func TestRunDueCreatesTask(t *testing.T) {
 func TestRunDueMissedRunsCreateOne(t *testing.T) {
 	f := setup(t)
 	r := f.recurring(t, RecurringInput{Title: "Hourly", AssigneeID: f.rook.ID, Schedule: schedule.Spec{Kind: schedule.KindEveryHours, EveryHours: 1}, Enabled: true}, at("2026-10-05 08:30"))
-	// Foreman a fost inchis doua zile
+	// HobStack a fost inchis doua zile
 	now := at("2026-10-07 10:15")
 	if err := f.tm.RunDue(now); err != nil {
 		t.Fatal(err)

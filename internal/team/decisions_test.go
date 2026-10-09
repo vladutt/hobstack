@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 func twoQuestions() []mcp.DecisionInput {

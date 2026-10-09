@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { el, field, toast, TOOLS, topbar } from "./ui.js";
 import { liveRenderer } from "./live.js";
-import { foremanChat } from "./foreman-chat.js";
+import { hobstackChat } from "./hobstack-chat.js";
 import { loadCategories, categoryInput } from "./category.js";
 
 // Wizard-ul "Proiect nou cu AI": 1) folder + descriere, 2) analiza live,
@@ -21,10 +21,10 @@ export async function setupView(root, id, target = null) {
   let session = null;   // {id, runId}
   let stream = null;    // EventSource-ul analizei
   let closed = false;
-  // pasul 3: panoul Foreman traieste peste reconstruirile formularului
-  let chat = null;           // instanta foremanChat (null in afara pasului 3)
+  // pasul 3: panoul HobStack traieste peste reconstruirile formularului
+  let chat = null;           // instanta hobstackChat (null in afara pasului 3)
   let collectCurrent = null; // collectProposal() al formularului afisat acum
-  let reviewMain = null;     // coloana principala a pasului 3 (blocata cat lucreaza Foreman)
+  let reviewMain = null;     // coloana principala a pasului 3 (blocata cat lucreaza HobStack)
   let reviewFm = null;       // sectiunea folderului (modul folder) a formularului afisat
   let formBusy = false;
   const cleanup = () => { closed = true; closeStream(); dropChat(); };
@@ -354,7 +354,7 @@ export async function setupView(root, id, target = null) {
     const folderEls = folders.map((f) => el("div", { class: "folder-row" },
       el("div", { class: "row" }, field("Name", f.name), el("div", { class: "field" }, el("span", { class: "label" }, "Path"), el("code", {}, f.path || "new folder"))),
       field("Context for this folder", f.context)));
-    // doua coloane: propunerea (cu butoanele finale) si panoul Foreman
+    // doua coloane: propunerea (cu butoanele finale) si panoul HobStack
     const main = el("div", { class: "wizard-review wizard-main" },
       fm ? fm.sections : null,
       fm ? null : el("section", { class: "section" },
@@ -380,7 +380,7 @@ export async function setupView(root, id, target = null) {
     main.inert = formBusy;
     // panoul se creeaza o singura data; la reconstruire doar se muta in noua coloana
     if (!chat) {
-      chat = foremanChat({ session, appName: info.name, folderMode: Boolean(target),
+      chat = hobstackChat({ session, appName: info.name, folderMode: Boolean(target),
         collect: () => collectCurrent(), onChanged: rebuild, onBusy: setFormBusy });
     }
     side.append(chat.el);
@@ -395,7 +395,7 @@ export async function setupView(root, id, target = null) {
     }
 
     // collectProposal: propunerea curenta din formular. O folosesc Create / Add agents
-    // si chat-ul cu Foreman (care primeste si editarile manuale).
+    // si chat-ul cu HobStack (care primeste si editarile manuale).
     function collectProposal() {
       const agents = rows.filter((r) => r.include.checked).map((r) => ({
         name: r.name.value.trim(), role: r.role.value.trim(), model: r.model.value,
@@ -460,14 +460,14 @@ export async function setupView(root, id, target = null) {
     return { sections, ctxArea, updateCtx, row };
   }
 
-  // setFormBusy blocheaza coloana principala cat lucreaza Foreman (inert: fara click,
+  // setFormBusy blocheaza coloana principala cat lucreaza HobStack (inert: fara click,
   // fara focus, fara tastare), ca editarile sa nu se piarda la reconstruire.
   function setFormBusy(on) {
     formBusy = on;
     if (reviewMain) reviewMain.inert = on;
   }
 
-  // dropChat inchide panoul Foreman (iesirea din pasul 3 sau sesiune noua)
+  // dropChat inchide panoul HobStack (iesirea din pasul 3 sau sesiune noua)
   function dropChat() {
     chat?.destroy();
     chat = null;
@@ -477,7 +477,7 @@ export async function setupView(root, id, target = null) {
     formBusy = false;
   }
 
-  // rebuild reface formularul din propunerea noua (Foreman a schimbat-o sau Undo),
+  // rebuild reface formularul din propunerea noua (HobStack a schimbat-o sau Undo),
   // pastrand panoul de chat, si evidentiaza agentii noi sau schimbati cateva secunde.
   function rebuild(s) {
     const before = collectCurrent ? collectCurrent() : null;
@@ -499,7 +499,7 @@ export async function setupView(root, id, target = null) {
       if (view.folderEls[i] && (!b || b.name !== f.name || b.context !== f.context)) changed.push(view.folderEls[i]);
     });
     if (view.fm) {
-      // contextul schimbat de Foreman (la cerere) se aplica; bifa utilizatorului ramane
+      // contextul schimbat de HobStack (la cerere) se aplica; bifa utilizatorului ramane
       const ctxChanged = (before.folders[0]?.context || "") !== (after.folders[0]?.context || "");
       view.fm.updateCtx.checked = view.fm.updateCtx.checked || Boolean(prevUpdateCtx) || ctxChanged;
     }

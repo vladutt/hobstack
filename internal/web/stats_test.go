@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func TestStatsRange(t *testing.T) {

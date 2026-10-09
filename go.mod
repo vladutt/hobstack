@@ -1,4 +1,4 @@
-module foreman
+module hobstack
 
 go 1.26.0
 

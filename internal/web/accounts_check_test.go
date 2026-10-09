@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"foreman/internal/runner"
+	"hobstack/internal/runner"
 )
 
 // withFakeClaude: runner-ul serverului foloseste claude-ul fals din runner/testdata.

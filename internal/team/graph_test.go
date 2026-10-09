@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/prompt"
-	"foreman/internal/store"
+	"hobstack/internal/prompt"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func TestSubLeadTurnShowsDirectTeamAndSubtasks(t *testing.T) {

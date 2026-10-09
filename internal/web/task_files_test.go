@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"foreman/internal/config"
-	"foreman/internal/store"
+	"hobstack/internal/config"
+	"hobstack/internal/store"
 )
 
 // addTaskFile scrie o copie pe disc si randul ei, ca dupa report_done files.

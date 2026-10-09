@@ -15,11 +15,11 @@ func TestDefaultPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := filepath.Join(home, ".foreman")
+	root := filepath.Join(home, ".hobstack")
 	if p.Root != root {
 		t.Errorf("Root = %q, vreau %q", p.Root, root)
 	}
-	if p.DB != filepath.Join(root, "foreman.db") {
+	if p.DB != filepath.Join(root, "hobstack.db") {
 		t.Errorf("DB = %q", p.DB)
 	}
 	if p.Logs != filepath.Join(root, "logs", "runs") {
@@ -28,7 +28,7 @@ func TestDefaultPaths(t *testing.T) {
 	if p.Projects != filepath.Join(root, "projects") {
 		t.Errorf("Projects = %q", p.Projects)
 	}
-	if p.Workspaces != filepath.Join(home, "Foreman") {
+	if p.Workspaces != filepath.Join(home, "HobStack") {
 		t.Errorf("Workspaces = %q", p.Workspaces)
 	}
 	if d := ProjectFilesDir(p.Projects, 7); !strings.HasSuffix(filepath.ToSlash(d), "projects/7/files") {

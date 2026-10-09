@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 const (
@@ -33,7 +33,7 @@ const (
 	maxBytes = 1 << 20 // 1 MB in total
 )
 
-// Lib lucreaza pe disc in Root (~/.foreman/library) si in store.
+// Lib lucreaza pe disc in Root (~/.hobstack/library) si in store.
 type Lib struct {
 	Root string
 	St   *store.Store
@@ -696,8 +696,8 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 		out.PluginDir = final // acelasi continut ca la build-ul anterior
 		return out, nil
 	}
-	manifest, _ := json.Marshal(map[string]string{"name": "foreman-library", "version": "1",
-		"description": "Foreman library for project " + pid})
+	manifest, _ := json.Marshal(map[string]string{"name": "hobstack-library", "version": "1",
+		"description": "HobStack library for project " + pid})
 	if err := os.MkdirAll(filepath.Join(tmp, ".claude-plugin"), 0o755); err != nil {
 		return out, err
 	}

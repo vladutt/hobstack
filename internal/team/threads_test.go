@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // threadOf: firul task-ului cu numarul dat (0 = fara fir).

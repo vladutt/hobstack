@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"foreman/internal/team"
+	"hobstack/internal/team"
 )
 
 // moveTask: drag & drop pe board (sau "Move to…"): actiunea coloanei tinta.

@@ -16,18 +16,18 @@ import (
 	"syscall"
 	"time"
 
-	"foreman/internal/config"
-	"foreman/internal/draft"
-	"foreman/internal/events"
-	"foreman/internal/library"
-	"foreman/internal/mcp"
-	"foreman/internal/opener"
-	"foreman/internal/picker"
-	"foreman/internal/runner"
-	"foreman/internal/setup"
-	"foreman/internal/store"
-	"foreman/internal/team"
-	"foreman/internal/web"
+	"hobstack/internal/config"
+	"hobstack/internal/draft"
+	"hobstack/internal/events"
+	"hobstack/internal/library"
+	"hobstack/internal/mcp"
+	"hobstack/internal/opener"
+	"hobstack/internal/picker"
+	"hobstack/internal/runner"
+	"hobstack/internal/setup"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
+	"hobstack/internal/web"
 )
 
 const usage = `%[1]s - local Claude Code agent teams
@@ -65,6 +65,15 @@ func start(args []string) error {
 	if err != nil {
 		return err
 	}
+	// aplicatia se numea foreman: datele din ~/.foreman se muta o data in folderul nou
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	legacyRoot, err := config.MoveLegacyData(home)
+	if err != nil {
+		return fmt.Errorf("moving data from %s: %w", legacyRoot, err)
+	}
 	if err := paths.Ensure(); err != nil {
 		return fmt.Errorf("cannot create %s: %w", paths.Root, err)
 	}
@@ -77,6 +86,13 @@ func start(args []string) error {
 		return err
 	}
 	defer st.Close()
+	if legacyRoot != "" {
+		// calea veche din instructiunile agentilor si din brief-uri devine cea noua
+		if err := st.RewriteDataRoot(legacyRoot, paths.Root); err != nil {
+			return fmt.Errorf("updating paths after moving data: %w", err)
+		}
+		log.Printf("moved data from %s to %s", legacyRoot, paths.Root)
+	}
 
 	// contextul se anuleaza la Ctrl+C / SIGTERM si ajunge in toate request-urile,
 	// deci conexiunile SSE se inchid singure la oprire

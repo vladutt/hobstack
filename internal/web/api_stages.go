@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 func (s *Server) saveStages(w http.ResponseWriter, r *http.Request) {

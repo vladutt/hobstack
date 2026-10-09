@@ -2,26 +2,26 @@ import { api } from "./api.js";
 import { el, toast } from "./ui.js";
 import { liveRenderer } from "./live.js";
 
-// foremanChat: panoul de chat cu Foreman la pasul 3 al wizard-ului.
-// Utilizatorul cere schimbari; Foreman (analistul, reluat cu --resume) actualizeaza
+// hobstackChat: panoul de chat cu HobStack la pasul 3 al wizard-ului.
+// Utilizatorul cere schimbari; HobStack (analistul, reluat cu --resume) actualizeaza
 // direct propunerea din sesiune, iar setup.js reface formularul prin onChanged.
 //
 //   session    sesiunea de setup (id, chat, busy, chatRunId, version)
-//   appName    numele aplicatiei din /api/info ("foreman"), afisat capitalizat
+//   appName    numele aplicatiei din /api/info ("HobStack")
 //   folderMode true in "Set up agents with AI" (doar agenti noi)
 //   collect()  propunerea curenta din formular (aceeasi ca la Create / Add agents)
 //   onChanged(session)  chemat cand versiunea propunerii a crescut sau dupa Undo
-//   onBusy(bool)        chemat cand Foreman incepe / termina (setup.js blocheaza formularul)
+//   onBusy(bool)        chemat cand HobStack incepe / termina (setup.js blocheaza formularul)
 //
 // Intoarce { el, destroy() }. Elementul se poate muta in alta
 // parte a paginii (setup.js il muta la reconstruirea formularului): conversatia si
 // stream-ul in curs raman, fiindca instanta e aceeasi.
-export function foremanChat({ session, appName, folderMode, collect, onChanged, onBusy = () => {} }) {
-  const name = capitalize(appName || "foreman");
+export function hobstackChat({ session, appName, folderMode, collect, onChanged, onBusy = () => {} }) {
+  const name = capitalize(appName || "HobStack");
   const id = session.id;
   let version = session.version || 0; // ultima versiune a propunerii vazuta de pagina
   let chat = session.chat || [];
-  let undoable = false;  // ultimul raspuns al lui Foreman a schimbat propunerea
+  let undoable = false;  // ultimul raspuns al lui HobStack a schimbat propunerea
   let busy = false;
   let stream = null;     // EventSource-ul run-ului de chat
   let live = null;       // caseta live "<Name> is working..."
@@ -36,7 +36,7 @@ export function foremanChat({ session, appName, folderMode, collect, onChanged, 
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
   });
-  const root = el("div", { class: "foreman-chat" },
+  const root = el("div", { class: "hobstack-chat" },
     el("div", { class: "fc-head" }, name),
     thread,
     el("form", { onsubmit: (e) => { e.preventDefault(); send(); } }, input, sendBtn));
@@ -44,13 +44,13 @@ export function foremanChat({ session, appName, folderMode, collect, onChanged, 
   // draw redeseneaza conversatia din `chat`; caseta live (daca exista) ramane la final
   function draw() {
     const msgs = chat.map((m, i) => {
-      const role = m.role === "user" || m.role === "foreman" ? m.role : "event";
+      const role = m.role === "user" || m.role === "hobstack" ? m.role : "event";
       const undo = undoable && i === chat.length - 1 && !busy
         ? el("div", { class: "fc-undo" }, el("button", { type: "button", class: "btn small", onclick: undoLast }, "Undo"))
         : null;
       return el("div", { class: `fc-msg ${role}` }, m.text, undo);
     });
-    thread.replaceChildren(el("div", { class: "fc-msg foreman" }, intro), ...msgs, ...(live ? [live] : []));
+    thread.replaceChildren(el("div", { class: "fc-msg hobstack" }, intro), ...msgs, ...(live ? [live] : []));
     thread.scrollTop = thread.scrollHeight;
   }
 

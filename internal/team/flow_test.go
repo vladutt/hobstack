@@ -3,8 +3,8 @@ package team
 import (
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func eventsOfKind(t *testing.T, f *fixture, taskID int64, kind string) []store.TaskEvent {

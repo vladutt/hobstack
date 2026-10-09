@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"foreman/internal/opener"
-	"foreman/internal/store"
+	"hobstack/internal/opener"
+	"hobstack/internal/store"
 )
 
 // Opener deschide folderul proiectului in Finder, in editor sau pagina lui

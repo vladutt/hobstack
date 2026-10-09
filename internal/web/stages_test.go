@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func TestStagesAPI(t *testing.T) {

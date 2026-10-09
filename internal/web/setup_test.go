@@ -2,16 +2,16 @@ package web
 
 import (
 	"encoding/json"
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
-	wizard "foreman/internal/setup" // alias: in pachetul web, "setup" e deja helper-ul de test
-	"foreman/internal/store"
+	wizard "hobstack/internal/setup" // alias: in pachetul web, "setup" e deja helper-ul de test
+	"hobstack/internal/store"
 )
 
 func withSetup(t *testing.T) *env {
@@ -382,7 +382,7 @@ func TestSetupChatAndUndo(t *testing.T) {
 		t.Fatalf("busy undo: %d", code)
 	}
 
-	// Foreman propune o schimbare, apoi run-ul se termina
+	// HobStack propune o schimbare, apoi run-ul se termina
 	spec := cs.specs[len(cs.specs)-1]
 	c2, _ := b.Resolve(mcpToken(t, spec))
 	changed := strings.Replace(chatProposal, `"Shop"`, `"Shop 2"`, 1)

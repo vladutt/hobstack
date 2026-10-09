@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 var (

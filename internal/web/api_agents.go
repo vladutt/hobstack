@@ -9,9 +9,9 @@ import (
 	"slices"
 	"strings"
 
-	"foreman/internal/prompt"
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/prompt"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 type agentInput struct {

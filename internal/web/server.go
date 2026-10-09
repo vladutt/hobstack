@@ -19,17 +19,17 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"foreman/internal/codefiles"
-	"foreman/internal/config"
-	"foreman/internal/draft"
-	"foreman/internal/events"
-	"foreman/internal/library"
-	"foreman/internal/mcpregistry"
-	"foreman/internal/models"
-	"foreman/internal/runner"
-	wizard "foreman/internal/setup" // alias: in pachetul web, "setup" e helper-ul din teste
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/codefiles"
+	"hobstack/internal/config"
+	"hobstack/internal/draft"
+	"hobstack/internal/events"
+	"hobstack/internal/library"
+	"hobstack/internal/mcpregistry"
+	"hobstack/internal/models"
+	"hobstack/internal/runner"
+	wizard "hobstack/internal/setup" // alias: in pachetul web, "setup" e helper-ul din teste
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 //go:embed static
@@ -222,13 +222,13 @@ func guard(next http.Handler) http.Handler {
 		}
 		// Content-Type: cererile care schimba starea trebuie sa fie JSON, chiar
 		// si fara body (stop/resume/accept), sau multipart cu header custom
-		// (un formular din alt site nu poate trimite X-Foreman). /mcp e exceptat.
+		// (un formular din alt site nu poate trimite X-HobStack). /mcp e exceptat.
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.Method != http.MethodGet {
 			ct := r.Header.Get("Content-Type")
 			ok := strings.HasPrefix(ct, "application/json") ||
-				(strings.HasPrefix(ct, "multipart/form-data") && r.Header.Get("X-Foreman") == "1")
+				(strings.HasPrefix(ct, "multipart/form-data") && r.Header.Get("X-HobStack") == "1")
 			if !ok {
-				writeErr(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json (or multipart with X-Foreman: 1)")
+				writeErr(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json (or multipart with X-HobStack: 1)")
 				return
 			}
 		}
@@ -237,7 +237,7 @@ func guard(next http.Handler) http.Handler {
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"name": config.AppName, "canPickFolder": s.canPick, "models": models.All, "editors": s.editors(), "os": runtime.GOOS})
+	writeJSON(w, http.StatusOK, map[string]any{"name": config.DisplayName, "canPickFolder": s.canPick, "models": models.All, "editors": s.editors(), "os": runtime.GOOS})
 }
 
 // badRequest e o eroare de validare; mesajul ajunge ca atare in UI (400).

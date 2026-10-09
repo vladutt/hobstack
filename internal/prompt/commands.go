@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // forbiddenPrefixChars: caracterele de shell care ar face din prefix altceva decat inceputul unei comenzi.

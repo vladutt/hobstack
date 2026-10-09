@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // checkTimeout: cat asteptam raspunsul la verificarea unui cont

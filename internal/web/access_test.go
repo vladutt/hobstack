@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 func TestAccessInResponses(t *testing.T) {

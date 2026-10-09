@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/opener"
+	"hobstack/internal/opener"
 )
 
 // fakeOpener inregistreaza ce s-ar fi deschis, fara sa lanseze aplicatii.

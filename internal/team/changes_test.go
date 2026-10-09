@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 func hunk(l ...string) []runner.Hunk {

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/config"
-	"foreman/internal/store"
-	"foreman/internal/taskfiles"
+	"hobstack/internal/config"
+	"hobstack/internal/store"
+	"hobstack/internal/taskfiles"
 )
 
 // fisierele proiectului (projects/<pid>/files, pagina Files) sunt si ele un loc pentru livrabile:

@@ -16,7 +16,7 @@ var (
 )
 
 // errAutomationDenied: userul a refuzat permisiunea de Automatizare pe macOS.
-var errAutomationDenied = errors.New("macOS denied access to the dialog; allow Terminal/foreman in System Settings > Privacy & Security > Automation")
+var errAutomationDenied = errors.New("macOS denied access to the dialog; allow Terminal/hobstack in System Settings > Privacy & Security > Automation")
 
 // parseResult transforma iesirea unei comenzi de dialog intr-o cale sau o eroare.
 // Pur (nu ruleaza nimic), deci se poate testa pe orice OS.

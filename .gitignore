@@ -7,3 +7,7 @@
 .idea/
 foreman.exe
 *.exe
+/hobstack
+/hobstack.prev
+/hobstack-*
+hobstack.exe

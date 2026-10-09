@@ -5,8 +5,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 func TestCreateTaskAssignsWorker(t *testing.T) {

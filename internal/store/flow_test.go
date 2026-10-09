@@ -52,10 +52,10 @@ func TestTaskFlowFromSubtask(t *testing.T) {
 	mid := mkTask(t, s, p, dev, "Mid", &root)
 	leaf := mkTask(t, s, p, dev, "Leaf", &mid)
 	other := mkTask(t, s, p, dev, "Other", &root)
-	event(t, s, root, t0, "created", "Foreman", lead.Name, "Created by Foreman", "brief")
+	event(t, s, root, t0, "created", "HobStack", lead.Name, "Created by HobStack", "brief")
 	event(t, s, mid, t0.Add(time.Minute), "created", lead.Name, "Dev", "Created by "+lead.Name, "")
 	event(t, s, leaf, t0.Add(2*time.Minute), "created", "Dev", "Dev", "Created by Dev", "")
-	event(t, s, root, t0.Add(10*time.Minute), "accepted", "Foreman", "", "Foreman accepted", "")
+	event(t, s, root, t0.Add(10*time.Minute), "accepted", "HobStack", "", "HobStack accepted", "")
 	root.Status = StatusDone
 	if err := s.SaveTask(&root); err != nil {
 		t.Fatal(err)

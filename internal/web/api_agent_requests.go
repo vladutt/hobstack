@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // agentRequestView e o cerere add_agent deschisa, asa cum o vede UI-ul.

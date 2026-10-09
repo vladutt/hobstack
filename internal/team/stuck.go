@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // stuckAfter: cat sta un task neschimbat pana il consideram blocat; tot atat
@@ -207,7 +207,7 @@ func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []
 			return err
 		}
 		refs, verb := refsOf(tasks)
-		if err := t.note(projectID, a.ID, fmt.Sprintf("Foreman nudged %s: %s %s waiting for a decision.", a.Name, refs, verb), true); err != nil {
+		if err := t.note(projectID, a.ID, fmt.Sprintf("HobStack nudged %s: %s %s waiting for a decision.", a.Name, refs, verb), true); err != nil {
 			return err
 		}
 		for _, task := range tasks {
@@ -216,7 +216,7 @@ func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []
 			}
 			task.NudgedAt = &now
 			// aceeasi nota pe fiecare task impins (o comunicare per task, nu per destinatar)
-			t.taskMsg(task, "nudged", actorForeman, a.Name, "Foreman nudged "+a.Name, nudge)
+			t.taskMsg(task, "nudged", actorHobStack, a.Name, "HobStack nudged "+a.Name, nudge)
 			t.emit(projectID, "task", task)
 		}
 	case stuckOrphan:
@@ -231,9 +231,9 @@ func (t *Team) nudgeLocked(projectID int64, kind string, a store.Agent, tasks []
 				return err
 			}
 			task.NudgedAt = &now
-			t.taskEvent(task, "requeued", actorForeman, "Foreman requeued it")
+			t.taskEvent(task, "requeued", actorHobStack, "HobStack requeued it")
 			t.emit(projectID, "task", task)
-			text := fmt.Sprintf("Foreman requeued %s: it was in progress with nothing running.", task.Ref())
+			text := fmt.Sprintf("HobStack requeued %s: it was in progress with nothing running.", task.Ref())
 			if err := t.note(projectID, a.ID, text, true); err != nil {
 				return err
 			}

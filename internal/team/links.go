@@ -8,9 +8,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // MaxOpenQuestions: cate intrebari fara raspuns poate avea un agent catre alte proiecte.

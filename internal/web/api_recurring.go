@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"foreman/internal/schedule"
-	"foreman/internal/store"
-	"foreman/internal/team"
+	"hobstack/internal/schedule"
+	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 // recurringView: sarcina recurenta cu ce mai trebuie aratat in UI.

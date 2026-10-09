@@ -2,17 +2,17 @@
 
 ## Requirements
 
-- **Claude Code** installed and logged in: the `claude` command must work in your terminal. Foreman
+- **Claude Code** installed and logged in: the `claude` command must work in your terminal. HobStack
   runs every agent through it, so your Claude subscription or API key is what the agents use.
 - macOS, Linux or Windows.
 
-## Run Foreman
+## Run HobStack
 
-Foreman is a single executable file named `foreman` (`foreman.exe` on Windows). Put it somewhere in
-your PATH, or run it from its folder as `./foreman`. Start it from a terminal:
+HobStack is a single executable file named `hobstack` (`hobstack.exe` on Windows). Put it somewhere in
+your PATH, or run it from its folder as `./hobstack`. Start it from a terminal:
 
 ```
-foreman start
+hobstack start
 ```
 
 Your browser opens at `http://127.0.0.1:7777`. Options:
@@ -22,10 +22,10 @@ Your browser opens at `http://127.0.0.1:7777`. Options:
 | `--port 8080` | Listen on another port |
 | `--no-open` | Don't open the browser automatically |
 
-Foreman runs as long as the terminal command runs. Stop it with Ctrl+C. Agents that are working are
+HobStack runs as long as the terminal command runs. Stop it with Ctrl+C. Agents that are working are
 stopped too, and their tasks are put back in the queue.
 
-> **Every project starts paused.** When Foreman starts, no agent runs (or costs anything) until you
+> **Every project starts paused.** When HobStack starts, no agent runs (or costs anything) until you
 > press **Start team** on a project. This is on purpose: you choose when work begins.
 
 ## Your first project
@@ -43,7 +43,7 @@ On the **Projects** page you have two ways to start.
    - the project's name, goal and shared context (stack, build and test commands, conventions);
    - a team: names, roles, what each agent takes, who reports to whom, reviewers and instructions.
 5. Review the proposal. Everything is editable, and you can untick agents you don't want. You can
-   also ask the **Foreman** panel on the right for changes in plain language ("add a QA agent", "make
+   also ask the **HobStack** panel on the right for changes in plain language ("add a QA agent", "make
    the lead use Opus"). Every change it makes can be undone with **Undo**.
 6. Click **Create project**.
 
@@ -56,8 +56,8 @@ The analysis runs in the background. You can leave the page: it appears on Proje
 ### Option B: New project (manual)
 
 1. Click **New project**.
-2. Fill in the brief: name, goal, shared context and folders. If you leave the folder empty, Foreman
-   creates `~/Foreman/<project-name>` for you.
+2. Fill in the brief: name, goal, shared context and folders. If you leave the folder empty, HobStack
+   creates `~/HobStack/<project-name>` for you.
 3. You get a default lead. Add more agents from the project's **Team** tab (see
    [Building your team](team.md)).
 

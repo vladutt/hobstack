@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
-const systemPrompt = `You are the team architect in Foreman. You read a project and propose a small team of Claude Code agents that will work on it.
+const systemPrompt = `You are the team architect in HobStack. You read a project and propose a small team of Claude Code agents that will work on it.
 
 What you do: propose ONE team for THIS project. The user's description says what the team will work on after it is created; it is not a task for you. Do not implement anything, and do not propose alternatives, templates, or teams for other projects.
 

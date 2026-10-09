@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // todoTask: task-ul din argument sau cel curent; il poate atinge doar asignatul lui sau cel care a raportat

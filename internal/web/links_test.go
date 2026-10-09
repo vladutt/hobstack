@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"foreman/internal/mcp"
+	"hobstack/internal/mcp"
 )
 
 func TestProjectLinksAPI(t *testing.T) {

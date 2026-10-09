@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // reviewTask: un task al lui Rook, in review la lead, proiect activ.

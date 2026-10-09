@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	"foreman/internal/events"
-	"foreman/internal/mcp"
-	"foreman/internal/runner"
-	"foreman/internal/store"
+	"hobstack/internal/events"
+	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
+	"hobstack/internal/store"
 )
 
 // fakeStarter inlocuieste runner-ul: inregistreaza ce s-ar fi pornit, iar

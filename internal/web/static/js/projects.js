@@ -72,7 +72,7 @@ export async function projectsView(root) {
           tbody)
         : el("div", { class: "empty-state" },
           el("h2", {}, "No projects yet"),
-          el("p", {}, "Point Foreman at a folder and let the AI propose a team, or start with just a lead."),
+          el("p", {}, "Point HobStack at a folder and let the AI propose a team, or start with just a lead."),
           el("div", { class: "actions" },
             el("a", { class: "btn primary", href: "#/setup" }, "\u2726 New project with AI"),
             el("a", { class: "btn", href: "#/new" }, "Create project")))));
@@ -385,7 +385,7 @@ function foldersEditor(initial, canPick, agents, projectId) {
   function add(f = { id: 0, name: "", path: "", context: "" }) {
     const name = el("input", { type: "text", value: f.name, maxlength: 40, placeholder: "e.g. Client" });
     const path = el("input", { type: "text", value: f.path,
-      placeholder: rows.length ? "e.g. ~/code/probe-landing" : "empty = ~/Foreman/<project name>" });
+      placeholder: rows.length ? "e.g. ~/code/probe-landing" : "empty = ~/HobStack/<project name>" });
     const context = el("textarea", { value: f.context, rows: 3, maxlength: 20000,
       placeholder: "Stack, build/test commands, conventions for this folder." });
     const pickBtn = canPick && el("button", { type: "button", class: "btn", onclick: () => pickInto(path, pickBtn) }, "Browse...");

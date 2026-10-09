@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"foreman/internal/codefiles"
-	"foreman/internal/store"
+	"hobstack/internal/codefiles"
+	"hobstack/internal/store"
 )
 
 // maxCodeHits: cate fisiere intoarce o cautare dupa @ in chat.

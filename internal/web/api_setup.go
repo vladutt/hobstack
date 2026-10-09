@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	wizard "foreman/internal/setup"
-	"foreman/internal/store"
+	wizard "hobstack/internal/setup"
+	"hobstack/internal/store"
 )
 
 // setupFail traduce erorile de validare ale wizard-ului in 400.
@@ -139,7 +139,7 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 	}
 	folders := slices.Clone(in.Proposal.Folders) // copie: nu modificam propunerea
 	if len(folders) == 0 {
-		folders = []wizard.ProposedFolder{{Path: in.Workdir}} // gol = folder nou in ~/Foreman
+		folders = []wizard.ProposedFolder{{Path: in.Workdir}} // gol = folder nou in ~/HobStack
 	} else if len(folders) == 1 && folders[0].Path == "" {
 		folders[0].Path = in.Workdir // analistul a lasat calea goala: folderul ales de utilizator
 	}
@@ -325,7 +325,7 @@ func (s *Server) addAgentsFromSetup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, agents)
 }
 
-// chatSetup trimite un mesaj lui Foreman, impreuna cu propunerea curenta (cu editarile utilizatorului).
+// chatSetup trimite un mesaj lui HobStack, impreuna cu propunerea curenta (cu editarile utilizatorului).
 func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request) {
 	if s.wizard == nil {
 		writeErr(w, http.StatusNotFound, wizard.ErrNotFound.Error())
@@ -347,7 +347,7 @@ func (s *Server) chatSetup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, sess)
 }
 
-// undoSetup readuce propunerea de dinaintea ultimei schimbari a lui Foreman.
+// undoSetup readuce propunerea de dinaintea ultimei schimbari a lui HobStack.
 func (s *Server) undoSetup(w http.ResponseWriter, r *http.Request) {
 	if s.wizard == nil {
 		writeErr(w, http.StatusNotFound, wizard.ErrNotFound.Error())

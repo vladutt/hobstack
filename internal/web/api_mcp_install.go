@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"foreman/internal/library"
-	"foreman/internal/mcp"
-	"foreman/internal/mcpregistry"
-	"foreman/internal/store"
+	"hobstack/internal/library"
+	"hobstack/internal/mcp"
+	"hobstack/internal/mcpregistry"
+	"hobstack/internal/store"
 )
 
 // mcpProbeTimeout: cat asteptam la Install un server MCP local (un `npx` / `uvx` poate descarca pachetul).

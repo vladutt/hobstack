@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"foreman/internal/mcp"
+	"hobstack/internal/mcp"
 )
 
 func TestQuestionsAPI(t *testing.T) {

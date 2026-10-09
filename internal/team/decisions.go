@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"foreman/internal/mcp"
-	"foreman/internal/store"
+	"hobstack/internal/mcp"
+	"hobstack/internal/store"
 )
 
 // AskDecisions salveaza intrebarile cu optiuni date la report_done. Limitele sunt validate in MCP.

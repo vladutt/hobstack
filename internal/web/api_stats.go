@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"foreman/internal/store"
+	"hobstack/internal/store"
 )
 
 // statsWeekAfter: peste atatea zile, range-ul all se grupeaza pe saptamani.
