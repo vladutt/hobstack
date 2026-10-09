@@ -14,27 +14,60 @@ export async function projectsView(root) {
   projects.sort((a, b) => Number(b.favorite) - Number(a.favorite));
   const peak = Math.max(1, ...projects.flatMap((p) => p.activity || [])); // aceeasi scara pe toate randurile
   const rows = projects.map((p) => ({ p, tr: projectRow(p, peak) }));
-  const tbody = el("tbody", {}, rows.map((r) => r.tr));
+  // categoriile: filtre sus si grupuri in tabel, doar cand cel putin un proiect are categorie.
+  // "" = fara categorie (ultimul grup); ALL = toate
+  const hasCats = projects.some((p) => p.category);
+  const cats = [...new Set(projects.map((p) => p.category || ""))]
+    .sort((a, b) => (a === "") - (b === "") || a.localeCompare(b, undefined, { sensitivity: "base" }));
+  let current = savedCategory();
+  if (current !== ALL && !cats.includes(current)) current = ALL;
+  const groups = hasCats
+    ? cats.map((c) => {
+      const members = rows.filter((r) => (r.p.category || "") === c);
+      return { c, rows: members, head: el("tr", { class: "p-group" }, el("td", { colspan: 8 },
+        el("span", { class: "p-group-name" }, c || "Uncategorized"), el("span", { class: "p-group-count" }, members.length))) };
+    })
+    : [{ c: null, rows, head: null }];
+  const tbody = el("tbody", {}, groups.map((g) => [g.head, g.rows.map((r) => r.tr)]));
   const none = el("tr", { hidden: true }, el("td", { colspan: 8, class: "hint" }, "No project matches."));
   tbody.append(none);
+  const chips = hasCats ? el("div", { class: "cat-filter", role: "group", "aria-label": "Categories" }) : null;
+  function drawChips() {
+    if (!chips) return;
+    const opts = [[ALL, "All", projects.length], ...groups.map((g) => [g.c, g.c || "Uncategorized", g.rows.length])];
+    chips.replaceChildren(...opts.map(([value, label, n]) => el("button", {
+      type: "button", class: "seg" + (value === current ? " active" : ""), "aria-pressed": String(value === current),
+      onclick: () => { current = value; saveCategory(value); drawChips(); filter(); },
+    }, label, el("span", { class: "cat-count" }, n))));
+  }
   function filter() {
     const q = search.value.trim().toLowerCase();
     let shown = 0;
-    for (const r of rows) {
-      const on = !q || r.p.name.toLowerCase().includes(q) || (r.p.goal || "").toLowerCase().includes(q);
-      r.tr.hidden = !on;
-      if (on) shown++;
+    for (const g of groups) {
+      let n = 0;
+      for (const r of g.rows) {
+        const on = (current === ALL || g.c === current) && (!q || r.p.name.toLowerCase().includes(q) ||
+          (r.p.goal || "").toLowerCase().includes(q) || (r.p.category || "").toLowerCase().includes(q));
+        r.tr.hidden = !on;
+        if (on) n++;
+      }
+      // titlul grupului doar pe "All": cu o categorie aleasa ar repeta filtrul
+      if (g.head) g.head.hidden = !n || current !== ALL;
+      shown += n;
     }
     none.hidden = shown > 0;
   }
+  drawChips();
+  filter();
   root.append(
     topbar("projects",
       el("span", { class: "grow" }),
-      projects.length > 5 ? search : null,
+      projects.length > 5 || hasCats ? search : null,
       el("a", { class: "btn ghost", href: "#/setup", title: "Pick a folder; the AI proposes the project and the team" }, "\u2726 New project with AI"),
       el("a", { class: "btn primary", href: "#/new" }, "Create project")),
     el("div", { class: "page projects-page" },
       setupBox,
+      chips,
       projects.length
         ? el("table", { class: "ptable" },
           el("thead", {}, el("tr", {},
@@ -65,6 +98,16 @@ export async function projectsView(root) {
   }
   draw(setups);
   return () => { closed = true; clearTimeout(timer); };
+}
+
+// filtrul de categorie ales pe pagina Proiecte, tinut minte in browser
+const ALL = "\u0000all"; // nu poate fi o categorie reala
+const CATEGORY_KEY = "foreman-category";
+function savedCategory() {
+  try { return localStorage.getItem(CATEGORY_KEY) ?? ALL; } catch { return ALL; }
+}
+function saveCategory(value) {
+  try { localStorage.setItem(CATEGORY_KEY, value); } catch { /* fara memorie: ramane doar pe pagina */ }
 }
 
 const SETUP_STATUS = {
@@ -196,6 +239,11 @@ export async function projectFormView(root, id) {
     : { name: "", goal: "", context: "", folders: [], maxParallel: 0, budgetUsd: 0 };
 
   const name = el("input", { type: "text", value: p.name, placeholder: "e.g. HoReCa QR", required: true, maxlength: 80 });
+  // categoria: una existenta (sugestii din celelalte proiecte) sau una noua
+  let known = [];
+  try { known = [...new Set((await api("/api/projects")).map((x) => x.category).filter(Boolean))].sort(); } catch { /* fara sugestii */ }
+  const category = el("input", { type: "text", value: p.category || "", placeholder: "e.g. Work", maxlength: 40, list: "project-categories" });
+  const categoryList = el("datalist", { id: "project-categories" }, known.map((c) => el("option", { value: c })));
   const goal = el("textarea", { value: p.goal, placeholder: "An MVP and a clickable prototype for QR sign-ups." });
   const context = el("textarea", { value: p.context, rows: 7, placeholder: "Stack, conventions, what is already decided, what is off-limits." });
   // butonul "Alege..." apare doar daca serverul poate deschide dialogul nativ
@@ -233,6 +281,7 @@ export async function projectFormView(root, id) {
           el("section", { class: "section" },
             el("h2", {}, "Brief"),
             field("Name", name),
+            field("Category \u00b7 groups projects in the list", category), categoryList,
             field("Goal \u00b7 what done looks like", goal),
             field("Shared context \u00b7 every agent reads it", context)),
           el("section", { class: "section" },
@@ -262,7 +311,7 @@ export async function projectFormView(root, id) {
   async function save(e) {
     e.preventDefault();
     const body = {
-      name: name.value, goal: goal.value, context: context.value, folders: folders.values(),
+      name: name.value, goal: goal.value, context: context.value, folders: folders.values(), category: category.value.trim(),
       maxParallel: Number(parallel.value) || 0, budgetUsd: Number(budget.value) || 0,
       autonomy: autonomy.checked,
       ...(accountsLoaded && account.value !== "" ? { accountId: Number(account.value) } : {}),

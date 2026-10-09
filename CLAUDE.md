@@ -121,6 +121,9 @@ utilizatorului, sub o zecime de cent) si claude auth status pentru Default. Schi
 reseteaza sesiunile (ca New chat); o eroare de autentificare (runner.IsAuthError) pune proiectul pe pauza, task-ul inapoi in
 Queued si cardul "Claude account failed" in Needs you. Wizard-ul alege contul la pasul 1; draft-ul si wizard-ul pe folder
 folosesc contul proiectului.
+Gata (categorii de proiecte): projects.category (migrarea 026, text liber, max 40; "work" ia scrierea unei categorii
+existente). Pe Proiecte: filtre All / <categorie> / Uncategorized (alegerea in localStorage "foreman-category") si
+gruparea tabelului pe categorii; cautarea cauta si in categorie. In formularul de proiect, sugestii din categoriile existente.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
