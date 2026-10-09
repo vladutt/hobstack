@@ -15,27 +15,21 @@ export async function projectsView(root) {
   projects.sort((a, b) => Number(b.favorite) - Number(a.favorite));
   const peak = Math.max(1, ...projects.flatMap((p) => p.activity || [])); // aceeasi scara pe toate randurile
   const rows = projects.map((p) => ({ p, tr: projectRow(p, peak, (c) => pickCategory(c)) }));
-  // categoriile: filtre sus si grupuri in tabel, doar cand cel putin un proiect are categorie.
-  // "" = fara categorie (ultimul grup); ALL = toate
+  // categoriile: doar filtre sus (lista ramane una singura, fara grupuri), cand cel putin un proiect are categorie.
+  // "" = fara categorie (ultimul filtru); ALL = toate
   const hasCats = projects.some((p) => p.category);
   const cats = [...new Set(projects.map((p) => p.category || ""))]
     .sort((a, b) => (a === "") - (b === "") || a.localeCompare(b, undefined, { sensitivity: "base" }));
   let current = savedCategory();
   if (current !== ALL && !cats.includes(current)) current = ALL;
-  const groups = hasCats
-    ? cats.map((c) => {
-      const members = rows.filter((r) => (r.p.category || "") === c);
-      return { c, rows: members, head: el("tr", { class: "p-group" }, el("td", { colspan: 8 },
-        el("span", { class: "p-group-name" }, c || "Uncategorized"), el("span", { class: "p-group-count" }, members.length))) };
-    })
-    : [{ c: null, rows, head: null }];
-  const tbody = el("tbody", {}, groups.map((g) => [g.head, g.rows.map((r) => r.tr)]));
+  const tbody = el("tbody", {}, rows.map((r) => r.tr));
   const none = el("tr", { hidden: true }, el("td", { colspan: 8, class: "hint" }, "No project matches."));
   tbody.append(none);
   const chips = hasCats ? el("div", { class: "cat-filter", role: "group", "aria-label": "Categories" }) : null;
   function drawChips() {
     if (!chips) return;
-    const opts = [[ALL, "All", projects.length], ...groups.map((g) => [g.c, g.c || "Uncategorized", g.rows.length])];
+    const count = (c) => projects.filter((p) => (p.category || "") === c).length;
+    const opts = [[ALL, "All", projects.length], ...cats.map((c) => [c, c || "Uncategorized", count(c)])];
     chips.replaceChildren(...opts.map(([value, label, n]) => el("button", {
       type: "button", class: "seg" + (value === current ? " active" : ""), "aria-pressed": String(value === current),
       onclick: () => pickCategory(value),
@@ -50,23 +44,14 @@ export async function projectsView(root) {
   function filter() {
     const q = search.value.trim().toLowerCase();
     let shown = 0;
-    for (const g of groups) {
-      let n = 0;
-      for (const r of g.rows) {
-        const on = (current === ALL || g.c === current) && (!q || r.p.name.toLowerCase().includes(q) ||
-          (r.p.goal || "").toLowerCase().includes(q) || (r.p.category || "").toLowerCase().includes(q));
-        r.tr.hidden = !on;
-        if (on) n++;
-      }
-      // titlul grupului doar pe "All": cu o categorie aleasa ar repeta filtrul
-      if (g.head) g.head.hidden = !n || current !== ALL;
-      shown += n;
+    for (const r of rows) {
+      const on = (current === ALL || (r.p.category || "") === current) && (!q || r.p.name.toLowerCase().includes(q) ||
+        (r.p.goal || "").toLowerCase().includes(q) || (r.p.category || "").toLowerCase().includes(q));
+      r.tr.hidden = !on;
+      if (on) shown++;
     }
     none.hidden = shown > 0;
-    // pe "All" fara cautare categoria se vede din titlul grupului; altfel pe fiecare rand
-    table?.classList.toggle("grouped", hasCats && current === ALL && !q);
   }
-  let table = null;
   drawChips();
   root.append(
     topbar("projects",
@@ -78,13 +63,13 @@ export async function projectsView(root) {
       setupBox,
       chips,
       projects.length
-        ? (table = el("table", { class: "ptable" },
+        ? el("table", { class: "ptable" },
           el("thead", {}, el("tr", {},
             el("th", { class: "p-star-col", "aria-label": "Favorite" }, "\u2605"),
             el("th", {}, "Name"), el("th", { class: "hide-xs" }, "Lead"), el("th", { class: "hide-sm" }, "Team"),
             el("th", {}, "Progress"), el("th", { class: "hide-md", title: "Runs started per day, today last" }, "Activity \u00b7 7d"),
             el("th", { class: "hide-md" }, "Links"), el("th", { class: "num hide-xs" }, "Total cost"))),
-          tbody))
+          tbody)
         : el("div", { class: "empty-state" },
           el("h2", {}, "No projects yet"),
           el("p", {}, "Point Foreman at a folder and let the AI propose a team, or start with just a lead."),
@@ -92,7 +77,7 @@ export async function projectsView(root) {
             el("a", { class: "btn primary", href: "#/setup" }, "\u2726 New project with AI"),
             el("a", { class: "btn", href: "#/new" }, "Create project")))));
 
-  filter(); // dupa ce tabelul e in pagina (clasa "grouped")
+  filter(); // filtrul salvat si cautarea, dupa ce randurile sunt in pagina
 
   // analizele din wizard ruleaza pe server; cat timp una ruleaza, verificam
   // lista la cateva secunde ca sa vedem cand e gata
@@ -283,7 +268,7 @@ export async function projectFormView(root, id) {
           el("section", { class: "section" },
             el("h2", {}, "Brief"),
             field("Name", name),
-            field("Category \u00b7 groups projects in the list", category.el),
+            field("Category \u00b7 filters projects in the list", category.el),
             field("Goal \u00b7 what done looks like", goal),
             field("Shared context \u00b7 every agent reads it", context)),
           el("section", { class: "section" },
