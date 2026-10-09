@@ -238,10 +238,32 @@ func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
 	if err := t.recordOutcome(ar, agentID, hash, o); err != nil {
 		log.Printf("finishing run %s: %v", o.RunID, err)
 	}
+	t.saveUsage(ar.projectID, o.RateLimit)
 	// intrebarile primite in run si ramase deschise primesc raspunsul final al run-ului (sau se inchid)
 	t.settleQuestions(ar, o)
 	t.emit(ar.projectID, "agent", map[string]int64{"id": agentID})
 	t.Kick(ar.projectID)
+}
+
+// saveUsage tine minte limitele contului Claude al proiectului (Stats le arata); un run care nu le-a
+// raportat nu sterge ce stim deja.
+func (t *Team) saveUsage(projectID int64, rl *runner.RateLimit) {
+	if rl == nil {
+		return
+	}
+	p, err := t.st.GetProject(projectID)
+	if err != nil {
+		return
+	}
+	account := int64(0) // Default
+	if p.AccountID != nil {
+		account = *p.AccountID
+	}
+	u := store.AccountUsage{AccountID: account, Status: rl.Status, FiveHourUsed: rl.FiveHourUsed,
+		FiveHourResets: rl.FiveHourResets, SevenDayUsed: rl.SevenDayUsed, SevenDayResets: rl.SevenDayResets}
+	if err := t.st.SaveAccountUsage(u); err != nil {
+		log.Printf("project %d: saving usage: %v", projectID, err)
+	}
 }
 
 func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.Outcome) error {

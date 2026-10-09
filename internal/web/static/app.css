@@ -1319,3 +1319,16 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .mention-name { color: var(--text); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
 .mention-dir { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; min-width: 0; }
 .mention-empty { padding: 8px 10px; color: var(--muted); font-size: 13px; }
+
+/* Stats: limitele contului Claude (5 ore / saptamanal) */
+.usage-rows { display: grid; gap: 14px; }
+.usage-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 6px; font-size: 13px; }
+.usage-label { font-weight: 600; }
+.usage-text { color: var(--soft); }
+.usage-text.warn { color: var(--amber); }
+.usage-text.bad { color: var(--red); }
+.usage-bar { height: 8px; border-radius: 99px; background: var(--deep); overflow: hidden; }
+.usage-bar i { display: block; height: 100%; border-radius: 99px; background: var(--teal); }
+.usage-bar i.warn { background: var(--amber); }
+.usage-bar i.bad { background: var(--red); }
+.usage-updated { margin: 12px 0 0; font-size: 12px; }

@@ -53,6 +53,16 @@ type Outcome struct {
 	Changes   []FileChange // fisiere modificate de agent, in ordinea rezultatelor
 	Commands  []Command    // comenzile Bash rulate (si cele esuate)
 	ToolUses  []string     // numele tuturor tool_use-urilor din run (ex. mcp__server__tool)
+	RateLimit *RateLimit   // limitele contului din ultimul rate_limit_event; nil = run-ul nu le-a raportat
+}
+
+// RateLimit: cat din limitele contului Claude e folosit (0..1) si cand se reseteaza fiecare fereastra.
+type RateLimit struct {
+	Status         string // allowed, allowed_warning, rejected
+	FiveHourUsed   float64
+	FiveHourResets time.Time
+	SevenDayUsed   float64
+	SevenDayResets time.Time
 }
 
 // Run este o singura executie `claude -p`. Tine istoricul evenimentelor in

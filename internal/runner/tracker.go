@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // tracker aduna din stream-json ce ne trebuie la finalul run-ului:
 // sesiunea (pentru --resume), textul final, costul si eventualele erori.
 type tracker struct {
+	rateLimit *RateLimit // ultimul rate_limit_event
 	sessionID string
 	result    string
 	cost      float64
@@ -123,6 +125,8 @@ func (t *tracker) observe(line []byte) {
 		t.observeAssistant(line)
 	case "user":
 		t.observeUser(line)
+	case "rate_limit_event":
+		t.observeRateLimit(line)
 	}
 	if ev.SessionID != "" {
 		t.sessionID = ev.SessionID
@@ -160,10 +164,46 @@ func (t *tracker) observe(line []byte) {
 	}
 }
 
+// observeRateLimit retine limitele contului (fereastra de 5 ore si cea saptamanala) din rate_limit_event.
+func (t *tracker) observeRateLimit(line []byte) {
+	type window struct {
+		Utilization float64 `json:"utilization"`
+		ResetsAt    int64   `json:"resetsAt"`
+	}
+	var ev struct {
+		Info struct {
+			Status  string `json:"status"`
+			Windows struct {
+				FiveHour *window `json:"five_hour"`
+				SevenDay *window `json:"seven_day"`
+			} `json:"unifiedWindows"`
+		} `json:"rate_limit_info"`
+	}
+	if json.Unmarshal(line, &ev) != nil || ev.Info.Status == "" {
+		return
+	}
+	rl := &RateLimit{Status: ev.Info.Status}
+	if w := ev.Info.Windows.FiveHour; w != nil {
+		rl.FiveHourUsed, rl.FiveHourResets = w.Utilization, unixTime(w.ResetsAt)
+	}
+	if w := ev.Info.Windows.SevenDay; w != nil {
+		rl.SevenDayUsed, rl.SevenDayResets = w.Utilization, unixTime(w.ResetsAt)
+	}
+	t.rateLimit = rl
+}
+
+// unixTime: secunde Unix -> time.Time; 0 = necunoscut (time.Time zero)
+func unixTime(sec int64) time.Time {
+	if sec <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(sec, 0)
+}
+
 // outcome decide starea finala. Ordinea conteaza: oprirea manuala castiga,
 // apoi eroarea raportata de claude (ex. buget depasit), apoi codul de iesire.
 func (t *tracker) outcome(runID string, waitErr error, stopped bool) Outcome {
-	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Tokens: t.tokens, Denials: t.denials, Changes: t.changes, Commands: t.commands, ToolUses: t.toolUses}
+	o := Outcome{RunID: runID, Status: "done", SessionID: t.sessionID, Result: t.result, CostUSD: t.cost, Tokens: t.tokens, Denials: t.denials, Changes: t.changes, Commands: t.commands, ToolUses: t.toolUses, RateLimit: t.rateLimit}
 	switch {
 	case stopped:
 		o.Status, o.Error = "stopped", "stopped"

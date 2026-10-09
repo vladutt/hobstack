@@ -130,6 +130,10 @@ Gata (@ in chat): in chat-ul cu un agent, @ deschide lista fisierelor de cod ale
 git ls-files cu .gitignore, altfel parcurgere fara node_modules/vendor/dist/build/foldere ascunse; max 20000 pe folder,
 cache 30 s; GET /api/projects/{id}/code-files?q=&agent=); alegerea scrie @cale (relativa in folderul agentului, absoluta
 in celelalte), agentul citeste singur fisierul. UI: static/js/mentions.js.
+Gata (limitele contului pe Stats): runner-ul retine ultimul rate_limit_event din stream-json (fereastra de 5 ore si cea
+saptamanala: utilization + resetsAt, status allowed/allowed_warning/rejected) in Outcome.RateLimit; team.finish il salveaza
+pe contul proiectului (account_usage, migrarea 028, account_id 0 = Default); GET /api/projects/{id}/stats are "usage" si
+"account"; cardul "Claude usage" sus pe Stats (bare, % ramas, ora resetului, "Updated … ago").
 Gata (categorii de proiecte): projects.category (migrarea 027, text liber, max 40; "work" ia scrierea unei categorii
 existente). Pe Proiecte: filtre All / <categorie> / Uncategorized (alegerea in localStorage "foreman-category") si
 gruparea tabelului pe categorii; cautarea cauta si in categorie. Campul Category (category.js, categoryInput) are lista

@@ -94,5 +94,22 @@ func (s *Server) getProjectStats(w http.ResponseWriter, r *http.Request) {
 		}
 		stats.Prev = &prev
 	}
-	writeJSON(w, http.StatusOK, stats)
+	// limitele contului Claude al proiectului (5 ore / saptamanal), din ultimul run care le-a raportat
+	account, accountID := "Default", int64(0)
+	if a, err := s.st.ProjectAccount(id); err == nil && a != nil {
+		account, accountID = a.Name, a.ID
+	}
+	usage, err := s.st.GetAccountUsage(accountID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, statsView{Stats: stats, Account: account, Usage: usage})
+}
+
+// statsView: statisticile proiectului plus limitele contului lui Claude (usage nil = fara date inca).
+type statsView struct {
+	store.Stats
+	Account string              `json:"account"`
+	Usage   *store.AccountUsage `json:"usage"`
 }

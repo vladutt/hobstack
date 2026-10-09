@@ -155,6 +155,55 @@ function card(title, ...children) {
   return el("section", { class: "stats-card" }, el("h3", {}, title), children);
 }
 
+// usageCard: limitele contului Claude al proiectului (fereastra de 5 ore si cea saptamanala),
+// din ultimul run care le-a raportat. d.usage null = niciun run inca.
+function usageCard(d) {
+  const title = `Claude usage \u00b7 ${d.account || "Default"}`;
+  const u = d.usage;
+  if (!u) return card(title, el("p", { class: "muted" }, "No usage data yet; it appears after an agent's first run."));
+  return card(title,
+    el("div", { class: "usage-rows" },
+      usageRow("5-hour window", u.fiveHourUsed, u.fiveHourResets, u.status, false),
+      usageRow("Weekly", u.sevenDayUsed, u.sevenDayResets, u.status, true)),
+    el("p", { class: "usage-updated muted" }, `Updated ${ago(u.updatedAt)} (from the latest agent run)`));
+}
+
+// usageRow: bara unei ferestre. Chihlimbar peste 80% sau la avertisment, rosu la 100% / limita atinsa.
+function usageRow(label, used, resets, status, weekly) {
+  const pct = Math.max(0, Math.min(100, Math.round((used || 0) * 100)));
+  const full = pct >= 100 || (status === "rejected" && pct >= 99);
+  const level = full ? "bad" : pct >= 80 || (status === "allowed_warning" && pct >= 50) ? "warn" : "ok";
+  const when = resetText(resets, weekly);
+  const text = full ? `Limit reached${when ? ` \u00b7 resets ${when}` : ""}`
+    : `${pct}% used \u00b7 ${100 - pct}% left${when ? ` \u00b7 resets ${when}` : ""}`;
+  return el("div", { class: "usage-row" },
+    el("div", { class: "usage-head" }, el("span", { class: "usage-label" }, label), el("span", { class: `usage-text ${level}` }, text)),
+    el("div", { class: "usage-bar", role: "meter", "aria-label": label, "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(pct) },
+      el("i", { class: level, style: `width:${pct}%` })));
+}
+
+// resetText: "at 14:30" (azi), "tomorrow 09:00", altfel "Mon 18:00"; "" daca necunoscut
+function resetText(iso, weekly) {
+  const t = Date.parse(iso);
+  if (!t || t < Date.UTC(2001, 0, 1)) return "";
+  const d = new Date(t);
+  const hm = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return `at ${hm}`;
+  if (d.toDateString() === tomorrow.toDateString()) return `tomorrow ${hm}`;
+  const day = d.toLocaleDateString("en-US", weekly ? { weekday: "short", month: "short", day: "numeric" } : { weekday: "short" });
+  return `${day} ${hm}`;
+}
+
+function ago(iso) {
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86400)} d ago`;
+}
+
 // statsView: corpul tab-ului. load() aduce datele pentru perioada aleasa.
 // agentKind(id) -> "lead" / "worker", pentru culoarea agentului.
 export function statsView(projectId, { agentKind }) {
@@ -232,10 +281,11 @@ export function statsView(projectId, { agentKind }) {
     const t = d.totals;
     const empty = !d.agents.length && !t.tasksCreated && !t.tasksDone && !t.filesChanged && !t.commands && !t.questions && !t.answered;
     if (empty) {
-      content.replaceChildren(tiles(d, state.range), el("p", { class: "stats-empty muted" }, "No activity in this range."));
+      content.replaceChildren(usageCard(d), tiles(d, state.range), el("p", { class: "stats-empty muted" }, "No activity in this range."));
       return;
     }
     content.replaceChildren(
+      usageCard(d),
       tiles(d, state.range),
       el("div", { class: "stats-grid-2" },
         card("Spend over time", spendChart(d, agentKind), legend(d, agentKind)),

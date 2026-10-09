@@ -64,3 +64,19 @@ func TestDenialKeepsFullCommand(t *testing.T) {
 		t.Fatalf("%+v", d)
 	}
 }
+
+// rate_limit_event: limitele contului (5 ore si saptamanal), luate dintr-un log real
+func TestTrackerRateLimit(t *testing.T) {
+	var tr tracker
+	if o := tr.outcome("r", nil, false); o.RateLimit != nil {
+		t.Fatalf("fara eveniment: %+v", o.RateLimit)
+	}
+	tr.observe([]byte(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1791556800,"rateLimitType":"five_hour","overageStatus":"rejected","overageDisabledReason":"org_level_disabled","isUsingOverage":false,"unifiedWindows":{"five_hour":{"utilization":0.05,"resetsAt":1791556800},"seven_day":{"utilization":0.46,"resetsAt":1791788400}}},"uuid":"0190d7e0","session_id":"71612d81"}`))
+	tr.observe([]byte(`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","unifiedWindows":{"five_hour":{"utilization":0.81,"resetsAt":1791556800},"seven_day":{"utilization":0.47,"resetsAt":1791788400}}}}`))
+	o := tr.outcome("r", nil, true) // si un run oprit raporteaza limitele
+	rl := o.RateLimit
+	if rl == nil || rl.Status != "allowed_warning" || rl.FiveHourUsed != 0.81 || rl.SevenDayUsed != 0.47 ||
+		rl.FiveHourResets.Unix() != 1791556800 || rl.SevenDayResets.Unix() != 1791788400 {
+		t.Fatalf("%+v", rl)
+	}
+}
