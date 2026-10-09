@@ -55,7 +55,7 @@ func (t *Team) MoveTask(taskID int64, to, reason string) error {
 func (t *Team) moveToDone(task store.Task, agents []store.Agent, reason string) error {
 	switch task.Status {
 	case store.StatusReview:
-		return t.decideAsUser(task, agents, true, "", decisionOwner(task, agents))
+		return t.decideAsUser(task, agents, true, "", decisionOwner(task, agents), nil)
 	case store.StatusBlocked:
 		return t.resolveBlockedLocked(task, agents, true)
 	case store.StatusQueued:
@@ -70,7 +70,7 @@ func (t *Team) moveToQueue(task store.Task, agents []store.Agent, reason string)
 		if reason == "" {
 			return ErrReasonRequired
 		}
-		return t.decideAsUser(task, agents, false, reason, decisionOwner(task, agents))
+		return t.decideAsUser(task, agents, false, reason, decisionOwner(task, agents), nil)
 	case store.StatusBlocked:
 		return t.resolveBlockedLocked(task, agents, false)
 	case store.StatusDone:
@@ -83,7 +83,9 @@ func (t *Team) moveToQueue(task store.Task, agents []store.Agent, reason string)
 }
 
 // moveToStage: un task in asteptare / blocat trece in alta etapa (il ia primul liber de acolo);
-// unul Done se redeschide in etapa aceea (cu motiv).
+// unul Done se redeschide in etapa aceea (cu motiv). Board-ul cu etape nu are coloana Queued:
+// un task blocat tras pe etapa lui e deblocat, iar unul din Review e trimis inapoi in etapa
+// pe care a fost tras (cu motiv).
 func (t *Team) moveToStage(task store.Task, agents []store.Agent, stageID int64, reason string) error {
 	stages, err := t.st.ListStages(task.ProjectID)
 	if err != nil {
@@ -100,9 +102,18 @@ func (t *Team) moveToStage(task store.Task, agents []store.Agent, stageID int64,
 			return ErrReasonRequired
 		}
 		return t.reopenTask(task, agents, &st, reason)
-	case store.StatusQueued, store.StatusBlocked:
+	case store.StatusReview:
+		if reason == "" {
+			return ErrReasonRequired
+		}
+		return t.decideAsUser(task, agents, false, reason, decisionOwner(task, agents), &st)
+	case store.StatusBlocked:
+		if task.StageID != nil && *task.StageID == st.ID {
+			return t.resolveBlockedLocked(task, agents, false)
+		}
+	case store.StatusQueued:
 	default:
-		return MoveError(fmt.Sprintf("%s is waiting for a decision; accept it or send it back.", task.Ref()))
+		return MoveError(fmt.Sprintf("%s can't be moved there.", task.Ref()))
 	}
 	if task.StageID != nil && *task.StageID == st.ID {
 		return MoveError(fmt.Sprintf("%s is already in %s.", task.Ref(), st.Name))

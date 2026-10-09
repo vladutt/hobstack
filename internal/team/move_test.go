@@ -130,3 +130,87 @@ func TestMoveBetweenStages(t *testing.T) {
 		t.Fatalf("etapa inexistenta: %v", err)
 	}
 }
+
+// Accept peste reviewer: reviewer-ul primeste nota "for you", iar liderul (care ar fi
+// decis dupa reviewer) afla de decizie in coada lui.
+func TestMoveOverReviewerTellsLead(t *testing.T) {
+	f := setup(t)
+	f.rook.ReviewerID = &f.vera.ID
+	if err := f.st.UpdateAgent(f.rook); err != nil {
+		t.Fatal(err)
+	}
+	task := f.task(t, "Reviewed", f.rook, store.StatusReview)
+	task.ReviewStage = store.StageReviewer
+	if err := f.st.SaveTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.MoveTask(task.ID, "done", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.st.GetTask(task.ID); got.Status != store.StatusDone {
+		t.Fatalf("accept peste reviewer: %s", got.Status)
+	}
+	if !f.hasMessage(f.vera.ID, "The user decided "+task.Ref()+" for you: accepted.") {
+		t.Fatal("reviewer-ul n-a primit nota")
+	}
+	pending, _ := f.st.Undelivered(f.lead.ID)
+	found := false
+	for _, m := range pending {
+		if m.Text == "The user accepted "+task.Ref()+" (instead of Vera)." {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("liderul trebuie anuntat in coada: %+v", pending)
+	}
+}
+
+// Pe board-ul cu etape nu exista Queued: Blocked pe etapa lui = Unblock,
+// Review pe orice etapa = Send back in etapa aceea (cu motiv).
+func TestMoveOnStageBoard(t *testing.T) {
+	f := setup(t)
+	stages, err := f.st.SaveStages(f.p.ID, []store.Stage{
+		{Name: "Build", Kind: store.KindWork, AgentIDs: []int64{f.rook.ID}},
+		{Name: "QA", Kind: store.KindCheck, AgentIDs: []int64{f.vera.ID}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newTask := func(title, status string) store.Task {
+		task := store.Task{ProjectID: f.p.ID, Title: title, AssigneeID: f.rook.ID, CreatorID: &f.lead.ID, StageID: &stages[0].ID}
+		if err := f.st.CreateTask(&task); err != nil {
+			t.Fatal(err)
+		}
+		task.Status = status
+		if status == store.StatusReview {
+			task.ReviewStage = store.StageLead
+		}
+		if err := f.st.SaveTask(&task); err != nil {
+			t.Fatal(err)
+		}
+		return task
+	}
+
+	b := newTask("Blocked", store.StatusBlocked)
+	if err := f.tm.MoveTask(b.ID, "stage:"+itoa(stages[0].ID), ""); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.st.GetTask(b.ID); got.Status != store.StatusQueued || got.StageID == nil || *got.StageID != stages[0].ID {
+		t.Fatalf("unblock pe etapa lui: %+v", got)
+	}
+
+	rv := newTask("Review", store.StatusReview)
+	if err := f.tm.MoveTask(rv.ID, "stage:"+itoa(stages[1].ID), " "); !errors.Is(err, ErrReasonRequired) {
+		t.Fatalf("send back fara motiv: %v", err)
+	}
+	if err := f.tm.MoveTask(rv.ID, "stage:"+itoa(stages[1].ID), "Check the forms"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.st.GetTask(rv.ID)
+	if got.Status != store.StatusQueued || got.StageID == nil || *got.StageID != stages[1].ID || got.Feedback != "Check the forms" {
+		t.Fatalf("send back in etapa: %+v", got)
+	}
+	if !f.hasMessage(f.lead.ID, "The user decided "+rv.Ref()+" for you: sent back: Check the forms") {
+		t.Fatal("liderul n-a primit nota")
+	}
+}
