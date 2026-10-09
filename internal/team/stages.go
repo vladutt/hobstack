@@ -298,7 +298,9 @@ func (t *Team) advance(task *store.Task, stages []store.Stage, agents []store.Ag
 	t.record(*task, ev)
 	t.emit(task.ProjectID, "task", *task)
 	if ok {
-		t.note(task.ProjectID, boss.ID, clip(fmt.Sprintf("%s went through all stages (last: %s). Decide with accept_task or send_back: %s", task.Ref(), byName, task.Result)), false)
+		text := fmt.Sprintf("%s went through all stages (last: %s). Decide with accept_task or send_back: %s", task.Ref(), byName, task.Result)
+		// intrebarile puse in etape: la raport nu decidea nimeni, acum decide liderul
+		t.note(task.ProjectID, boss.ID, t.withOpenDecisions(text, task.ID), false)
 	}
 	t.Kick(task.ProjectID)
 	return fmt.Sprintf("%s went through all stages and is waiting for the lead's decision.", task.Ref()), nil

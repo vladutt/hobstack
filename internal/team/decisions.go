@@ -45,13 +45,47 @@ func (t *Team) noteDecisions(task store.Task, from store.Agent, qs []store.Decis
 	if id == 0 || !ok || boss.ID == from.ID {
 		return
 	}
+	t.note(boss.ProjectID, boss.ID, clip(task.Ref()+": "+decisionsList(qs)), false)
+	t.Kick(boss.ProjectID)
+}
+
+// decisionsList: "Decisions for the user:" + cate o linie "<n>. <intrebare> (<optiuni>)".
+func decisionsList(qs []store.Decision) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: Decisions for the user:", task.Ref())
+	b.WriteString("Decisions for the user:")
 	for i, q := range qs {
 		fmt.Fprintf(&b, "\n%d. %s (%s)", i+1, q.Question, strings.Join(q.Options, " / "))
 	}
-	t.note(boss.ProjectID, boss.ID, clip(b.String()), false)
-	t.Kick(boss.ProjectID)
+	return b.String()
+}
+
+// openDecisionsText: intrebarile fara raspuns ale task-ului, pentru nota liderului care decide
+// dupa reviewer sau dupa ultima etapa (la raport nu decidea el). Gol daca nu sunt.
+func (t *Team) openDecisionsText(taskID int64) string {
+	ds, err := t.st.ListDecisions(taskID)
+	if err != nil {
+		return ""
+	}
+	var open []store.Decision
+	for _, d := range ds {
+		if d.AnsweredAt == nil {
+			open = append(open, d)
+		}
+	}
+	if len(open) == 0 {
+		return ""
+	}
+	return decisionsList(open)
+}
+
+// withOpenDecisions: nota liderului (taiata cu clip) plus intrebarile deschise pe un rand nou.
+// Intrebarile se adauga dupa clip, ca un raport lung sa nu le taie (sunt limitate in MCP).
+func (t *Team) withOpenDecisions(text string, taskID int64) string {
+	text = clip(text)
+	if d := t.openDecisionsText(taskID); d != "" {
+		return text + "\n" + d
+	}
+	return text
 }
 
 // maxOtherLen: lungimea maxima (in caractere) a textului liber "other" dintr-un raspuns.
@@ -88,9 +122,9 @@ func (t *Team) decideWithAnswers(task store.Task, agents []store.Agent, accept b
 		if err != nil {
 			return err
 		}
-		// istoricul pastreaza nota doar cand a ajuns la cineva (task cu intrebari)
-		if t.noteOnlyAccept(task, agents, ds, note) {
-			t.taskMsg(task, "decided", actorUser, to, "You left a note", noteLine(note))
+		// istoricul pastreaza nota doar cand a ajuns la cineva
+		if who, ok := t.noteOnlyAccept(task, agents, ds, note); ok {
+			t.taskMsg(task, "decided", actorUser, who, "You left a note", noteLine(note))
 		}
 		return nil
 	}
@@ -131,31 +165,40 @@ func (t *Team) decideWithAnswers(task store.Task, agents []store.Agent, accept b
 
 // noteOnlyAccept: la un accept doar cu nota, nota ajunge la agentii cu intrebari ramase fara
 // raspuns (cu liniile lor "no answer"); daca nu sunt, doar la ultimul agent care a intrebat.
-func (t *Team) noteOnlyAccept(task store.Task, agents []store.Agent, ds []store.Decision, note string) bool {
+// Fara intrebari (sau cel care a intrebat nu mai exista), nota merge la agentul care a lasat
+// punctele pentru utilizator (TodosBy, altfel asignatul): acolo scrie utilizatorul valorile cerute.
+// Intoarce destinatarul pentru istoric si daca nota a ajuns la cineva.
+func (t *Team) noteOnlyAccept(task store.Task, agents []store.Agent, ds []store.Decision, note string) (string, bool) {
 	var open []store.Decision
 	for _, d := range ds {
 		if d.AnsweredAt == nil {
 			open = append(open, d)
 		}
 	}
+	to := agentName(agents, task.AssigneeID)
 	if len(open) > 0 {
-		return t.noteAskers(task, agents, open, note)
-	}
-	if len(ds) == 0 {
-		return false
-	}
-	last := ds[0]
-	for _, d := range ds[1:] {
-		if !d.AskedAt.Before(last.AskedAt) {
-			last = d
+		if t.noteAskers(task, agents, open, note) {
+			return to, true
+		}
+	} else if len(ds) > 0 {
+		last := ds[0]
+		for _, d := range ds[1:] {
+			if !d.AskedAt.Before(last.AskedAt) {
+				last = d
+			}
+		}
+		// fara linii de intrebari: raspunsurile le-a aflat deja
+		if t.noteAsker(task, agents, last.AskedBy, "", note) {
+			t.Kick(task.ProjectID)
+			return to, true
 		}
 	}
-	// fara linii de intrebari: raspunsurile le-a aflat deja
-	if t.noteAsker(task, agents, last.AskedBy, "", note) {
-		t.Kick(task.ProjectID)
-		return true
+	a, err := t.TodosBy(task)
+	if err != nil || !t.noteAsker(task, agents, a.Name, "", note) {
+		return "", false
 	}
-	return false
+	t.Kick(task.ProjectID)
+	return a.Name, true
 }
 
 // noteAskers trimite fiecarui agent din qs (asked_by) o nota in coada cu raspunsurile la

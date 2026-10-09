@@ -869,8 +869,15 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 	if task.Status != store.StatusInProgress {
 		return "", fmt.Errorf("%s is no longer in progress (status %s)", task.Ref(), task.Status)
 	}
+	// un raport nou inlocuieste intrebarile vechi fara raspuns ale agentului (cele noi vin dupa, prin AskDecisions)
+	clearOld := func() {
+		if err := t.st.SetDecisions(task.ID, worker.Name, nil); err != nil {
+			log.Printf("%s: clear old decisions: %v", task.Ref(), err)
+		}
+	}
 	// task dintr-o etapa: trece in etapa urmatoare (intr-o etapa de verificare, ca o aprobare)
 	if task.StageID != nil {
+		clearOld()
 		stages, err := t.st.ListStages(c.ProjectID)
 		if err != nil {
 			return "", err
@@ -881,6 +888,7 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 	}
 	// radacina livreaza munca ceruta de un proiect legat: nu are sef, trece pe la reviewer sau direct in Done
 	if worker.ParentID == nil && task.RequestID != nil {
+		clearOld()
 		return t.finishRequestedTask(&task, worker, agents, summary)
 	}
 	if worker.ParentID == nil {
@@ -901,6 +909,7 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 	}
 
 	task.Result = summary
+	clearOld()
 	who, err := t.toReview(&task, worker, agents, worker.Name+" finished "+task.Ref(), reportedNote(worker, summary), true)
 	if err != nil {
 		return "", err
@@ -1029,7 +1038,8 @@ func (t *Team) ReviewApprove(c mcp.Caller, ref, note string) (string, error) {
 	if n := strings.TrimSpace(note); n != "" {
 		text += " Note: " + n
 	}
-	t.note(c.ProjectID, boss.ID, clip(text), false)
+	// intrebarile workerului: la raport le-a primit reviewer-ul, acum decide liderul
+	t.note(c.ProjectID, boss.ID, t.withOpenDecisions(text, task.ID), false)
 	t.note(c.ProjectID, reviewer.ID, "Approved "+task.Ref(), true)
 	t.emit(c.ProjectID, "task", task)
 	t.Kick(c.ProjectID)

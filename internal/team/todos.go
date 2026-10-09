@@ -125,6 +125,10 @@ func (t *Team) leave(c mcp.Caller, ref string, items []string, kind string) (str
 		head = "No new items; they were already listed."
 	}
 	out := head + " When you fill one in, call tick_left_for_user with its number."
+	if kind == "step" {
+		// pasii ii face utilizatorul si ii bifeaza tot el
+		out = head + " Only the user can do them; the user does them and ticks them off."
+	}
 	if open := t.openItems(task); open != "" {
 		out += " " + open + "."
 	}

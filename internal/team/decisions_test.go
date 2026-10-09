@@ -415,3 +415,193 @@ func TestUserDecideRetrySameAnswers(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// I1: accept doar cu nota pe un task fara intrebari, cu valori lasate pentru utilizator:
+// nota ajunge la cel care a lasat punctele (nu la asignatul de acum) si istoricul are "decided"
+func TestUserDecideNoteOnlyNoDecisionsGoesToTodosBy(t *testing.T) {
+	f := setup(t)
+	task := store.Task{ProjectID: f.p.ID, Title: "Invoice", AssigneeID: f.rook.ID, ByUser: true}
+	if err := f.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	task.Status = store.StatusInProgress
+	f.st.SaveTask(&task)
+	c := f.workerCaller(f.rook, task.ID)
+	if _, err := f.tm.ReportDone(c, "", "done"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.LeaveForUser(c, "", []string{"VAT number"}); err != nil {
+		t.Fatal(err)
+	}
+	// asignatul s-a schimbat (ca in etape): nota tot la Rook, care a lasat punctele
+	got, _ := f.st.GetTask(task.ID)
+	got.AssigneeID = f.vera.ID
+	got.Status, got.ReviewStage = store.StatusReview, store.StageLead
+	f.st.SaveTask(&got)
+	if err := f.tm.UserDecide(task.ID, true, "VAT is RO123", nil); err != nil {
+		t.Fatal(err)
+	}
+	notes := acceptNotes(f, f.rook.ID)
+	if len(notes) != 1 || !strings.Contains(notes[0], "Note: VAT is RO123") {
+		t.Fatalf("Rook: %q", notes)
+	}
+	msgs, _ := f.st.Undelivered(f.rook.ID)
+	queued := false
+	for _, m := range msgs {
+		queued = queued || strings.Contains(m.Text, "VAT is RO123")
+	}
+	if !queued {
+		t.Fatal("nota nu e in coada lui Rook")
+	}
+	if len(acceptNotes(f, f.vera.ID)) != 0 {
+		t.Fatal("Vera nu a lasat punctele")
+	}
+	evs, _ := f.st.ListTaskEvents(task.ID)
+	di, ai := -1, -1
+	for i, e := range evs {
+		switch e.Kind {
+		case "decided":
+			di = i
+			if e.Body != "Note: VAT is RO123" || e.To != f.rook.Name {
+				t.Fatalf("decided: %+v", e)
+			}
+		case "user_accepted":
+			ai = i
+		}
+	}
+	if di < 0 || ai < 0 || di < ai {
+		t.Fatalf("decided %d, user_accepted %d", di, ai)
+	}
+}
+
+// I2: worker cu reviewer: intrebarile ajung la lider odata cu aprobarea reviewer-ului
+func TestDecisionsReachLeadAfterReviewApprove(t *testing.T) {
+	f := setup(t)
+	f.rook.ReviewerID = &f.vera.ID
+	if err := f.st.UpdateAgent(f.rook); err != nil {
+		t.Fatal(err)
+	}
+	task := f.task(t, "A", f.rook, store.StatusInProgress)
+	c := f.workerCaller(f.rook, task.ID)
+	if _, err := f.tm.ReportDone(c, "", "done"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.AskDecisions(c, "", twoQuestions()); err != nil {
+		t.Fatal(err)
+	}
+	vc := mcp.Caller{ProjectID: f.p.ID, AgentID: f.vera.ID, HasParent: true, IsReviewer: true}
+	if _, err := f.tm.ReviewApprove(vc, task.Ref(), "ok"); err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := f.st.ListMessages(f.lead.ID)
+	for _, m := range msgs {
+		if strings.Contains(m.Text, "Vera approved "+task.Ref()) {
+			if !strings.Contains(m.Text, "Decisions for the user:") || !strings.Contains(m.Text, "Open a follow-up? (Yes / No)") ||
+				!strings.Contains(m.Text, "Which? (A / B / C)") {
+				t.Fatalf("nota liderului fara intrebari: %q", m.Text)
+			}
+			return
+		}
+	}
+	t.Fatalf("liderul nu a primit aprobarea: %+v", msgs)
+}
+
+// I2: proiect cu etape: dupa ultima etapa, nota liderului are intrebarile deschise
+func TestDecisionsReachLeadAfterLastStage(t *testing.T) {
+	f, _, stages := stagesFixture(t)
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: f.rook.ID, CreatorID: &f.lead.ID, StageID: &stages[0].ID}
+	if err := f.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	task.Status = store.StatusInProgress
+	f.st.SaveTask(&task)
+	c := f.workerCaller(f.rook, task.ID)
+	if _, err := f.tm.ReportDone(c, "", "done"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tm.AskDecisions(c, "", twoQuestions()); err != nil {
+		t.Fatal(err)
+	}
+	if f.hasMessage(f.lead.ID, "Decisions for the user:") {
+		t.Fatal("liderul nu decide inca (task-ul e in QA)")
+	}
+	got, _ := f.st.GetTask(task.ID)
+	got.Status = store.StatusInProgress // Vera il ia in QA
+	f.st.SaveTask(&got)
+	vc := mcp.Caller{ProjectID: f.p.ID, AgentID: f.vera.ID, TaskID: task.ID, HasParent: true, StageKind: store.KindCheck}
+	if _, err := f.tm.ReviewApprove(vc, task.Ref(), ""); err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := f.st.ListMessages(f.lead.ID)
+	for _, m := range msgs {
+		if strings.Contains(m.Text, "went through all stages") {
+			if !strings.Contains(m.Text, "Decisions for the user:") || !strings.Contains(m.Text, "Open a follow-up? (Yes / No)") {
+				t.Fatalf("nota liderului fara intrebari: %q", m.Text)
+			}
+			return
+		}
+	}
+	t.Fatalf("liderul nu a primit nota de final: %+v", msgs)
+}
+
+// I2: decide utilizatorul (task din board, cu reviewer): nimeni nu primeste intrebarile ca nota
+func TestDecisionsNotSentWhenUserDecidesAfterReview(t *testing.T) {
+	f := setup(t)
+	f.rook.ReviewerID = &f.vera.ID
+	f.st.UpdateAgent(f.rook)
+	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: f.rook.ID, ByUser: true}
+	f.st.CreateTask(&task)
+	task.Status = store.StatusInProgress
+	f.st.SaveTask(&task)
+	c := f.workerCaller(f.rook, task.ID)
+	f.tm.ReportDone(c, "", "done")
+	f.tm.AskDecisions(c, "", twoQuestions())
+	vc := mcp.Caller{ProjectID: f.p.ID, AgentID: f.vera.ID, HasParent: true, IsReviewer: true}
+	if _, err := f.tm.ReviewApprove(vc, task.Ref(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if f.hasMessage(f.lead.ID, "Decisions for the user:") {
+		t.Fatal("liderul a primit intrebari desi decide utilizatorul")
+	}
+}
+
+// M1: un report_done nou fara intrebari sterge intrebarile vechi fara raspuns ale agentului
+func TestReportDoneClearsOldOpenDecisions(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "A", f.rook, store.StatusInProgress)
+	c := f.workerCaller(f.rook, task.ID)
+	f.tm.ReportDone(c, "", "done")
+	if _, err := f.tm.AskDecisions(c, "", twoQuestions()); err != nil {
+		t.Fatal(err)
+	}
+	ds, _ := f.st.ListDecisions(task.ID)
+	if err := f.st.AnswerDecisions(task.ID, []store.DecisionAnswer{{ID: ds[0].ID, Choices: []string{"Yes"}}}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.st.GetTask(task.ID)
+	got.Status, got.ReviewStage = store.StatusInProgress, store.StageNone
+	f.st.SaveTask(&got)
+	if _, err := f.tm.ReportDone(c, "", "done again"); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := f.st.ListDecisions(task.ID)
+	if len(list) != 1 || list[0].ID != ds[0].ID {
+		t.Fatalf("raman doar intrebarile raspunse: %+v", list)
+	}
+}
+
+// pasii ii face utilizatorul: agentul nu e rugat sa-i bifeze
+func TestLeaveStepsNoTickInstruction(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "Build page", f.rook, store.StatusInProgress)
+	c := f.workerCaller(f.rook, task.ID)
+	f.tm.ReportDone(c, "", "done")
+	out, err := f.tm.LeaveSteps(c, "", []string{"Set .env"})
+	if err != nil || strings.Contains(out, "tick_left_for_user") || !strings.Contains(out, "the user does them") {
+		t.Fatalf("%q %v", out, err)
+	}
+	out, _ = f.tm.LeaveForUser(c, "", []string{"VAT"})
+	if !strings.Contains(out, "call tick_left_for_user with its number") {
+		t.Fatalf("valori: %q", out)
+	}
+}
