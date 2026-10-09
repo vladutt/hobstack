@@ -121,7 +121,12 @@ utilizatorului, sub o zecime de cent) si claude auth status pentru Default. Schi
 reseteaza sesiunile (ca New chat); o eroare de autentificare (runner.IsAuthError) pune proiectul pe pauza, task-ul inapoi in
 Queued si cardul "Claude account failed" in Needs you. Wizard-ul alege contul la pasul 1; draft-ul si wizard-ul pe folder
 folosesc contul proiectului.
-Gata (categorii de proiecte): projects.category (migrarea 026, text liber, max 40; "work" ia scrierea unei categorii
+Gata (mutare si stergere, spec in docs/superpowers/specs/2026-10-09-foreman-task-move-delete-design.md): drag & drop pe
+board = actiunea coloanei (team.MoveTask: Accept, Send back, Unblock, Reopen, Close, mutare intre etape; In progress si
+Review nu primesc drop), meniul "⋯" de pe card (Move to… / Delete). Delete = arhivare (status archived, migrarea 026,
+archived_from/archived_root): run-ul se opreste, intrebarile/cererile legate se inchid, ListTasks/Subtasks nu le mai
+intorc; toast cu Undo si panoul "Deleted (N)" cu Restore.
+Gata (categorii de proiecte): projects.category (migrarea 027, text liber, max 40; "work" ia scrierea unei categorii
 existente). Pe Proiecte: filtre All / <categorie> / Uncategorized (alegerea in localStorage "foreman-category") si
 gruparea tabelului pe categorii; cautarea cauta si in categorie. In formularul de proiect, sugestii din categoriile existente.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):

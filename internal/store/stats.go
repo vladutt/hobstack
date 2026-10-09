@@ -242,7 +242,7 @@ func (s *Store) statsTasks(projectID int64, a *statsAcc) error {
 			COALESCE((SELECT MIN(e.created_at) FROM task_events e WHERE e.task_id = t.id AND e.kind IN ('accepted', 'user_accepted')),
 				CASE WHEN t.status = 'done' THEN t.updated_at END)
 		FROM tasks t LEFT JOIN agents ag ON ag.id = t.assignee_id
-		WHERE t.project_id = ?`, projectID)
+		WHERE t.project_id = ? AND t.status != 'archived'`, projectID)
 	if err != nil {
 		return err
 	}

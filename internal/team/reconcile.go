@@ -747,13 +747,20 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 	if err != nil {
 		return err
 	}
-	if task.Status != store.StatusBlocked {
-		return ErrNotBlocked
-	}
 	agents, err := t.st.ListAgents(task.ProjectID)
 	if err != nil {
 		return err
 	}
+	return t.resolveBlockedLocked(task, agents, accept, "")
+}
+
+// resolveBlockedLocked e corpul lui resolveBlocked; se apeleaza cu t.work blocat.
+// note: nota optionala a utilizatorului la Unblock; daca nu e goala devine feedback-ul task-ului.
+func (t *Team) resolveBlockedLocked(task store.Task, agents []store.Agent, accept bool, note string) error {
+	if task.Status != store.StatusBlocked {
+		return ErrNotBlocked
+	}
+	note = strings.TrimSpace(note)
 	text := "The user accepted " + task.Ref() + "."
 	if accept {
 		task.Status = store.StatusDone
@@ -764,12 +771,18 @@ func (t *Team) resolveBlocked(taskID int64, accept bool) error {
 		task.SendBacks = 0
 		task.Escalated = false // incercari noi: un nou blocaj ajunge iar la decident
 		text = "The user unblocked " + task.Ref() + "; the assignee resumes it with the latest feedback."
+		if note != "" {
+			task.Feedback = note
+			text = "The user unblocked " + task.Ref() + ": " + note + "\nThe assignee resumes it with this as feedback."
+		}
 	}
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
 	}
 	if accept {
 		t.taskMsg(task, "user_accepted", actorUser, agentName(agents, task.AssigneeID), "You accepted", "Accepted")
+	} else if note != "" {
+		t.taskMsg(task, "unblocked", actorUser, agentName(agents, task.AssigneeID), "You unblocked it: "+note, note)
 	} else {
 		t.taskEvent(task, "unblocked", actorUser, "You unblocked it")
 	}

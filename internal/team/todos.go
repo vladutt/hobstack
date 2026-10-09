@@ -25,6 +25,9 @@ func (t *Team) todoTask(c mcp.Caller, ref string) (store.Task, store.Agent, erro
 	if err != nil {
 		return task, store.Agent{}, err
 	}
+	if task.Status == store.StatusArchived {
+		return task, store.Agent{}, fmt.Errorf("%s was deleted by the user", task.Ref())
+	}
 	a, err := t.st.GetAgent(c.AgentID)
 	if err != nil {
 		return task, a, err
@@ -197,6 +200,10 @@ func (t *Team) UserComment(taskID int64, text string) error {
 		t.work.Unlock()
 		return err
 	}
+	if task.Status == store.StatusArchived {
+		t.work.Unlock()
+		return archivedError(task.Ref())
+	}
 	// primeste comentariul cel care a lasat punctele (nu neaparat asignatul curent)
 	a, err := t.TodosBy(task)
 	if err != nil {
@@ -226,6 +233,9 @@ func (t *Team) UserSetTodo(taskID int64, position int, done bool) error {
 	task, err := t.st.GetTask(taskID)
 	if err != nil {
 		return err
+	}
+	if task.Status == store.StatusArchived {
+		return archivedError(task.Ref())
 	}
 	list, err := t.st.ListTodos(taskID)
 	if err != nil {

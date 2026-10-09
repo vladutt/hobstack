@@ -1266,3 +1266,38 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .tfiles-preview-body img { max-width: 100%; height: auto; display: block; border-radius: 6px; }
 .tfiles-preview-body iframe { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .tfiles-text { max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12px; margin: 0; padding: 12px; border-radius: 6px; background: var(--deep); }
+
+/* Drag & drop pe board: unde se poate lasa cardul */
+.col.drop-ok { outline: 2px dashed var(--teal-line); outline-offset: -2px; background: var(--teal-bg); }
+.col.drop-no { opacity: .55; }
+.task[draggable="true"] { cursor: grab; }
+/* Meniul cardului: butonul ⋯ sta peste coltul cardului (un buton nu poate sta in alt buton) */
+.card-wrap { position: relative; min-width: 0; }
+.card-menu-btn { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 6px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; opacity: 0; }
+.card-wrap:hover .card-menu-btn, .card-menu-btn:focus-visible, .card-menu-btn[aria-expanded="true"] { opacity: 1; }
+.card-menu-btn:hover { background: var(--card-hi); color: var(--text); }
+/* position: fixed, pus de JS langa buton (board-ul se deruleaza si l-ar taia) */
+.card-menu { position: fixed; z-index: 35; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px; border-radius: 8px; background: var(--deep); border: 1px solid var(--line-2); display: grid; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.card-menu button { text-align: left; background: none; border: 0; color: var(--soft); padding: 6px 10px; border-radius: 6px; font: inherit; font-size: 14px; cursor: pointer; }
+.card-menu button:hover, .card-menu button:focus-visible { background: var(--card-hi); color: var(--text); }
+.card-menu .danger { color: var(--red); }
+.card-menu-sub { display: grid; padding-left: 10px; border-left: 1px solid var(--line-2); margin: 2px 0 4px 10px; }
+.card-menu-sub[hidden] { display: none; }
+.card-menu-note { font-size: 13px; color: var(--muted); padding: 6px 10px; max-width: 260px; }
+.toast-action { margin-left: 8px; background: none; border: 1px solid currentColor; color: inherit; border-radius: 6px; padding: 2px 8px; font: inherit; cursor: pointer; }
+.btn.danger-hover:hover { color: var(--red); background: var(--red-bg); }
+.modal-delete { justify-content: flex-end; }
+/* fereastra de motiv (Send back / Reopen) */
+.reason-modal.modal { display: block; max-width: 480px; height: auto; max-height: 100%; overflow-y: auto; }
+.reason-form { display: grid; gap: 12px; padding: 22px 24px; }
+.reason-form h2 { margin: 0; font-size: 20px; }
+.reason-form .hint { margin: 0; overflow-wrap: anywhere; }
+/* panoul Deleted */
+.deleted-panel { display: grid; gap: 14px; }
+.deleted-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.deleted-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.deleted-row:last-child { border-bottom: 0; }
+.deleted-title { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+/* primul rand al cardului (etichete / titlu) lasa loc butonului ⋯ */
+.card-wrap > .task > .task-labels, .card-wrap > .task > .task-title { padding-right: 18px; }
+@media (hover: none) { .card-menu-btn { opacity: 1; } }
