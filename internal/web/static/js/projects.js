@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { el, avatar, field, toast, kindOf, clock, topbar } from "./ui.js";
 import { projectCommands } from "./commands.js";
 import { libraryInstalls } from "./library-cards.js";
+import { ALL, savedCategory, saveCategory, loadCategories, categoryInput } from "./category.js";
 
 export async function projectsView(root) {
   const [projects, setups] = await Promise.all([api("/api/projects"), api("/api/setup").catch(() => [])]);
@@ -13,7 +14,7 @@ export async function projectsView(root) {
   // favoritele primele; altfel ordinea de pe server (dupa id)
   projects.sort((a, b) => Number(b.favorite) - Number(a.favorite));
   const peak = Math.max(1, ...projects.flatMap((p) => p.activity || [])); // aceeasi scara pe toate randurile
-  const rows = projects.map((p) => ({ p, tr: projectRow(p, peak) }));
+  const rows = projects.map((p) => ({ p, tr: projectRow(p, peak, (c) => pickCategory(c)) }));
   // categoriile: filtre sus si grupuri in tabel, doar cand cel putin un proiect are categorie.
   // "" = fara categorie (ultimul grup); ALL = toate
   const hasCats = projects.some((p) => p.category);
@@ -37,8 +38,14 @@ export async function projectsView(root) {
     const opts = [[ALL, "All", projects.length], ...groups.map((g) => [g.c, g.c || "Uncategorized", g.rows.length])];
     chips.replaceChildren(...opts.map(([value, label, n]) => el("button", {
       type: "button", class: "seg" + (value === current ? " active" : ""), "aria-pressed": String(value === current),
-      onclick: () => { current = value; saveCategory(value); drawChips(); filter(); },
+      onclick: () => pickCategory(value),
     }, label, el("span", { class: "cat-count" }, n))));
+  }
+  function pickCategory(value) {
+    current = value;
+    saveCategory(value);
+    drawChips();
+    filter();
   }
   function filter() {
     const q = search.value.trim().toLowerCase();
@@ -56,9 +63,11 @@ export async function projectsView(root) {
       shown += n;
     }
     none.hidden = shown > 0;
+    // pe "All" fara cautare categoria se vede din titlul grupului; altfel pe fiecare rand
+    table?.classList.toggle("grouped", hasCats && current === ALL && !q);
   }
+  let table = null;
   drawChips();
-  filter();
   root.append(
     topbar("projects",
       el("span", { class: "grow" }),
@@ -69,19 +78,21 @@ export async function projectsView(root) {
       setupBox,
       chips,
       projects.length
-        ? el("table", { class: "ptable" },
+        ? (table = el("table", { class: "ptable" },
           el("thead", {}, el("tr", {},
             el("th", { class: "p-star-col", "aria-label": "Favorite" }, "\u2605"),
             el("th", {}, "Name"), el("th", { class: "hide-xs" }, "Lead"), el("th", { class: "hide-sm" }, "Team"),
             el("th", {}, "Progress"), el("th", { class: "hide-md", title: "Runs started per day, today last" }, "Activity \u00b7 7d"),
             el("th", { class: "hide-md" }, "Links"), el("th", { class: "num hide-xs" }, "Total cost"))),
-          tbody)
+          tbody))
         : el("div", { class: "empty-state" },
           el("h2", {}, "No projects yet"),
           el("p", {}, "Point Foreman at a folder and let the AI propose a team, or start with just a lead."),
           el("div", { class: "actions" },
             el("a", { class: "btn primary", href: "#/setup" }, "\u2726 New project with AI"),
             el("a", { class: "btn", href: "#/new" }, "Create project")))));
+
+  filter(); // dupa ce tabelul e in pagina (clasa "grouped")
 
   // analizele din wizard ruleaza pe server; cat timp una ruleaza, verificam
   // lista la cateva secunde ca sa vedem cand e gata
@@ -98,16 +109,6 @@ export async function projectsView(root) {
   }
   draw(setups);
   return () => { closed = true; clearTimeout(timer); };
-}
-
-// filtrul de categorie ales pe pagina Proiecte, tinut minte in browser
-const ALL = "\u0000all"; // nu poate fi o categorie reala
-const CATEGORY_KEY = "foreman-category";
-function savedCategory() {
-  try { return localStorage.getItem(CATEGORY_KEY) ?? ALL; } catch { return ALL; }
-}
-function saveCategory(value) {
-  try { localStorage.setItem(CATEGORY_KEY, value); } catch { /* fara memorie: ramane doar pe pagina */ }
 }
 
 const SETUP_STATUS = {
@@ -154,7 +155,8 @@ function setupCard(s, refresh) {
 // projectRow: un rand din tabelul de proiecte; click oriunde pe rand deschide proiectul.
 // peak: cea mai mare activitate zilnica din tabel (barele au aceeasi scara pe toate randurile;
 // radical, ca o zi cu 250 de run-uri sa nu faca invizibile zilele cu 5).
-function projectRow(p, peak) {
+// projectRow: un rand din tabelul Proiecte; onCategory(categorie) la click pe eticheta categoriei
+function projectRow(p, peak, onCategory) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
   const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0) + (p.fillIns || 0) + (p.libraryProposals || 0) + (p.accountError ? 1 : 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru, contul Claude cazut
   const href = `#/p/${p.id}`;
@@ -188,10 +190,13 @@ function projectRow(p, peak) {
   },
     el("td", { class: "p-star-col" }, star),
     el("td", {}, el("div", { class: "p-name" },
-      el("a", { href }, p.name,
-        asks ? el("span", { class: "badge-needs-you" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null,
-        p.autonomy ? el("span", { class: "badge-auto", title: "Agents don't ask you questions" }, "autonomous") : null,
-        p.accountName ? el("span", { class: "badge-account", title: "Claude account used by this project" }, p.accountName) : null),
+      el("div", { class: "p-title" },
+        el("a", { href }, p.name,
+          asks ? el("span", { class: "badge-needs-you" }, `${asks} ${asks === 1 ? "needs" : "need"} you`) : null,
+          p.autonomy ? el("span", { class: "badge-auto", title: "Agents don't ask you questions" }, "autonomous") : null,
+          p.accountName ? el("span", { class: "badge-account", title: "Claude account used by this project" }, p.accountName) : null),
+        p.category ? el("button", { type: "button", class: "badge-cat", title: `Show only ${p.category}`,
+          onclick: () => onCategory(p.category) }, p.category) : null),
       el("span", { class: "p-sub", title: p.goal || "" },
         el("span", { class: `p-state ${state}` }, p.status), p.goal ? " \u00b7 " + p.goal : ""))),
     el("td", { class: "hide-xs" }, lead ? el("span", { class: "p-lead" }, avatar(lead.name, kindOf(lead), 30), lead.name) : el("span", { class: "hint" }, "\u2014")),
@@ -239,11 +244,8 @@ export async function projectFormView(root, id) {
     : { name: "", goal: "", context: "", folders: [], maxParallel: 0, budgetUsd: 0 };
 
   const name = el("input", { type: "text", value: p.name, placeholder: "e.g. HoReCa QR", required: true, maxlength: 80 });
-  // categoria: una existenta (sugestii din celelalte proiecte) sau una noua
-  let known = [];
-  try { known = [...new Set((await api("/api/projects")).map((x) => x.category).filter(Boolean))].sort(); } catch { /* fara sugestii */ }
-  const category = el("input", { type: "text", value: p.category || "", placeholder: "e.g. Work", maxlength: 40, list: "project-categories" });
-  const categoryList = el("datalist", { id: "project-categories" }, known.map((c) => el("option", { value: c })));
+  // categoria: una existenta (lista se deschide la focus) sau una noua
+  const category = categoryInput(p.category || "", await loadCategories());
   const goal = el("textarea", { value: p.goal, placeholder: "An MVP and a clickable prototype for QR sign-ups." });
   const context = el("textarea", { value: p.context, rows: 7, placeholder: "Stack, conventions, what is already decided, what is off-limits." });
   // butonul "Alege..." apare doar daca serverul poate deschide dialogul nativ
@@ -281,7 +283,7 @@ export async function projectFormView(root, id) {
           el("section", { class: "section" },
             el("h2", {}, "Brief"),
             field("Name", name),
-            field("Category \u00b7 groups projects in the list", category), categoryList,
+            field("Category \u00b7 groups projects in the list", category.el),
             field("Goal \u00b7 what done looks like", goal),
             field("Shared context \u00b7 every agent reads it", context)),
           el("section", { class: "section" },
@@ -311,7 +313,7 @@ export async function projectFormView(root, id) {
   async function save(e) {
     e.preventDefault();
     const body = {
-      name: name.value, goal: goal.value, context: context.value, folders: folders.values(), category: category.value.trim(),
+      name: name.value, goal: goal.value, context: context.value, folders: folders.values(), category: category.input.value.trim(),
       maxParallel: Number(parallel.value) || 0, budgetUsd: Number(budget.value) || 0,
       autonomy: autonomy.checked,
       ...(accountsLoaded && account.value !== "" ? { accountId: Number(account.value) } : {}),

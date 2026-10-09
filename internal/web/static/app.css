@@ -68,6 +68,8 @@ a.crumb:hover { color: var(--text); }
 .status-chip.paused .dot { background: var(--amber); }
 .status-chip.auto { font-size: 12px; font-weight: 600; color: var(--teal); background: var(--teal-bg); padding: 2px 9px; border-radius: 999px; }
 .status-chip.account { font-size: 12px; font-weight: 600; color: var(--purple); background: rgba(199, 155, 242, .13); padding: 2px 9px; border-radius: 999px; }
+.status-chip.cat { font-size: 12px; font-weight: 600; color: var(--soft); border: 1px solid var(--line-2); padding: 1px 9px; border-radius: 999px; text-decoration: none; }
+.status-chip.cat:hover { color: var(--text); border-color: var(--muted); }
 .needs-chip { font-size: 12px; font-weight: 600; color: var(--amber); background: var(--amber-bg); padding: 2px 9px; border-radius: 999px; text-decoration: none; white-space: nowrap; }
 .needs-chip[hidden] { display: none; }
 .needs-chip:hover { background: rgba(242, 181, 68, .2); }
@@ -183,6 +185,10 @@ a.card:hover { border-color: var(--line-2); }
 .p-name { display: grid; gap: 2px; min-width: 0; }
 .p-name a { font-size: 16px; font-weight: 650; text-decoration: none; color: var(--text); display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .p-name a:hover { text-decoration: underline; text-decoration-color: var(--dim); }
+.p-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.badge-cat { font: 600 11px var(--sans); color: var(--soft); background: none; border: 1px solid var(--line-2); padding: 1px 8px; border-radius: 999px; cursor: pointer; }
+.badge-cat:hover { color: var(--text); border-color: var(--muted); }
+.ptable.grouped .badge-cat { display: none; } /* pe All fara cautare categoria e titlul grupului */
 .p-sub { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; max-width: 46ch; }
 .p-lead { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; }
 .p-progress { display: flex; align-items: center; gap: 12px; min-width: 180px; }
@@ -1301,3 +1307,11 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 /* primul rand al cardului (etichete / titlu) lasa loc butonului ⋯ */
 .card-wrap > .task > .task-labels, .card-wrap > .task > .task-title { padding-right: 18px; }
 @media (hover: none) { .card-menu-btn { opacity: 1; } }
+
+/* ---------- campul cu lista (categorii) ---------- */
+.combo { position: relative; }
+.combo-list { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 4px; list-style: none;
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; max-height: 240px; overflow: auto; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.combo-opt { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--soft); }
+.combo-opt:hover, .combo-opt.active { background: var(--card-hi); color: var(--text); }
+.combo-opt.create { color: var(--amber); }

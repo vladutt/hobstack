@@ -9,6 +9,7 @@ import { recurringPanel } from "./recurring.js";
 import { questionBox } from "./questions.js";
 import { stuckBox, refreshStuckAges } from "./stuck.js";
 import { accessBox } from "./access.js";
+import { saveCategory } from "./category.js";
 import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
@@ -621,6 +622,8 @@ export async function workspaceView(root, projectId, route) {
       el("span", { class: "topbar-status" }, status,
         p.autonomy ? el("span", { class: "status-chip auto", title: "Agents don't ask you questions; the root lead decides" }, "Autonomous") : null,
         p.accountName ? el("span", { class: "status-chip account", title: "Claude account used by this project's agents" }, p.accountName) : null,
+        p.category ? el("a", { class: "status-chip cat", href: "#/", title: `Projects in ${p.category}`,
+          onclick: () => saveCategory(p.category) }, p.category) : null,
         needsChip),
       el("span", { class: "grow" }),
       p.agents.length ? stack : null,

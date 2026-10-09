@@ -128,7 +128,10 @@ archived_from/archived_root): run-ul se opreste, intrebarile/cererile legate se 
 intorc; toast cu Undo si panoul "Deleted (N)" cu Restore.
 Gata (categorii de proiecte): projects.category (migrarea 027, text liber, max 40; "work" ia scrierea unei categorii
 existente). Pe Proiecte: filtre All / <categorie> / Uncategorized (alegerea in localStorage "foreman-category") si
-gruparea tabelului pe categorii; cautarea cauta si in categorie. In formularul de proiect, sugestii din categoriile existente.
+gruparea tabelului pe categorii; cautarea cauta si in categorie. Campul Category (category.js, categoryInput) are lista
+categoriilor existente cu numarul de proiecte, deschisa la focus, plus "Create "X""; e in formularul de proiect si la pasul 3
+din wizard (POST /api/projects/setup primeste category). Eticheta categoriei pe rand (vizibila cand filtrezi sau cauti; click
+= filtru) si in header-ul proiectului (click = Proiecte filtrate).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { el, field, toast, TOOLS, topbar } from "./ui.js";
 import { liveRenderer } from "./live.js";
 import { foremanChat } from "./foreman-chat.js";
+import { loadCategories, categoryInput } from "./category.js";
 
 // Wizard-ul "Proiect nou cu AI": 1) folder + descriere, 2) analiza live,
 // 3) propunerea editabila, apoi "Creeaza proiectul".
@@ -15,7 +16,8 @@ export async function setupView(root, id, target = null) {
   const info = await api("/api/info");
   let accounts = [];
   try { accounts = await api("/api/accounts"); } catch { /* doar Default */ }
-  const form = { workdirs: [""], description: "", model: "sonnet", accountId: 0 };
+  const categories = await loadCategories();
+  const form = { workdirs: [""], description: "", model: "sonnet", accountId: 0, category: "" };
   let session = null;   // {id, runId}
   let stream = null;    // EventSource-ul analizei
   let closed = false;
@@ -214,6 +216,8 @@ export async function setupView(root, id, target = null) {
     const name = el("input", { type: "text", value: p.name, maxlength: 80 });
     const goal = el("textarea", { value: p.goal, rows: 3 });
     const context = el("textarea", { value: p.context, rows: 8 });
+    // categoria nu vine de la analist; form.category o pastreaza peste reconstruirile pasului 3
+    const category = categoryInput(form.category, categories, (v) => { form.category = v; });
     const tree = el("pre", { class: "wizard-tree" });
     // modul folder: sectiunile proprii (folderul, contextul lui) si echipa existenta
     const fm = target ? reviewFolderSection(p) : null;
@@ -355,7 +359,7 @@ export async function setupView(root, id, target = null) {
       fm ? fm.sections : null,
       fm ? null : el("section", { class: "section" },
         el("h2", {}, "3. Proposal"),
-        field("Name", name), field("Goal", goal), field("Shared context", context),
+        field("Name", name), field("Category \u00b7 groups projects in the list", category.el), field("Goal", goal), field("Shared context", context),
         p.rationale && el("div", { class: "field" }, el("span", { class: "label" }, "Why this team"), el("p", { class: "muted" }, p.rationale))),
       folders.length > 0 && el("section", { class: "section" },
         el("h2", {}, many ? "Folders" : "Folder"),
@@ -416,6 +420,7 @@ export async function setupView(root, id, target = null) {
         if (fm) { await createInFolder(proposal, fm); return; }
         const proj = await api("/api/projects/setup", { method: "POST", body: {
           setupId: session?.id, workdir: form.workdirs[0] || "", proposal, accountId: form.accountId || 0,
+          category: category.input.value.trim(),
         } });
         location.hash = `#/p/${proj.id}/team`;
       } catch (err) {

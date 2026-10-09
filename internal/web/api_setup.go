@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	wizard "foreman/internal/setup"
 	"foreman/internal/store"
@@ -124,6 +125,8 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 		// AccountID: contul ales la pasul 1, trimis si de pagina; conteaza cand sesiunea a disparut (restart, expirata)
 		AccountID int64           `json:"accountId"`
 		Proposal  wizard.Proposal `json:"proposal"`
+		// Category: categoria aleasa la pasul 3 (nu face parte din propunerea analistului)
+		Category string `json:"category"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -140,7 +143,11 @@ func (s *Server) createProjectFromSetup(w http.ResponseWriter, r *http.Request) 
 	} else if len(folders) == 1 && folders[0].Path == "" {
 		folders[0].Path = in.Workdir // analistul a lasat calea goala: folderul ales de utilizator
 	}
-	p := store.Project{Name: in.Proposal.Name, Goal: in.Proposal.Goal, Context: in.Proposal.Context}
+	p := store.Project{Name: in.Proposal.Name, Goal: in.Proposal.Goal, Context: in.Proposal.Context, Category: strings.TrimSpace(in.Category)}
+	if err := maxLen("category", p.Category, 40); err != nil {
+		fail(w, err)
+		return
+	}
 	seen := map[string]bool{}
 	for i, f := range folders {
 		hint := in.Proposal.Name

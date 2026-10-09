@@ -448,3 +448,19 @@ func TestCreateFromSetupWithoutSessionKeepsAccount(t *testing.T) {
 		t.Fatalf("fara sesiune: %d %s", code, raw)
 	}
 }
+
+func TestCreateFromSetupWithCategory(t *testing.T) {
+	e := withSetup(t)
+	proposal := map[string]any{"name": "Notes", "goal": "g", "context": "c",
+		"agents": []map[string]any{{"name": "Ana", "role": "Lead", "model": "sonnet", "reportsTo": ""}}}
+	code, raw := e.do(t, "POST", "/api/projects/setup", map[string]any{"workdir": t.TempDir(), "proposal": proposal, "category": " Work "})
+	var p struct{ Category string }
+	json.Unmarshal(raw, &p)
+	if code != http.StatusCreated || p.Category != "Work" {
+		t.Fatalf("categorie: %d %s", code, raw)
+	}
+	proposal["name"] = "Other"
+	if code, _ := e.do(t, "POST", "/api/projects/setup", map[string]any{"workdir": t.TempDir(), "proposal": proposal, "category": strings.Repeat("c", 41)}); code != http.StatusBadRequest {
+		t.Fatalf("prea lunga: %d", code)
+	}
+}
