@@ -31,6 +31,7 @@ type Spec struct {
 	Dir    string   // working directory
 	Args   []string // argumentele pentru claude, fara binar
 	Prompt string   // mesajul turei, doar pentru evenimentul de start
+	Env    []string // K=V adaugate in mediu; nevid = variabilele de cont mostenite sunt scoase (vezi procEnv)
 }
 
 // Command e o comanda Bash rulata de agent; OK e fals cand rezultatul a fost is_error (esuata sau blocata).
@@ -192,6 +193,7 @@ func (m *Manager) Start(spec Spec, onDone func(Outcome)) (*Run, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, m.claudeBin, spec.Args...)
 	cmd.Dir = spec.Dir
+	cmd.Env = procEnv(spec.Env)
 	setProcessGroup(cmd)
 
 	stdout, err := cmd.StdoutPipe()
