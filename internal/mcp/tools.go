@@ -70,6 +70,17 @@ var createTaskInStages = Tool{
 	}),
 }
 
+// startTaskTool: in run-urile fara task (chat), agentul isi porneste un task pentru o modificare ceruta.
+var startTaskTool = Tool{
+	Name:        "start_task",
+	Description: "Starts a task assigned to you for a change the user asked for in this conversation. Changes are made only in tasks: call it, then stop; the task starts right after this run with the same conversation.",
+	InputSchema: schema([]string{"title"}, map[string]any{
+		"title":       str("Short, clear title"),
+		"description": str("What needs to be done, acceptance criteria, relevant files"),
+		"continues":   str(continuesArg),
+	}),
+}
+
 var reportTool = Tool{
 	Name:        "report_done",
 	Description: "Reports to your boss that you finished a task (or that you are blocked). The task moves to Review, to your reviewer if you have one.",
@@ -345,6 +356,10 @@ func toolsFor(c Caller) []Tool {
 	}
 	if c.CanWrite {
 		out = append(out, proposeLibraryTool)
+	}
+	// run fara task (chat, notificari): modificarile se fac doar pe task, pornit de agent
+	if c.TaskID == 0 {
+		out = append(out, startTaskTool)
 	}
 	out = append(out, askUserTool)
 	return out

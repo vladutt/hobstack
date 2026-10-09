@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"foreman/internal/runner"
+	"foreman/internal/prompt"
 	"foreman/internal/store"
 )
 
@@ -177,7 +178,7 @@ func TestRootsIgnoreMaxParallel(t *testing.T) {
 	if c.IsLead || c.HasParent || c.IsReviewer {
 		t.Fatalf("radacina singura: %+v", c)
 	}
-	if got := turn(f.fs.last(t, solo)); got != "Notifications:\n- User: salut" {
+	if got := turn(f.fs.last(t, solo)); got != "Notifications:\n- User: salut\n\n"+prompt.ReadOnlyTurn {
 		t.Fatalf("tura Solo: %q", got)
 	}
 }

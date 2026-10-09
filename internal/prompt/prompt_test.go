@@ -326,3 +326,19 @@ func TestSystemDenied(t *testing.T) {
 		}
 	}
 }
+
+func TestReadOnlyTurnAndSolo(t *testing.T) {
+	if !strings.Contains(ReadOnlyTurn, "mcp__team__start_task") || !strings.Contains(ReadOnlyTurn, "read-only") {
+		t.Fatal(ReadOnlyTurn)
+	}
+	got := System(store.Project{Name: "X"}, store.Agent{Name: "A"}, Links{})
+	if strings.Contains(got, "do the requested work") || !strings.Contains(got, "mcp__team__start_task") {
+		t.Fatalf("%s", got)
+	}
+}
+
+func TestLeftForUserUsesFollowUpTask(t *testing.T) {
+	if !strings.Contains(howLeftForUser, "mcp__team__start_task") {
+		t.Fatal(howLeftForUser)
+	}
+}

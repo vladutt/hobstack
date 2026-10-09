@@ -108,7 +108,7 @@ func TestBlockCommandAndNonCommandRequest(t *testing.T) {
 	f.rook.Tools = []string{"shell"}
 	f.st.UpdateAgent(f.rook)
 	f.tm.work.Lock()
-	f.tm.recordDenials(activeRun{projectID: f.p.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "rm -rf build"}})
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: f.task(t, "X", f.rook, store.StatusInProgress).ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "rm -rf build"}})
 	f.tm.work.Unlock()
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
 	if err := f.tm.BlockCommandInProject(reqs[0].ID); err != nil {
@@ -194,7 +194,7 @@ func TestDenyingRuleFallback(t *testing.T) {
 	f.st.SetCommandRules(f.p.ID, []store.CommandRule{{Prefix: "git", Mode: store.CmdAsk}, {Prefix: "git status", Mode: store.CmdAllow}})
 	// regula decisiva e Allow (git status), dar claude a refuzat din cauza lui "git" (Ask)
 	f.tm.work.Lock()
-	f.tm.recordDenials(activeRun{projectID: f.p.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git status"}})
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: f.task(t, "X", f.rook, store.StatusInProgress).ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: "git status"}})
 	f.tm.work.Unlock()
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
 	if len(reqs) != 1 || reqs[0].Prefix != "git" {
@@ -208,7 +208,7 @@ func TestDenialClassifiedOnFullCommand(t *testing.T) {
 	f.st.UpdateAgent(f.rook)
 	long := strings.Repeat("echo x && ", 30) + "git push"
 	f.tm.work.Lock()
-	f.tm.recordDenials(activeRun{projectID: f.p.ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: long[:120] + "...", Command: long}})
+	f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: f.task(t, "X", f.rook, store.StatusInProgress).ID}, f.rook, []runner.Denial{{Tool: "Bash", Detail: long[:120] + "...", Command: long}})
 	f.tm.work.Unlock()
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
 	if len(reqs) != 1 || reqs[0].Prefix != "git push" {
@@ -291,7 +291,7 @@ func TestBlockInProjectDismissesSamePrefix(t *testing.T) {
 	f.st.UpdateAgent(f.vera)
 	for _, a := range []store.Agent{f.rook, f.vera} {
 		f.tm.work.Lock()
-		f.tm.recordDenials(activeRun{projectID: f.p.ID}, a, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
+		f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: f.task(t, "X", a, store.StatusInProgress).ID}, a, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
 		f.tm.work.Unlock()
 	}
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
@@ -477,7 +477,7 @@ func TestAllowInProjectSkipsAgentsWithoutShell(t *testing.T) {
 	f.st.UpdateAgent(f.vera)
 	for _, a := range []store.Agent{f.rook, f.vera} {
 		f.tm.work.Lock()
-		f.tm.recordDenials(activeRun{projectID: f.p.ID}, a, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
+		f.tm.recordDenials(activeRun{projectID: f.p.ID, taskID: f.task(t, "X", a, store.StatusInProgress).ID}, a, []runner.Denial{{Tool: "Bash", Detail: "git push"}})
 		f.tm.work.Unlock()
 	}
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)

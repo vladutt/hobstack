@@ -1,7 +1,7 @@
 # Foreman: modificarile se fac doar pe task (chat doar de citire)
 
 Data: 2026-10-09
-Status: spec, de implementat.
+Status: implementat (2026-10-09).
 
 ## Problema
 
@@ -70,7 +70,8 @@ UI: butonul "Allow … in this chat" nu mai apare in practica (nu mai exista cer
 Raspunsul tool-ului: `Started T-5. Stop now; the work continues in the task.`
 
 Liderii folosesc in continuare `create_task` pentru echipa si `start_task` pentru partea lor. Limita: max 3 task-uri
-deschise pornite cu `start_task` de acelasi agent (anti-bucla); al patrulea e refuzat cu mesaj clar.
+in lucru (Queued / In progress) pornite cu `start_task` de acelasi agent (anti-bucla; cele care asteapta o decizie nu
+conteaza); al patrulea e refuzat cu mesaj clar. Cu echipa oprita, raspunsul spune ca task-ul porneste la Start team.
 
 ## 4. Prompt
 

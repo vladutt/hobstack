@@ -20,6 +20,8 @@ var toolRules = map[string][]string{
 	"git": {"Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git add:*)",
 		"Bash(git commit:*)", "Bash(git checkout -b:*)"},
 	"web":      {"WebSearch", "WebFetch"},
+	// git-read: git doar pentru citire, in run-urile fara task (nume intern, nu apare in UI)
+	"git-read": {"Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)"},
 	"packages": packageRules,
 }
 
@@ -109,7 +111,7 @@ func Settings(tools []string, home string, extraAllow, cmdDeny, granted []string
 			allow = append(allow, rule)
 		}
 	}
-	for _, name := range ValidTools {
+	for _, name := range append(slices.Clone(ValidTools), "git-read") {
 		if !slices.Contains(tools, name) {
 			continue
 		}
@@ -162,4 +164,19 @@ func MCPConfig(url string, extra map[string]any) string {
 	}
 	b, _ := json.Marshal(map[string]any{"mcpServers": servers})
 	return string(b)
+}
+
+// ReadOnlyTools: tool-urile unui run fara task (chat, notificari): fara write, shell si packages,
+// git doar pentru citire; web ramane. Modificarile se fac doar pe task.
+func ReadOnlyTools(tools []string) []string {
+	out := []string{}
+	for _, name := range tools {
+		switch name {
+		case "git":
+			out = append(out, "git-read")
+		case "web":
+			out = append(out, "web")
+		}
+	}
+	return out
 }

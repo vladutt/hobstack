@@ -83,6 +83,14 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		turn += "\n\nLibrary (shared tools, skills and servers installed in this project):\n" + strings.Join(libBuild.TurnLines, "\n")
 	}
 
+	// run fara task (chat, notificari, comentarii): doar citire; modificarile se fac pe task (start_task / create_task).
+	// Doar permisiunile se schimba: system prompt-ul ramane acelasi, ca sesiunea sa continue intre chat si task.
+	runTools := a.Tools
+	if taskID == 0 {
+		runTools = prompt.ReadOnlyTools(a.Tools)
+		turn += "\n\n" + prompt.ReadOnlyTurn
+	}
+
 	linkedProjects, err := t.st.LinkedProjects(p.ID)
 	if err != nil {
 		return err
@@ -133,7 +141,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	isLead := roles.IsLead || (len(stages) > 0 && roles.IsRoot)
 	t.mu.Lock()
 	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
-		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0, CanAddAgents: isLead || roles.IsRoot, HasLinks: hasLinks, IsRoot: roles.IsRoot, FromRequest: fromRequest, CanWrite: slices.Contains(a.Tools, "write")}
+		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0, CanAddAgents: isLead || roles.IsRoot, HasLinks: hasLinks, IsRoot: roles.IsRoot, FromRequest: fromRequest, CanWrite: slices.Contains(runTools, "write")}
 	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token, accountID: accountID}
 	t.mu.Unlock()
 
@@ -151,19 +159,23 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 	}
 
-	// grant-urile din "Needs you": ale task-ului run-ului, sau de chat (taskID 0); nu se consuma
-	granted, err := t.st.CommandGrants(a.ID, taskID)
-	if err != nil {
-		log.Printf("agent %d: command grants: %v", a.ID, err)
-		granted = nil
+	// grant-urile din "Needs you": ale task-ului run-ului (nu se consuma); un run fara task nu primeste nimic
+	var granted []string
+	if taskID != 0 {
+		if granted, err = t.st.CommandGrants(a.ID, taskID); err != nil {
+			log.Printf("agent %d: command grants: %v", a.ID, err)
+			granted = nil
+		}
 	}
 	cmdDeny := prompt.DenyPrefixes(rules, granted)
 
+	runAgent := a // permisiunile run-ului; system prompt-ul de mai sus vine din tool-urile intregi
+	runAgent.Tools = runTools
 	spec := runner.Spec{
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
 		Dir:    home.Path,
-		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild, cmdDeny, granted), extraArgs...),
+		Args:   append(t.args(p, runAgent, system, turn, mcpCfg, resume, libBuild, cmdDeny, granted), extraArgs...),
 		Prompt: turn,
 		Env:    env,
 	}
@@ -437,6 +449,10 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 	for _, d := range denials {
 		// refuzate intentionat (lista fixa din settings; Task e numele vechi al lui Agent)
 		if d.Tool == "Task" || prompt.AlwaysDeniedTool(d.Tool) {
+			continue
+		}
+		// run fara task: scrierea e taiata intentionat (agentul porneste un task), nu e o cerere de acces
+		if ar.taskID == 0 && slices.Contains([]string{"Edit", "Write", "NotebookEdit", "Bash"}, d.Tool) {
 			continue
 		}
 		// cererile pentru acest refuz; implicit cererea de tool (Enable Shell, WebFetch...)

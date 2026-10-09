@@ -317,3 +317,20 @@ func TestTaskThreadID(t *testing.T) {
 		t.Fatalf("dupa stergere thread_id = %v", *got.ThreadID)
 	}
 }
+
+func TestCountSelfStarted(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	for i, kind := range []string{"self_started", "assigned", "self_started"} {
+		task := Task{ProjectID: p.ID, Title: "t", AssigneeID: lead.ID}
+		s.CreateTask(&task)
+		s.AddTaskEvent(&TaskEvent{TaskID: task.ID, Kind: kind, Text: "x"})
+		if i == 2 { // al treilea e Done: nu mai conteaza
+			task.Status = StatusDone
+			s.SaveTask(&task)
+		}
+	}
+	if n, err := s.CountSelfStarted(lead.ID); err != nil || n != 1 {
+		t.Fatalf("%d %v", n, err)
+	}
+}
