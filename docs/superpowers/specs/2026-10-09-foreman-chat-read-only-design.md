@@ -58,9 +58,10 @@ UI: butonul "Allow … in this chat" nu mai apare in practica (nu mai exista cer
 - creeaza un task asignat agentului care cheama, in Queued, fara etape (chiar daca proiectul are etape: e munca
   agentului, nu fluxul pe coloane); `continues` ca la `create_task` (fir de lucru);
 - cine decide Done:
-  - run-ul a livrat un mesaj al utilizatorului (`activeRun.request != nil`: mesaj in chat, raspuns sau comentariu) ->
-    `ByUser = true`: decide utilizatorul;
-  - altfel (ex. o notificare de la sef sau de la echipa) -> regula obisnuita (`decider`: seful; radacina -> utilizatorul);
+  - run-ul a livrat un mesaj al utilizatorului in chat (`activeRun.request != nil`; raspunsurile la intrebari si
+    comentariile pe task-uri au `Reply` si nu conteaza) -> `ByUser = true`: decide utilizatorul;
+  - altfel (comentariu, notificare de la sef sau de la echipa) -> regula obisnuita (`decider`: seful; radacina ->
+    utilizatorul). `CreatorID` ramane gol: altfel agentul si-ar decide singur task-ul.
 - pasul "requested" din Flow (`recordRequest`) il leaga de mesajul din chat, ca la `create_task`;
 - in chat-ul agentului apare nota `Started T-5: <title>`, iar in istoricul task-ului `Started by <agent>`;
 - task-ul porneste dupa ce se termina run-ul curent (reconcilierea il ia ca orice task Queued); sesiunea Claude continua
