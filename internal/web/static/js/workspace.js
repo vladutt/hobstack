@@ -1227,25 +1227,59 @@ export async function workspaceView(root, projectId, route) {
     const who = el("select", {},
       first && el("option", { value: "" }, `First free agent in ${first.name}`),
       assignable(first?.id).map((a) => el("option", { value: a.id }, a.name + (a.role ? " \u00b7 " + a.role : ""))));
+    // fisierele pentru agent: alese cu butonul sau trase pe formular, trimise multipart la Add
+    const files = [];
+    const fileList = el("ul", { class: "tf-files" });
+    const picker = el("input", { type: "file", multiple: true, hidden: true, class: "tf-picker",
+      onchange: () => { addFiles(picker.files); picker.value = ""; } });
+    const attach = el("div", { class: "tf-attach" },
+      el("button", { type: "button", id: "tf-attach-btn", class: "btn small", onclick: () => picker.click() }, "\u{1F4CE} Attach files"),
+      el("span", { class: "hint" }, "or drop them on this form. The agent reads them with the task."), picker);
     const addBtn = el("button", { type: "submit", class: "btn primary" }, "Add");
     const form = el("form", { class: "section task-form", onsubmit: submit },
       el("h2", {}, "New task"),
       field("Title", title), field("Description", description),
+      el("div", { class: "field" }, el("label", { for: "tf-attach-btn" }, "Files"), attach, fileList),
       field("Assignee", who, (first ? "The task enters the first stage; " : "The agent picks it up automatically; ") +
         (p.autonomy ? "the root lead decides at the end (full autonomy)." : "you decide at the end.")),
       el("div", { class: "actions" }, el("span", { class: "grow" }),
         el("button", { type: "button", class: "btn", onclick: closePanel }, "Cancel"), addBtn));
+    setupDrop(form, addFiles);
     showPanel("task", form);
     title.focus();
+
+    function addFiles(list) {
+      for (const f of Array.from(list)) {
+        if (!files.some((x) => x.name === f.name && x.size === f.size)) files.push(f);
+      }
+      drawFiles();
+    }
+    function drawFiles() {
+      fileList.replaceChildren(...files.map((f, i) => el("li", { class: "tf-file" },
+        el("span", { class: "tf-file-name", title: f.name }, f.name),
+        el("span", { class: "hint" }, fileSize(f.size)),
+        el("button", { type: "button", class: "tf-remove", "aria-label": `Remove ${f.name}`, title: "Remove",
+          onclick: () => { files.splice(i, 1); drawFiles(); } }, "\u00d7"))));
+    }
 
     async function submit(e) {
       e.preventDefault();
       if (!title.value.trim()) return;
       addBtn.disabled = true;
+      const path = `/api/projects/${projectId}/tasks`;
       try {
-        await api(`/api/projects/${projectId}/tasks`, { method: "POST", body: {
-          title: title.value.trim(), description: description.value.trim(), assigneeId: Number(who.value) || 0,
-        } });
+        if (files.length) {
+          const fd = new FormData();
+          fd.append("title", title.value.trim());
+          fd.append("description", description.value.trim());
+          fd.append("assigneeId", String(Number(who.value) || 0));
+          for (const f of files) fd.append("files", f);
+          await upload(path, fd);
+        } else {
+          await api(path, { method: "POST", body: {
+            title: title.value.trim(), description: description.value.trim(), assigneeId: Number(who.value) || 0,
+          } });
+        }
         closePanel();
         await reload();
       } catch (err) {
@@ -1253,6 +1287,12 @@ export async function workspaceView(root, projectId, route) {
         addBtn.disabled = false;
       }
     }
+  }
+
+  function fileSize(n) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1 << 20) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1 << 20)).toFixed(1)} MB`;
   }
 
   // assign: utilizatorul muta un task in asteptare sau blocat la alt agent

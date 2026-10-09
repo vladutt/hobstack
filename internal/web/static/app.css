@@ -1332,3 +1332,22 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .usage-bar i.warn { background: var(--amber); }
 .usage-bar i.bad { background: var(--red); }
 .usage-updated { margin: 12px 0 0; font-size: 12px; }
+
+/* fisierele utilizatorului: formularul de task nou si tab-ul Files din modala */
+.task-form.dropping { outline-offset: 4px; border-radius: 12px; }
+.tf-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tf-files { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.tf-files:empty { display: none; }
+.tf-file { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 6px 6px 12px; border-radius: 8px; background: var(--deep); border: 1px solid var(--line-2); }
+.tf-file-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-remove { flex: none; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 8px; border-radius: 6px; }
+.tf-remove:hover, .tf-remove:focus-visible { color: var(--amber); }
+.tfiles.dropping { outline-offset: 4px; border-radius: 8px; }
+.tfiles { min-height: 120px; }
+.tfiles-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tfiles-bar + .tfiles-sub-head { margin-top: 8px; }
+/* pe telefon tab-urile modalei (acum si Files mereu) incap pe un rand */
+@media (max-width: 480px) {
+  .modal-tabs { gap: 14px; }
+  .modal-tabs .tab { font-size: 14px; }
+}

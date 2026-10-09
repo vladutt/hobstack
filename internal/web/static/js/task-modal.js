@@ -1,4 +1,4 @@
-import { api } from "./api.js";
+import { api, upload } from "./api.js";
 import { el, avatar, clock, kindOf, toast } from "./ui.js";
 import { changesView } from "./changes.js";
 import { flowView } from "./flow.js";
@@ -40,9 +40,19 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
   let chgSeq = 0;         // ca seq, pentru cererea Changes
   const changes = changesView();
-  let filesCount = null;  // filesCount-ul pentru care s-a incarcat tab-ul Files (null = neincarcat)
+  let filesCount = null;  // filesCount (+ sters) pentru care s-a incarcat tab-ul Files (null = neincarcat)
   let filesSeq = 0;       // ca seq, pentru cererea Files
-  const filesView = taskFilesView();
+  // Upload din tab-ul Files: dupa raspuns se reincarca task-ul (filesCount) si lista
+  const filesView = taskFilesView({
+    canUpload: () => data?.task?.status !== "archived",
+    onUpload: async (list) => {
+      const fd = new FormData();
+      for (const f of list) fd.append("files", f);
+      await upload(`/api/tasks/${taskId}/files`, fd);
+      filesCount = null;
+      await load();
+    },
+  });
   let flowSeq = 0;        // ca seq, pentru cererea Flow
   let flowKey = null;     // ultimul raspuns Flow desenat (serializat)
   const flow = flowView({ projectId, open: flowOpen });
@@ -66,7 +76,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
   const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
   const filesPane = el("div", { id: `files-${taskId}`, role: "tabpanel", hidden: true }, filesView.el);
-  const tabFiles = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": filesPane.id, hidden: true, onclick: () => setTab("files") }, "Files");
+  const tabFiles = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": filesPane.id, onclick: () => setTab("files") }, "Files");
   const flowPane = el("div", { id: `flow-${taskId}`, role: "tabpanel", hidden: true }, flow.el);
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
@@ -420,13 +430,12 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     }
   }
 
-  // syncFiles: tab-ul Files apare doar cand exista fisiere (pe task sau pe sub-task-uri);
+  // syncFiles: tab-ul Files e mereu vizibil (utilizatorul poate urca fisiere);
   // /files se cere cand tab-ul e deschis si filesCount s-a schimbat
   async function syncFiles() {
     if (!data) return;
-    const count = data.filesCount || 0;
-    tabFiles.hidden = count === 0;
-    if (count === 0 && tab === "files") { setTab("conversation"); return; }
+    // cheia include stergerea: pe un task sters dispare Upload
+    const count = `${data.filesCount || 0}:${data.task.status === "archived"}`;
     if (tab !== "files" || count === filesCount) return;
     const my = ++filesSeq;
     try {

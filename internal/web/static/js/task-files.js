@@ -1,4 +1,4 @@
-import { el } from "./ui.js";
+import { el, toast } from "./ui.js";
 import { renderMarkdown } from "./md.js";
 
 // Cat text se arata in preview (restul se descarca).
@@ -43,13 +43,55 @@ function ago(iso) {
 
 const url = (id, download) => `/api/task-files/${id}${download ? "?download=1" : ""}`;
 
+const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
+
 // taskFilesView: tab-ul "Files" al unui task. Click pe un rand deschide preview-ul in locul listei (cu Back).
+// onUpload(files) -> Promise: urca fisierele utilizatorului (lipsa = fara Upload); canUpload() -> false pe un task sters.
 // Intoarce { el, show(data), error(msg) }; data = raspunsul GET /api/tasks/{id}/files.
-export function taskFilesView() {
+export function taskFilesView({ onUpload = null, canUpload = () => true } = {}) {
   const root = el("div", { class: "tfiles" });
   let last = null;       // ultimul raspuns aratat
   let previewId = null;  // fisierul deschis (ramane deschis la refresh)
   const open = new Set(); // cai cu "earlier versions" desfasurat
+  let uploading = false;  // un upload in curs (butonul e dezactivat)
+
+  // Upload: input ascuns + drag & drop pe tot tab-ul
+  const picker = el("input", { type: "file", multiple: true, hidden: true, class: "tfiles-picker",
+    onchange: () => { const list = Array.from(picker.files); picker.value = ""; send(list); } });
+  const uploadBtn = el("button", { type: "button", class: "btn small", onclick: () => picker.click() }, "Upload");
+  const status = el("span", { class: "hint tfiles-status", "aria-live": "polite" });
+  const bar = el("div", { class: "tfiles-bar" }, uploadBtn,
+    el("span", { class: "hint" }, "or drop files here. The agent reads them on this task."), status, picker);
+
+  let depth = 0; // dragenter/dragleave se declanseaza si pe copii
+  const dropOn = () => onUpload && canUpload();
+  root.addEventListener("dragenter", (e) => { if (hasFiles(e) && dropOn()) { depth++; root.classList.add("dropping"); } });
+  root.addEventListener("dragover", (e) => { if (hasFiles(e)) e.preventDefault(); });
+  root.addEventListener("dragleave", () => { if (--depth <= 0) { depth = 0; root.classList.remove("dropping"); } });
+  root.addEventListener("drop", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); // fara el browserul ar deschide fisierul in locul aplicatiei
+    depth = 0;
+    root.classList.remove("dropping");
+    if (dropOn()) send(Array.from(e.dataTransfer.files));
+  });
+
+  async function send(list) {
+    if (!list.length || uploading || !dropOn()) return;
+    uploading = true;
+    uploadBtn.disabled = true;
+    status.textContent = `Uploading ${list.length} ${list.length === 1 ? "file" : "files"}...`;
+    try {
+      await onUpload(list);
+      status.textContent = "";
+    } catch (err) {
+      status.textContent = "";
+      toast(err.message);
+    } finally {
+      uploading = false;
+      uploadBtn.disabled = false;
+    }
+  }
 
   function show(data) {
     last = data;
@@ -65,7 +107,7 @@ export function taskFilesView() {
   }
 
   function findFile(id) {
-    const groups = [...last.files, ...last.subtasks.flatMap((s) => s.files)];
+    const groups = [...(last.user || []), ...last.files, ...last.subtasks.flatMap((s) => s.files)];
     for (const g of groups) {
       if (g.id === id) return g;
       const v = g.versions.find((x) => x.id === id);
@@ -76,8 +118,18 @@ export function taskFilesView() {
 
   function renderList() {
     const nodes = [];
-    if (last.files.length) nodes.push(el("ul", { class: "tfiles-list" }, last.files.map(row)));
-    else nodes.push(el("p", { class: "hint" }, "No files were attached to this task."));
+    if (onUpload && canUpload()) nodes.push(bar);
+    const user = last.user || [];
+    if (user.length) {
+      nodes.push(el("h4", { class: "tfiles-sub-head" }, "From you"));
+      nodes.push(el("ul", { class: "tfiles-list" }, user.map(row)));
+    }
+    if (last.files.length) {
+      if (user.length) nodes.push(el("h4", { class: "tfiles-sub-head" }, "From agents"));
+      nodes.push(el("ul", { class: "tfiles-list" }, last.files.map(row)));
+    } else if (!user.length && !last.subtasks.length) {
+      nodes.push(el("p", { class: "hint" }, "No files on this task yet."));
+    }
     if (last.subtasks.length) {
       nodes.push(el("h4", { class: "tfiles-sub-head" }, "From subtasks"));
       for (const s of last.subtasks) {

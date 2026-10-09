@@ -130,6 +130,14 @@ Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-fi
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
 modala (preview imagine/PDF/Markdown/text, Download, versiuni, "From subtasks"), eticheta 📎 N pe card; HTML/SVG nu
 se servesc inline (serveStored, comun cu fisierele urcate).
+Gata (fisierele utilizatorului pe task): utilizatorul pune fisiere pe task in formularul de task nou (Attach files / drag & drop,
+POST /api/projects/{id}/tasks multipart) si in tab-ul Files din modala (mereu vizibil, Upload / drop, fara upload pe task-urile
+sterse; POST /api/tasks/{id}/files, 50 MB / 200 MB ca la proiect). Tot in task_files, fara migrare: agent_id NULL si autorul
+"You" (store.UserFileAuthor, TaskFile.FromUser); GET /files le intoarce separat ("user", sectiunea "From you"). Fisierele se
+scriu intai in staging (task-files/.staging-*, taskfiles.Save), iar team.UserCreateTaskWithFiles / AddUserFiles le muta cu
+rename si le adauga sub t.work inainte de Kick (la eroare task-ul abia creat se sterge). Tura pe task are blocul "Files from
+the user" (prompt.TaskTurn) si run-ul primeste --add-dir pe task-files/<task>; pe un task inceput (in lucru, review, blocat,
+gata) asignatul primeste o nota in coada; evenimentul user_files intra in istoric si in conversatie.
 Gata (cont Claude per proiect, spec in docs/superpowers/specs/2026-10-09-foreman-claude-accounts-design.md):
 claude_accounts (migrarea 025; token din `claude setup-token`, camp privat, nu iese din API) + projects.account_id (NULL =
 Default, CLI-ul logat). runner.Spec.Env pune CLAUDE_CODE_OAUTH_TOKEN si scoate variabilele de cont mostenite (doar pe
