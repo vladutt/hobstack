@@ -1,7 +1,9 @@
 package team
 
 import (
+	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +18,18 @@ func argAfter(args []string, flag string) string {
 		}
 	}
 	return ""
+}
+
+// denyOf intoarce permissions.deny din --settings-ul unui run.
+func denyOf(t *testing.T, spec runner.Spec) []string {
+	t.Helper()
+	var cfg struct {
+		Permissions struct{ Deny []string } `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(argAfter(spec.Args, "--settings")), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	return cfg.Permissions.Deny
 }
 
 func TestCommandRulesInRun(t *testing.T) {
@@ -138,7 +152,7 @@ func TestAllowOnceGrantLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := f.fs.last(t, f.rook)
-	if strings.Contains(argAfter(run.Args, "--settings"), "Bash(git push:*)") {
+	if slices.Contains(denyOf(t, run), "Bash(git push:*)") {
 		t.Fatal("run-ul cu grant are git push in deny")
 	}
 	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone})
@@ -156,7 +170,7 @@ func TestAllowOnceGrantLifecycle(t *testing.T) {
 	if chat.ID == run.ID {
 		t.Fatal("nu a pornit run-ul de chat")
 	}
-	if !strings.Contains(argAfter(chat.Args, "--settings"), "Bash(git push:*)") {
+	if !slices.Contains(denyOf(t, chat), "Bash(git push:*)") {
 		t.Fatal("grant-ul task-ului a ajuns in chat")
 	}
 	f.fs.finish(chat.ID, runner.Outcome{Status: store.RunDone})
@@ -168,7 +182,7 @@ func TestAllowOnceGrantLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	again := f.fs.last(t, f.rook)
-	if again.ID == chat.ID || strings.Contains(argAfter(again.Args, "--settings"), "Bash(git push:*)") {
+	if again.ID == chat.ID || slices.Contains(denyOf(t, again), "Bash(git push:*)") {
 		t.Fatal("grant-ul nu a tinut pe al doilea run al task-ului")
 	}
 }
@@ -228,7 +242,7 @@ func TestAllowRefusedWhenRuleNoLongerAsk(t *testing.T) {
 	task2 := f.task(t, "Again", f.rook, store.StatusQueued)
 	f.st.AddCommandGrant(f.p.ID, f.rook.ID, &task2.ID, "git push")
 	f.tm.Reconcile(f.p.ID)
-	if !strings.Contains(argAfter(f.fs.last(t, f.rook).Args, "--settings"), "Bash(git push:*)") {
+	if !slices.Contains(denyOf(t, f.fs.last(t, f.rook)), "Bash(git push:*)") {
 		t.Fatal("Block ridicat de grant")
 	}
 }
@@ -289,5 +303,19 @@ func TestBlockInProjectDismissesSamePrefix(t *testing.T) {
 	}
 	if p, _ := f.st.Undelivered(f.vera.ID); len(p) != 0 {
 		t.Fatalf("Block nu trezeste: %+v", p)
+	}
+}
+
+func TestTaskGrantAllowsCommandWithoutShell(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"git"}
+	f.st.UpdateAgent(f.rook)
+	task := f.task(t, "Stash", f.rook, store.StatusQueued)
+	f.st.AddCommandGrant(f.p.ID, f.rook.ID, &task.ID, "git stash")
+	if err := f.tm.Reconcile(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(argAfter(f.fs.last(t, f.rook).Args, "--settings"), `"Bash(git stash:*)"`) {
+		t.Fatal("grant-ul nu e in allow")
 	}
 }

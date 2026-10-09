@@ -1,6 +1,8 @@
 package prompt
 
 import (
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -24,7 +26,7 @@ func TestAlwaysDenied(t *testing.T) {
 }
 
 func TestSettingsPackages(t *testing.T) {
-	without, with := Settings([]string{"shell"}, "", nil, nil), Settings([]string{"packages"}, "", nil, []string{"brew install"})
+	without, with := Settings([]string{"shell"}, "", nil, nil, nil), Settings([]string{"packages"}, "", nil, []string{"brew install"}, nil)
 	if !strings.Contains(without, `"deny":[`) || !strings.Contains(without[strings.Index(without, `"deny"`):], "npm install") {
 		t.Errorf("fara packages, npm install e in deny: %s", without)
 	}
@@ -39,13 +41,13 @@ func TestMCPConfigExtra(t *testing.T) {
 	if !strings.Contains(got, `"team"`) || !strings.Contains(got, `"stock-db"`) || strings.Contains(got, "evil") {
 		t.Fatal(got)
 	}
-	if !strings.Contains(Settings([]string{"write"}, "/w", []string{"mcp__stock-db"}, nil), `"mcp__stock-db"`) {
+	if !strings.Contains(Settings([]string{"write"}, "/w", []string{"mcp__stock-db"}, nil, nil), `"mcp__stock-db"`) {
 		t.Fatal("allow-ul extra lipseste")
 	}
 }
 
 func TestSettingsExtraAllowOnlyWholeServers(t *testing.T) {
-	got := Settings(nil, "", []string{"mcp__ok", "Bash", "mcp__team__*", "mcp__x__tool", "mcp__a(b)", "mcp__*"}, nil)
+	got := Settings(nil, "", []string{"mcp__ok", "Bash", "mcp__team__*", "mcp__x__tool", "mcp__a(b)", "mcp__*"}, nil, nil)
 	for _, bad := range []string{`"Bash"`, `mcp__x__tool`, `mcp__a(b)`, `"mcp__*"`} {
 		if strings.Contains(got, bad) {
 			t.Fatalf("allow nepermis %s: %s", bad, got)
@@ -73,7 +75,7 @@ func TestAlwaysDeniedBashWithRules(t *testing.T) {
 }
 
 func TestSettingsCommandDeny(t *testing.T) {
-	got := Settings([]string{"shell"}, "/w", nil, []string{"git push", "sudo"})
+	got := Settings([]string{"shell"}, "/w", nil, []string{"git push", "sudo"}, nil)
 	for _, want := range []string{`"Bash(git push:*)"`, `"Bash(sudo:*)"`, `"TaskCreate"`, `"Bash"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("lipseste %s din %s", want, got)
@@ -81,5 +83,25 @@ func TestSettingsCommandDeny(t *testing.T) {
 	}
 	if strings.Contains(got, "rm -rf") {
 		t.Fatal("rm -rf nu mai e fix: vine doar din reguli")
+	}
+}
+
+func TestSettingsGranted(t *testing.T) {
+	raw := Settings([]string{"git"}, "", nil, []string{"sudo"}, []string{"git stash", "sudo", "bad)*"})
+	var cfg struct {
+		Permissions struct{ Allow, Deny []string } `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(cfg.Permissions.Allow, "Bash(git stash:*)") {
+		t.Fatalf("grant-ul lipseste din allow: %s", raw)
+	}
+	// Block ramane in deny chiar daca apare si in grant-uri (deny castiga in claude)
+	if !slices.Contains(cfg.Permissions.Deny, "Bash(sudo:*)") {
+		t.Fatalf("%s", raw)
+	}
+	if strings.Contains(raw, "bad)") {
+		t.Fatalf("prefix invalid acceptat: %s", raw)
 	}
 }

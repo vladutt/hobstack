@@ -97,7 +97,9 @@ func bashMatches(command string, rules []string) bool {
 // extraAllow: serverele MCP din Library; se accepta doar "mcp__<server>" (tot serverul),
 // nimic cu wildcard, paranteze sau tool anume, ca Library sa nu poata largi permisiunile.
 // cmdDeny: prefixele de comenzi refuzate (din DenyPrefixes), puse in deny ca Bash(prefix:*).
-func Settings(tools []string, home string, extraAllow, cmdDeny []string) string {
+// granted: prefixele aprobate din "Needs you" pentru acest run, puse in allow ca Bash(prefix:*)
+// (si agentilor fara Shell). Un deny (Block, refuz fix) tot castiga.
+func Settings(tools []string, home string, extraAllow, cmdDeny, granted []string) string {
 	allow := slices.Clone(alwaysAllow)
 	for _, rule := range extraAllow {
 		if libraryServerRule.MatchString(rule) && rule != "mcp__team" {
@@ -115,6 +117,12 @@ func Settings(tools []string, home string, extraAllow, cmdDeny []string) string 
 			continue
 		}
 		allow = append(allow, toolRules[name]...)
+	}
+	for _, g := range granted {
+		// prefixele vin din reguli sau din CommandPrefix; nimic care ar putea iesi din Bash(...:*)
+		if g != "" && !strings.ContainsAny(g, "()*") {
+			allow = append(allow, "Bash("+g+":*)")
+		}
 	}
 	deny := slices.Clone(denyFor(tools))
 	for _, p := range cmdDeny {

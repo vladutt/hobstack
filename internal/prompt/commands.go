@@ -174,3 +174,91 @@ func splitCommand(command string) []string {
 	}
 	return out
 }
+
+// subcommandTools: unelte la care al doilea cuvant e subcomanda (git stash, npm run...).
+var subcommandTools = map[string]bool{
+	"git": true, "npm": true, "npx": true, "pnpm": true, "yarn": true, "composer": true,
+	"go": true, "docker": true, "cargo": true, "make": true, "kubectl": true,
+}
+
+var subcommandWord = regexp.MustCompile(`^[a-z][a-z0-9:-]*$`)
+
+// CommandPrefix: prefixul pe care il aprobi pentru o comanda (o bucata, fara && / |):
+// primul cuvant, plus subcomanda la uneltele cu subcomenzi ("git stash", "php artisan migrate").
+// Un flag pe locul subcomenzii ("git -C dir ...") lasa doar primul cuvant.
+func CommandPrefix(cmd string) string {
+	words := strings.Fields(cmd)
+	if len(words) == 0 {
+		return ""
+	}
+	n := 1
+	switch {
+	case words[0] == "php" && len(words) > 1 && words[1] == "artisan":
+		n = 2
+	case !subcommandTools[words[0]]:
+		return words[0]
+	}
+	if len(words) > n && subcommandWord.MatchString(words[n]) {
+		n++
+	}
+	return strings.Join(words[:n], " ")
+}
+
+// BashAllowed spune daca o bucata de comanda e permisa agentului: cu Shell orice,
+// altfel ce permit tool-urile lui (git -> git status...) si grant-urile.
+func BashAllowed(cmd string, tools, granted []string) bool {
+	if slices.Contains(tools, "shell") {
+		return true
+	}
+	var rules []string
+	for _, name := range tools {
+		rules = append(rules, toolRules[name]...)
+	}
+	for _, g := range granted {
+		rules = append(rules, "Bash("+g+":*)")
+	}
+	return bashMatches(cmd, rules)
+}
+
+// Request: o cerere pentru "Needs you" dintr-o comanda refuzata (Kind = store.Access*).
+type Request struct {
+	Prefix string
+	Kind   string
+}
+
+// NoShellRequests imparte comanda refuzata unui agent fara Shell in cereri, pe bucati:
+// regula Block = fara cerere (blocked); regula Ask = prefixul regulii (daca nu are deja grant);
+// refuz fix (npm install fara packages) = cerere de tool; bucata permisa = nimic;
+// altfel prefixul calculat. Fara nicio cerere si fara Block ramane cererea de tool (Enable Shell),
+// ca utilizatorul sa vada refuzul.
+func NoShellRequests(cmd string, tools []string, rules []store.CommandRule, granted []string) (reqs []Request, blocked bool) {
+	add := func(r Request) {
+		if !slices.Contains(reqs, r) {
+			reqs = append(reqs, r)
+		}
+	}
+	for _, part := range splitCommand(cmd) {
+		mode, pfx := MatchCommand(part, rules)
+		if mode != store.CmdBlock && mode != store.CmdAsk {
+			mode, pfx = DenyingRule(part, rules)
+		}
+		switch {
+		case mode == store.CmdBlock:
+			blocked = true
+		case mode == store.CmdAsk:
+			if !slices.Contains(granted, pfx) {
+				add(Request{pfx, store.AccessAsk})
+			}
+		case bashMatches(part, denyFor(tools)):
+			add(Request{"", store.AccessTool})
+		case BashAllowed(part, tools, granted):
+			// deja permisa
+		default:
+			add(Request{CommandPrefix(part), store.AccessCommand})
+		}
+	}
+	if len(reqs) == 0 && !blocked {
+		reqs = []Request{{"", store.AccessTool}}
+	}
+	return reqs, blocked
+}

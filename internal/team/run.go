@@ -163,7 +163,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
 		Dir:    home.Path,
-		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild, cmdDeny), extraArgs...),
+		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild, cmdDeny, granted), extraArgs...),
 		Prompt: turn,
 		Env:    env,
 	}
@@ -184,7 +184,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 }
 
 // args construieste linia de comanda pentru claude.
-func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build, cmdDeny []string) []string {
+func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string, resume bool, lb library.Build, cmdDeny, granted []string) []string {
 	args := []string{
 		"-p", turn,
 		"--output-format", "stream-json", "--verbose",
@@ -193,7 +193,7 @@ func (t *Team) args(p store.Project, a store.Agent, system, turn, mcpCfg string,
 		// setarile globale ale utilizatorului raman; .claude/settings.json din
 		// repo-ul proiectului nu se incarca (permisiunile vin doar de la noi)
 		"--setting-sources", "user",
-		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, cmdDeny),
+		"--settings", prompt.Settings(a.Tools, store.HomeFolder(a, p.Folders).Path, lb.Allow, cmdDeny, granted),
 		// fara el, un tool nepermis blocheaza run-ul in asteptarea unei aprobari
 		"--permission-mode", "dontAsk",
 		"--mcp-config", mcpCfg,

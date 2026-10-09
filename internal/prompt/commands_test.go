@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -128,5 +129,55 @@ func TestAlwaysDeniedBashAnyDeny(t *testing.T) {
 	rules := []store.CommandRule{{Prefix: "git", Mode: store.CmdAsk}, {Prefix: "git status", Mode: store.CmdAllow}}
 	if !AlwaysDeniedBash("git status", []string{"shell"}, rules) {
 		t.Fatal("git status e refuzat de git (Ask), chiar daca git status e Allow")
+	}
+}
+
+func TestCommandPrefix(t *testing.T) {
+	for in, want := range map[string]string{
+		`git stash push -u -m "x" -- app/`: "git stash",
+		"ls -la":                           "ls",
+		"php artisan migrate --force":      "php artisan migrate",
+		"php -v":                           "php",
+		"git -C dir status":                "git",
+		"npx prettier --write .":           "npx prettier",
+		"./vendor/bin/phpunit --filter X":  "./vendor/bin/phpunit",
+		"":                                 "",
+	} {
+		if got := CommandPrefix(in); got != want {
+			t.Errorf("%q: %q, vrea %q", in, got, want)
+		}
+	}
+}
+
+func TestNoShellRequests(t *testing.T) {
+	rules := []store.CommandRule{{Prefix: "git push", Mode: store.CmdAsk}, {Prefix: "sudo", Mode: store.CmdBlock}}
+	git := []string{"git"}
+	cases := []struct {
+		cmd     string
+		tools   []string
+		granted []string
+		want    []Request
+		blocked bool
+	}{
+		// git stash nu e in tool-ul git: prefix calculat
+		{"git stash push -u", git, nil, []Request{{"git stash", store.AccessCommand}}, false},
+		// bucata permisa (git status) nu face cerere
+		{"git status && git stash", git, nil, []Request{{"git stash", store.AccessCommand}}, false},
+		// cu grant: nimic de cerut, ramane cererea de tool (Enable Shell)
+		{"git stash", git, []string{"git stash"}, []Request{{"", store.AccessTool}}, false},
+		// regula Ask: prefixul regulii
+		{"git push origin main", git, nil, []Request{{"git push", store.AccessAsk}}, false},
+		// Block: fara cerere
+		{"sudo ls", git, nil, nil, true},
+		// refuz fix (instalare fara packages): cerere de tool
+		{"npm install x", git, nil, []Request{{"", store.AccessTool}}, false},
+		// doua bucati necunoscute, fara duplicate
+		{"cd app && make build && make test", nil, nil, []Request{{"cd", store.AccessCommand}, {"make build", store.AccessCommand}, {"make test", store.AccessCommand}}, false},
+	}
+	for _, c := range cases {
+		got, blocked := NoShellRequests(c.cmd, c.tools, rules, c.granted)
+		if !slices.Equal(got, c.want) || blocked != c.blocked {
+			t.Errorf("%q: %+v %v, vrea %+v %v", c.cmd, got, blocked, c.want, c.blocked)
+		}
 	}
 }
