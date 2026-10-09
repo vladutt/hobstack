@@ -105,3 +105,30 @@ func TestSettingsGranted(t *testing.T) {
 		t.Fatalf("prefix invalid acceptat: %s", raw)
 	}
 }
+
+func TestReadOnlyTools(t *testing.T) {
+	got := ReadOnlyTools([]string{"write", "shell", "packages", "git", "web"})
+	if !slices.Equal(got, []string{"git-read", "web"}) {
+		t.Fatalf("%v", got)
+	}
+	if got := ReadOnlyTools(nil); len(got) != 0 {
+		t.Fatalf("%v", got)
+	}
+	raw := Settings(ReadOnlyTools([]string{"write", "shell", "git"}), "/w", nil, nil, nil)
+	var cfg struct {
+		Permissions struct{ Allow, Deny []string } `json:"permissions"`
+	}
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range cfg.Permissions.Allow {
+		if a == "Bash" || a == "Bash(git add:*)" || a == "Bash(git commit:*)" || strings.HasPrefix(a, "Edit") || strings.HasPrefix(a, "Write") {
+			t.Fatalf("%s in allow: %s", a, raw)
+		}
+	}
+	for _, want := range []string{"Read", "mcp__team__*", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git blame:*)"} {
+		if !slices.Contains(cfg.Permissions.Allow, want) {
+			t.Fatalf("lipseste %s: %s", want, raw)
+		}
+	}
+}

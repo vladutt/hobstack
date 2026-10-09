@@ -116,7 +116,14 @@ const howReviewer = `You check the work of the agents listed under "You review t
 	`mcp__team__review_reject with concrete feedback: what is wrong and what needs to change. ` +
 	`Read the changed files to check the work; do not rely only on the summary.`
 
-const howSolo = `You talk directly with the user and have no team. Reply to their messages and do the requested work.`
+const howSolo = `You talk directly with the user and have no team. Answer their messages; any change to the project is done in a task you start with mcp__team__start_task.`
+
+// ReadOnlyTurn: linia din tura unui run fara task (chat, notificari, comentarii). E in tura, nu in system
+// prompt, ca sesiunea sa fie aceeasi pentru run-urile cu si fara task.
+const ReadOnlyTurn = `This conversation is read-only: you can read and analyze, but not change files or run commands that change anything. ` +
+	`When the user asks for a change, start a task (mcp__team__start_task for yourself, mcp__team__create_task for your team) ` +
+	`and stop: the work continues in the task. For analysis or questions, answer here; create a task only if the user asks for one. ` +
+	`If a comment on a finished task needs changes, start a follow-up task with continues set to that task.`
 
 // System compileaza system prompt-ul agentului. Contine doar date stabile:
 // Claude Code il inregistreaza la prima cerere a sesiunii si il retrimite
