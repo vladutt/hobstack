@@ -311,7 +311,8 @@ func Context(c TurnContext) string {
 }
 
 // TaskTurn e mesajul cu care porneste un agent pe un task.
-func TaskTurn(c TurnContext, t store.Task, subtasks, notes []string) string {
+// userFiles: fisierele puse de utilizator pe task (calea absoluta a copiei); blocul apare doar cand exista.
+func TaskTurn(c TurnContext, t store.Task, subtasks, notes []string, userFiles []FileRef) string {
 	var parts []string
 	if ctx := Context(c); ctx != "" {
 		parts = append(parts, ctx)
@@ -321,6 +322,14 @@ func TaskTurn(c TurnContext, t store.Task, subtasks, notes []string) string {
 		task += "\n" + d
 	}
 	parts = append(parts, task)
+	if len(userFiles) > 0 {
+		var b strings.Builder
+		b.WriteString("Files from the user (read them with Read):")
+		for _, f := range userFiles {
+			fmt.Fprintf(&b, "\n- %s (%s)", f.Path, f.Name)
+		}
+		parts = append(parts, b.String())
+	}
 	if len(subtasks) > 0 {
 		parts = append(parts, bullets("Subtasks already created for this task (do not create them again):", subtasks))
 	}

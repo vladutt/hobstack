@@ -2,6 +2,7 @@ package taskfiles
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -122,4 +123,31 @@ func TestCopyTooLarge(t *testing.T) {
 	if entries, _ := os.ReadDir(dest); len(entries) != 0 {
 		t.Fatalf("a ramas o copie partiala: %v", entries)
 	}
+}
+
+func TestSave(t *testing.T) {
+	dir := t.TempDir()
+	c, err := Save(strings.NewReader("# Brief"), "brief.md", dir)
+	if err != nil || c.Name != "brief.md" || c.Path != "brief.md" || c.Size != 7 || !strings.HasSuffix(c.Stored, "-brief.md") || len(c.Stored) != 16+1+8 {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, c.Stored)); string(b) != "# Brief" {
+		t.Fatalf("continut: %q", b)
+	}
+	if c, _ := Save(strings.NewReader("\x89PNG\r\n\x1a\n"), "noext", dir); c.Mime != "image/png" {
+		t.Fatalf("mime ghicit din continut: %q", c.Mime)
+	}
+	if _, err := Save(io.LimitReader(zeros{}, MaxSize+1), "big.bin", dir); err != errTooLarge {
+		t.Fatalf("prea mare: %v", err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 2 {
+		t.Fatalf("copia prea mare trebuia stearsa: %v", entries)
+	}
+}
+
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
 }

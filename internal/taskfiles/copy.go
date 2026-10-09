@@ -120,6 +120,35 @@ func Copy(roots []string, home, raw, destDir string) (Copied, error) {
 	return Copied{Path: display, Name: name, Stored: stored, Mime: detectMime(name, head), Size: size}, nil
 }
 
+// Save scrie un fisier urcat de utilizator in destDir, cu prefix aleator (ca la Copy).
+// name trebuie sa fie deja curatat (store.CleanFileName); Path ramane numele.
+func Save(src io.Reader, name, destDir string) (Copied, error) {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return Copied{}, err
+	}
+	stored := randomPrefix() + "-" + name
+	path := filepath.Join(destDir, stored)
+	dst, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return Copied{}, err
+	}
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(src, head)
+	head = head[:n]
+	size, err := io.Copy(dst, io.MultiReader(bytes.NewReader(head), io.LimitReader(src, MaxSize+1-int64(n))))
+	if cerr := dst.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil && size > MaxSize {
+		err = errTooLarge
+	}
+	if err != nil {
+		os.Remove(path)
+		return Copied{}, err
+	}
+	return Copied{Path: name, Name: name, Stored: stored, Mime: detectMime(name, head), Size: size}, nil
+}
+
 // within cauta radacina care contine abs si intoarce calea relativa la ea.
 func within(roots []string, abs string) (root, rel string, ok bool) {
 	for _, r := range roots {

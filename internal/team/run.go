@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"foreman/internal/config"
 	"foreman/internal/library"
 	"foreman/internal/mcp"
 	"foreman/internal/prompt"
@@ -64,6 +65,11 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		if block := prompt.FilesBlock(refs); block != "" {
 			turn += "\n\n" + block
 		}
+	}
+
+	// fisierele puse de utilizator pe task: agentul le citeste din task-files/<task>/
+	if len(t.userFileRefs(p.ID, taskID)) > 0 {
+		extraArgs = append(extraArgs, "--add-dir", config.TaskFilesDir(t.filesRoot, p.ID, taskID))
 	}
 
 	// Library: pluginul proiectului (skill-uri, scripturi) si serverele MCP instalate.

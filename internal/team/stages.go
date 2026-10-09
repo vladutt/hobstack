@@ -112,6 +112,7 @@ type taskOrigin struct {
 	recurring *store.RecurringTask
 	request   *store.ProjectRequest
 	from, by  string
+	files     []StagedFile // fisierele utilizatorului (din staging), puse inainte de Kick
 }
 
 // userCreateTask e corpul lui UserCreateTask; se cheama cu t.work tinut.
@@ -169,7 +170,22 @@ func (t *Team) userCreateTask(projectID int64, title, description string, agentI
 	if err := t.st.CreateTask(&task); err != nil {
 		return store.Task{}, err
 	}
+	// fisierele utilizatorului intra inaintea oricarui eveniment: daca nu pot fi puse,
+	// task-ul abia creat se sterge si nu ramane nimic pe jumatate
+	var userFiles []store.TaskFile
+	if len(origin.files) > 0 {
+		var err error
+		if userFiles, err = t.placeUserFiles(task, origin.files); err != nil {
+			if derr := t.st.DeleteNewTask(task.ID); derr != nil {
+				log.Printf("task %d: cannot remove after failed files: %v", task.ID, derr)
+			}
+			return store.Task{}, err
+		}
+	}
 	t.taskMsg(task, "created", actor, to, created, briefBody(task.Title, task.Description))
+	if len(userFiles) > 0 {
+		t.userFilesEvent(task, to, fileNames(userFiles))
+	}
 	t.taskEvent(task, "assigned", actor, assigned)
 	if a, ok := store.FindAgent(agents, task.AssigneeID); ok && task.StageID == nil {
 		text := fmt.Sprintf("%s assigned by the user: %s", task.Ref(), title)

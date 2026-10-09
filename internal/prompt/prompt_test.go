@@ -114,7 +114,7 @@ func TestContextAndTurns(t *testing.T) {
 		t.Fatal("context gol")
 	}
 	task := store.Task{Number: 3, Title: "Parser", Description: "Doar local.", Feedback: "Lipsesc testele."}
-	got := TaskTurn(c, task, []string{"T-5 [done] Lexer -> Wes"}, []string{"User: hurry up"})
+	got := TaskTurn(c, task, []string{"T-5 [done] Lexer -> Wes"}, []string{"User: hurry up"}, nil)
 	want := ctx + "\n\nTask T-3: Parser\nDoar local." +
 		"\n\nSubtasks already created for this task (do not create them again):\n- T-5 [done] Lexer -> Wes" +
 		"\n\nFeedback on the previous attempt:\nLipsesc testele." +
@@ -122,7 +122,7 @@ func TestContextAndTurns(t *testing.T) {
 	if got != want {
 		t.Fatalf("TaskTurn =\n%s\nvreau\n%s", got, want)
 	}
-	if got := TaskTurn(TurnContext{}, store.Task{Number: 1, Title: "A"}, nil, nil); got != "Task T-1: A" {
+	if got := TaskTurn(TurnContext{}, store.Task{Number: 1, Title: "A"}, nil, nil, nil); got != "Task T-1: A" {
 		t.Fatalf("simplu: %q", got)
 	}
 	if got := NotifyTurn(TurnContext{}, []string{"salut"}); got != "Notifications:\n- salut" {
@@ -340,5 +340,21 @@ func TestReadOnlyTurnAndSolo(t *testing.T) {
 func TestLeftForUserUsesFollowUpTask(t *testing.T) {
 	if !strings.Contains(howLeftForUser, "mcp__team__start_task") {
 		t.Fatal(howLeftForUser)
+	}
+}
+
+// fisierele utilizatorului apar dupa descrierea task-ului, doar cand exista
+func TestTaskTurnUserFiles(t *testing.T) {
+	task := store.Task{Number: 2, Title: "Logo", Description: "Use the brief."}
+	files := []FileRef{{Name: "brief.pdf", Path: "/x/task-files/2/aa-brief.pdf"}, {Name: "colors.txt", Path: "/x/task-files/2/bb-colors.txt"}}
+	got := TaskTurn(TurnContext{}, task, nil, []string{"n"}, files)
+	want := "Task T-2: Logo\nUse the brief." +
+		"\n\nFiles from the user (read them with Read):\n- /x/task-files/2/aa-brief.pdf (brief.pdf)\n- /x/task-files/2/bb-colors.txt (colors.txt)" +
+		"\n\nNotifications:\n- n"
+	if got != want {
+		t.Fatalf("TaskTurn =\n%s\nvreau\n%s", got, want)
+	}
+	if got := TaskTurn(TurnContext{}, task, nil, nil, []FileRef{}); strings.Contains(got, "Files from the user") {
+		t.Fatalf("fara fisiere nu apare blocul: %q", got)
 	}
 }

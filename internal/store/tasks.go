@@ -243,3 +243,11 @@ func (s *Store) CountSelfStarted(agentID int64) (int, error) {
 		AND EXISTS (SELECT 1 FROM task_events e WHERE e.task_id = t.id AND e.kind = 'self_started')`, agentID).Scan(&n)
 	return n, err
 }
+
+// DeleteNewTask sterge de tot un task abia creat, cand pasul urmator (de ex. mutarea fisierelor
+// utilizatorului) a esuat. Doar pentru task-uri fara alte legaturi; randurile lui (task_files,
+// task_events) se sterg in cascada.
+func (s *Store) DeleteNewTask(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM tasks WHERE id = ?`, id)
+	return err
+}

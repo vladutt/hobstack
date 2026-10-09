@@ -21,6 +21,13 @@ type TaskFile struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// UserFileAuthor: agent_name pentru fisierele puse de utilizator pe task (agent_id ramane NULL).
+const UserFileAuthor = "You"
+
+// FromUser: fisierul l-a pus utilizatorul (nu e livrabilul unui agent).
+// Un agent sters are tot agent_id NULL, dar numele lui ramane in agent_name.
+func (f TaskFile) FromUser() bool { return f.AgentID == nil && f.AgentName == UserFileAuthor }
+
 const taskFileCols = `id, task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at`
 
 func scanTaskFile(row interface{ Scan(...any) error }) (TaskFile, error) {
@@ -53,6 +60,33 @@ func (s *Store) AddTaskFile(f *TaskFile) error {
 	return err
 }
 
+// AddTaskFiles adauga mai multe fisiere intr-o tranzactie: ori toate, ori niciunul.
+func (s *Store) AddTaskFiles(files []*TaskFile) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	ts := now()
+	for _, f := range files {
+		var agent sql.NullInt64
+		if f.AgentID != nil {
+			agent = sql.NullInt64{Int64: *f.AgentID, Valid: true}
+		}
+		res, err := tx.Exec(`INSERT INTO task_files (task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			f.TaskID, f.ProjectID, agent, f.AgentName, f.Path, f.Name, f.Stored, f.Size, f.Mime, ts)
+		if err != nil {
+			return err
+		}
+		if f.ID, err = res.LastInsertId(); err != nil {
+			return err
+		}
+		f.CreatedAt = parseTime(ts)
+	}
+	return tx.Commit()
+}
+
 func (s *Store) GetTaskFile(id int64) (TaskFile, error) {
 	f, err := scanTaskFile(s.db.QueryRow(`SELECT `+taskFileCols+` FROM task_files WHERE id = ?`, id))
 	if err == sql.ErrNoRows {
@@ -64,6 +98,12 @@ func (s *Store) GetTaskFile(id int64) (TaskFile, error) {
 // ListTaskFiles: fisierele task-ului, cel mai nou primul; lista e mereu non-nil.
 func (s *Store) ListTaskFiles(taskID int64) ([]TaskFile, error) {
 	return s.queryTaskFiles(`SELECT `+taskFileCols+` FROM task_files WHERE task_id = ? ORDER BY id DESC`, taskID)
+}
+
+// ListUserTaskFiles: fisierele puse de utilizator pe task, in ordinea in care au venit.
+func (s *Store) ListUserTaskFiles(taskID int64) ([]TaskFile, error) {
+	return s.queryTaskFiles(`SELECT `+taskFileCols+` FROM task_files WHERE task_id = ? AND agent_id IS NULL AND agent_name = ? ORDER BY id`,
+		taskID, UserFileAuthor)
 }
 
 // ListDescendantFiles: fisierele sub-task-urilor (recursiv), in ordinea numerelor de task.

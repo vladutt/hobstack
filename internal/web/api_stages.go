@@ -2,7 +2,9 @@ package web
 
 import (
 	"errors"
+	"mime/multipart"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"foreman/internal/store"
@@ -83,6 +85,9 @@ func (s *Server) saveStages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, saved)
 }
 
+// createUserTask: JSON (title, description, assigneeId) sau multipart cu aceleasi campuri
+// plus fisierele utilizatorului ("files"). Fisierele se scriu intai in staging; team le pune
+// pe task inainte ca agentul sa poata porni.
 func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 	pid, err := pathID(r)
 	if err != nil {
@@ -94,7 +99,24 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 		AssigneeID  int64  `json:"assigneeId"` // 0 = primul liber (doar in proiectele cu etape)
 	}
-	if err := decode(r, &in); err != nil {
+	var uploads []*multipart.FileHeader
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if _, err := s.st.GetProject(pid); err != nil {
+			fail(w, err)
+			return
+		}
+		if uploads, err = s.readUploads(w, r); err != nil {
+			fail(w, err)
+			return
+		}
+		in.Title, in.Description = r.FormValue("title"), r.FormValue("description")
+		if v := strings.TrimSpace(r.FormValue("assigneeId")); v != "" {
+			if in.AssigneeID, err = strconv.ParseInt(v, 10, 64); err != nil {
+				fail(w, badRequest("assigneeId must be a number"))
+				return
+			}
+		}
+	} else if err := decode(r, &in); err != nil {
 		fail(w, err)
 		return
 	}
@@ -109,7 +131,18 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	task, err := s.team.UserCreateTask(pid, title, strings.TrimSpace(in.Description), in.AssigneeID)
+	var task store.Task
+	if len(uploads) > 0 {
+		dir, staged, serr := s.stageUploads(pid, uploads)
+		defer removeStaging(dir)
+		if serr != nil {
+			fail(w, serr)
+			return
+		}
+		task, err = s.team.UserCreateTaskWithFiles(pid, title, strings.TrimSpace(in.Description), in.AssigneeID, staged)
+	} else {
+		task, err = s.team.UserCreateTask(pid, title, strings.TrimSpace(in.Description), in.AssigneeID)
+	}
 	var ae team.AssignError
 	if errors.As(err, &ae) {
 		fail(w, badRequest(ae.Error()))

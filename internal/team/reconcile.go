@@ -250,7 +250,7 @@ func (t *Team) Reconcile(projectID int64) error {
 		}
 		ctx := ctxFor(a, task.ID)
 		ctx.Stage = stageLine(stages, *task)
-		turn := prompt.TaskTurn(ctx, *task, subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs))
+		turn := prompt.TaskTurn(ctx, *task, subtaskLines(task.ID, tasks, byID), t.texts(p.ID, msgs), t.userFileRefs(p.ID, task.ID))
 		if err := t.startRun(p, a, agents, task.ID, turn); err != nil {
 			task.Status = store.StatusQueued
 			if err := t.st.SaveTask(task); err != nil {
