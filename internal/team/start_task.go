@@ -56,5 +56,9 @@ func (t *Team) StartTask(c mcp.Caller, title, description, continues string) (st
 	t.note(c.ProjectID, a.ID, fmt.Sprintf("Started %s: %s", task.Ref(), title), true)
 	t.emit(c.ProjectID, "task", task)
 	t.Kick(c.ProjectID)
+	// echipa oprita (de utilizator sau dupa o eroare): task-ul asteapta Start team; agentul trebuie sa-i spuna
+	if p, err := t.st.GetProject(c.ProjectID); err == nil && p.Paused {
+		return fmt.Sprintf("Created %s. The team is stopped: %s starts when the user clicks Start team. Tell the user, then stop.", task.Ref(), task.Ref()), nil
+	}
 	return fmt.Sprintf("Started %s. Stop now; the work continues in the task.", task.Ref()), nil
 }

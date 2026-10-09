@@ -211,8 +211,10 @@ func (t *Team) UserComment(taskID int64, text string) error {
 		return ErrNoAssignee
 	}
 	t.taskMsg(task, "comment", actorUser, a.Name, "You commented", text)
-	msg := fmt.Sprintf("Comment from the user on %s (%s): %s\nIf it fills in something you left for them, update the work, "+
-		"tick it with mcp__team__tick_left_for_user (item numbers below) and reply with mcp__team__comment_task.", task.Ref(), task.Title, text)
+	// run-ul care citeste comentariul e doar de citire: modificarile merg intr-un task de continuare
+	msg := fmt.Sprintf("Comment from the user on %s (%s): %s\nIf it fills in something you left for them, update the work in a "+
+		"follow-up task (mcp__team__start_task with continues: %q), tick the item with mcp__team__tick_left_for_user "+
+		"(item numbers below) and reply with mcp__team__comment_task.", task.Ref(), task.Title, text, task.Ref())
 	if o := t.openItems(task); o != "" {
 		msg += "\n" + o + "."
 	}

@@ -73,3 +73,44 @@ func TestStartTaskIgnoresStages(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// echipa oprita: task-ul asteapta Start team, iar agentul trebuie sa i-o spuna utilizatorului
+func TestStartTaskWhenTeamStopped(t *testing.T) {
+	f := setup(t)
+	if err := f.st.SetPaused(f.p.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.tm.StartTask(mcp.Caller{ProjectID: f.p.ID, AgentID: f.lead.ID}, "Change", "", "")
+	if err != nil || !strings.Contains(out, "The team is stopped: T-1 starts when the user clicks Start team") || strings.Contains(out, "continues in the task") {
+		t.Fatalf("%q %v", out, err)
+	}
+}
+
+// limita numara doar task-urile in lucru: cele care asteapta o decizie nu blocheaza
+func TestStartTaskCapIgnoresWaitingForDecision(t *testing.T) {
+	f := setup(t)
+	c := mcp.Caller{ProjectID: f.p.ID, AgentID: f.rook.ID}
+	for i := 1; i <= 3; i++ {
+		if _, err := f.tm.StartTask(c, "T", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		got := f.wantStatus(t, i, store.StatusQueued)
+		got.Status = store.StatusReview
+		f.st.SaveTask(&got)
+	}
+	if _, err := f.tm.StartTask(c, "Fourth", "", ""); err != nil {
+		t.Fatalf("task-urile din Review nu trebuiau numarate: %v", err)
+	}
+}
+
+// un comentariu se citeste intr-un run doar de citire: modificarile merg intr-un task de continuare
+func TestUserCommentPointsToFollowUpTask(t *testing.T) {
+	f := setup(t)
+	task := f.task(t, "Landing", f.rook, store.StatusDone)
+	if err := f.tm.UserComment(task.ID, "Company is Meridian."); err != nil {
+		t.Fatal(err)
+	}
+	if !f.hasMessage(f.rook.ID, `mcp__team__start_task with continues: "T-1"`) {
+		t.Fatal("comentariul nu spune cum se fac modificarile")
+	}
+}

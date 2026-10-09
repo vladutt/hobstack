@@ -336,3 +336,9 @@ func TestReadOnlyTurnAndSolo(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 }
+
+func TestLeftForUserUsesFollowUpTask(t *testing.T) {
+	if !strings.Contains(howLeftForUser, "mcp__team__start_task") {
+		t.Fatal(howLeftForUser)
+	}
+}

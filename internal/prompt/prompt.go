@@ -94,8 +94,8 @@ const howSubLead = `When you receive a task from your boss, break it into subtas
 
 const howLeftForUser = `If the work needs values only the user can give (a company name, a registration number, a contact ` +
 	`e-mail), do not stop: use a clear placeholder, list each value in left_for_user when you call report_done, and finish. ` +
-	`The user answers in the task's comments; then fill them in, tick them with mcp__team__tick_left_for_user and reply ` +
-	`with mcp__team__comment_task.`
+	`The user answers in the task's comments; then fill them in through a follow-up task (mcp__team__start_task with ` +
+	`continues set to that task), tick them with mcp__team__tick_left_for_user and reply with mcp__team__comment_task.`
 
 const howFiles = `When the task asks for a file as its result (a document, an image, an export), save it in your folder ` +
 	`(or in the project files folder, with its absolute path) and list its path in files when you call report_done, ` +

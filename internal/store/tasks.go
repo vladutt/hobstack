@@ -235,10 +235,11 @@ func (s *Store) queryIDs(q string, args ...any) ([]int64, error) {
 	return ids, rows.Err()
 }
 
-// CountSelfStarted: task-urile deschise (nu Done / arhivate) pornite de agent cu start_task (evenimentul self_started).
+// CountSelfStarted: task-urile in lucru (Queued / In progress) pornite de agent cu start_task (evenimentul
+// self_started). Cele care asteapta o decizie (Review, Blocked) nu conteaza: nu le poate termina agentul.
 func (s *Store) CountSelfStarted(agentID int64) (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE t.assignee_id = ? AND t.status NOT IN ('done', 'archived')
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks t WHERE t.assignee_id = ? AND t.status IN ('queued', 'in_progress')
 		AND EXISTS (SELECT 1 FROM task_events e WHERE e.task_id = t.id AND e.kind = 'self_started')`, agentID).Scan(&n)
 	return n, err
 }
