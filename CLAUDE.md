@@ -176,6 +176,12 @@ gruparea tabelului pe categorii; cautarea cauta si in categorie. Campul Category
 categoriilor existente cu numarul de proiecte, deschisa la focus, plus "Create "X""; e in formularul de proiect si la pasul 3
 din wizard (POST /api/projects/setup primeste category). Eticheta categoriei pe rand (vizibila cand filtrezi sau cauti; click
 = filtru) si in header-ul proiectului (click = Proiecte filtrate).
+Gata (decizii usor de dat, spec in docs/superpowers/specs/2026-10-09-foreman-easy-decisions-design.md): report_done primeste
+decisions (max 5 intrebari cu 2-5 optiuni, multi) si user_steps (max 10, in task_todos cu kind step); task_decisions (migrarea
+030). Cand decide utilizatorul, modala arata Decide (radio/checkbox + Other), Your steps si zona de actiune (nota, motive rapide,
+Accept / Send back mari); POST /decide primeste answers: la Accept fiecare agent care a intrebat primeste in coada doar
+raspunsurile lui (si nota), la Send back raspunsurile intra in feedback; evenimentul decided dupa decizie; raspuns identic
+retrimis = no-op.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

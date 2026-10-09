@@ -1,7 +1,7 @@
 # Foreman: decizii usor de dat pe un task (intrebari cu optiuni, pasii tai, Accept / Send back rapid)
 
 Data: 2026-10-09
-Status: spec aprobat in chat, de implementat.
+Status: implementat (2026-10-09).
 
 ## Scop
 
