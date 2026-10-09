@@ -1395,3 +1395,6 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .md-file-link code { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
 /* <code> din blocurile colorate nu ia stilul codului din text (fundal, padding) */
 .md-pre code, .md-pre code.hljs { background: none; border: 0; padding: 0; border-radius: 0; font: inherit; color: inherit; }
+
+/* Stats: rolul agentului langa nume */
+.stats-role { color: var(--muted); font-size: 12px; }

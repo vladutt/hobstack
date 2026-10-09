@@ -206,7 +206,7 @@ function ago(iso) {
 
 // statsView: corpul tab-ului. load() aduce datele pentru perioada aleasa.
 // agentKind(id) -> "lead" / "worker", pentru culoarea agentului.
-export function statsView(projectId, { agentKind }) {
+export function statsView(projectId, { agentKind, agentRole = () => "" }) {
   const state = { range: savedRange(), sort: "costUsd", data: null };
   const rangeBar = el("div", { class: "stats-ranges", role: "group", "aria-label": "Time range" });
   const content = el("div", { class: "stats-content" });
@@ -249,7 +249,14 @@ export function statsView(projectId, { agentKind }) {
       el("thead", {}, el("tr", {}, COLS.map(([k, label]) => el("th", { "aria-sort": k === key ? (k === "name" ? "ascending" : "descending") : null },
         el("button", { type: "button", onclick: () => { state.sort = k; render(); } }, label))))),
       el("tbody", {}, rows.map((a) => el("tr", {}, COLS.map(([k, , fmt]) => el("td", {},
-        fmt ? fmt(a[k]) : el("a", { href: `#/p/${projectId}/team/${a.agentId}` }, a.name))))))));
+        fmt ? fmt(a[k]) : agentCell(a))))))));
+  }
+
+  // agentCell: numele (link catre agent) si rolul, mai sters; agentul sters nu mai are rol
+  function agentCell(a) {
+    const role = agentRole(a.agentId);
+    return [el("a", { href: `#/p/${projectId}/team/${a.agentId}` }, a.name),
+      role ? el("span", { class: "stats-role" }, ` (${role})`) : null];
   }
 
   function topTasks(d) {

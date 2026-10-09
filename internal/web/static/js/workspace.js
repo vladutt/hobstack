@@ -240,6 +240,7 @@ export async function workspaceView(root, projectId, route) {
   // tab-ul Stats: datele se incarca doar la intrarea pe tab (fara auto-refresh)
   const stats = statsView(projectId, {
     agentKind: (id) => kindOf(state.project.agents.find((a) => a.id === id)),
+    agentRole: (id) => state.project.agents.find((a) => a.id === id)?.role || "",
   });
   const bodies = {
     "team": el("div", { class: "tab-body team-body" }, canvas.el),
