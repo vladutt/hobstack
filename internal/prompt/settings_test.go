@@ -26,7 +26,7 @@ func TestAlwaysDenied(t *testing.T) {
 }
 
 func TestSettingsPackages(t *testing.T) {
-	without, with := Settings([]string{"shell"}, "", nil, nil, nil), Settings([]string{"packages"}, "", nil, []string{"brew install"}, nil)
+	without, with := Settings([]string{"shell"}, nil, nil, nil, nil), Settings([]string{"packages"}, nil, nil, []string{"brew install"}, nil)
 	if !strings.Contains(without, `"deny":[`) || !strings.Contains(without[strings.Index(without, `"deny"`):], "npm install") {
 		t.Errorf("fara packages, npm install e in deny: %s", without)
 	}
@@ -41,13 +41,13 @@ func TestMCPConfigExtra(t *testing.T) {
 	if !strings.Contains(got, `"team"`) || !strings.Contains(got, `"stock-db"`) || strings.Contains(got, "evil") {
 		t.Fatal(got)
 	}
-	if !strings.Contains(Settings([]string{"write"}, "/w", []string{"mcp__stock-db"}, nil, nil), `"mcp__stock-db"`) {
+	if !strings.Contains(Settings([]string{"write"}, []string{"/w"}, []string{"mcp__stock-db"}, nil, nil), `"mcp__stock-db"`) {
 		t.Fatal("allow-ul extra lipseste")
 	}
 }
 
 func TestSettingsExtraAllowOnlyWholeServers(t *testing.T) {
-	got := Settings(nil, "", []string{"mcp__ok", "Bash", "mcp__team__*", "mcp__x__tool", "mcp__a(b)", "mcp__*"}, nil, nil)
+	got := Settings(nil, nil, []string{"mcp__ok", "Bash", "mcp__team__*", "mcp__x__tool", "mcp__a(b)", "mcp__*"}, nil, nil)
 	for _, bad := range []string{`"Bash"`, `mcp__x__tool`, `mcp__a(b)`, `"mcp__*"`} {
 		if strings.Contains(got, bad) {
 			t.Fatalf("allow nepermis %s: %s", bad, got)
@@ -75,7 +75,7 @@ func TestAlwaysDeniedBashWithRules(t *testing.T) {
 }
 
 func TestSettingsCommandDeny(t *testing.T) {
-	got := Settings([]string{"shell"}, "/w", nil, []string{"git push", "sudo"}, nil)
+	got := Settings([]string{"shell"}, []string{"/w"}, nil, []string{"git push", "sudo"}, nil)
 	for _, want := range []string{`"Bash(git push:*)"`, `"Bash(sudo:*)"`, `"TaskCreate"`, `"Bash"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("lipseste %s din %s", want, got)
@@ -87,7 +87,7 @@ func TestSettingsCommandDeny(t *testing.T) {
 }
 
 func TestSettingsGranted(t *testing.T) {
-	raw := Settings([]string{"git"}, "", nil, []string{"sudo"}, []string{"git stash", "sudo", "bad)*"})
+	raw := Settings([]string{"git"}, nil, nil, []string{"sudo"}, []string{"git stash", "sudo", "bad)*"})
 	var cfg struct {
 		Permissions struct{ Allow, Deny []string } `json:"permissions"`
 	}
@@ -114,7 +114,7 @@ func TestReadOnlyTools(t *testing.T) {
 	if got := ReadOnlyTools(nil); len(got) != 0 {
 		t.Fatalf("%v", got)
 	}
-	raw := Settings(ReadOnlyTools([]string{"write", "shell", "git"}), "/w", nil, nil, nil)
+	raw := Settings(ReadOnlyTools([]string{"write", "shell", "git"}), []string{"/w"}, nil, nil, nil)
 	var cfg struct {
 		Permissions struct{ Allow, Deny []string } `json:"permissions"`
 	}

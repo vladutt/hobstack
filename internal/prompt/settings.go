@@ -98,13 +98,14 @@ func bashMatches(command string, rules []string) bool {
 
 // Settings intoarce JSON-ul pentru --settings. In modul -p, ce lipseste din
 // allow sau apare in deny e refuzat automat, fara sa intrebe pe nimeni.
-// home e folderul agentului: cu tool-ul write, scrie doar acolo ("" = oriunde).
+// writeDirs: folderele in care scrie agentul cu tool-ul write (al lui si folderul cu
+// fisierele proiectului); fara niciunul, scrie oriunde.
 // extraAllow: serverele MCP din Library; se accepta doar "mcp__<server>" (tot serverul),
 // nimic cu wildcard, paranteze sau tool anume, ca Library sa nu poata largi permisiunile.
 // cmdDeny: prefixele de comenzi refuzate (din DenyPrefixes), puse in deny ca Bash(prefix:*).
 // granted: prefixele aprobate din "Needs you" pentru acest run, puse in allow ca Bash(prefix:*)
 // (si agentilor fara Shell). Un deny (Block, refuz fix) tot castiga.
-func Settings(tools []string, home string, extraAllow, cmdDeny, granted []string) string {
+func Settings(tools []string, writeDirs []string, extraAllow, cmdDeny, granted []string) string {
 	allow := slices.Clone(alwaysAllow)
 	for _, rule := range extraAllow {
 		if libraryServerRule.MatchString(rule) && rule != "mcp__team" {
@@ -115,9 +116,11 @@ func Settings(tools []string, home string, extraAllow, cmdDeny, granted []string
 		if !slices.Contains(tools, name) {
 			continue
 		}
-		if name == "write" && home != "" {
-			for _, tool := range toolRules["write"] {
-				allow = append(allow, tool+"("+pathRule(home)+")")
+		if name == "write" && len(writeDirs) > 0 {
+			for _, dir := range writeDirs {
+				for _, tool := range toolRules["write"] {
+					allow = append(allow, tool+"("+pathRule(dir)+")")
+				}
 			}
 			continue
 		}
