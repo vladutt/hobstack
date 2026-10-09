@@ -149,7 +149,7 @@ ar fi refuzat din nou. Store: `HasOpenAccessRequest(agentID, taskID int64) (bool
 
 ## Teste
 
-- store: migrarea 028 (grant-urile consumate dispar, cele nefolosite devin de chat); `AddCommandGrant` fara duplicate;
+- store: migrarea 029 (grant-urile consumate dispar, cele nefolosite devin de chat); `AddCommandGrant` fara duplicate;
   `CommandGrants` pe task vs chat, fara consum; `StartNewChat` sterge grant-urile de chat.
 - prompt: `CommandPrefix` (exemplele de mai sus, flag pe pozitia 2, `php artisan`); `Settings` cu grant pune
   `Bash(prefix:*)` in allow; un Block sau un deny fix ramane in deny chiar cu grant.
