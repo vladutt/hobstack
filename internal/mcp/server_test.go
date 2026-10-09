@@ -22,6 +22,10 @@ func (f *fakeBackend) CreateTask(c Caller, title, desc, assignee, continues stri
 	f.calls = append(f.calls, "create_task|"+title+"|"+desc+"|"+assignee+"|"+continues)
 	return "Creat T-1 pentru " + assignee, f.err
 }
+func (f *fakeBackend) StartTask(c Caller, title, desc, continues string) (string, error) {
+	f.calls = append(f.calls, "start_task|"+title+"|"+desc+"|"+continues)
+	return "Started T-1", f.err
+}
 func (f *fakeBackend) ListTasks(c Caller, status string) (string, error) {
 	f.calls = append(f.calls, "list_tasks|"+status)
 	return "No tasks.", f.err
@@ -233,19 +237,19 @@ func TestToolsListByRole(t *testing.T) {
 		}
 		return out
 	}
-	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,ask_user" {
+	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,start_task,ask_user" {
 		t.Fatalf("lead: %s", got)
 	}
 	if got := strings.Join(names("worker"), ","); got != "report_done,tick_left_for_user,comment_task,ask_user" {
 		t.Fatalf("worker: %s", got)
 	}
-	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,tick_left_for_user,comment_task,ask_user" {
+	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,tick_left_for_user,comment_task,start_task,ask_user" {
 		t.Fatalf("sublead: %s", got)
 	}
-	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,ask_user" {
+	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,start_task,ask_user" {
 		t.Fatalf("reviewer: %s", got)
 	}
-	if got := strings.Join(names("solo"), ","); got != "ask_user" {
+	if got := strings.Join(names("solo"), ","); got != "start_task,ask_user" {
 		t.Fatalf("solo: %s", got)
 	}
 }
@@ -461,11 +465,11 @@ func TestAddAgentTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,ask_user" {
+	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,start_task,ask_user" {
 		t.Fatalf("leadadd: %s", got)
 	}
 	// radacina fara echipa: create_task + list_tasks ca sa-i dea de lucru agentului nou, fara accept/send_back
-	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,ask_user" {
+	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,start_task,ask_user" {
 		t.Fatalf("rootsolo: %s", got)
 	}
 	for _, token := range []string{"worker", "sublead", "setup"} {
@@ -506,10 +510,10 @@ func TestLinkedProjectTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,ask_user" {
+	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,start_task,ask_user" {
 		t.Fatalf("linkedworker: %s", got)
 	}
-	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_linked_projects,ask_project,reply_to_project,request_project_work,ask_user" {
+	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_linked_projects,ask_project,reply_to_project,request_project_work,start_task,ask_user" {
 		t.Fatalf("linkedlead: %s", got)
 	}
 	// radacina intr-un run pe un task venit din alt proiect: report_done chiar fara sef
@@ -654,5 +658,17 @@ func TestProposeLibraryTool(t *testing.T) {
 	_, resp = rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"propose_library_item","arguments":{"kind":"skill","name":"tone","description":"d","files":["SKILL.md"]}}}`)
 	if _, isErr := toolText(t, resp); !isErr || len(fb.calls) != 1 {
 		t.Fatal("worker fara write trebuia refuzat")
+	}
+}
+
+func TestCallStartTask(t *testing.T) {
+	fb, ts := setup(t)
+	rpc(t, ts, "solo", `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"start_task","arguments":{"title":"Fix","description":"d","continues":"T-2"}}}`)
+	if len(fb.calls) != 1 || fb.calls[0] != "start_task|Fix|d|T-2" {
+		t.Fatalf("%v", fb.calls)
+	}
+	_, resp := rpc(t, ts, "worker", `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"start_task","arguments":{"title":"x"}}}`)
+	if raw, _ := json.Marshal(resp); !strings.Contains(string(raw), "not available") {
+		t.Fatalf("worker pe task: %s", raw)
 	}
 }

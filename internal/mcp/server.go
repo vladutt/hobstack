@@ -52,6 +52,7 @@ type AddAgentInput struct {
 type Backend interface {
 	Resolve(token string) (Caller, bool)
 	CreateTask(c Caller, title, description, assignee, continues string) (string, error)
+	StartTask(c Caller, title, description, continues string) (string, error)
 	ListTasks(c Caller, status string) (string, error)
 	AcceptTask(c Caller, task, note string) (string, error)
 	SendBack(c Caller, task, feedback string) (string, error)
@@ -175,6 +176,8 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 	switch p.Name {
 	case "create_task":
 		text, err = s.backend.CreateTask(c, arg("title"), arg("description"), arg("assignee"), arg("continues"))
+	case "start_task":
+		text, err = s.backend.StartTask(c, arg("title"), arg("description"), arg("continues"))
 	case "list_tasks":
 		text, err = s.backend.ListTasks(c, arg("status"))
 	case "accept_task":
