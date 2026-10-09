@@ -149,6 +149,29 @@ func copyServers(in []Server) []Server {
 	return out
 }
 
+// getPage face GET /v0/servers?<q> si intoarce corpul (max maxBody); timeout-ul vine din hc.
+// Orice problema (retea, status != 200) e ErrUnavailable. Folosit de Client si de Catalog.
+func getPage(ctx context.Context, hc *http.Client, baseURL string, q url.Values) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+"/v0/servers?"+q.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: status %d", ErrUnavailable, resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	return body, nil
+}
+
 func (c *Client) fetch(ctx context.Context, search, cursor string) ([]Server, string, error) {
 	q := url.Values{}
 	if search != "" {
@@ -159,26 +182,13 @@ func (c *Client) fetch(ctx context.Context, search, cursor string) ([]Server, st
 	}
 	q.Set("version", "latest")
 	q.Set("limit", fmt.Sprint(pageLimit))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.BaseURL, "/")+"/v0/servers?"+q.Encode(), nil)
-	if err != nil {
-		return nil, "", fmt.Errorf("%w: %v", ErrUnavailable, err)
-	}
-	req.Header.Set("Accept", "application/json")
 	hc := c.HTTP
 	if hc == nil {
 		hc = &http.Client{Timeout: 10 * time.Second}
 	}
-	resp, err := hc.Do(req)
+	body, err := getPage(ctx, hc, c.BaseURL, q)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: %v", ErrUnavailable, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("%w: status %d", ErrUnavailable, resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-	if err != nil {
-		return nil, "", fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, "", err
 	}
 	var page apiPage
 	if err := json.Unmarshal(body, &page); err != nil {
@@ -206,8 +216,9 @@ type apiEntry struct {
 	Server apiServer `json:"server"`
 	Meta   struct {
 		Official *struct {
-			Status   string `json:"status"`
-			IsLatest *bool  `json:"isLatest"`
+			Status    string `json:"status"`
+			IsLatest  *bool  `json:"isLatest"`
+			UpdatedAt string `json:"updatedAt"`
 		} `json:"io.modelcontextprotocol.registry/official"`
 	} `json:"_meta"`
 }
