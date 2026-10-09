@@ -126,6 +126,10 @@ board = actiunea coloanei (team.MoveTask: Accept, Send back, Unblock, Reopen, Cl
 Review nu primesc drop), meniul "⋯" de pe card (Move to… / Delete). Delete = arhivare (status archived, migrarea 026,
 archived_from/archived_root): run-ul se opreste, intrebarile/cererile legate se inchid, ListTasks/Subtasks nu le mai
 intorc; toast cu Undo si panoul "Deleted (N)" cu Restore.
+Gata (@ in chat): in chat-ul cu un agent, @ deschide lista fisierelor de cod ale proiectului (pachet internal/codefiles:
+git ls-files cu .gitignore, altfel parcurgere fara node_modules/vendor/dist/build/foldere ascunse; max 20000 pe folder,
+cache 30 s; GET /api/projects/{id}/code-files?q=&agent=); alegerea scrie @cale (relativa in folderul agentului, absoluta
+in celelalte), agentul citeste singur fisierul. UI: static/js/mentions.js.
 Gata (categorii de proiecte): projects.category (migrarea 027, text liber, max 40; "work" ia scrierea unei categorii
 existente). Pe Proiecte: filtre All / <categorie> / Uncategorized (alegerea in localStorage "foreman-category") si
 gruparea tabelului pe categorii; cautarea cauta si in categorie. Campul Category (category.js, categoryInput) are lista

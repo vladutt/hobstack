@@ -15,8 +15,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"foreman/internal/codefiles"
 	"foreman/internal/config"
 	"foreman/internal/draft"
 	"foreman/internal/events"
@@ -50,11 +52,14 @@ type Server struct {
 	wizard  *wizard.Manager // nil = wizard-ul "Proiect nou cu AI" nu e disponibil
 	drafts  *draft.Manager  // nil = "Let AI draft this agent" nu e disponibil
 	lib     *library.Lib    // nil = rutele Library raspund 503
+
+	codeCache *codefiles.Cache // fisierele de cod pentru @ in chat (cateva secunde in memorie)
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
 	dirs Dirs, pick func(context.Context) (string, error), canPick bool) *Server {
-	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick}
+	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick,
+		codeCache: codefiles.NewCache(30 * time.Second)}
 }
 
 // SetSetup activeaza wizard-ul "Proiect nou cu AI".
@@ -155,6 +160,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/tasks/{id}", s.deleteTask)
 	mux.HandleFunc("POST /api/tasks/{id}/restore", s.restoreTask)
 	mux.HandleFunc("GET /api/projects/{id}/archived", s.listArchived)
+	mux.HandleFunc("GET /api/projects/{id}/code-files", s.codeFiles)
 	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)
 	mux.HandleFunc("POST /api/tasks/{id}/nudge", s.nudgeTask)
 	mux.HandleFunc("POST /api/tasks/{id}/comments", s.commentTask)

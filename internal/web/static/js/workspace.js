@@ -14,6 +14,7 @@ import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
 import { renderMarkdown } from "./md.js";
+import { attachMentions } from "./mentions.js";
 import { libraryProposalBox, librarySharePrompt } from "./library-cards.js";
 import { moveAction, moveTask } from "./board-move.js";
 import { deletedPanel } from "./deleted.js";
@@ -216,6 +217,12 @@ export async function workspaceView(root, projectId, route) {
   const threadHint = el("div", { class: "thread-hint" });
   const quick = el("div", { class: "quick-actions" }); // Ask for status, Give a task, Open T-<nr>
   const chatBox = el("div", { class: "chat" }, threadHint, thread, chatShare, chatQuestion, el("div", { class: "composer" }, chips, composer, quick, note));
+  // @ in mesaj: fisierele de cod ale proiectului (caile relative la folderul agentului selectat)
+  attachMentions(input, chatBox.querySelector(".composer"), async (q) => {
+    const agent = state.selected ? `&agent=${state.selected}` : "";
+    const res = await api(`/api/projects/${projectId}/code-files?q=${encodeURIComponent(q)}${agent}`);
+    return res.files;
+  });
   const drawerClose = el("button", {
     type: "button", class: "drawer-close", "aria-label": "Close panel", title: "Close",
     onclick: () => setDrawer(false),

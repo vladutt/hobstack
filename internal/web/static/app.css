@@ -388,7 +388,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 :is(.thread, .wizard, .foreman-chat) .live summary { cursor: pointer; font-family: var(--mono); font-size: 11.5px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 :is(.thread, .wizard, .foreman-chat) .live pre { margin: 6px 0 0; white-space: pre-wrap; font-size: 11.5px; max-height: 240px; overflow: auto; font-family: var(--mono); }
 .err { color: var(--red); }
-.composer { border-top: 1px solid var(--line); padding: 14px 20px 16px; display: grid; gap: 8px; }
+.composer { border-top: 1px solid var(--line); padding: 14px 20px 16px; display: grid; position: relative; gap: 8px; }
 .composer form { display: flex; gap: 8px; align-items: center; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }
 .composer form:focus-within { border-color: var(--amber); }
 .composer textarea { min-height: 40px; height: 44px; max-height: 200px; border: 0; background: transparent; padding: 10px 8px; box-shadow: none !important; resize: none; }
@@ -1310,3 +1310,12 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .combo-opt { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 7px; cursor: pointer; color: var(--soft); }
 .combo-opt:hover, .combo-opt.active { background: var(--card-hi); color: var(--text); }
 .combo-opt.create { color: var(--amber); }
+
+/* @ in chat: fisierele proiectului, deasupra campului de mesaj */
+.mention-list { position: absolute; left: 20px; right: 20px; bottom: calc(100% - 8px); z-index: 30; max-height: 280px; overflow-y: auto;
+  margin: 0; padding: 4px; list-style: none; background: var(--deep); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+.mention-item { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: 6px; cursor: pointer; min-width: 0; }
+.mention-item.active, .mention-item:hover { background: var(--card-hi); }
+.mention-name { color: var(--text); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.mention-dir { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; min-width: 0; }
+.mention-empty { padding: 8px 10px; color: var(--muted); font-size: 13px; }
