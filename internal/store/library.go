@@ -157,6 +157,25 @@ func (s *Store) FindLibraryItem(kind, name string) (LibraryItem, error) {
 	return scanLibraryItem(s.db.QueryRow(`SELECT `+libraryItemCols+` FROM library_items WHERE kind = ? AND name = ?`, kind, name))
 }
 
+// ListLibraryItemsAnyStatus: toate elementele de un fel, in orice stare (si declined / unpublished),
+// de exemplu pentru "In library" la Install, unde orice nume luat da 409.
+func (s *Store) ListLibraryItemsAnyStatus(kind string) ([]LibraryItem, error) {
+	rows, err := s.db.Query(`SELECT `+libraryItemCols+` FROM library_items WHERE kind = ? ORDER BY id`, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []LibraryItem{}
+	for rows.Next() {
+		it, err := scanLibraryItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
 // ListLibraryItems: kind "" = toate; fara declined si unpublished (dispar din Library); propunerile primele, apoi dupa nume.
 func (s *Store) ListLibraryItems(kind string) ([]LibraryItem, error) {
 	rows, err := s.db.Query(`SELECT `+libraryItemCols+` FROM library_items
@@ -227,6 +246,31 @@ func (s *Store) Install(projectID, itemID, versionID int64) error {
 		ON CONFLICT (project_id, item_id) DO UPDATE SET version_id = excluded.version_id, enabled = 1`,
 		projectID, itemID, versionID)
 	return err
+}
+
+// InstallWithSecrets instaleaza (si activeaza) elementul in proiect si salveaza secretele, intr-o singura
+// tranzactie: la o eroare nu ramane nici instalarea, nici vreun secret. O valoare goala pastreaza secretul existent.
+func (s *Store) InstallWithSecrets(projectID, itemID, versionID int64, secrets map[string]string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO library_installs (project_id, item_id, version_id, enabled) VALUES (?, ?, ?, 1)
+		ON CONFLICT (project_id, item_id) DO UPDATE SET version_id = excluded.version_id, enabled = 1`,
+		projectID, itemID, versionID); err != nil {
+		return err
+	}
+	for name, val := range secrets {
+		if val == "" {
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO library_secrets (project_id, item_id, name, value) VALUES (?, ?, ?, ?)
+			ON CONFLICT (project_id, item_id, name) DO UPDATE SET value = excluded.value`, projectID, itemID, name, val); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // Uninstall scoate elementul din proiect. ErrNotFound daca nu era instalat.

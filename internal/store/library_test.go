@@ -149,3 +149,52 @@ func TestSecretsEmptyAndPublishedAtOnce(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestListLibraryItemsAnyStatus(t *testing.T) {
+	s := newStore(t)
+	for _, st := range []string{ItemPublished, ItemDeclined, ItemUnpublished, ItemProposed} {
+		it := LibraryItem{Kind: KindMCP, Name: "m-" + st, Status: st, Transport: "local", Command: "npx"}
+		if err := s.AddLibraryItem(&it); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := LibraryItem{Kind: KindSkill, Name: "s", Status: ItemDeclined}
+	if err := s.AddLibraryItem(&other); err != nil {
+		t.Fatal(err)
+	}
+	all, err := s.ListLibraryItemsAnyStatus(KindMCP)
+	if err != nil || len(all) != 4 {
+		t.Fatalf("%+v %v", all, err)
+	}
+}
+
+func TestInstallWithSecretsAtomic(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	it := LibraryItem{Kind: KindMCP, Name: "m", Status: ItemPublished, Secrets: []string{"A_KEY", "B_KEY"}}
+	if err := s.AddLibraryItem(&it); err != nil {
+		t.Fatal(err)
+	}
+	// versiune inexistenta: cheia straina pica, nimic salvat (nici secretele)
+	if err := s.InstallWithSecrets(p.ID, it.ID, 9999, map[string]string{"A_KEY": "a"}); err == nil {
+		t.Fatal("versiune inexistenta acceptata")
+	}
+	if ins, _ := s.ListInstalls(p.ID); len(ins) != 0 {
+		t.Fatalf("instalat: %+v", ins)
+	}
+	if sec, _ := s.Secrets(p.ID, it.ID); len(sec) != 0 {
+		t.Fatalf("secrete ramase: %v", sec)
+	}
+	v := LibraryVersion{ItemID: it.ID, Version: "1.0", Dir: "/x"}
+	if err := s.AddLibraryVersion(&v); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InstallWithSecrets(p.ID, it.ID, v.ID, map[string]string{"A_KEY": "a", "B_KEY": "b"}); err != nil {
+		t.Fatal(err)
+	}
+	ins, _ := s.ListInstalls(p.ID)
+	sec, _ := s.Secrets(p.ID, it.ID)
+	if len(ins) != 1 || !ins[0].Enabled || ins[0].VersionID != v.ID || sec["A_KEY"] != "a" || sec["B_KEY"] != "b" {
+		t.Fatalf("%+v %v", ins, sec)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -622,6 +623,37 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 
 const maxSecretLen = 8192
 
+// checkSecretValues: fiecare nume (din valori si din clear) e un secret declarat al elementului, valorile au
+// cel mult maxSecretLen si niciun NUL. Comuna pentru PUT /api/projects/{id}/library/{item} si install-mcp.
+func checkSecretValues(declared []string, secrets map[string]string, clear []string) error {
+	check := func(name string) error {
+		if !library.ValidSecretName(name) || !slices.Contains(declared, name) {
+			return badRequest("secret " + name + " is not one of this item's secrets")
+		}
+		return nil
+	}
+	for name, val := range secrets {
+		if err := check(name); err != nil {
+			return err
+		}
+		if len(val) > maxSecretLen || strings.ContainsRune(val, 0) {
+			return badRequest("secret " + name + ": too long or has a NUL character")
+		}
+	}
+	for _, name := range clear {
+		if err := check(name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// installInProject instaleaza si activeaza versiunea in proiect si salveaza secretele (valorile goale pastreaza
+// secretul existent), intr-o singura tranzactie. Secretele se verifica inainte cu checkSecretValues.
+func (s *Server) installInProject(pid, itemID, versionID int64, secrets map[string]string) error {
+	return installWithSecrets(s.st, pid, itemID, versionID, secrets)
+}
+
 // putProjectLibrary instaleaza / scoate un element din proiect si salveaza secretele lui.
 //
 //	{"installed": true|false, "secrets": {"NAME": "value"}, "clear": ["NAME"], "upgrade": true}
@@ -665,31 +697,9 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	declared := map[string]bool{}
-	for _, n := range it.Secrets {
-		declared[n] = true
-	}
-	check := func(name string) error {
-		if !library.ValidSecretName(name) || !declared[name] {
-			return badRequest("secret " + name + " is not one of this item's secrets")
-		}
-		return nil
-	}
-	for name, val := range in.Secrets {
-		if err := check(name); err != nil {
-			fail(w, err)
-			return
-		}
-		if len(val) > maxSecretLen || strings.ContainsRune(val, 0) {
-			fail(w, badRequest("secret "+name+": too long or has a NUL character"))
-			return
-		}
-	}
-	for _, name := range in.Clear {
-		if err := check(name); err != nil {
-			fail(w, err)
-			return
-		}
+	if err := checkSecretValues(it.Secrets, in.Secrets, in.Clear); err != nil {
+		fail(w, err)
+		return
 	}
 	installs, err := s.st.ListInstalls(pid)
 	if err != nil {
@@ -735,21 +745,13 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 			}
 			versionID = vs[0].ID
 		}
-		if err := s.st.Install(pid, itemID, versionID); err != nil {
+		// instalarea si secretele noi intr-o tranzactie (valorile goale pastreaza secretul existent)
+		if err := s.installInProject(pid, itemID, versionID, in.Secrets); err != nil {
 			fail(w, err)
 			return
 		}
 	case cur != nil:
 		if err := s.st.Uninstall(pid, itemID); err != nil && !errors.Is(err, store.ErrNotFound) {
-			fail(w, err)
-			return
-		}
-	}
-	for name, val := range in.Secrets {
-		if val == "" {
-			continue // gol = pastreaza
-		}
-		if err := s.st.SetSecret(pid, itemID, name, val); err != nil {
 			fail(w, err)
 			return
 		}

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,10 +31,10 @@ func commandKey(command string, args []string) string {
 	return strings.Join(append([]string{strings.TrimSpace(command)}, args...), "\x00")
 }
 
-// mcpLibraryIndex citeste elementele mcp. ListLibraryItems sare peste cele declined / unpublished;
-// numele lor sunt totusi luate (Install le da 409), dar nu apar in Library, deci nici aici.
+// mcpLibraryIndex citeste elementele mcp in orice stare: si cele declined / unpublished au numele luat
+// (Install le da 409), deci apar "In library", consecvent cu 409.
 func (s *Server) mcpLibraryIndex() (mcpIndex, error) {
-	items, err := s.st.ListLibraryItems(store.KindMCP)
+	items, err := s.st.ListLibraryItemsAnyStatus(store.KindMCP)
 	if err != nil {
 		return mcpIndex{}, err
 	}
@@ -129,6 +131,15 @@ type mcpInstall struct {
 	Secrets     []string `json:"secrets"`
 	SkipTest    bool     `json:"skipTest"`  // "Install without test", dupa confirmarea utilizatorului
 	ProjectID   int64    `json:"projectId"` // 0 = doar in Library; altfel instalat si activat in proiect
+	// SecretValues: valorile secretelor pentru proiect (doar cu projectId). Intra in mediul probei si se salveaza
+	// ca secretele proiectului; nu apar niciodata intr-un raspuns.
+	SecretValues map[string]string `json:"secretValues"`
+}
+
+// hasMarker: textul contine un marcaj care nu e o valoare reala.
+func hasMarker(in mcpInstall, marker string) bool {
+	return strings.Contains(in.Command, marker) || strings.Contains(in.URL, marker) ||
+		slices.ContainsFunc(in.Args, func(a string) bool { return strings.Contains(a, marker) })
 }
 
 // installMCP: POST /api/library/install-mcp. Validare -> nume liber -> proba (doar local, fara skipTest) ->
@@ -144,9 +155,13 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// un argument ascuns din configurarile Claude nu e valoarea reala: nu se instaleaza niciodata
-	if strings.Contains(in.Command, mcpregistry.Hidden) || strings.Contains(in.URL, mcpregistry.Hidden) ||
-		slices.ContainsFunc(in.Args, func(a string) bool { return strings.Contains(a, mcpregistry.Hidden) }) {
+	if hasMarker(in, mcpregistry.Hidden) {
 		fail(w, badRequest("this server has a credential in its command, arguments or URL; move it to env in your Claude config, then install"))
+		return
+	}
+	// ${DIR} e folderul fisierelor unei propuneri de agent; un server instalat de aici nu are fisiere
+	if hasMarker(in, "${DIR}") {
+		fail(w, badRequest("${DIR} only works for items with files; use the full path"))
 		return
 	}
 	switch in.Kind {
@@ -175,6 +190,14 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		fail(w, badRequest("an mcp needs command (local) or url (remote)"))
 		return
 	}
+	if len(in.SecretValues) > 0 && in.ProjectID == 0 {
+		fail(w, badRequest("secretValues need projectId: secret values are kept per project"))
+		return
+	}
+	if err := checkSecretValues(v.Secrets, in.SecretValues, nil); err != nil {
+		fail(w, err)
+		return
+	}
 	if in.ProjectID != 0 {
 		if _, err := s.st.GetProject(in.ProjectID); err != nil {
 			fail(w, err)
@@ -190,14 +213,23 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// proba, inainte de a crea ceva. Mediul: secretele date deja in proiect pentru acest element; elementul e nou
-	// (numele e liber), deci nu are inca valori — proba porneste fara ele (ca Publish azi).
+	// proba, inainte de a crea ceva, cu valorile secretelor date acum (elementul e nou, deci in proiect nu are altele).
 	// Remote: Publish nu are proba pentru remote, deci nici aici.
+	env := map[string]string{}
+	for k, val := range in.SecretValues {
+		if val != "" {
+			env[k] = val
+		}
+	}
 	var tools []string
 	if in.Kind == "local" && !in.SkipTest {
-		names, err := library.ProbeMCP(v.Command, v.Args, map[string]string{}, mcpProbeTimeout)
+		names, err := library.ProbeMCP(v.Command, v.Args, env, mcpProbeTimeout)
 		if err != nil {
 			msg := strings.TrimSpace(err.Error())
+			// serverul poate repeta valoarea unui secret in eroare: nu iese din server
+			for _, val := range env {
+				msg = strings.ReplaceAll(msg, val, mcpregistry.Hidden)
+			}
 			if r := []rune(msg); len(r) > 300 {
 				msg = string(r[:300]) + "..."
 			}
@@ -226,9 +258,12 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	// undo sterge tot ce a facut Install: randurile (versiunile si instalarile cad prin cascade), propunerea si
+	// folderul versiunii (items/<id>, mutat acolo de publicare)
 	undo := func() {
 		_ = s.st.DeleteLibraryItem(it.ID)
 		s.lib.DiscardProposal(it.ID)
+		_ = os.RemoveAll(filepath.Join(s.lib.Root, "items", strconv.FormatInt(it.ID, 10)))
 	}
 	if _, err := s.lib.AdoptStaged(staging, it.ID); err != nil {
 		undo()
@@ -242,8 +277,10 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.ProjectID != 0 {
-		// acelasi drum ca PUT /api/projects/{id}/library/{item} cu installed=true: versiunea curenta, activat
-		if err := s.st.Install(in.ProjectID, it.ID, ver.ID); err != nil {
+		// acelasi drum ca PUT /api/projects/{id}/library/{item} cu installed=true: versiunea curenta, activat,
+		// plus secretele, intr-o tranzactie. La eroare elementul dispare de tot (altfel reincercarea ar da 409).
+		if err := s.installInProject(in.ProjectID, it.ID, ver.ID, in.SecretValues); err != nil {
+			undo()
 			fail(w, err)
 			return
 		}
@@ -254,6 +291,7 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	// elementul e nou: instalat cel mult in proiectul cerut acum (fara o interogare in plus)
 	installs := 0
 	if in.ProjectID != 0 {
 		installs = 1
@@ -265,3 +303,7 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusCreated, view)
 }
+
+// installWithSecrets: instalarea in proiect + secretele, intr-o tranzactie. Variabila exista ca testele sa poata
+// simula o eroare (si sa verifice ca Install nu lasa jumatati de stare).
+var installWithSecrets = (*store.Store).InstallWithSecrets
