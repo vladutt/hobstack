@@ -32,6 +32,8 @@ type projectInput struct {
 	BudgetUSD   float64       `json:"budgetUsd"`
 	// Autonomy: pointer, ca un PUT fara camp sa nu reseteze bifa
 	Autonomy *bool `json:"autonomy"`
+	// AccountID: contul Claude; absent = neschimbat (PUT) / Default (POST); 0 = Default
+	AccountID *int64 `json:"accountId"`
 }
 
 // folders valideaza folderele si le creeaza pe disc pe cele lipsa (ultimul
@@ -191,8 +193,11 @@ type projectCard struct {
 	Activity []int `json:"activity"`
 	Links    int   `json:"links"`
 	// FillIns: puncte lasate utilizatorului, inca deschise (intra in "N need you")
-	FillIns int            `json:"fillIns"`
-	fills   []store.FillIn // lista completa, o citim o data (o refoloseste getProject)
+	FillIns int `json:"fillIns"`
+	// AccountName / AccountError: contul Claude al proiectului (gol = Default) si ultima lui eroare ("Needs you")
+	AccountName  string         `json:"accountName"`
+	AccountError string         `json:"accountError"`
+	fills        []store.FillIn // lista completa, o citim o data (o refoloseste getProject)
 }
 
 type agentView struct {
@@ -289,6 +294,11 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 	}
 	c.FillIns = len(fills)
 	c.fills = fills
+	if acct, err := s.st.ProjectAccount(p.ID); err != nil {
+		return projectCard{}, nil, nil, nil, err
+	} else if acct != nil {
+		c.AccountName, c.AccountError = acct.Name, acct.LastError
+	}
 	for _, a := range agents {
 		r := store.RolesOf(a, agents)
 		c.Team = append(c.Team, memberBrief{ID: a.ID, Name: a.Name, IsLead: r.IsLead, IsRoot: r.IsRoot})
@@ -458,6 +468,12 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	if in.AccountID != nil {
+		if p.AccountID, err = s.accountRef(*in.AccountID); err != nil {
+			fail(w, err)
+			return
+		}
+	}
 	if _, err := s.st.CreateProject(&p); err != nil {
 		fail(w, err)
 		return
@@ -523,9 +539,39 @@ func (s *Server) updateProject(w http.ResponseWriter, r *http.Request) {
 	if in.Autonomy == nil {
 		p.Autonomy = existing.Autonomy // UpdateProject scrie campul: fara el in corp il pastram
 	}
+	// contul se schimba doar cu echipa oprita: run-urile active sunt pe contul vechi
+	changeAccount := false
+	var account *int64
+	if in.AccountID != nil {
+		if account, err = s.accountRef(*in.AccountID); err != nil {
+			fail(w, err)
+			return
+		}
+		same := (account == nil && existing.AccountID == nil) ||
+			(account != nil && existing.AccountID != nil && *account == *existing.AccountID)
+		if !same {
+			if s.team.ProjectActive(id) {
+				writeErr(w, http.StatusConflict, "Stop the team first: agents are working on the current Claude account.")
+				return
+			}
+			changeAccount = true
+		}
+	}
 	if err := s.st.UpdateProject(p); err != nil {
 		fail(w, err)
 		return
+	}
+	if changeAccount {
+		name := "Default"
+		if account != nil {
+			if a, err := s.st.Account(*account); err == nil {
+				name = a.Name
+			}
+		}
+		if _, err := s.st.SetProjectAccount(id, account, "Claude account changed to "+name+"; starting a new session."); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	saved, err := s.st.GetProject(id)
 	if err != nil {

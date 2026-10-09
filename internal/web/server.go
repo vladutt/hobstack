@@ -131,6 +131,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/settings/commands", s.getGlobalCommands)
 	mux.HandleFunc("PUT /api/settings/commands", s.putGlobalCommands)
 	mux.HandleFunc("POST /api/settings/commands/reset", s.resetGlobalCommands)
+	mux.HandleFunc("GET /api/accounts", s.listAccounts)
+	mux.HandleFunc("GET /api/accounts/default", s.defaultAccount)
+	mux.HandleFunc("POST /api/accounts", s.createAccount)
+	mux.HandleFunc("PUT /api/accounts/{id}", s.updateAccount)
+	mux.HandleFunc("DELETE /api/accounts/{id}", s.deleteAccount)
+	mux.HandleFunc("POST /api/accounts/{id}/check", s.checkAccountRoute)
 	mux.HandleFunc("GET /api/projects/{id}/commands", s.getProjectCommands)
 	mux.HandleFunc("PUT /api/projects/{id}/commands", s.putProjectCommands)
 	mux.HandleFunc("POST /api/access/{id}/allow-once", s.allowCommandOnce)
@@ -245,6 +251,8 @@ func fail(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusConflict, pre.Error())
 	case errors.Is(err, store.ErrSameProject):
 		writeErr(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, store.ErrAccountInUse):
+		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
 	case errors.Is(err, team.ErrNotBlocked), errors.Is(err, team.ErrNotStuck), errors.Is(err, team.ErrAgentBusy):
