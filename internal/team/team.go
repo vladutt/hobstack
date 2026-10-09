@@ -69,6 +69,7 @@ type activeRun struct {
 	projectID int64
 	taskID    int64
 	token     string
+	accountID int64          // contul Claude al run-ului; 0 = Default
 	request   *store.Message // ultimul mesaj al utilizatorului livrat la pornire (doar run-urile de chat)
 	questions []int64        // intrebarile din alte proiecte livrate run-ului: nu poate intreba la randul lui (anti-bucla), iar la final se inchid
 }

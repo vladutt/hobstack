@@ -25,6 +25,17 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		return fmt.Errorf("the folder %s (%s) does not exist", home.Name, home.Path)
 	}
 
+	// contul Claude al proiectului; fail closed: un proiect cu cont nu ruleaza pe cel implicit
+	acct, err := t.st.ProjectAccount(p.ID)
+	if err != nil {
+		return fmt.Errorf("Claude account: %w", err)
+	}
+	var env []string
+	var accountID int64
+	if acct != nil {
+		env, accountID = acct.Env(), acct.ID
+	}
+
 	// celelalte foldere ale proiectului: agentul le poate citi (scrie doar in al lui)
 	var extraArgs []string
 	for _, f := range p.Folders {
@@ -123,7 +134,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	t.mu.Lock()
 	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
 		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0, CanAddAgents: isLead || roles.IsRoot, HasLinks: hasLinks, IsRoot: roles.IsRoot, FromRequest: fromRequest, CanWrite: slices.Contains(a.Tools, "write")}
-	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token}
+	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token, accountID: accountID}
 	t.mu.Unlock()
 
 	// URL-ul MCP in linie; cu servere din Library (secrete in env/headers) config-ul merge intr-un
@@ -155,6 +166,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		Dir:    home.Path,
 		Args:   append(t.args(p, a, system, turn, mcpCfg, resume, libBuild, cmdDeny), extraArgs...),
 		Prompt: turn,
+		Env:    env,
 	}
 	agentID := a.ID
 	if _, err := t.runs.Start(spec, func(o runner.Outcome) { t.finish(agentID, hash, o) }); err != nil {
@@ -262,6 +274,9 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	t.recordDenials(ar, a, o.Denials)
 	t.recordChanges(ar, a, o)
 	t.recordLibraryUses(ar, a, o)
+	if o.Status == store.RunFailed && runner.IsAuthError(o.Error) {
+		return t.authFailed(ar, a, o.Error)
+	}
 	if o.Status == store.RunFailed {
 		t.note(ar.projectID, a.ID, "Run failed: "+o.Error, true)
 	}
