@@ -22,6 +22,26 @@ type fakeStarter struct {
 	onDone  map[string]func(runner.Outcome)
 	stopped []string
 	failErr error // daca e setat, urmatorul Start esueaza cu ea
+	// activity: cate modificari (fisiere + comenzi) a facut pana acum fiecare run; lipsa = necunoscut
+	activity map[string]int
+}
+
+// Activity imita runner.Manager.Activity pentru teste.
+func (f *fakeStarter) Activity(runID string) (int, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n, ok := f.activity[runID]
+	return n, ok
+}
+
+// setActivity fixeaza activitatea unui run.
+func (f *fakeStarter) setActivity(runID string, n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.activity == nil {
+		f.activity = map[string]int{}
+	}
+	f.activity[runID] = n
 }
 
 func newFakeStarter() *fakeStarter {
