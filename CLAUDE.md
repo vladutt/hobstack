@@ -195,6 +195,15 @@ X-HobStack). La prima pornire config.MoveLegacyData muta ~/.foreman in ~/.hobsta
 si lasa un symlink pe calea veche; store.RewriteDataRoot inlocuieste calea in instructiunile agentilor, brief-uri, sarcinile
 recurente si task_changes.path. Istoricul ramane cum a fost scris (evenimentele vechi au actorul "Foreman"; doi agenti reali se
 numesc asa). Cheile din localStorage "foreman-*" trec pe "hobstack-*" in app.js. Folderul implicit pentru proiecte noi: ~/HobStack.
+Gata (catalog MCP local, spec in docs/superpowers/specs/2026-10-10-hobstack-mcp-catalog-design.md): registrul oficial
+raspunde in 5-40 s la cautarile noi, deci mcpregistry.Catalog tine ultima versiune a fiecarui server in
+~/.hobstack/mcp-registry.db (fisier separat, schema cu user_version, refacut daca e stricat). Prima sincronizare completa
+pagina cu pagina (full_cursor + full_started in meta, reluata dupa restart; cursor respins = reia de la pagina 1), apoi
+actualizare cu updated_since = last_sync_at - 1 h (deleted/deprecated si versiunile refuzate de normalize scot randul).
+Goroutine in cmd/hobstack: la pornire si la fiecare ora daca Due (24 h). GET /api/library/registry cauta local cand e
+gata (cuvinte cu instr, nume exact primul, 30 pe pagina), altfel la registru cu timeout 60 s; raspunsul are catalog
+(state/count/updatedAt/syncing/lastError); /registry/status si POST /registry/sync (202/409). UI: randul de stare cu
+Update now (poll la 3 s cat ruleaza), cautare anulabila (api() primeste signal; erorile au status si data).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

@@ -1,7 +1,7 @@
 # HobStack: catalog local al registrului MCP
 
 Data: 2026-10-10
-Status: spec scris, de aprobat.
+Status: implementat (2026-10-10).
 
 ## Scop
 
