@@ -1498,3 +1498,43 @@ input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
 /* butoanele raman la vedere si cu multe variabile (telefon) */
 .mcp-dialog .lib-form-foot { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); z-index: 1; }
 .mcp-dialog .hint[hidden] { display: none; }
+
+/* Add skill (#/library/skill/add), fereastra de Install / Update si sursa pe pagina elementului */
+.label-tag.skill-official { background: var(--amber-bg); color: var(--amber); }
+.skill-meta { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: 13px; min-width: 0; }
+.skill-repo { color: var(--soft); font-size: 12.5px; overflow-wrap: anywhere; font-variant-ligatures: none; }
+.skill-repo:hover { color: var(--text); }
+.mcp-section > .hint[hidden] { display: none; }
+.skill-dialog.modal { max-width: 720px; }
+.skill-src-line { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.skill-src-line a { color: var(--text); }
+.skill-files-box { display: grid; gap: 8px; min-width: 0; }
+.skill-files { display: grid; border: 1px solid var(--line); border-radius: 10px; max-height: 240px; overflow-y: auto; background: var(--deep); }
+.skill-file { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 7px 12px; background: none; border: 0; border-top: 1px solid var(--line); color: var(--text); font: 13px var(--sans); text-align: left; cursor: pointer; }
+.skill-file:first-child { border-top: 0; }
+.skill-file:hover { background: var(--card); }
+.skill-file[aria-pressed="true"] { background: var(--amber-bg); }
+.skill-file:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+.skill-file-path { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12.5px; font-variant-ligatures: none; }
+.skill-file-size { flex: none; font-size: 12px; }
+.mcp-badge.warn { background: var(--red-bg); color: var(--red); }
+.skill-preview-head { font-size: 12.5px; color: var(--soft); overflow-wrap: anywhere; }
+.skill-preview-head[hidden], .skill-preview[hidden] { display: none; }
+.md-pre.skill-preview { margin: 0; padding: 12px 14px; max-height: 320px; overflow: auto; font-size: 12.5px; white-space: pre; }
+.skill-warn { margin: 0; padding: 10px 12px; border-radius: 9px; background: var(--amber-bg); color: var(--amber); font-size: 13.5px; }
+.skill-script-list { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; overflow-wrap: anywhere; }
+.skill-dialog .mcp-dlg-error[hidden] { display: none; }
+.skill-diff { display: grid; gap: 8px; min-width: 0; }
+.skill-diff .change-file { flex-wrap: wrap; }
+.skill-diff .change-body .diff { max-height: 360px; overflow: auto; }
+.skill-change { font: 600 11px var(--sans); padding: 1px 7px; border-radius: 6px; background: #353c48; color: var(--soft); }
+.skill-change.added { background: var(--teal-bg); color: var(--teal); }
+.skill-change.removed { background: var(--red-bg); color: var(--red); }
+.skill-change.modified { background: var(--amber-bg); color: var(--amber); }
+.lib-source { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; margin: 0 0 14px; font-size: 14px; color: var(--soft); min-width: 0; }
+.lib-source[hidden] { display: none; }
+.lib-source-from { overflow-wrap: anywhere; min-width: 0; }
+.lib-source-from a { color: var(--text); }
+.lib-update { display: inline-flex; align-items: center; gap: 7px; color: var(--amber); font-weight: 600; }
+.lib-update-dot { align-self: center; }
+.lib-install-adds { display: flex; gap: 8px; flex-wrap: wrap; }

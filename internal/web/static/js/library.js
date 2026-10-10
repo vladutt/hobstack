@@ -1,12 +1,13 @@
 import { api } from "./api.js";
 import { el, avatar, field, toast, topbar } from "./ui.js";
+import { shortRef, sourceNode, updateDialog } from "./skill-source.js";
 
 // Paginile Library: #/library/tools, #/library/skills, #/library/mcp si pagina unui element,
 // #/library/item/<id>. Tot textul vine din server (scris de agenti): se pune doar prin el() / textContent.
 
 const KINDS = {
   tool: { path: "tools", title: "Tools", one: "tool", add: "+ New tool", search: "Search tools…" },
-  skill: { path: "skills", title: "Skills", one: "skill", add: "+ New skill", search: "Search skills…" },
+  skill: { path: "skills", title: "Skills", one: "skill", add: "+ Add skill", form: "New skill", search: "Search skills…" },
   mcp: { path: "mcp", title: "MCP", one: "server", add: "+ Add server", search: "Search servers…" },
 };
 const KIND_BY_PATH = { tools: "tool", skills: "skill", mcp: "mcp" };
@@ -159,8 +160,9 @@ export async function libraryView(root, path) {
   const nameKind = kind === "mcp" ? "server" : kind;
   root.append(
     topbar("library", el("span", { class: "grow" }), search,
-      // MCP: pagina cu cautare in registru (formularul manual e acolo, "Add manually")
+      // MCP si skill-uri: pagina cu cautare (formularul manual e acolo, "Add manually")
       kind === "mcp" ? el("a", { class: "btn primary", href: "#/library/mcp/add" }, cfg.add)
+        : kind === "skill" ? el("a", { class: "btn primary", href: "#/library/skill/add" }, cfg.add)
         : el("button", { class: "btn primary", type: "button", onclick: () => newForm(kind, reload) }, cfg.add)),
     body);
 
@@ -303,6 +305,8 @@ export async function libraryView(root, path) {
       onclick: () => { selected = it.id; draw(); },
     },
       el("span", { class: "lib-skill-top" }, el("span", { class: "lib-icon" }, "✦"), el("span", { class: "lib-skill-name" }, it.name),
+        // sursa are o versiune noua (Add skill): punctul de pe card
+        it.updateAvailable ? el("span", { class: "dot-amber lib-update-dot", title: "Update available", "aria-label": "Update available" }) : null,
         el("span", { class: "lib-ver" + (it.status === "proposed" ? " flag" : "") }, it.status === "proposed" ? "Proposed" : it.version ? "v" + it.version.version : "")),
       el("span", { class: "lib-skill-desc" }, it.description),
       el("span", { class: "lib-skill-foot" }, el("span", { class: "lib-by" }, avatar(it.madeBy, "worker", 24), el("span", {}, it.madeBy)),
@@ -440,6 +444,45 @@ export async function libraryItemView(root, id, tab) {
     }
   });
   const toList = () => { location.hash = `#/library/${cfg.path}`; };
+
+  // sursa (skill-uri din Add skill): "From anthropics/skills @ 1ed29a0", "Update available" + Update
+  let left = false;
+  let closeUpdate = null; // fereastra de Update deschisa (se inchide la iesirea din pagina)
+  let inner = null; // pagina redesenata dupa Update (curatarea ei se cheama tot de aici)
+  const sourceBox = el("div", { class: "lib-source", hidden: !d.source });
+  function drawSource(note) {
+    if (!d.source) { sourceBox.hidden = true; return; }
+    sourceBox.hidden = false;
+    const update = d.updateAvailable && d.status === "published"
+      ? el("button", { type: "button", class: "btn small primary" }, "Update") : null;
+    update?.addEventListener("click", async () => {
+      closeUpdate = await updateDialog(d, update, () => {
+        if (left) return;
+        root.replaceChildren();
+        inner = libraryItemView(root, id, current);
+      });
+      if (left) closeUpdate?.(); // pagina parasita cat se pregatea
+    });
+    sourceBox.replaceChildren(...[
+      el("span", { class: "lib-source-from" }, "From ", sourceNode(d.source)),
+      d.updateAvailable ? el("span", { class: "lib-update" }, el("span", { class: "dot-amber" }), "Update available",
+        d.source.latest ? el("span", { class: "mono muted" }, " · " + shortRef(d.source.latest)) : null) : null,
+      update,
+      note ? el("span", { class: "hint" }, note) : null,
+    ].filter(Boolean));
+  }
+  drawSource("");
+  // verificarea sursei la deschidere, daca ultima e mai veche de o ora (limita GitHub = fara schimbare, fara eroare)
+  const checked = d.source?.checkedAt ? new Date(d.source.checkedAt).getTime() : 0;
+  if (d.source && !(Date.now() - checked < 60 * 60 * 1000)) {
+    api(`/api/library/items/${d.id}/source/check`, { method: "POST" }).then((res) => {
+      if (left || !res?.source) return;
+      d.source = res.source;
+      d.updateAvailable = !!res.updateAvailable;
+      drawSource(res.note || "");
+    }).catch(() => {});
+  }
+
   const side = el("aside", { class: "modal-side lib-side" },
     el("div", { class: "side-rows" },
       row("Type", kindWord),
@@ -464,15 +507,18 @@ export async function libraryItemView(root, id, tab) {
           el("span", { class: "mono current" }, d.name)),
         el("h1", { class: "lib-item-title" }, d.name),
         el("p", { class: "lib-item-desc" }, d.description),
+        sourceBox,
         tabBar, panel),
       side));
   drawTabs();
+  return () => { left = true; closeUpdate?.(); inner?.then((c) => c?.()); };
 }
 
 // ---------- formular "New tool / skill / server" ----------
 
 export function newForm(kind, onCreated) {
   const cfg = KINDS[kind];
+  const title = cfg.form || cfg.add.replace("+ ", "");
   const name = el("input", { type: "text", placeholder: kind === "skill" ? "romanian-ui-copy" : "pdf-offer", autocomplete: "off" });
   const desc = el("input", { type: "text", placeholder: "One line: what it does and when to use it" });
   const content = el("textarea", { class: "mono-area", rows: "10", placeholder: kind === "skill" ? "---\nname: ...\nwhen: ...\n---\nInstructions" : "#!/bin/sh\n..." });
@@ -511,9 +557,9 @@ export function newForm(kind, onCreated) {
     }
   });
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) close(); } },
-    el("div", { class: "modal lib-form", role: "dialog", "aria-modal": "true", "aria-label": cfg.add.replace("+ ", "") },
+    el("div", { class: "modal lib-form", role: "dialog", "aria-modal": "true", "aria-label": title },
       el("div", { class: "lib-form-body" },
-        el("h2", {}, cfg.add.replace("+ ", "")),
+        el("h2", {}, title),
         field("Name", name, "Lowercase letters, digits and dashes."),
         field("Description", desc),
         kind === "mcp" ? field("Runs", mode) : null,
