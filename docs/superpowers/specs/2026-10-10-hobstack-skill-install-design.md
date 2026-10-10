@@ -1,7 +1,7 @@
 # HobStack: Add skill din Claude si din skills.sh / Anthropic
 
 Data: 2026-10-10
-Status: spec scris, de aprobat.
+Status: implementat (2026-10-10).
 
 ## Scop
 

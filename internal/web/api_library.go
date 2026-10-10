@@ -25,6 +25,9 @@ type itemView struct {
 	store.LibraryItem
 	Version  *store.LibraryVersion `json:"version"` // null cat timp nu are nicio versiune publicata
 	Installs int                   `json:"installs"`
+	// Source: de unde a fost instalat (Add skill), null pentru celelalte elemente
+	Source          *store.LibrarySource `json:"source"`
+	UpdateAvailable bool                 `json:"updateAvailable"` // sursa are o referinta noua (latest != ref)
 }
 
 type installedIn struct {
@@ -60,6 +63,12 @@ func (s *Server) itemViewOf(it store.LibraryItem, installs int) (itemView, error
 	v := itemView{LibraryItem: it, Installs: installs}
 	if len(vs) > 0 {
 		v.Version = &vs[0]
+	}
+	src, err := s.st.GetLibrarySource(it.ID)
+	if err == nil {
+		v.Source, v.UpdateAvailable = &src, updateAvailable(src)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return itemView{}, err
 	}
 	return v, nil
 }
@@ -409,6 +418,9 @@ type libraryCreate struct {
 	Files       []library.TextFile `json:"files"`
 }
 
+// maxCreateBody: corpul JSON maxim la POST /api/library (un skill de 10 MB cu escapari).
+const maxCreateBody = 16 << 20
+
 // createLibraryItem face elementul, il publica ca 1.0 si intoarce itemView (201). Nu se instaleaza nicaieri
 // (nu are proiect sursa): utilizatorul il instaleaza pe fiecare proiect.
 func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
@@ -416,9 +428,19 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in libraryCreate
-	// pana la 1 MB de fisiere, plus ghilimele si escapari JSON: limita corpului e mai mare decat cea de 1 MB
-	if err := decodeMax(r, &in, 4<<20); err != nil {
-		fail(w, err)
+	// pana la 10 MB de fisiere la un skill (library.Limits), plus ghilimele si escapari JSON: limita corpului e
+	// mai mare; limitele pe tip le verifica WriteStaged
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxCreateBody+1))
+	if err != nil {
+		fail(w, badRequest("invalid body"))
+		return
+	}
+	if int64(len(raw)) > maxCreateBody {
+		writeErr(w, http.StatusRequestEntityTooLarge, "The files are too big (max 10 MB for a skill).")
+		return
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		fail(w, badRequest("invalid JSON"))
 		return
 	}
 	files := append([]library.TextFile(nil), in.Files...)
@@ -458,7 +480,7 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 	var staging string
 	if len(files) > 0 {
 		var ue library.UserError
-		if staging, _, _, err = s.lib.WriteStaged(files); errors.As(err, &ue) {
+		if staging, _, _, err = s.lib.WriteStaged(v.Kind, files); errors.As(err, &ue) {
 			fail(w, badRequest(ue.Msg))
 			return
 		} else if err != nil {

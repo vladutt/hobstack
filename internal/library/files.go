@@ -42,7 +42,8 @@ func (l *Lib) DiscardProposal(itemID int64) { os.RemoveAll(l.ProposalDir(itemID)
 // WriteStaged scrie fisierele facute de utilizator intr-un folder de lucru (.staging-*), cu aceleasi limite ca
 // CopyStaged. Caile trec prin checkRel si nu pot iesi din folder; sunt scrise doar in folderul proaspat creat.
 // Chemati AdoptStaged sau stergeti folderul.
-func (l *Lib) WriteStaged(files []TextFile) (staging string, nfiles, lines int, err error) {
+func (l *Lib) WriteStaged(kind string, files []TextFile) (staging string, nfiles, lines int, err error) {
+	maxFiles, maxBytes := Limits(kind)
 	if len(files) > maxFiles {
 		return "", 0, 0, UserError{fmt.Sprintf("too many files (max %d)", maxFiles)}
 	}
@@ -52,7 +53,7 @@ func (l *Lib) WriteStaged(files []TextFile) (staging string, nfiles, lines int, 
 	}
 	var list []item
 	seen := map[string]bool{}
-	total := 0
+	total := int64(0)
 	for _, f := range files {
 		rel, err := checkRel(f.Path)
 		if err != nil {
@@ -62,9 +63,9 @@ func (l *Lib) WriteStaged(files []TextFile) (staging string, nfiles, lines int, 
 			return "", 0, 0, UserError{fmt.Sprintf("duplicate file %q", f.Path)}
 		}
 		seen[rel] = true
-		total += len(f.Content)
+		total += int64(len(f.Content))
 		if total > maxBytes {
-			return "", 0, 0, UserError{"files are bigger than 1 MB in total"}
+			return "", 0, 0, UserError{fmt.Sprintf("files are bigger than %d MB in total", maxBytes>>20)}
 		}
 		list = append(list, item{rel, []byte(f.Content)})
 		lines += countLines([]byte(f.Content))

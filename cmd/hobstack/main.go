@@ -26,6 +26,7 @@ import (
 	"hobstack/internal/picker"
 	"hobstack/internal/runner"
 	"hobstack/internal/setup"
+	"hobstack/internal/skillsrc"
 	"hobstack/internal/store"
 	"hobstack/internal/team"
 	"hobstack/internal/web"
@@ -142,6 +143,8 @@ func start(args []string) error {
 		webSrv.SetCatalog(cat, ctx)
 		go syncCatalog(ctx, cat)
 	}
+	// verificarea zilnica a surselor skill-urilor din Library (la pornire si la fiecare ora)
+	go syncSkillSources(ctx, st, skillsrc.NewRemote(), home)
 	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
 	webSrv.SetOpener(opener.New())
 
@@ -188,6 +191,23 @@ func syncCatalog(ctx context.Context, cat *mcpregistry.Catalog) {
 			if err != nil && !errors.Is(err, mcpregistry.ErrSyncRunning) && ctx.Err() == nil {
 				log.Printf("mcp catalog: sync: %v", err)
 			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// syncSkillSources verifica sursele skill-urilor la pornire si apoi la fiecare ora;
+// CheckSources sare peste cele verificate in ultimele 24 h si se opreste la limita GitHub; home e pentru plugin-uri.
+func syncSkillSources(ctx context.Context, st *store.Store, r *skillsrc.Remote, home string) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		if err := skillsrc.CheckSources(ctx, st, r, home, time.Now()); err != nil && ctx.Err() == nil {
+			log.Printf("skill sources: %v", err)
 		}
 		select {
 		case <-ctx.Done():

@@ -300,7 +300,7 @@ var proposeLibraryTool = Tool{
 		"kind":        map[string]any{"type": "string", "enum": []string{"tool", "skill", "mcp"}},
 		"name":        str("lowercase-with-dashes, e.g. pdf-offer"),
 		"description": str("One sentence: what it does"),
-		"files":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Paths relative to your folder (max 20 files, 1 MB)"},
+		"files":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Paths relative to your folder (tool / mcp: max 20 files, 1 MB; skill: max 200 files, 10 MB)"},
 		"entry":       str("tool: the file to run, e.g. pdf-offer.sh"),
 		"command":     str("mcp (local): the command that starts the server, e.g. python3"),
 		"args":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "mcp (local): its arguments; ${DIR} is the server's folder"},

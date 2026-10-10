@@ -24,46 +24,46 @@ Autorul e senior PHP/Laravel, incepator in Go: cod simplu, idiomatic, comentat u
 - Preferinta: dependente minime. SQLite prin modernc.org/sqlite (pure Go, fara CGO).
 
 ## Stare
-Gata (felia 1, spec in docs/superpowers/specs/2026-09-29-hobstack-slice1-design.md): proiecte, echipe,
+Gata (felia 1, spec in docs/superpowers/specs/2026-09-29-foreman-slice1-design.md): proiecte, echipe,
 orchestrare prin MCP, board live, chat per agent, SQLite.
-Gata (echipe ca graf, spec in docs/superpowers/specs/2026-09-29-hobstack-team-graph-design.md): ierarhie cu mai multe
+Gata (echipe ca graf, spec in docs/superpowers/specs/2026-09-29-foreman-team-graph-design.md): ierarhie cu mai multe
 radacini si sub-lideri, reviewer per agent, editor canvas.
-Gata (wizard, spec in docs/superpowers/specs/2026-09-30-hobstack-setup-wizard-design.md): "Proiect nou cu AI":
+Gata (wizard, spec in docs/superpowers/specs/2026-09-30-foreman-setup-wizard-design.md): "Proiect nou cu AI":
 un analist Claude (doar citire) citeste folderul si propune proiectul si echipa prin tool-ul MCP propose_setup;
 utilizatorul editeaza propunerea si creeaza totul intr-o tranzactie. Pachet: internal/setup.
 Analiza ruleaza in fundal (sesiuni doar in memorie): apare pe Proiecte ca un card (Analyzing / Ready / Failed), redeschis prin #/setup/<id>.
-Gata (foldere, spec in docs/superpowers/specs/2026-09-30-hobstack-multi-folder-design.md): un proiect are unul sau mai multe
+Gata (foldere, spec in docs/superpowers/specs/2026-09-30-foreman-multi-folder-design.md): un proiect are unul sau mai multe
 foldere (tabel project_folders; primul e implicit). Fiecare agent lucreaza si scrie in folderul lui (agents.folder_id,
 NULL = primul), citeste restul prin --add-dir. Wizard-ul propune echipe si context per folder.
-Gata (wizard pe folder, spec in docs/superpowers/specs/2026-09-30-hobstack-folder-setup-design.md): "Set up agents with AI"
+Gata (wizard pe folder, spec in docs/superpowers/specs/2026-09-30-foreman-folder-setup-design.md): "Set up agents with AI"
 pe un folder al unui proiect existent; analistul propune contextul folderului si agenti noi sub un agent existent,
 adaugati cu store.AddAgents.
-Gata ("Needs you", spec in docs/superpowers/specs/2026-09-30-hobstack-needs-you-design.md): tool-ul MCP ask_user;
+Gata ("Needs you", spec in docs/superpowers/specs/2026-09-30-foreman-needs-you-design.md): tool-ul MCP ask_user;
 intrebarile deschise apar pe proiect, pe card, in chat si pe agent; raspunsul trezeste agentul si pune task-ul inapoi in
 coada (un task care asteapta raspuns nu e re-pus in coada la Stop team / restart).
-Gata (chat in wizard, spec in docs/superpowers/specs/2026-09-30-hobstack-wizard-chat-design.md): la pasul 3, panoul
+Gata (chat in wizard, spec in docs/superpowers/specs/2026-09-30-foreman-wizard-chat-design.md): la pasul 3, panoul
 "HobStack" reia sesiunea analistului (--resume) si schimba propunerea la cerere, cu Undo.
-Gata (task-uri blocate, spec in docs/superpowers/specs/2026-10-01-hobstack-stuck-tasks-design.md): verificare la 1 min;
+Gata (task-uri blocate, spec in docs/superpowers/specs/2026-10-01-foreman-stuck-tasks-design.md): verificare la 1 min;
 un task nemiscat 5 min (decizie la un agent idle sau In progress fara run) e impins automat o data, apoi apare in
 "Needs you" cu Nudge again / Open <agent>.
-Gata (modala de task, spec in docs/superpowers/specs/2026-10-01-hobstack-task-modal-design.md): istoric per task
+Gata (modala de task, spec in docs/superpowers/specs/2026-10-01-foreman-task-modal-design.md): istoric per task
 (task_events) inregistrat pe toate drumurile; card compact pe board si modala cu descriere, istoric, raport ascuns si actiuni.
-Gata (full autonomy, spec in docs/superpowers/specs/2026-10-01-hobstack-autonomy-design.md): comutator per proiect (agentii nu
+Gata (full autonomy, spec in docs/superpowers/specs/2026-10-01-foreman-autonomy-design.md): comutator per proiect (agentii nu
 intreaba, radacina decide in locul utilizatorului, fara bucla la blocaj); cererile de acces din permission_denials apar in
 "Needs you" in toate modurile, cu Enable Shell / Dismiss. Un task creat din board si dat radacinii nu trece singur in Done
 nici in modul autonom (decide utilizatorul), iar un run oprit fara report_done (cand agentul il putea chema) nu se accepta automat.
 Gata (new chat): butonul "New chat" din chat-ul unui agent sterge sesiunea Claude (urmatorul mesaj porneste una noua) si
 ascunde istoricul (agents.chat_from); mesajele vechi raman salvate, vizibile prin "Earlier messages".
-Gata (conversatia pe task, spec in docs/superpowers/specs/2026-10-01-hobstack-task-conversation-design.md): task_events cu
+Gata (conversatia pe task, spec in docs/superpowers/specs/2026-10-01-foreman-task-conversation-design.md): task_events cu
 destinatar si text complet; tab-ul Conversation din modala arata brief-ul, rapoartele, feedback-ul, intrebarile si ce a
 spus fiecare agent in run-urile pe task.
-Gata (modificarile pe task, spec in docs/superpowers/specs/2026-10-02-hobstack-task-changes-design.md): din stream-json
+Gata (modificarile pe task, spec in docs/superpowers/specs/2026-10-02-foreman-task-changes-design.md): din stream-json
 (tool_use + tool_use_result.structuredPatch) se salveaza diff-urile Edit/Write si comenzile Bash per task (task_changes);
 eticheta "N files" pe card si tab-ul Changes in modala.
-Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-hobstack-stages-design.md): etape de lucru per
+Gata (coloane proprii, spec in docs/superpowers/specs/2026-09-30-foreman-stages-design.md): etape de lucru per
 proiect (lucru/verificare, agenti per etapa, primul agent liber ia task-ul); dupa ultima etapa decide liderul
 (sau utilizatorul pentru task-urile create din board). Proiectele fara etape merg ca inainte.
-Gata (sarcini recurente, spec in docs/superpowers/specs/2026-10-03-hobstack-recurring-tasks-design.md): sarcini per
+Gata (sarcini recurente, spec in docs/superpowers/specs/2026-10-03-foreman-recurring-tasks-design.md): sarcini per
 proiect care creeaza task-uri pe un program (la N ore, zilnic, saptamanal; ora locala), pe ticker-ul din team.Run si o data
 la pornire (o singura rulare pentru cele ratate); sarite cat timp aparitia precedenta e deschisa; auto-accept optional.
 Pachet: internal/schedule.
@@ -71,14 +71,14 @@ Gata (Run history, spec in docs/superpowers/specs/2026-10-10-hobstack-recurring-
 recurenta (#/p/<pid>/tasks/recurring/<rid>, din "N runs" pe panoul Recurring): Files (fisierele tuturor rularilor si ale
 sub-task-urilor, grupate pe cale, T-N pe versiuni) si Runs (paginat cate 20, excerpt din raport, arhivatele estompate);
 store.RecurringHistory / RecurringCounts / RecurringFiles, GET /api/recurring/{id}/history si /files, recurring-history.js.
-Gata (Flow, spec in docs/superpowers/specs/2026-10-03-hobstack-task-flow-design.md): tab-ul Flow din modala de task arata
+Gata (Flow, spec in docs/superpowers/specs/2026-10-03-foreman-task-flow-design.md): tab-ul Flow din modala de task arata
 arborele de delegare de la radacina (store.TaskFlow, GET /api/tasks/{id}/flow), cu pasii din task_events si sub-task-urile
 intercalate; pasul "requested" leaga task-ul de mesajul din chat care l-a pornit (activeRun.request, doar in memorie).
-Gata (liderul adauga agenti, spec in docs/superpowers/specs/2026-10-06-hobstack-lead-adds-agents-design.md):
+Gata (liderul adauga agenti, spec in docs/superpowers/specs/2026-10-06-foreman-lead-adds-agents-design.md):
 tool-urile MCP add_agent / remove_agent pentru lideri si radacini (si fara echipa); agentul intra sub lider, cu
 tool-uri din ale liderului, max 6 adaugati; direct cu Full autonomy sau la cererea utilizatorului din chat, altfel
 aprobare in "Needs you" (agent_requests); remove = detasare.
-Gata (proiecte legate, spec in docs/superpowers/specs/2026-10-06-hobstack-project-links-design.md): utilizatorul leaga
+Gata (proiecte legate, spec in docs/superpowers/specs/2026-10-06-foreman-project-links-design.md): utilizatorul leaga
 proiecte (fara sens); agentii pun intrebari radacinii proiectului legat (ask_project / reply_to_project, max 3 deschise,
 anti-bucla) si liderii cer munca (request_project_work: task pentru radacina tinta, aprobat in "Needs you" la tinta,
 direct doar la cererea utilizatorului din chat); raportul se intoarce la Done (afterDone).
@@ -90,29 +90,29 @@ Gata (redesign UI dupa mockup-urile din ../screenshots): tema ardezie rece + fon
 in loc de sidebar; Proiecte ca tabel; pe proiect board-ul pe toata latimea cu "Needs you" ca prima coloana, Done cu "Show N more";
 chat-ul si detaliile agentului intr-un panou lateral care se inchide (starea in localStorage "hobstack-drawer"); modala de task pe
 doua coloane (continut + detalii); avatare colorate dupa nume (ui.toneOf, amber = radacina); canvas-ul se incadreaza pe noduri.
-Gata (Stats, spec in docs/superpowers/specs/2026-10-08-hobstack-project-stats-design.md): tab-ul Stats pe proiect
+Gata (Stats, spec in docs/superpowers/specs/2026-10-08-foreman-project-stats-design.md): tab-ul Stats pe proiect
 (Today / 7d / 30d / All): cheltuiala si tokeni pe agent si pe zi, task-uri create/terminate, mediana pana la Done,
 rata de succes a run-urilor, fisiere si comenzi, intrebari; store.ProjectStats + GET /api/projects/{id}/stats, grafice SVG in stats.js.
 Gata (fara pauza la pornire): la restart run-urile vechi devin interrupted, task-urile in lucru revin in Queued si
 echipele pornesc singure (Recover trezeste proiectele si decidentii). Pauza o pune doar utilizatorul (Stop team) sau un run
 care nu poate porni (anti-bucla); migrarea 020 a scos o data proiectele de pe pauzele puse de restarturile vechi.
-Gata (draft AI pentru agent nou, spec in docs/superpowers/specs/2026-10-08-hobstack-agent-draft-design.md): pachetul
+Gata (draft AI pentru agent nou, spec in docs/superpowers/specs/2026-10-08-foreman-agent-draft-design.md): pachetul
 internal/draft, run scurt doar citire cu tool-ul propose_agent; pagina Agent nou completeaza campurile neatinse.
 Costul nu intra in Total cost.
-Gata (Left for you, spec in docs/superpowers/specs/2026-10-08-hobstack-left-for-you-design.md): report_done
+Gata (Left for you, spec in docs/superpowers/specs/2026-10-08-foreman-left-for-you-design.md): report_done
 left_for_user, tick_left_for_user, comment_task; comentariile utilizatorului trezesc asignatul; task_todos
 (migrarea 021); cardul To fill in in Needs you.
-Gata (Library, spec in docs/superpowers/specs/2026-10-08-hobstack-library-design.md): tool-uri, skill-uri si servere MCP
+Gata (Library, spec in docs/superpowers/specs/2026-10-08-foreman-library-design.md): tool-uri, skill-uri si servere MCP
 refolosite intre proiecte. Tabelele library_* (migrarea 022); pachet internal/library: propuneri copiate cu OpenRoot,
 versiuni read-only, plugin per proiect pe hash (--plugin-dir), serverele MCP prin --mcp-config (fisier 0600 cu
 secrete), probe la Publish (30 s; fara probe pentru elementele facute de utilizator; "Publish without test" dupa confirmare).
 Tool-ul MCP propose_library_item (MCP local doar cu Shell). API + UI #/library,
 Instructions > Library cu secrete per proiect, "Recent use" pe pagina item-ului (tool ancorat pe <build>/<pid>-<hash>/bin/<nume>/ in comenzile
 Bash, MCP dupa mcp__<nume>__*, doar run-uri pe task).
-Gata (reguli pentru comenzi, spec in docs/superpowers/specs/2026-10-08-hobstack-command-rules-design.md): command_rules
+Gata (reguli pentru comenzi, spec in docs/superpowers/specs/2026-10-08-foreman-command-rules-design.md): command_rules
 (globale + override pe proiect, migrarea 023), Allow / Ask / Block pe prefixe pentru agentii cu Shell, pagina Settings;
 refuzurile pe Ask ajung in Needs you cu Allow once (command_grants) / Allow in this project / Block.
-Gata (aprobari pe task, spec in docs/superpowers/specs/2026-10-09-hobstack-task-grants-design.md): un grant din Needs you
+Gata (aprobari pe task, spec in docs/superpowers/specs/2026-10-09-foreman-task-grants-design.md): un grant din Needs you
 (command_grants.task_id, migrarea 029) tine pe toate run-urile agentului pe task (NULL = chat, pana la New chat) si intra in
 --settings ca Bash(prefix:*) in allow ("Allow once" a devenit "Allow "<prefix>" on T-N"); agentii fara Shell primesc cereri pe
 prefix calculat (prompt.NoShellRequests / CommandPrefix, access_requests.kind 'command'); Enable Shell / Allow package installs
@@ -122,14 +122,14 @@ HobStack si ca agentul nu cere aprobari in chat. Fara card pentru comenzile pe c
 tail, grep... verificat cu claude 2.1.295) si fara prefix pentru interpretoare/wrapper-e sau `git -C` (raman Enable Shell);
 `cd dir && git ...` e refuzat de claude fara Shell chiar cu Bash(cd:*). Instalarile (npm i, yarn/pnpm/bun add, pip3, cargo,
 gem, composer install, go install) sunt in refuzul fix fara tool-ul packages.
-Gata (chat doar de citire, spec in docs/superpowers/specs/2026-10-09-hobstack-chat-read-only-design.md): un run fara task
+Gata (chat doar de citire, spec in docs/superpowers/specs/2026-10-09-foreman-chat-read-only-design.md): un run fara task
 (chat, notificari, comentarii) primeste prompt.ReadOnlyTools (fara write/shell/packages, git doar citire: git-read) si linia
 prompt.ReadOnlyTurn; system prompt-ul ramane acelasi (sesiunea continua). Modificarile se fac pe task: tool-ul MCP
 start_task (doar in run-urile fara task) creeaza un task Queued pentru agent, fara etape, CreatorID gol, ByUser pentru
 cererile din chat, max 3 in lucru (Queued / In progress; evenimentul self_started); cu echipa oprita raspunsul spune
 ca task-ul porneste la Start team. Comentariile pe task cer modificarile printr-un task de continuare. Refuzurile Edit/Write/Bash din run-urile fara task nu fac
 cereri de acces. Verificat cu claude 2.1.295: Edit, redirectarea >, tee si git commit sunt refuzate, git log trece.
-Gata (cod colorat si fisierele modificate, spec in docs/superpowers/specs/2026-10-09-hobstack-code-view-design.md):
+Gata (cod colorat si fisierele modificate, spec in docs/superpowers/specs/2026-10-09-foreman-code-view-design.md):
 highlight.js 11.9.0 (build common ES, 36 de limbaje, static/vendor/highlight, BSD-3) prin static/js/highlight.js (languageFor,
 highlightInto, highlightLine; fara colorare peste 5000 linii / 500 KB) in markdown, diff-uri (changes.js: diffBlock) si
 previzualizari. Tab-ul Modified pe task (GET /api/tasks/{id}/modified, cu sub-task-urile) si modala de fisier (file-view.js,
@@ -137,7 +137,7 @@ GET /api/tasks/{id}/file?path=&task=): fisierul de acum de pe disc, doar cai din
 binar = NUL in primii 8 KB; marcajele added/modified/deleted din store.FileMarkers (fragmentele aplicate in ordine;
 exact=false fara numere de linie / trunchiat / Write fara fragmente). Deschisa din Modified, "View file" din Changes si
 numele de fisiere +/- din rapoarte; Esc inchide doar modala de fisier.
-Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-hobstack-task-files-design.md): report_done files
+Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
 modala (preview imagine/PDF/Markdown/text, Download, versiuni, "From subtasks"), eticheta 📎 N pe card; HTML/SVG nu
@@ -153,7 +153,7 @@ rename si le adauga sub t.work inainte de Kick (la eroare task-ul abia creat se 
 un task in lucru / blocat: nota in coada cu caile ("- <cale> (<nume>)") + Kick; review / done: doar evenimentul; in coada:
 nimic. Evenimentul user_files (cu caile) intra in istoric si in conversatie. Numele de agent "You" e rezervat
 (store.ReservedAgentName: CheckAgentFields, propunerea din wizard, draft-ul).
-Gata (cont Claude per proiect, spec in docs/superpowers/specs/2026-10-09-hobstack-claude-accounts-design.md):
+Gata (cont Claude per proiect, spec in docs/superpowers/specs/2026-10-09-foreman-claude-accounts-design.md):
 claude_accounts (migrarea 025; token din `claude setup-token`, camp privat, nu iese din API) + projects.account_id (NULL =
 Default, CLI-ul logat). runner.Spec.Env pune CLAUDE_CODE_OAUTH_TOKEN si scoate variabilele de cont mostenite (doar pe
 proiectele cu cont; Default mosteneste mediul neatins). Settings > Claude accounts: Check (runner.Check, haiku fara setarile
@@ -161,7 +161,7 @@ utilizatorului, sub o zecime de cent) si claude auth status pentru Default. Schi
 reseteaza sesiunile (ca New chat); o eroare de autentificare (runner.IsAuthError) pune proiectul pe pauza, task-ul inapoi in
 Queued si cardul "Claude account failed" in Needs you. Wizard-ul alege contul la pasul 1; draft-ul si wizard-ul pe folder
 folosesc contul proiectului.
-Gata (mutare si stergere, spec in docs/superpowers/specs/2026-10-09-hobstack-task-move-delete-design.md): drag & drop pe
+Gata (mutare si stergere, spec in docs/superpowers/specs/2026-10-09-foreman-task-move-delete-design.md): drag & drop pe
 board = actiunea coloanei (team.MoveTask: Accept, Send back, Unblock, Reopen, Close, mutare intre etape; In progress si
 Review nu primesc drop), meniul "⋯" de pe card (Move to… / Delete). Delete = arhivare (status archived, migrarea 026,
 archived_from/archived_root): run-ul se opreste, intrebarile/cererile legate se inchid, ListTasks/Subtasks nu le mai
@@ -180,13 +180,13 @@ gruparea tabelului pe categorii; cautarea cauta si in categorie. Campul Category
 categoriilor existente cu numarul de proiecte, deschisa la focus, plus "Create "X""; e in formularul de proiect si la pasul 3
 din wizard (POST /api/projects/setup primeste category). Eticheta categoriei pe rand (vizibila cand filtrezi sau cauti; click
 = filtru) si in header-ul proiectului (click = Proiecte filtrate).
-Gata (decizii usor de dat, spec in docs/superpowers/specs/2026-10-09-hobstack-easy-decisions-design.md): report_done primeste
+Gata (decizii usor de dat, spec in docs/superpowers/specs/2026-10-09-foreman-easy-decisions-design.md): report_done primeste
 decisions (max 5 intrebari cu 2-5 optiuni, multi) si user_steps (max 10, in task_todos cu kind step); task_decisions (migrarea
 030). Cand decide utilizatorul, modala arata Decide (radio/checkbox + Other), Your steps si zona de actiune (nota, motive rapide,
 Accept / Send back mari); POST /decide primeste answers: la Accept fiecare agent care a intrebat primeste in coada doar
 raspunsurile lui (si nota), la Send back raspunsurile intra in feedback; evenimentul decided dupa decizie; raspuns identic
 retrimis = no-op.
-Gata (install MCP din registru, spec in docs/superpowers/specs/2026-10-09-hobstack-mcp-install-design.md): pachetul
+Gata (install MCP din registru, spec in docs/superpowers/specs/2026-10-09-foreman-mcp-install-design.md): pachetul
 internal/mcpregistry cauta in registrul oficial (GET /v0/servers, cache 10 min, timeout 10 s, HOBSTACK_MCP_REGISTRY_URL
 doar http/https) si construieste comanda (npx/uvx/docker, fara runtimeArguments optionale; argumente sau header-e
 obligatorii = neinstalabil) si citeste serverele din ~/.claude.json si Claude Desktop cu valorile credentialelor ascunse
@@ -208,6 +208,13 @@ Goroutine in cmd/hobstack: la pornire si la fiecare ora daca Due (24 h). GET /ap
 gata (cuvinte cu instr, nume exact primul, 30 pe pagina), altfel la registru cu timeout 60 s; raspunsul are catalog
 (state/count/updatedAt/syncing/lastError); /registry/status si POST /registry/sync (202/409). UI: randul de stare cu
 Update now (poll la 3 s cat ruleaza), cautare anulabila (api() primeste signal; erorile au status si data).
+Gata (Add skill din Claude si skills.sh, spec in docs/superpowers/specs/2026-10-10-hobstack-skill-install-design.md): limite 200 de
+fisiere / 10 MB pentru skill-uri; library_sources (migrarea 031) tine sursa elementului. Pachet internal/skillsrc: cautare skills.sh,
+lista Official din anthropics/skills, Fetch in doua treceri fixat pe commit-ul folderului, surse locale (Claude Code, claude.ai
+sincronizat, plugin-uri), Fingerprint. Endpointuri /api/library/skills/*; folderele pregatite au token de 30 min; instalarea
+publica elementul si optional il activeaza; source/check|prepare|update inlocuiesc versiunea cu PublishReplaceStaged sub lock-ul
+elementului. UI #/library/skill/add (Official / From your Claude), avertismente pentru script-uri si continut sensibil, "Update
+available" cu diff, verificare zilnica a surselor (CheckSources, la pornire si din ora in ora; ErrRateLimited opreste bucla).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

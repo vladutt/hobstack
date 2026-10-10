@@ -28,6 +28,7 @@ import (
 	"hobstack/internal/models"
 	"hobstack/internal/runner"
 	wizard "hobstack/internal/setup" // alias: in pachetul web, "setup" e helper-ul din teste
+	"hobstack/internal/skillsrc"
 	"hobstack/internal/store"
 	"hobstack/internal/team"
 )
@@ -63,13 +64,18 @@ type Server struct {
 	home       func() (string, error) // folderul utilizatorului pentru configurarile Claude (testele dau unul temporar)
 
 	codeCache *codefiles.Cache // fisierele de cod pentru @ in chat (cateva secunde in memorie)
+
+	skills *skillsrc.Remote // skills.sh si GitHub (Library -> Add skill)
+	preps  *preparations    // skill-urile pregatite pentru Install / Update (doar in memorie)
+	now    func() time.Time // ceasul pentru expirarea pregatirilor (testele dau unul fals)
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
 	dirs Dirs, pick func(context.Context) (string, error), canPick bool) *Server {
 	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick,
 		codeCache: codefiles.NewCache(30 * time.Second),
-		registry:  mcpregistry.NewClient(), home: os.UserHomeDir}
+		registry:  mcpregistry.NewClient(), home: os.UserHomeDir,
+		skills: skillsrc.NewRemote(), preps: newPreparations(), now: time.Now}
 }
 
 // SetSetup activeaza wizard-ul "Proiect nou cu AI".
@@ -194,6 +200,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/library/registry/sync", s.syncRegistry)
 	mux.HandleFunc("GET /api/library/local-mcp", s.localMCP)
 	mux.HandleFunc("POST /api/library/install-mcp", s.installMCP)
+	mux.HandleFunc("GET /api/library/skills/search", s.searchSkills)
+	mux.HandleFunc("GET /api/library/skills/local", s.localSkills)
+	mux.HandleFunc("POST /api/library/skills/prepare", s.prepareSkill)
+	mux.HandleFunc("GET /api/library/skills/prepare/{token}/file", s.prepFile)
+	mux.HandleFunc("DELETE /api/library/skills/prepare/{token}", s.dropPrep)
+	mux.HandleFunc("POST /api/library/skills/install", s.installSkill)
+	mux.HandleFunc("POST /api/library/items/{id}/source/check", s.checkSource)
+	mux.HandleFunc("POST /api/library/items/{id}/source/prepare", s.prepareSourceUpdate)
+	mux.HandleFunc("POST /api/library/items/{id}/source/update", s.updateFromSource)
 	mux.HandleFunc("GET /api/library/{id}", s.getLibraryItem)
 	mux.HandleFunc("GET /api/library/{id}/files/{path...}", s.libraryFile)
 	mux.HandleFunc("POST /api/library/{id}/publish", s.publishLibraryItem)
