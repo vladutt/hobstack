@@ -217,6 +217,10 @@ sincronizat, plugin-uri), Fingerprint. Endpointuri /api/library/skills/*; folder
 publica elementul si optional il activeaza; source/check|prepare|update inlocuiesc versiunea cu PublishReplaceStaged sub lock-ul
 elementului. UI #/library/skill/add (Official / From your Claude), avertismente pentru script-uri si continut sensibil, "Update
 available" cu diff, verificare zilnica a surselor (CheckSources, la pornire si din ora in ora; ErrRateLimited opreste bucla).
+Gata (fara review cand nu s-a schimbat nimic): report_done sare peste reviewer daca run-ul curent n-a modificat fisiere si
+n-a rulat comenzi (runner.Manager.Activity, numarat din stream-json in timpul run-ului) si ultima decizie a reviewer-ului pe
+task a fost approved (team.skipReview); raportul merge la decident, evenimentul review_skipped. Dupa o respingere, la primul
+raport sau cu activitatea necunoscuta, reviewer-ul il primeste ca inainte.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
