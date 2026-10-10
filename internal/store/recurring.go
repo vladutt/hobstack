@@ -149,7 +149,7 @@ func (s *Store) RecurringHistory(id, before int64, limit int) ([]RecurringRun, b
 	}
 	out := make([]RecurringRun, 0, len(tasks))
 	for _, t := range tasks {
-		n, err := s.CountTaskFilesTree(t.ID)
+		n, err := s.countRunFiles(t.ID)
 		if err != nil {
 			return nil, false, err
 		}
@@ -177,10 +177,44 @@ func (s *Store) recurringTasks(id, before int64, n int) ([]Task, error) {
 	return out, rows.Err()
 }
 
+// runTreeStep: pasul recursiv peste sub-task-uri. Sub-task-urile arhivate se sar, mai putin cele
+// arhivate odata cu rularea (acelasi archived_root): o rulare stearsa isi pastreaza fisierele in istoric.
+const runTreeStep = `UNION ALL SELECT t.id, sub.aroot FROM tasks t JOIN sub ON t.parent_task_id = sub.id
+	WHERE t.status != 'archived' OR (sub.aroot IS NOT NULL AND t.archived_root = sub.aroot)`
+
 // RecurringFiles: fisierele rularilor (si ale celor arhivate) si ale sub-task-urilor lor, cel mai nou primul.
 func (s *Store) RecurringFiles(id int64) ([]TaskFile, error) {
-	return s.queryTaskFiles(`WITH RECURSIVE sub(id) AS (
-			SELECT id FROM tasks WHERE recurring_id = ?
-			UNION ALL SELECT t.id FROM tasks t JOIN sub ON t.parent_task_id = sub.id WHERE t.status != 'archived')
+	return s.queryTaskFiles(`WITH RECURSIVE sub(id, aroot) AS (
+			SELECT id, archived_root FROM tasks WHERE recurring_id = ? `+runTreeStep+`)
 		SELECT `+taskFileCols+` FROM task_files WHERE task_id IN (SELECT id FROM sub) ORDER BY id DESC`, id)
+}
+
+// countRunFiles: randurile de fisiere ale unei rulari si ale sub-task-urilor ei (cu versiuni).
+func (s *Store) countRunFiles(taskID int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`WITH RECURSIVE sub(id, aroot) AS (
+			SELECT id, archived_root FROM tasks WHERE id = ? `+runTreeStep+`)
+		SELECT COUNT(*) FROM task_files WHERE task_id IN (SELECT id FROM sub)`, taskID).Scan(&n)
+	return n, err
+}
+
+// RecurringRefs: id -> "T-N" pentru rularile sarcinii si sub-task-urile lor (aceeasi multime ca RecurringFiles).
+func (s *Store) RecurringRefs(id int64) (map[int64]string, error) {
+	rows, err := s.db.Query(`WITH RECURSIVE sub(id, aroot) AS (
+			SELECT id, archived_root FROM tasks WHERE recurring_id = ? `+runTreeStep+`)
+		SELECT id, number FROM tasks WHERE id IN (SELECT id FROM sub)`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]string{}
+	for rows.Next() {
+		var tid int64
+		var n int
+		if err := rows.Scan(&tid, &n); err != nil {
+			return nil, err
+		}
+		out[tid] = Task{Number: n}.Ref()
+	}
+	return out, rows.Err()
 }

@@ -31,6 +31,8 @@ export function recurringHistory({ projectId, recurringId, onClose, onEdit }) {
   let runs = [];           // rularile incarcate
   let more = false;
   let loadingMore = false;
+  let seq = 0;             // un load mai vechi decat ultimul nu mai scrie starea
+  let refreshTimer = null;
   const expanded = new Set(); // id-urile rularilor cu raportul intreg
 
   const titleId = "rh-title-" + recurringId;
@@ -63,21 +65,28 @@ export function recurringHistory({ projectId, recurringId, onClose, onEdit }) {
   dialog.focus();
   load();
 
-  // load: prima pagina (sau cate rulari erau incarcate, max 50), totalurile si fisierele
+  // load: prima pagina, totalurile si fisierele. La refresh, rularile mai vechi deja incarcate
+  // (prin Load more) raman sub pagina proaspata, ca lista sa nu se taie sub ochii utilizatorului.
   async function load() {
-    const limit = Math.min(Math.max(runs.length, PAGE), 50);
+    const my = ++seq;
     try {
       const [h, f] = await Promise.all([
-        api(`/api/recurring/${recurringId}/history?limit=${limit}`),
+        api(`/api/recurring/${recurringId}/history?limit=${PAGE}`),
         api(`/api/recurring/${recurringId}/files`),
       ]);
-      if (destroyed) return;
-      rec = h.recurring; counts = h.counts; runs = h.runs; more = h.more;
+      if (destroyed || my !== seq) return;
+      rec = h.recurring; counts = h.counts;
+      const last = h.runs[h.runs.length - 1];
+      const tail = last ? runs.filter((r) => r.id < last.id) : [];
+      if (tail.length) runs = h.runs.concat(tail); // more ramane al cozii pastrate
+      else { runs = h.runs; more = h.more; }
       files.show(f);
       filesSection.hidden = !f.files.length && !f.user.length;
       render();
     } catch (err) {
-      if (destroyed) return;
+      if (destroyed || my !== seq) return;
+      // dupa prima incarcare, o eroare trecatoare nu sterge ce se vede (doar 404 inseamna ca sarcina nu mai e)
+      if (rec && err.status !== 404) { toast(`Could not refresh the history: ${err.message}`); return; }
       const msg = err.status === 404 ? "This recurring task no longer exists." : `Could not load the history: ${err.message}`;
       body.replaceChildren(el("p", { class: "hint" }, msg));
       side.replaceChildren();
@@ -91,7 +100,9 @@ export function recurringHistory({ projectId, recurringId, onClose, onEdit }) {
     try {
       const h = await api(`/api/recurring/${recurringId}/history?limit=${PAGE}&before=${runs[runs.length - 1].id}`);
       if (destroyed) return;
-      runs = runs.concat(h.runs);
+      // un refresh terminat intre timp a putut schimba lista: adaugam doar ce e mai vechi decat ultima rulare
+      const lastId = runs.length ? runs[runs.length - 1].id : Infinity;
+      runs = runs.concat(h.runs.filter((r) => r.id < lastId));
       more = h.more;
       renderRuns();
     } catch (err) {
@@ -168,9 +179,15 @@ export function recurringHistory({ projectId, recurringId, onClose, onEdit }) {
 
   return {
     recurringId,
-    refresh() { if (!destroyed && !loadingMore) load(); },
+    // refresh: la evenimentele task ale proiectului; mai multe la rand se aduna intr-o singura cerere
+    refresh() {
+      if (destroyed) return;
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(load, 1000);
+    },
     destroy() {
       destroyed = true;
+      clearTimeout(refreshTimer);
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
       overlay.remove();

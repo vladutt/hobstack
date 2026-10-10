@@ -151,14 +151,16 @@ func TestRecurringHistory(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE tasks SET status = 'done', result = 'found 2' WHERE id IN (?, ?)`, r1.ID, r3.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ArchiveTasks([]int64{r2.ID}, r2.ID); err != nil {
-		t.Fatal(err)
-	}
+	sub2 := run(scout, &r2.ID) // sub-task al rularii arhivate: se arhiveaza odata cu ea (ca team.ArchiveTask)
 	f1 := file(r1, "leads.csv")
-	f2 := file(r2, "leads.csv") // rularea arhivata: fisierul ramane
+	f2 := file(r2, "leads.csv")  // rularea arhivata: fisierul ramane
+	f5 := file(sub2, "deep.csv") // si fisierul sub-task-ului ei
 	f3 := file(sub, "notes.md")
 	f4 := file(r3, "leads.csv")
 	file(o1, "other.csv")
+	if err := s.ArchiveTasks([]int64{r2.ID, sub2.ID}, r2.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	// totaluri: 3 rulari (sub-task-ul nu e rulare), 2 done, 0 open, 1 arhivata
 	c, err := s.RecurringCounts(scout.ID)
@@ -171,7 +173,7 @@ func TestRecurringHistory(t *testing.T) {
 	if err != nil || more || len(runs) != 3 || runs[0].ID != r3.ID || runs[1].ID != r2.ID || runs[2].ID != r1.ID {
 		t.Fatalf("history: %+v %v %v", runs, more, err)
 	}
-	if runs[0].Files != 2 || runs[1].Files != 1 || runs[0].Result != "found 2" || runs[1].Status != "archived" {
+	if runs[0].Files != 2 || runs[1].Files != 2 || runs[0].Result != "found 2" || runs[1].Status != "archived" {
 		t.Fatalf("campuri: %+v", runs)
 	}
 
@@ -191,11 +193,17 @@ func TestRecurringHistory(t *testing.T) {
 
 	// fisiere: ale rularilor (si arhivate) si ale sub-task-urilor, cel mai nou primul
 	files, err := s.RecurringFiles(scout.ID)
-	if err != nil || len(files) != 4 {
+	if err != nil || len(files) != 5 {
 		t.Fatalf("files: %+v %v", files, err)
 	}
-	if files[0].ID != f4.ID || files[1].ID != f3.ID || files[2].ID != f2.ID || files[3].ID != f1.ID {
+	if files[0].ID != f4.ID || files[1].ID != f3.ID || files[2].ID != f5.ID || files[3].ID != f2.ID || files[4].ID != f1.ID {
 		t.Fatalf("ordine: %+v", files)
+	}
+
+	// T-N-urile tuturor task-urilor din arborele rularilor (pentru versiunile din Files), o singura interogare
+	refs, err := s.RecurringRefs(scout.ID)
+	if err != nil || refs[r2.ID] != r2.Ref() || refs[sub2.ID] != sub2.Ref() || refs[sub.ID] != sub.Ref() || refs[o1.ID] != "" {
+		t.Fatalf("refs: %v %v", refs, err)
 	}
 
 	// sarcina fara rulari

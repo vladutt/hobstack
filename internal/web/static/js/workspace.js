@@ -1896,7 +1896,6 @@ export async function workspaceView(root, projectId, route) {
     renderAll();
     if (boardPanel === "recurring") recurring?.update(state.project); // formularul deschis nu se redeseneaza
     modal?.refresh(state.project); // modala deschisa isi reincarca task-ul
-    history?.refresh(); // o rulare noua sau un fisier nou apar fara refresh
     syncLive();
   }
   const scheduleReload = () => {
@@ -1930,6 +1929,8 @@ export async function workspaceView(root, projectId, route) {
     try { ev = JSON.parse(msg.data); } catch { return; }
     if (ev.type === "message" && ev.data.agentId === state.selected) addMessage(ev.data);
     if (ev.type === "files") loadFiles();
+    // Run history: doar la schimbarile de task (o rulare noua, un status, fisiere atasate), nu la fiecare mesaj
+    if (ev.type === "task") history?.refresh();
     scheduleReload();
   };
   events.onerror = () => { hadError = true; };

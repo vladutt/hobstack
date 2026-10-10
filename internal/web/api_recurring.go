@@ -238,16 +238,13 @@ func (s *Server) recurringFiles(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	refs := map[int64]string{}
+	refs, err := s.st.RecurringRefs(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	var mine, theirs []store.TaskFile
 	for _, f := range list {
-		if _, ok := refs[f.TaskID]; !ok {
-			if t, err := s.st.GetTask(f.TaskID); err == nil {
-				refs[f.TaskID] = t.Ref()
-			} else {
-				refs[f.TaskID] = ""
-			}
-		}
 		if f.FromUser() {
 			mine = append(mine, f)
 		} else {
