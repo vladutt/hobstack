@@ -322,6 +322,43 @@ func baseDecider(task store.Task, agents []store.Agent) (store.Agent, bool) {
 	return store.Agent{}, false
 }
 
+// activityReporter: runner-ul care stie cate modificari a facut un run pana acum (runner.Manager).
+type activityReporter interface {
+	Activity(runID string) (int, bool)
+}
+
+// skipReview: reviewer-ul nu mai primeste un raport cand run-ul curent n-a modificat niciun fisier si n-a
+// rulat nicio comanda, iar ultima decizie a reviewer-ului pe task a fost o aprobare (aceeasi stare pe care a
+// verificat-o deja). Dupa o respingere, la primul raport sau cand activitatea run-ului nu se stie: reviewer.
+func (t *Team) skipReview(task store.Task, worker store.Agent, agents []store.Agent, runID string) (store.Agent, bool) {
+	if worker.ReviewerID == nil || runID == "" {
+		return store.Agent{}, false
+	}
+	rev, ok := store.FindAgent(agents, *worker.ReviewerID)
+	if !ok {
+		return store.Agent{}, false
+	}
+	ar, ok := t.runs.(activityReporter)
+	if !ok {
+		return store.Agent{}, false
+	}
+	if n, known := ar.Activity(runID); !known || n > 0 {
+		return store.Agent{}, false
+	}
+	evs, err := t.st.ListTaskEvents(task.ID)
+	if err != nil {
+		return store.Agent{}, false
+	}
+	for i := len(evs) - 1; i >= 0; i-- {
+		e := evs[i]
+		if e.Actor != rev.Name || (e.Kind != "approved" && e.Kind != "rejected") {
+			continue
+		}
+		return rev, e.Kind == "approved"
+	}
+	return store.Agent{}, false
+}
+
 // reviewerOf intoarce reviewer-ul asignatului task-ului, daca are unul care exista.
 func reviewerOf(task store.Task, agents []store.Agent) (store.Agent, bool) {
 	w, ok := store.FindAgent(agents, task.AssigneeID)
@@ -910,9 +947,18 @@ func (t *Team) ReportDone(c mcp.Caller, ref, summary string) (string, error) {
 
 	task.Result = summary
 	clearOld()
-	who, err := t.toReview(&task, worker, agents, worker.Name+" finished "+task.Ref(), reportedNote(worker, summary), true)
+	// run fara nicio modificare dupa ce reviewer-ul a aprobat deja: nu mai are ce verifica, decide liderul / utilizatorul
+	assignee := worker
+	rev, skip := t.skipReview(task, worker, agents, c.RunID)
+	if skip {
+		assignee.ReviewerID = nil
+	}
+	who, err := t.toReview(&task, assignee, agents, worker.Name+" finished "+task.Ref(), reportedNote(worker, summary), true)
 	if err != nil {
 		return "", err
+	}
+	if skip {
+		t.taskEvent(task, "review_skipped", actorHobStack, "Review skipped: no changes since "+rev.Name+" approved it")
 	}
 	t.note(c.ProjectID, worker.ID, "Reported "+task.Ref(), true)
 	t.Kick(c.ProjectID)

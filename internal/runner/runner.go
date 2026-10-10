@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -81,6 +82,8 @@ type Run struct {
 	stopped bool
 	log     *os.File
 	cancel  context.CancelFunc
+
+	activity atomic.Int64 // fisiere modificate + comenzi Bash pana acum (pentru report_done in timpul run-ului)
 }
 
 // publish adauga un eveniment in istoric si in log si il trimite abonatilor.
@@ -180,6 +183,16 @@ func (m *Manager) Get(id string) (*Run, error) {
 	return r, nil
 }
 
+// Activity: cate fisiere a modificat si cate comenzi Bash a rulat pana acum run-ul. ok = false daca
+// run-ul nu (mai) e cunoscut.
+func (m *Manager) Activity(id string) (int, bool) {
+	r, err := m.Get(id)
+	if err != nil {
+		return 0, false
+	}
+	return int(r.activity.Load()), true
+}
+
 // Start porneste claude cu argumentele din spec. onDone (poate fi nil) e
 // apelat o singura data, dintr-o goroutine, dupa ce procesul s-a terminat.
 func (m *Manager) Start(spec Spec, onDone func(Outcome)) (*Run, error) {
@@ -264,6 +277,7 @@ func (m *Manager) pump(run *Run, cmd *exec.Cmd, stdout, stderr io.Reader, onDone
 		for sc.Scan() {
 			line := append([]byte(nil), sc.Bytes()...)
 			tr.observe(line)
+			run.activity.Store(int64(len(tr.changes) + len(tr.commands)))
 			run.publish(line)
 		}
 	}()
