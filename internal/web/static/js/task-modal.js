@@ -653,7 +653,9 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     // intrebarile deschise intra in cheie: un raport nou reconstruieste caseta Decide
     const open = mine ? (data.decisions || []).filter((d) => !d.answeredAt) : [];
     const openKey = JSON.stringify(open.map((d) => [d.id, d.question, d.options, d.multi]));
-    const key = [t.status, mine, byRoot, stuck, openKey].join("|");
+    // askName: cine primeste intrebarea din "Ask" (ca la comentarii: cel care a lasat punctele, altfel asignatul)
+    const askName = mine ? ((data.todos || []).length && data.todosBy ? data.todosBy : data.assignee) || "" : "";
+    const key = [t.status, mine, byRoot, stuck, openKey, askName].join("|");
     if (key === actionsKey) return;
     actionsKey = key;
 
@@ -667,10 +669,20 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     const parts = [];
     if (mine) {
       // Decide + zona de actiune (decide.js); nota scrisa se pastreaza cand caseta se reconstruieste
-      const hint = byRoot ? `${byRoot} decides this; you can decide it too.` : "You decide this task.";
+      const hint = (byRoot ? `${byRoot} decides this; you can decide it too.` : "You decide this task.") +
+        (askName ? ` A question for ${askName}? Write it and press Ask; Send back starts the work again.` : "");
       dbox = decideBox({
         decisions: open, hint, note: dbox ? dbox.note() : "",
         onSubmit: (action, feedback, answers) => actions.decide(t, action, feedback, answers),
+        // o intrebare nu e Send back: merge ca un comentariu doar la asignat
+        ask: askName ? { name: askName, onAsk: async (text) => {
+          try {
+            await api(`/api/tasks/${taskId}/comments`, { method: "POST", body: { text } });
+            setTab("conversation");
+            load();
+            return true;
+          } catch (err) { toast(err.message); return false; }
+        } } : null,
       });
       decideSlot.replaceChildren(...(dbox.el ? [dbox.el] : []));
       parts.push(dbox.actions);

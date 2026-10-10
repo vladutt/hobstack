@@ -37,9 +37,11 @@ export function appendReason(text, reason) {
 // - onSubmit(action, feedback, answers) -> Promise<bool>; action = "accept" | "send_back".
 // - hint: textul de deasupra butoanelor ("You decide this task.").
 // - note: textul initial al notei (pastrat cand caseta se reconstruieste).
+// - ask: optional { name, onAsk(text) -> Promise<bool> }: butonul "Ask <name>" trimite nota ca intrebare
+//   doar asignatului (comentariu), fara Send back: task-ul ramane la decizie si reviewer-ul nu e trezit.
 // Alegerile raman in pagina pana la Accept / Send back (nu se salveaza la fiecare click).
 // Intoarce { el, actions, answers(), note(), dirty() }; el e null cand nu sunt intrebari deschise.
-export function decideBox({ decisions, onSubmit, hint = "", note = "" }) {
+export function decideBox({ decisions, onSubmit, hint = "", note = "", ask = null }) {
   const open = (decisions || []).filter((d) => !d.answeredAt);
   const state = new Map(); // id -> { choices, other }
   const get = (id) => {
@@ -93,11 +95,20 @@ export function decideBox({ decisions, onSubmit, hint = "", note = "" }) {
   };
   accept.addEventListener("click", submit("accept"));
   back.addEventListener("click", submit("send_back"));
+  const askBtn = ask ? el("button", { type: "button", class: "btn ghost decide-btn", title: `Only ${ask.name} gets it; the task stays with you` }, `Ask ${ask.name}`) : null;
+  if (askBtn) askBtn.addEventListener("click", async () => {
+    const text = noteInput.value.trim();
+    if (!text) { noteInput.focus(); return; }
+    accept.disabled = back.disabled = askBtn.disabled = true;
+    const ok = await ask.onAsk(text);
+    accept.disabled = back.disabled = askBtn.disabled = false;
+    if (ok) noteInput.value = "";
+  });
   const actions = el("div", { class: "decide-zone" },
     hint ? el("p", { class: "hint" }, hint) : null,
     noteInput,
     el("div", { class: "decide-reasons", role: "group", "aria-label": "Quick reasons to send back" }, reasons),
-    el("div", { class: "decide-buttons" }, accept, back));
+    el("div", { class: "decide-buttons" }, accept, back, askBtn));
 
   return {
     el: box,

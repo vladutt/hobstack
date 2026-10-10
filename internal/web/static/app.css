@@ -324,7 +324,9 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .needs-you h2.needs-head .col-count { margin-left: auto; }
 /* sub-containerele nu sunt cutii: casetele lor stau direct in grila coloanei */
 .needs-questions, .needs-stuck, .needs-access, .needs-agent-requests, .needs-work-requests { display: contents; }
-.question { background: var(--card); border: 1px solid transparent; border-radius: 11px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.question { background: var(--card); border: 1px solid transparent; border-radius: 11px; padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
+/* optiunile pot fi propozitii lungi: se rup pe mai multe randuri in loc sa iasa din card */
+.question .actions .btn { height: auto; min-height: 30px; padding-block: 6px; white-space: normal; text-align: left; justify-content: flex-start; max-width: 100%; line-height: 1.35; }
 .question-head { font-size: 12px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; color: var(--muted); font-weight: 600;
   text-transform: uppercase; letter-spacing: .06em; }
 .question-head strong { color: var(--amber); font-weight: 700; }
@@ -380,13 +382,14 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .msg.me .bubble { background: var(--me); color: var(--text); max-width: min(90%, 480px); }
 .pending { font-size: 11px; color: var(--amber); }
 .event { font-size: 12px; color: var(--muted); text-align: center; padding: 2px 8px; overflow-wrap: anywhere; }
-:is(.thread, .wizard, .hobstack-chat) .live { border: 1px dashed var(--line-2); border-radius: 12px; padding: 12px; display: grid; gap: 8px; font-size: 13px; background: rgba(79, 195, 161, .03); }
+/* minmax(0, 1fr): fara el, coloana gridului ia latimea celui mai lung rand nowrap (comanda) si iese din chat */
+:is(.thread, .wizard, .hobstack-chat) .live { border: 1px dashed var(--line-2); border-radius: 12px; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; font-size: 13px; background: rgba(79, 195, 161, .03); }
 .live-head { color: var(--teal); font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .live-head::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); animation: pulse 1.4s ease-in-out infinite; }
 .live-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 :is(.thread, .wizard, .hobstack-chat) .live details { background: var(--bg); border-radius: 7px; padding: 5px 9px; }
 :is(.thread, .wizard, .hobstack-chat) .live summary { cursor: pointer; font-family: var(--mono); font-size: 11.5px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:is(.thread, .wizard, .hobstack-chat) .live pre { margin: 6px 0 0; white-space: pre-wrap; font-size: 11.5px; max-height: 240px; overflow: auto; font-family: var(--mono); }
+:is(.thread, .wizard, .hobstack-chat) .live pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; max-height: 240px; overflow: auto; font-family: var(--mono); }
 .err { color: var(--red); }
 .composer { border-top: 1px solid var(--line); padding: 14px 20px 16px; display: grid; position: relative; gap: 8px; }
 .composer form { display: flex; gap: 8px; align-items: center; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }

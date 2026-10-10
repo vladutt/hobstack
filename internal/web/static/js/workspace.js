@@ -1388,7 +1388,8 @@ export async function workspaceView(root, projectId, route) {
     if (blocked) line = el("span", { class: "task-line bad" }, "Blocked");
     else if (working) line = el("span", { class: "task-line working" }, el("span", { class: "dot working" }), `${worker.name} \u00b7 working`);
     else if ((state.project.fillIns || []).some((f) => f.taskId === t.id)) line = el("span", { class: "task-line warn" }, "Waiting on you");
-    else if (decides) line = el("span", { class: "task-line warn" }, "Waiting for you to decide");
+    // spune ce are de facut: Accept / Send back sunt in modala (cu intrebarile din Decide, daca sunt)
+    else if (decides) line = el("span", { class: "task-line warn", title: "Open the task to read the report and decide" }, "Your call: accept or send back");
     else if (stage) line = el("span", { class: "task-line warn" }, `With ${stage}`);
     else if (t.status === "in_progress") line = idleReason(t, who, byId, kids, stuck);
     const labels = [
