@@ -25,6 +25,9 @@ type itemView struct {
 	store.LibraryItem
 	Version  *store.LibraryVersion `json:"version"` // null cat timp nu are nicio versiune publicata
 	Installs int                   `json:"installs"`
+	// Source: de unde a fost instalat (Add skill), null pentru celelalte elemente
+	Source          *store.LibrarySource `json:"source"`
+	UpdateAvailable bool                 `json:"updateAvailable"` // sursa are o referinta noua (latest != ref)
 }
 
 type installedIn struct {
@@ -60,6 +63,12 @@ func (s *Server) itemViewOf(it store.LibraryItem, installs int) (itemView, error
 	v := itemView{LibraryItem: it, Installs: installs}
 	if len(vs) > 0 {
 		v.Version = &vs[0]
+	}
+	src, err := s.st.GetLibrarySource(it.ID)
+	if err == nil {
+		v.Source, v.UpdateAvailable = &src, updateAvailable(src)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return itemView{}, err
 	}
 	return v, nil
 }

@@ -317,13 +317,20 @@ func countLines(data []byte) int {
 // Publish face din propunere (peste versiunea curenta, daca exista) o versiune read-only,
 // o marcheaza publicata si o instaleaza in proiectul sursa.
 func (l *Lib) Publish(itemID int64, note string) (store.LibraryVersion, error) {
-	return l.publish(itemID, note, false, false)
+	return l.publish(itemID, note, false, false, false)
 }
 
 // PublishSkipTest ca Publish, dar fara testul serverului MCP local (ToolNames ramane gol). Pentru elementele
 // facute de utilizator si pentru "Publish without test", dupa confirmarea comenzii.
 func (l *Lib) PublishSkipTest(itemID int64, note string) (store.LibraryVersion, error) {
-	return l.publish(itemID, note, false, true)
+	return l.publish(itemID, note, false, true, false)
+}
+
+// PublishReplace ca PublishSkipTest, dar versiunea noua are doar fisierele propunerii: cele din versiunea
+// precedenta nu se mai copiaza dedesubt. Pentru Update-ul unui skill din sursa lui (fisierele sterse la
+// sursa dispar si din versiunea noua).
+func (l *Lib) PublishReplace(itemID int64, note string) (store.LibraryVersion, error) {
+	return l.publish(itemID, note, false, true, true)
 }
 
 // probeTimeout: cat asteptam un server MCP local sa raspunda la publicare (un `npx` poate descarca pachetul).
@@ -336,7 +343,7 @@ var ErrStatus = errors.New("the item is not in a state that allows this")
 // si pune direct starea declined. Elementul nu e niciodata published (published_at ramane NULL), deci niciun alt
 // proiect nu il poate instala. Doar pentru propuneri cu proiect sursa.
 func (l *Lib) KeepInSource(itemID int64, note string, skipTest bool) (store.LibraryVersion, error) {
-	return l.publish(itemID, note, true, skipTest)
+	return l.publish(itemID, note, true, skipTest, false)
 }
 
 // Decline respinge de tot o propunere (fara "Keep"): sterge fisierele si pune starea declined, sub lock-ul item-ului.
@@ -355,7 +362,8 @@ func (l *Lib) Decline(itemID int64) error {
 	return l.St.SetLibraryStatus(itemID, store.ItemDeclined)
 }
 
-func (l *Lib) publish(itemID int64, note string, keep, skipTest bool) (store.LibraryVersion, error) {
+// replace: versiunea noua nu porneste de la fisierele versiunii precedente (vezi PublishReplace).
+func (l *Lib) publish(itemID int64, note string, keep, skipTest, replace bool) (store.LibraryVersion, error) {
 	// o singura publicare pe item: altfel doua apeluri ar alege aceeasi versiune
 	mu := l.lockFor(l.itemMus, itemID)
 	mu.Lock()
@@ -433,7 +441,7 @@ func (l *Lib) publish(itemID int64, note string, keep, skipTest bool) (store.Lib
 		return store.LibraryVersion{}, err
 	}
 	defer os.RemoveAll(tmp) // dupa rename nu mai exista
-	if prev != "" && dirExists(prev) {
+	if prev != "" && dirExists(prev) && !replace {
 		if err := copyTree(prev, tmp); err != nil {
 			return store.LibraryVersion{}, err
 		}
