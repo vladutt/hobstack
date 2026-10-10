@@ -238,3 +238,25 @@ func TestRegistryStatusAndSync(t *testing.T) {
 		t.Fatalf("%s", raw)
 	}
 }
+
+// Cursor invalid pe catalogul gata: 400 cu starea catalogului, ca UI-ul sa reia cautarea de la prima pagina.
+func TestRegistryBadCursorIncludesCatalog(t *testing.T) {
+	e := setupLib(t)
+	reg, _ := catalogRegistry(t, nil, nil)
+	cat := openTestCatalog(t, reg.URL)
+	if err := cat.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.SetCatalog(cat, context.Background())
+	code, _, raw := e.get(t, "/api/library/registry?cursor=abc")
+	if code != http.StatusBadRequest {
+		t.Fatalf("%d %s", code, raw)
+	}
+	var out catalogOut
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Catalog == nil || out.Catalog.State != "ready" {
+		t.Fatalf("catalog lipsa din 400: %s", raw)
+	}
+}

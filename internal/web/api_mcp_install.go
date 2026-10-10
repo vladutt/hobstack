@@ -93,7 +93,8 @@ func (s *Server) searchRegistry(w http.ResponseWriter, r *http.Request) {
 	if s.catalog != nil && s.catalog.Ready() {
 		servers, next, err = s.catalog.Search(q.Get("search"), q.Get("cursor"))
 		if errors.Is(err, mcpregistry.ErrBadCursor) {
-			writeErr(w, http.StatusBadRequest, "Invalid cursor.")
+			// cu starea catalogului, ca UI-ul sa poata reincarca de la prima pagina
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid cursor.", "catalog": s.catalogStatus()})
 			return
 		}
 		if err != nil {

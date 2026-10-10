@@ -625,3 +625,45 @@ func TestOpenCatalogReplacesCorruptFile(t *testing.T) {
 		t.Fatalf("count = %d", st.Count)
 	}
 }
+
+// syncUpdate: catalog cu o singura intrare initiala, apoi o actualizare cu intrarile date.
+func syncUpdate(t *testing.T, initial map[string]any, update ...map[string]any) *Catalog {
+	t.Helper()
+	f, srv := newFakeRegistry(t)
+	f.setHandler(func(q url.Values) (int, any) { return 200, page("", initial) })
+	c := testCatalog(t, filepath.Join(t.TempDir(), "cat.db"), srv.URL)
+	first := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	c.now = func() time.Time { return first }
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.setHandler(func(q url.Values) (int, any) {
+		return 200, page("", update...)
+	})
+	c.now = func() time.Time { return first.Add(25 * time.Hour) }
+	if err := c.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestCatalogUpdateDeprecatedLatestRemovesOtherVersion(t *testing.T) {
+	c := syncUpdate(t, regEntry("io.github.a/srv", "1.0.0", "active", true, "2026-01-01T00:00:00Z"),
+		regEntry("io.github.a/srv", "2.0.0", "deprecated", true, "2026-10-10T01:00:00Z"),
+		regEntry("io.github.a/srv", "1.0.0", "active", false, "2026-10-10T01:00:00Z"),
+	)
+	if got := rowVersion(t, c, "io.github.a/srv"); got != "" {
+		t.Fatalf("version = %q, row trebuia sters", got)
+	}
+}
+
+func TestCatalogUpdateUnknownStatusIsActive(t *testing.T) {
+	for _, status := range []string{"", "weird"} {
+		c := syncUpdate(t, regEntry("io.github.a/srv", "1.0.0", "active", true, "2026-01-01T00:00:00Z"),
+			regEntry("io.github.a/srv", "1.1.0", status, true, "2026-10-10T01:00:00Z"),
+		)
+		if got := rowVersion(t, c, "io.github.a/srv"); got != "1.1.0" {
+			t.Errorf("status %q: version = %q, want 1.1.0", status, got)
+		}
+	}
+}

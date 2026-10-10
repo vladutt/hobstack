@@ -425,7 +425,9 @@ func (c *Catalog) update(ctx context.Context, start time.Time) error {
 }
 
 // applyUpdate aplica o intrare din actualizare:
-//   - deleted / deprecated pe versiunea din catalog -> randul se sterge;
+//   - deleted / deprecated pe ultima versiune -> randul se sterge dupa nume (orice versiune);
+//   - deleted / deprecated pe o versiune veche -> se sterge doar daca e versiunea din catalog;
+//   - status gol sau necunoscut = active (ca la prima sincronizare);
 //   - active + latest + normalize o accepta -> upsert (versiunea noua inlocuieste randul);
 //   - active + latest dar normalize o refuza -> randul se sterge dupa nume (orice versiune),
 //     pentru ca versiunea din catalog nu mai e ultima;
@@ -436,9 +438,15 @@ func applyUpdate(tx *sql.Tx, e rawEntry) error {
 	status, latest := "active", true
 	if o := e.entry.Meta.Official; o != nil {
 		status = o.Status
+		if !isGone(e.entry) {
+			status = "active"
+		}
 		latest = o.IsLatest == nil || *o.IsLatest
 	}
 	switch {
+	case isGone(e.entry) && latest:
+		_, err := tx.Exec(`DELETE FROM servers WHERE name = ?`, e.entry.Server.Name)
+		return err
 	case isGone(e.entry):
 		return deleteVersion(tx, e.entry.Server.Name, e.entry.Server.Version)
 	case status == "active" && latest:

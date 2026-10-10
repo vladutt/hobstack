@@ -171,6 +171,12 @@ export async function mcpAddView(root, projectId) {
     } catch (err) {
       // anulata de o cautare noua / de iesirea din pagina: fara eroare
       if (err.name === "AbortError" || closed || my !== seq) return;
+      // cursor invalid (de pe registrul live, catalogul s-a facut gata intre timp): cautare noua, prima pagina
+      if (err.status === 400 && append && cursor) {
+        if (err.data && "catalog" in err.data) setCatalog(err.data.catalog);
+        load(false);
+        return;
+      }
       searching = false;
       if (err.data && "catalog" in err.data) setCatalog(err.data.catalog);
       status.textContent = "";
