@@ -49,12 +49,13 @@ const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files"
 // taskFilesView: tab-ul "Files" al unui task. Click pe un rand deschide preview-ul in locul listei (cu Back).
 // onUpload(files) -> Promise: urca fisierele utilizatorului (lipsa = fara Upload); canUpload() -> false pe un task sters.
 // Intoarce { el, show(data), error(msg) }; data = raspunsul GET /api/tasks/{id}/files.
-export function taskFilesView({ onUpload = null, canUpload = () => true } = {}) {
+export function taskFilesView({ onUpload = null, canUpload = () => true, limit = 0 } = {}) {
   const root = el("div", { class: "tfiles" });
   let last = null;       // ultimul raspuns aratat
   let previewId = null;  // fisierul deschis (ramane deschis la refresh)
   const open = new Set(); // cai cu "earlier versions" desfasurat
   let uploading = false;  // un upload in curs (butonul e dezactivat)
+  let showAll = false;    // cu limit: toate grupurile, nu doar primele
 
   // Upload: input ascuns + drag & drop pe tot tab-ul
   const picker = el("input", { type: "file", multiple: true, hidden: true, class: "tfiles-picker",
@@ -127,7 +128,10 @@ export function taskFilesView({ onUpload = null, canUpload = () => true } = {}) 
     }
     if (last.files.length) {
       if (user.length) nodes.push(el("h4", { class: "tfiles-sub-head" }, "From agents"));
-      nodes.push(el("ul", { class: "tfiles-list" }, last.files.map(row)));
+      const cut = limit > 0 && !showAll && last.files.length > limit;
+      nodes.push(el("ul", { class: "tfiles-list" }, (cut ? last.files.slice(0, limit) : last.files).map(row)));
+      if (cut) nodes.push(el("button", { type: "button", class: "link-btn tfiles-more", onclick: () => { showAll = true; renderList(); } },
+        `Show all ${last.files.length}`));
     } else if (!user.length && !last.subtasks.length) {
       nodes.push(el("p", { class: "hint" }, "No files on this task yet."));
     }
@@ -155,13 +159,13 @@ export function taskFilesView({ onUpload = null, canUpload = () => true } = {}) 
       el("button", { type: "button", class: "tfiles-main", title: g.path, onclick: () => preview(g.id) },
         el("span", { class: "tfiles-name" }, g.name),
         dir ? el("span", { class: "tfiles-dir" }, dir) : null),
-      el("span", { class: "tfiles-meta" }, `${size(g.size)} · ${g.agentName} · ${ago(g.createdAt)}`),
+      el("span", { class: "tfiles-meta" }, `${size(g.size)} · ${g.agentName} · ${ago(g.createdAt)}${g.ref ? " · " + g.ref : ""}`),
       n ? el("button", { type: "button", class: "link-btn tfiles-meta", "aria-expanded": String(open.has(g.path)), onclick: () => toggle(g.path) },
         `${n} earlier ${n === 1 ? "version" : "versions"}`) : null,
       el("a", { class: "btn ghost small", href: url(g.id, true), download: g.name }, "Download"),
       open.has(g.path) ? el("ul", { class: "tfiles-versions" }, g.versions.map((v) => el("li", {},
         el("button", { type: "button", class: "link-btn", onclick: () => preview(v.id) }, ago(v.createdAt)),
-        el("span", { class: "tfiles-meta" }, ` ${size(v.size)} · ${v.agentName} · `),
+        el("span", { class: "tfiles-meta" }, ` ${size(v.size)} · ${v.agentName}${v.ref ? " · " + v.ref : ""} · `),
         el("a", { class: "link-btn", href: url(v.id, true), download: g.name }, "Download")))) : null);
   }
 

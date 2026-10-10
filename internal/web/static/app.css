@@ -764,6 +764,22 @@ pre.md-pre:not(.diff) { padding: 8px 12px; }
 .rec-opt { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
 .rec-opt input[type=radio] { accent-color: var(--amber); }
 .rec-opt input[type=number] { width: 76px; }
+.rec-info .rec-runs { color: var(--amber); }
+.rh-head { margin: 0 0 10px; font-size: 15px; font-weight: 650; }
+.rh-files .tfiles-more { margin-top: 8px; }
+.rh-runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rh-run { background: var(--card); border-radius: 11px; padding: 10px 14px; display: grid; gap: 6px; min-width: 0; }
+.rh-run.archived { opacity: .55; }
+.rh-run-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13px; }
+.rh-toggle { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.rh-toggle:disabled { cursor: default; }
+.rh-toggle[aria-expanded="true"] .rh-when::after { content: " ▾"; color: var(--soft); }
+.rh-toggle:not(:disabled)[aria-expanded="false"] .rh-when::after { content: " ▸"; color: var(--soft); }
+.rh-excerpt { margin: 0; font-size: 13px; color: var(--soft); overflow-wrap: anywhere; }
+.rh-run .md { font-size: 13px; overflow-wrap: anywhere; }
+.rh-side-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 4px 0; }
+.rh-side-row > span:last-child { text-align: right; overflow-wrap: anywhere; }
+.rh-side-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .rec-opt input[type=time] { width: auto; padding: 8px 10px; }
 .rec-opt input:disabled { opacity: .5; }
 .rec-days { display: flex; flex-wrap: wrap; gap: 4px; }
