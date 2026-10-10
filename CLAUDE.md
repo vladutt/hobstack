@@ -204,6 +204,13 @@ Goroutine in cmd/hobstack: la pornire si la fiecare ora daca Due (24 h). GET /ap
 gata (cuvinte cu instr, nume exact primul, 30 pe pagina), altfel la registru cu timeout 60 s; raspunsul are catalog
 (state/count/updatedAt/syncing/lastError); /registry/status si POST /registry/sync (202/409). UI: randul de stare cu
 Update now (poll la 3 s cat ruleaza), cautare anulabila (api() primeste signal; erorile au status si data).
+Gata (Add skill din Claude si skills.sh, spec in docs/superpowers/specs/2026-10-10-hobstack-skill-install-design.md): limite 200 de
+fisiere / 10 MB pentru skill-uri; library_sources (migrarea 031) tine sursa elementului. Pachet internal/skillsrc: cautare skills.sh,
+lista Official din anthropics/skills, Fetch in doua treceri fixat pe commit-ul folderului, surse locale (Claude Code, claude.ai
+sincronizat, plugin-uri), Fingerprint. Endpointuri /api/library/skills/*; folderele pregatite au token de 30 min; instalarea
+publica elementul si optional il activeaza; source/check|prepare|update inlocuiesc versiunea cu PublishReplaceStaged sub lock-ul
+elementului. UI #/library/skill/add (Official / From your Claude), avertismente pentru script-uri si continut sensibil, "Update
+available" cu diff, verificare zilnica a surselor (CheckSources, la pornire si din ora in ora; ErrRateLimited opreste bucla).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
