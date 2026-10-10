@@ -418,6 +418,9 @@ type libraryCreate struct {
 	Files       []library.TextFile `json:"files"`
 }
 
+// maxCreateBody: corpul JSON maxim la POST /api/library (un skill de 10 MB cu escapari).
+const maxCreateBody = 16 << 20
+
 // createLibraryItem face elementul, il publica ca 1.0 si intoarce itemView (201). Nu se instaleaza nicaieri
 // (nu are proiect sursa): utilizatorul il instaleaza pe fiecare proiect.
 func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
@@ -425,9 +428,19 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in libraryCreate
-	// pana la 1 MB de fisiere, plus ghilimele si escapari JSON: limita corpului e mai mare decat cea de 1 MB
-	if err := decodeMax(r, &in, 4<<20); err != nil {
-		fail(w, err)
+	// pana la 10 MB de fisiere la un skill (library.Limits), plus ghilimele si escapari JSON: limita corpului e
+	// mai mare; limitele pe tip le verifica WriteStaged
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxCreateBody+1))
+	if err != nil {
+		fail(w, badRequest("invalid body"))
+		return
+	}
+	if int64(len(raw)) > maxCreateBody {
+		writeErr(w, http.StatusRequestEntityTooLarge, "The files are too big (max 10 MB for a skill).")
+		return
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		fail(w, badRequest("invalid JSON"))
 		return
 	}
 	files := append([]library.TextFile(nil), in.Files...)

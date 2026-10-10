@@ -17,8 +17,12 @@ import (
 
 // Fingerprint e amprenta continutului unui folder: sha256 peste (cale relativa + "\x00" + un octet
 // pentru bitul executabil + marimea pe 8 octeti + continut) pentru fiecare fisier obisnuit, in
-// ordinea cailor. Folosita ca "ref" la sursele locale.
+// ordinea cailor. Folosita ca "ref" la sursele locale. Un dir symlink se rezolva o data (resolveDir).
 func Fingerprint(dir string) (string, error) {
+	dir, err := resolveDir(dir)
+	if err != nil {
+		return "", err
+	}
 	files, err := walkFiles(dir)
 	if err != nil {
 		return "", err

@@ -47,7 +47,7 @@ func TestCheckSources(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := CheckSources(context.Background(), st, r, now); err != nil {
+	if err := CheckSources(context.Background(), st, r, "", now); err != nil {
 		t.Fatal(err)
 	}
 	g, _ := st.GetLibrarySource(gh)
@@ -64,7 +64,7 @@ func TestCheckSources(t *testing.T) {
 	}
 
 	// peste 24 h se verifica din nou
-	if err := CheckSources(context.Background(), st, r, now.Add(25*time.Hour)); err != nil {
+	if err := CheckSources(context.Background(), st, r, "", now.Add(25*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if f, _ = st.GetLibrarySource(fresh); f.Latest != "abcdef1" {
@@ -86,7 +86,7 @@ func TestCheckSourcesRateLimited(t *testing.T) {
 	})
 	a := addSrc(t, st, "a", store.LibrarySource{Kind: store.SourceGitHub, Repo: "o/s", Path: "a"})
 	b := addSrc(t, st, "b", store.LibrarySource{Kind: store.SourceGitHub, Repo: "o/s", Path: "b"})
-	if err := CheckSources(context.Background(), st, r, time.Now()); err != nil {
+	if err := CheckSources(context.Background(), st, r, "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 {

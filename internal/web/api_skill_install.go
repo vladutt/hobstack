@@ -139,7 +139,16 @@ type skillIndex struct {
 	names      map[string]bool
 	github     map[string]bool // repo (litere mici) + "\x00" + cale
 	githubBase map[string]bool // repo + "\x00" + numele folderului (rezultatele skills.sh nu au calea)
-	local      map[string]bool // kind + "\x00" + cale
+	local      map[string]bool // kind + "\x00" + cale; plugin dupa cheie: localKey
+}
+
+// localKey: cheia unei surse locale in skillIndex.local. Plugin-urile salvate dupa cheie (Repo = nume@marketplace,
+// Path = numele skill-ului) nu au calea absoluta: o versiune noua a plugin-ului e tot "In library".
+func localKey(kind, repo, p string) string {
+	if kind == store.SourcePlugin && repo != "" {
+		return kind + "\x00" + repo + "\x00" + p
+	}
+	return kind + "\x00" + p
 }
 
 func (s *Server) skillLibraryIndex() (skillIndex, error) {
@@ -162,7 +171,7 @@ func (s *Server) skillLibraryIndex() (skillIndex, error) {
 			ix.github[repo+"\x00"+src.Path] = true
 			ix.githubBase[repo+"\x00"+folderName(src.Repo, src.Path)] = true
 		} else {
-			ix.local[src.Kind+"\x00"+src.Path] = true
+			ix.local[localKey(src.Kind, src.Repo, src.Path)] = true
 		}
 	}
 	return ix, nil
@@ -318,7 +327,8 @@ func (s *Server) localSkills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, ls := range skillsrc.LocalSkills(home) {
-		in := ix.names[suggestName(ls.Name)] || ix.local[ls.Kind+"\x00"+ls.Path]
+		in := ix.names[suggestName(ls.Name)] || ix.local[localKey(ls.Kind, "", ls.Path)] ||
+			(ls.PluginKey != "" && ix.local[localKey(ls.Kind, ls.PluginKey, ls.Name)])
 		out = append(out, localSkillView{LocalSkill: ls, InLibrary: in})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"skills": out})
@@ -399,7 +409,7 @@ func (s *Server) storePrep(w http.ResponseWriter, pr *prepared, diff []fileChang
 
 // fetchGitHub aduce skillID din repo la commit-ul sha in dir. Ref-ul intors e ultimul commit pe folderul
 // skill-ului pana la sha (acelasi continut ca la sha), ca verificarea pe cale sa nu vada un update fals; daca GitHub nu
-// raspunde la a doua cerere ramane sha.
+// raspunde la a doua cerere (ex. limita) ramane sha, iar skillsrc.CheckSource recunoaste ca acelasi continut.
 func (s *Server) fetchGitHub(ctx context.Context, repo, sha, skillID, dir string) (store.LibrarySource, error) {
 	p, err := s.skills.Fetch(ctx, repo, sha, skillID, dir)
 	if err != nil {
@@ -472,7 +482,12 @@ func (s *Server) prepareSkill(w http.ResponseWriter, r *http.Request) {
 			fail(w, badRequest(unknownLocal))
 			return
 		}
-		pr, ok := s.copyLocal(w, store.LibrarySource{Kind: found.Kind, Path: found.Path, Label: found.Label})
+		src := store.LibrarySource{Kind: found.Kind, Path: found.Path, Label: found.Label}
+		if found.PluginKey != "" {
+			// plugin: dupa cheie si numele skill-ului, ca update-ul sa urmeze versiunile plugin-ului
+			src.Repo, src.Path = found.PluginKey, found.Name
+		}
+		pr, ok := s.copyLocal(w, home, src)
 		if ok && fill(w, pr, found.Name) {
 			s.storePrep(w, pr, nil)
 		}
@@ -481,14 +496,24 @@ func (s *Server) prepareSkill(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// copyLocal copiaza folderul sursei locale intr-un folder de lucru; Ref = amprenta copiei.
-func (s *Server) copyLocal(w http.ResponseWriter, src store.LibrarySource) (*prepared, bool) {
+// copyLocal copiaza folderul de acum al sursei locale (skillsrc.ResolveLocal) intr-un folder de lucru;
+// Ref = amprenta copiei, Label = eticheta de acum (la plugin-uri cu versiunea instalata acum).
+func (s *Server) copyLocal(w http.ResponseWriter, home string, src store.LibrarySource) (*prepared, bool) {
+	from, label, err := skillsrc.ResolveLocal(home, src)
+	if errors.Is(err, skillsrc.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, sourceGoneMsg)
+		return nil, false
+	} else if err != nil {
+		fail(w, err)
+		return nil, false
+	}
+	src.Label = label
 	dir, err := s.lib.NewStaging()
 	if err != nil {
 		fail(w, err)
 		return nil, false
 	}
-	err = skillsrc.CopyLocal(src.Path, dir)
+	err = skillsrc.CopyLocal(from, dir)
 	if err == nil {
 		src.Ref, err = skillsrc.Fingerprint(dir)
 	}
@@ -684,6 +709,15 @@ func (s *Server) installSkill(w http.ResponseWriter, r *http.Request) {
 
 // --- sursa si Update ---
 
+// homeDir: folderul utilizatorului pentru sursele locale ("" daca nu se stie: plugin-urile dupa cheie = disparute).
+func (s *Server) homeDir() string {
+	home, err := s.home()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
 func updateAvailable(src store.LibrarySource) bool { return src.Latest != "" && src.Latest != src.Ref }
 
 // itemSource citeste elementul si sursa lui; false = raspunsul de eroare e scris.
@@ -720,7 +754,7 @@ func (s *Server) checkSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	note := ""
-	latest, err := skillsrc.CheckSource(r.Context(), s.skills, src)
+	latest, err := skillsrc.CheckSource(r.Context(), s.skills, s.homeDir(), src)
 	switch {
 	case err == nil:
 		if err := s.st.MarkSourceChecked(it.ID, latest, s.now()); err != nil {
@@ -764,7 +798,7 @@ func (s *Server) prepareSourceUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, notUpdatable)
 		return
 	}
-	latest, err := skillsrc.CheckSource(r.Context(), s.skills, src)
+	latest, err := skillsrc.CheckSource(r.Context(), s.skills, s.homeDir(), src)
 	switch {
 	case err == nil:
 		if err := s.st.MarkSourceChecked(it.ID, latest, s.now()); err != nil {
@@ -788,13 +822,8 @@ func (s *Server) prepareSourceUpdate(w http.ResponseWriter, r *http.Request) {
 			fail(w, err)
 			return
 		}
-		got, err := s.skills.Fetch(r.Context(), src.Repo, latest, folderName(src.Repo, src.Path), dir)
-		if err == nil && got != src.Path {
-			os.RemoveAll(dir)
-			writeErr(w, http.StatusUnprocessableEntity, "The skill moved in "+src.Repo+". Install it again from Add skill.")
-			return
-		}
-		if err != nil {
+		// calea exacta salvata la install: un alt folder cu acelasi nume nu il inlocuieste
+		if err := s.skills.FetchPath(r.Context(), src.Repo, latest, src.Path, dir); err != nil {
 			os.RemoveAll(dir)
 			remoteErr(w, err, "")
 			return
@@ -803,7 +832,7 @@ func (s *Server) prepareSourceUpdate(w http.ResponseWriter, r *http.Request) {
 		next.Ref = latest
 		pr = &prepared{dir: dir, source: next}
 	} else {
-		if pr, ok = s.copyLocal(w, src); !ok {
+		if pr, ok = s.copyLocal(w, s.homeDir(), src); !ok {
 			return
 		}
 	}
@@ -876,7 +905,7 @@ func (s *Server) updateFromSource(w http.ResponseWriter, r *http.Request) {
 	defer os.RemoveAll(staging) // dupa adoptare nu mai exista
 	// mutarea in propunere si publicarea sub acelasi lock al elementului; versiunea noua are exact fisierele
 	// sursei (fara cele sterse intre timp la sursa)
-	if _, err := s.lib.PublishReplaceStaged(it.ID, staging, "Updated from "+src.Label); errors.Is(err, library.ErrStatus) {
+	if _, err := s.lib.PublishReplaceStaged(it.ID, staging, "Updated from "+pr.source.Label); errors.Is(err, library.ErrStatus) {
 		writeErr(w, http.StatusConflict, notUpdatable)
 		return
 	} else if err != nil {

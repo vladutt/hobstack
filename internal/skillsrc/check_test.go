@@ -22,8 +22,10 @@ func TestCheckSourceGitHub(t *testing.T) {
 		}
 		if req.URL.Path == "/api/repos/o/skills/commits" {
 			gotPath = req.URL.Query().Get("path")
-			if req.URL.Query().Get("sha") != "" {
-				t.Errorf("verificarea trebuie sa ceara ramura implicita, nu %q", req.URL.Query().Get("sha"))
+			// cu &sha=<ref>: istoria pana la ref-ul instalat, al carui ultim commit pe cale e chiar ref-ul
+			if at := req.URL.Query().Get("sha"); at != "" {
+				w.Write([]byte(`[{"sha":"` + at + `"}]`))
+				return
 			}
 			w.Write([]byte(`[{"sha":"` + sha + `"}]`))
 			return
@@ -31,15 +33,15 @@ func TestCheckSourceGitHub(t *testing.T) {
 		http.NotFound(w, req)
 	})
 	src := store.LibrarySource{Kind: store.SourceGitHub, Repo: "o/skills", Path: "skills/pdf", Ref: "aaaaaaa1"}
-	if got, err := CheckSource(context.Background(), r, src); err != nil || got != "aaaaaaa1" || gotPath != "skills/pdf" {
+	if got, err := CheckSource(context.Background(), r, "", src); err != nil || got != "aaaaaaa1" || gotPath != "skills/pdf" {
 		t.Fatalf("%q %v %q", got, err, gotPath)
 	}
 	sha = "bbbbbbb2" // commit nou
-	if got, err := CheckSource(context.Background(), r, src); err != nil || got != "bbbbbbb2" {
+	if got, err := CheckSource(context.Background(), r, "", src); err != nil || got != "bbbbbbb2" {
 		t.Fatalf("%q %v", got, err)
 	}
 	limited = true
-	if _, err := CheckSource(context.Background(), r, src); !errors.Is(err, ErrRateLimited) {
+	if _, err := CheckSource(context.Background(), r, "", src); !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("limita: %v", err)
 	}
 }
@@ -48,17 +50,17 @@ func TestCheckSourceLocal(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "mine")
 	writeFile(t, filepath.Join(dir, "SKILL.md"), "v1")
 	src := store.LibrarySource{Kind: store.SourceClaudeCode, Path: dir}
-	a, err := CheckSource(context.Background(), nil, src)
+	a, err := CheckSource(context.Background(), nil, "", src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(dir, "SKILL.md"), "v2")
-	b, err := CheckSource(context.Background(), nil, src)
+	b, err := CheckSource(context.Background(), nil, "", src)
 	if err != nil || a == b {
 		t.Fatalf("schimbat: %q %q %v", a, b, err)
 	}
 	os.RemoveAll(dir)
-	_, err = CheckSource(context.Background(), nil, src)
+	_, err = CheckSource(context.Background(), nil, "", src)
 	if !errors.Is(err, ErrNotFound) || err.Error() != "Source no longer on this machine." {
 		t.Fatalf("disparut: %v", err)
 	}

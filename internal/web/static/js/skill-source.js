@@ -213,8 +213,9 @@ function diffNode(path, hunks) {
   return [diffBlock(path, shown), more ? el("p", { class: "hint skill-diff-cut" }, `Diff truncated: ${more} more ${more === 1 ? "line" : "lines"}.`) : null];
 }
 
-// diffList: lista schimbarilor pe fisiere (primele 3 deschise), fiecare cu diff-ul ei
-export function diffList(diff) {
+// diffList: lista schimbarilor pe fisiere (primele 3 deschise), fiecare cu diff-ul ei; sensitive = caile din
+// versiunea noua marcate "sensitive" (primesc eticheta, ca in lista de la install)
+export function diffList(diff, sensitive = new Set()) {
   if (!diff?.length) {
     return el("p", { class: "hint" }, "No file changes. Only the source reference moved.");
   }
@@ -234,6 +235,7 @@ export function diffList(diff) {
     const btn = el("button", { type: "button", class: "change-file", "aria-expanded": String(i < 3) },
       el("span", { class: "change-path" }, d.path),
       el("span", { class: `skill-change ${d.change}` }, CHANGE[d.change] || d.change),
+      sensitive.has(d.path) ? el("span", { class: "mcp-badge warn" }, "sensitive") : null,
       hunks ? statBadge({ added, removed }) : null);
     btn.addEventListener("click", () => {
       body.hidden = !body.hidden;
@@ -282,11 +284,14 @@ export async function updateDialog(item, button, onDone) {
   // in afara de cele sterse, care in versiunea noua e script. Un fisier neschimbat nu apare in diff.
   const scriptNow = new Set(files.filter((f) => f.script).map((f) => f.path));
   const scripts = diff.filter((d) => d.change !== "removed" && scriptNow.has(d.path));
+  // fisierele cu posibile secrete adaugate sau schimbate: acelasi avertisment ca la install
+  const sensitiveNow = new Set(files.filter((f) => f.sensitive).map((f) => f.path));
+  const secrets = diff.some((d) => d.change !== "removed" && sensitiveNow.has(d.path));
   const goLabel = `Update to ${shortRef(prep.source?.ref)}`;
   const body = el("div", { class: "lib-form-body" });
   const foot = el("div", { class: "lib-form-foot" });
   const btn = (text, cls, onclick) => el("button", { type: "button", class: "btn " + cls, onclick }, text);
-  const diffNode = diffList(diff);
+  const diffNode = diffList(diff, sensitiveNow);
 
   function form() {
     body.replaceChildren(
@@ -297,6 +302,8 @@ export async function updateDialog(item, button, onDone) {
       el("p", { class: "hint" }, counts.length
         ? counts.map(([c, n]) => `${n} ${CHANGE[c]}`).join(" · ") + ` · ${plural(files.length, "file", "files")} in the new version`
         : "Nothing changed in the files."),
+      secrets ? el("p", { class: "skill-warn", role: "note" },
+        "This skill includes files that may hold secrets (.env, keys). Check them before updating.") : null,
       diffNode,
       el("p", { class: "hint" }, "Projects that installed it can move to the new version in Instructions › Library, like with any new Library version."));
     const go = btn(goLabel, "primary", () => { if (scripts.length) confirmStep(); else send(go); });

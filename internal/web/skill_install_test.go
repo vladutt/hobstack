@@ -32,6 +32,7 @@ type fakeGitHub struct {
 	searchSt  int               // != 0: statusul raspunsului la cautare
 	limited   bool              // API-ul raspunde 403 cu X-RateLimit-Remaining: 0
 	pathRefs  []string          // parametrul sha din cererile commits?path=
+	pathLimit bool              // doar commits?path= raspunde cu limita GitHub
 	apiCalls  int
 }
 
@@ -78,7 +79,21 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if repo, ok := strings.CutSuffix(rest, "/commits"); ok {
-			f.pathRefs = append(f.pathRefs, r.URL.Query().Get("sha"))
+			at := r.URL.Query().Get("sha")
+			f.pathRefs = append(f.pathRefs, at)
+			if f.pathLimit {
+				w.Header().Set("X-RateLimit-Remaining", "0")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			// istoria pana la un commit de pe cale (ref-ul instalat): ultimul commit pe cale e chiar el;
+			// pana la HEAD (sau fara sha): commit-ul de acum de pe cale
+			if at != "" && at != f.head[repo] {
+				if _, ok := f.pathSHA[repo+":"+r.URL.Query().Get("path")]; ok {
+					json.NewEncoder(w).Encode([]map[string]string{{"sha": at}})
+					return
+				}
+			}
 			sha, ok := f.pathSHA[repo+":"+r.URL.Query().Get("path")]
 			if !ok {
 				json.NewEncoder(w).Encode([]any{})

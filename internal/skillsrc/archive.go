@@ -65,11 +65,59 @@ func (l *limitReader) Read(p []byte) (int, error) {
 // numit <id>, apoi frontmatter name: <id>; la egalitate calea cea mai scurta, apoi alfabetic) si
 // scrie doar fisierele lui in destDir. Intoarce calea folderului in repo ("" = radacina).
 func (r *Remote) Fetch(ctx context.Context, repo, sha, skillID, destDir string) (string, error) {
-	if !ValidRepo(repo) {
-		return "", fmt.Errorf("invalid repository %q", repo)
-	}
 	if !ValidSkillID(skillID) {
 		return "", fmt.Errorf("invalid skill id %q", skillID)
+	}
+	return r.fetch(ctx, repo, sha, skillID, destDir, func(skillMDs map[string][]byte) (string, error) {
+		dir, ok := pickFolder(skillMDs, repo, skillID)
+		if !ok {
+			return "", errorf(ErrNotFound, "Couldn't find the skill %s in %s.", skillID, repo)
+		}
+		return dir, nil
+	})
+}
+
+// FetchPath e Fetch pe calea exacta a folderului in repo (dir, "" = radacina), folosit la Update: fara cautare
+// dupa nume, deci un alt folder cu acelasi nume aparut intre timp nu il inlocuieste. Fara SKILL.md la calea
+// aceea: ErrNotFound "The skill moved or was removed in <repo>."
+func (r *Remote) FetchPath(ctx context.Context, repo, sha, dir, destDir string) error {
+	if !validRepoPath(dir) {
+		return fmt.Errorf("invalid path %q", dir)
+	}
+	name := path.Base(dir)
+	if dir == "" {
+		_, name, _ = strings.Cut(repo, "/")
+	}
+	_, err := r.fetch(ctx, repo, sha, name, destDir, func(skillMDs map[string][]byte) (string, error) {
+		if _, ok := skillMDs[dir]; !ok {
+			return "", errorf(ErrNotFound, "The skill moved or was removed in %s.", repo)
+		}
+		return dir, nil
+	})
+	return err
+}
+
+// validRepoPath: o cale relativa curata in repo, cu /, fara "..", "." sau .git ("" = radacina).
+func validRepoPath(p string) bool {
+	if p == "" {
+		return true
+	}
+	if strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\\x00:") || path.Clean(p) != p {
+		return false
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == "." || part == ".." || part == ".git" {
+			return false
+		}
+	}
+	return true
+}
+
+// fetch descarca arhiva si scrie in destDir fisierele folderului ales de pick (din folderele cu SKILL.md);
+// name apare in mesajele despre limite.
+func (r *Remote) fetch(ctx context.Context, repo, sha, name, destDir string, pick func(map[string][]byte) (string, error)) (string, error) {
+	if !ValidRepo(repo) {
+		return "", fmt.Errorf("invalid repository %q", repo)
 	}
 	if !shaRe.MatchString(sha) {
 		return "", fmt.Errorf("invalid commit %q", sha)
@@ -111,9 +159,9 @@ func (r *Remote) Fetch(ctx context.Context, repo, sha, skillID, destDir string) 
 	if err != nil {
 		return "", err
 	}
-	dir, ok := pickFolder(skillMDs, repo, skillID)
-	if !ok {
-		return "", errorf(ErrNotFound, "Couldn't find the skill %s in %s.", skillID, repo)
+	dir, err := pick(skillMDs)
+	if err != nil {
+		return "", err
 	}
 	inSkill := func(rel string) bool { return dir == "" || strings.HasPrefix(rel, dir+"/") }
 
@@ -127,10 +175,10 @@ func (r *Remote) Fetch(ctx context.Context, repo, sha, skillID, destDir string) 
 		}
 	}
 	if n > maxFiles {
-		return "", errorf(ErrTooLarge, "The skill %s has more than %d files.", skillID, maxFiles)
+		return "", errorf(ErrTooLarge, "The skill %s has more than %d files.", name, maxFiles)
 	}
 	if total > maxBytes {
-		return "", errorf(ErrTooLarge, "The skill %s is larger than %d MB.", skillID, maxBytes>>20)
+		return "", errorf(ErrTooLarge, "The skill %s is larger than %d MB.", name, maxBytes>>20)
 	}
 
 	// trecerea 2: doar fisierele folderului ales, direct in destDir

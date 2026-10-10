@@ -31,7 +31,8 @@ type LocalSkill struct {
 	Label       string `json:"label"`  // eticheta salvata la sursa; la plugin-uri cu versiunea ("Plugin: superpowers 6.4.1")
 	Name        string `json:"name"`   // numele folderului
 	Description string `json:"description"`
-	Path        string `json:"path"` // calea absoluta a folderului
+	Path        string `json:"path"`                // calea absoluta a folderului (la un symlink din ~/.claude/skills, calea link-ului)
+	PluginKey   string `json:"pluginKey,omitempty"` // doar la plugin-uri: cheia "nume@marketplace" din installed_plugins.json
 }
 
 // LocalSkills citeste cele trei surse din home. Fisierele lipsa sau stricate se ignora.
@@ -39,8 +40,9 @@ func LocalSkills(home string) []LocalSkill {
 	var out []LocalSkill
 	skillsDir := filepath.Join(home, ".claude", "skills")
 
-	// Claude Code: ~/.claude/skills/<nume>, fara folderul special "synced"
-	for _, d := range skillDirs(skillsDir) {
+	// Claude Code: ~/.claude/skills/<nume>, fara folderul special "synced"; aici (si doar aici) un symlink spre
+	// un folder cu SKILL.md conteaza (ex. find-skills -> ../../.agents/skills/find-skills)
+	for _, d := range skillDirs(skillsDir, true) {
 		if d.name == "synced" {
 			continue
 		}
@@ -50,10 +52,10 @@ func LocalSkills(home string) []LocalSkill {
 
 	// claude.ai: ~/.claude/skills/synced/<cont>/<nume> + manifest.json pentru descrieri
 	synced := filepath.Join(skillsDir, "synced")
-	for _, acct := range subdirs(synced) {
+	for _, acct := range subdirs(synced, false) {
 		acctDir := filepath.Join(synced, acct)
 		descs := manifestDescriptions(filepath.Join(acctDir, "manifest.json"))
-		for _, d := range skillDirs(acctDir) {
+		for _, d := range skillDirs(acctDir, false) {
 			desc := d.desc
 			if m, ok := descs[d.name]; ok && m != "" {
 				desc = m
@@ -63,32 +65,54 @@ func LocalSkills(home string) []LocalSkill {
 		}
 	}
 
-	// plugin-uri: installed_plugins.json -> <installPath>/skills/<nume>
+	// plugin-uri: installed_plugins.json -> <installPath>/skills/<nume> (prima instalare a fiecarei chei)
 	seen := map[string]bool{}
-	for _, p := range installedPlugins(filepath.Join(home, ".claude", "plugins", "installed_plugins.json")) {
+	for _, p := range installedPlugins(pluginsFile(home)) {
 		if seen[p.path] {
 			continue
 		}
 		seen[p.path] = true
-		source := "Plugin: " + p.name
-		label := source
-		if p.version != "" {
-			label += " " + p.version
-		}
-		for _, d := range skillDirs(filepath.Join(p.path, "skills")) {
-			out = append(out, LocalSkill{Source: source, Kind: KindPlugin, Label: label,
-				Name: d.name, Description: d.desc, Path: d.path})
+		for _, d := range skillDirs(filepath.Join(p.path, "skills"), false) {
+			out = append(out, LocalSkill{Source: "Plugin: " + p.name, Kind: KindPlugin, Label: p.label(),
+				Name: d.name, Description: d.desc, Path: d.path, PluginKey: p.key})
 		}
 	}
 	return out
 }
 
+func pluginsFile(home string) string {
+	return filepath.Join(home, ".claude", "plugins", "installed_plugins.json")
+}
+
+// ResolveLocal intoarce folderul de acum al unei surse locale si eticheta ei. La plugin-uri sursa e salvata
+// dupa cheie (Repo = "nume@marketplace", Path = numele folderului skill-ului): folderul vine din installPath-ul
+// de acum din installed_plugins.json (prima instalare a cheii), deci o versiune noua a plugin-ului se vede, iar
+// eticheta are versiunea noua. Plugin dezinstalat = ErrNotFound. Sursele de plugin mai vechi (Repo gol) si
+// celelalte tipuri au calea absoluta in Path.
+func ResolveLocal(home string, src store.LibrarySource) (dir, label string, err error) {
+	if src.Kind != store.SourcePlugin || src.Repo == "" {
+		return src.Path, src.Label, nil
+	}
+	if !ValidSkillID(src.Path) {
+		return "", "", fmt.Errorf("invalid plugin skill %q", src.Path)
+	}
+	if home != "" {
+		for _, p := range installedPlugins(pluginsFile(home)) {
+			if p.key == src.Repo {
+				return filepath.Join(p.path, "skills", src.Path), p.label(), nil
+			}
+		}
+	}
+	return "", "", errorf(ErrNotFound, "Source no longer on this machine.")
+}
+
 type skillDir struct{ name, path, desc string }
 
-// skillDirs intoarce, sortate, folderele din dir (nu symlink-uri) care au SKILL.md obisnuit.
-func skillDirs(dir string) []skillDir {
+// skillDirs intoarce, sortate, folderele din dir care au SKILL.md obisnuit. links=true: si symlink-urile spre
+// un folder (calea ramane cea a link-ului); symlink-urile din interiorul skill-ului se sar oricum la copiere.
+func skillDirs(dir string, links bool) []skillDir {
 	var out []skillDir
-	for _, name := range subdirs(dir) {
+	for _, name := range subdirs(dir, links) {
 		p := filepath.Join(dir, name)
 		fi, err := os.Lstat(filepath.Join(p, "SKILL.md"))
 		if err != nil || !fi.Mode().IsRegular() {
@@ -104,15 +128,24 @@ func skillDirs(dir string) []skillDir {
 	return out
 }
 
-// subdirs: numele folderelor din dir, sortate; symlink-urile nu conteaza ca foldere.
-func subdirs(dir string) []string {
+// subdirs: numele folderelor din dir, sortate; symlink-urile conteaza ca foldere doar cu links=true si doar
+// cand duc la un folder (un link rupt sau spre un fisier se ignora).
+func subdirs(dir string, links bool) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
 	var out []string
 	for _, e := range entries {
-		if e.Type().IsDir() && !strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		isDir := e.Type().IsDir()
+		if !isDir && links && e.Type()&fs.ModeSymlink != 0 {
+			fi, err := os.Stat(filepath.Join(dir, e.Name()))
+			isDir = err == nil && fi.IsDir()
+		}
+		if isDir {
 			out = append(out, e.Name())
 		}
 	}
@@ -148,9 +181,18 @@ func manifestDescriptions(file string) map[string]string {
 	return out
 }
 
-type plugin struct{ name, version, path string }
+type plugin struct{ key, name, version, path string }
 
-// installedPlugins citeste installed_plugins.json, sortat dupa cheie; fisier invalid = nimic.
+// label: eticheta salvata la sursa, cu versiunea ("Plugin: superpowers 6.4.1").
+func (p plugin) label() string {
+	if p.version == "" {
+		return "Plugin: " + p.name
+	}
+	return "Plugin: " + p.name + " " + p.version
+}
+
+// installedPlugins citeste installed_plugins.json, sortat dupa cheie, cu prima instalare valida a fiecarei
+// chei (aceeasi pe care o foloseste ResolveLocal); fisier invalid = nimic.
 func installedPlugins(file string) []plugin {
 	data, err := readCapped(file, maxJSON)
 	if err != nil {
@@ -177,15 +219,26 @@ func installedPlugins(file string) []plugin {
 			if inst.InstallPath == "" || !filepath.IsAbs(inst.InstallPath) {
 				continue
 			}
-			out = append(out, plugin{name: name, version: inst.Version, path: filepath.Clean(inst.InstallPath)})
+			out = append(out, plugin{key: k, name: name, version: inst.Version, path: filepath.Clean(inst.InstallPath)})
+			break
 		}
 	}
 	return out
 }
 
-// CopyLocal copiaza folderul unui skill local in destDir: citit prin os.OpenRoot pe src,
-// doar fisiere obisnuite (fara symlink-uri si .git), cu limitele unui skill din Library.
+// resolveDir rezolva o data symlink-urile din calea folderului (ex. ~/.claude/skills/<nume> -> alt folder);
+// de aici totul se citeste prin os.OpenRoot pe rezultat, iar symlink-urile din interior se sar.
+func resolveDir(dir string) (string, error) {
+	return filepath.EvalSymlinks(dir)
+}
+
+// CopyLocal copiaza folderul unui skill local in destDir: citit prin os.OpenRoot pe src (rezolvat o data daca
+// e symlink), doar fisiere obisnuite (fara symlink-uri si .git), cu limitele unui skill din Library.
 func CopyLocal(src, destDir string) error {
+	src, err := resolveDir(src)
+	if err != nil {
+		return err
+	}
 	files, err := walkFiles(src)
 	if err != nil {
 		return err

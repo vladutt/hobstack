@@ -43,15 +43,6 @@ func TestLocalSkills(t *testing.T) {
 			{"scope":"project","installPath":%q,"version":"6.4.1"}],
 		  "rel@m":[{"installPath":"relative/path","version":"1"}]}}`, pl, pl))
 
-	if runtime.GOOS != "windows" {
-		// symlink ca folder de skill: ignorat
-		real := filepath.Join(home, "elsewhere", "linked")
-		writeFile(t, filepath.Join(real, "SKILL.md"), "---\nname: linked\n---\n")
-		if err := os.Symlink(real, filepath.Join(sk, "linked")); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	got := LocalSkills(home)
 	var lines []string
 	for _, s := range got {
