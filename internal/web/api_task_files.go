@@ -19,6 +19,8 @@ import (
 // fileVersion: o predare mai veche a aceleiasi cai.
 type fileVersion struct {
 	ID        int64     `json:"id"`
+	TaskID    int64     `json:"taskId"`
+	Ref       string    `json:"ref,omitempty"` // T-N, doar unde vin fisiere din mai multe task-uri (Run history)
 	Size      int64     `json:"size"`
 	AgentName string    `json:"agentName"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -27,6 +29,7 @@ type fileVersion struct {
 // fileGroup: ultima versiune a unei cai, cu versiunile mai vechi.
 type fileGroup struct {
 	store.TaskFile
+	Ref      string        `json:"ref,omitempty"`
 	Versions []fileVersion `json:"versions"`
 }
 
@@ -37,13 +40,24 @@ func groupFiles(list []store.TaskFile) []fileGroup {
 	at := map[string]int{} // cale -> index in out
 	for _, f := range list {
 		if i, ok := at[f.Path]; ok {
-			out[i].Versions = append(out[i].Versions, fileVersion{ID: f.ID, Size: f.Size, AgentName: f.AgentName, CreatedAt: f.CreatedAt})
+			out[i].Versions = append(out[i].Versions, fileVersion{ID: f.ID, TaskID: f.TaskID, Size: f.Size, AgentName: f.AgentName, CreatedAt: f.CreatedAt})
 			continue
 		}
 		at[f.Path] = len(out)
 		out = append(out, fileGroup{TaskFile: f, Versions: []fileVersion{}})
 	}
 	return out
+}
+
+// withRefs pune T-N-ul task-ului pe fiecare grup si versiune (refs: id task -> "T-N").
+func withRefs(groups []fileGroup, refs map[int64]string) []fileGroup {
+	for i := range groups {
+		groups[i].Ref = refs[groups[i].TaskID]
+		for j := range groups[i].Versions {
+			groups[i].Versions[j].Ref = refs[groups[i].Versions[j].TaskID]
+		}
+	}
+	return groups
 }
 
 type subtaskFiles struct {

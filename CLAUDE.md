@@ -67,6 +67,10 @@ Gata (sarcini recurente, spec in docs/superpowers/specs/2026-10-03-hobstack-recu
 proiect care creeaza task-uri pe un program (la N ore, zilnic, saptamanal; ora locala), pe ticker-ul din team.Run si o data
 la pornire (o singura rulare pentru cele ratate); sarite cat timp aparitia precedenta e deschisa; auto-accept optional.
 Pachet: internal/schedule.
+Gata (Run history, spec in docs/superpowers/specs/2026-10-10-hobstack-recurring-history-design.md): modala per sarcina
+recurenta (#/p/<pid>/tasks/recurring/<rid>, din "N runs" pe panoul Recurring): Files (fisierele tuturor rularilor si ale
+sub-task-urilor, grupate pe cale, T-N pe versiuni) si Runs (paginat cate 20, excerpt din raport, arhivatele estompate);
+store.RecurringHistory / RecurringCounts / RecurringFiles, GET /api/recurring/{id}/history si /files, recurring-history.js.
 Gata (Flow, spec in docs/superpowers/specs/2026-10-03-hobstack-task-flow-design.md): tab-ul Flow din modala de task arata
 arborele de delegare de la radacina (store.TaskFlow, GET /api/tasks/{id}/flow), cu pasii din task_events si sub-task-urile
 intercalate; pasul "requested" leaga task-ul de mesajul din chat care l-a pornit (activeRun.request, doar in memorie).

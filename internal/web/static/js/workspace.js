@@ -6,6 +6,7 @@ import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
 import { stagesEditor } from "./stages.js";
 import { recurringPanel } from "./recurring.js";
+import { recurringHistory } from "./recurring-history.js";
 import { questionBox } from "./questions.js";
 import { stuckBox, refreshStuckAges } from "./stuck.js";
 import { accessBox } from "./access.js";
@@ -53,7 +54,7 @@ const TABS = [
   { id: "stats", label: "Stats" },
 ];
 
-// parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId, taskId }.
+// parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId, taskId, recurringId }.
 // Link-urile vechi #/p/3/agent/7 duc in tab-ul Echipa, cu agentul 7 selectat.
 // #/p/3/tasks/12 deschide modala task-ului 12 peste board.
 export function parseWorkspaceRoute(rest) {
@@ -62,13 +63,15 @@ export function parseWorkspaceRoute(rest) {
   const legacy = { "task-uri": "tasks", "echipa": "team", "fisiere": "files" };
   if (parts[0] in legacy) parts[0] = legacy[parts[0]];
   if (parts[0] === "agent") {
-    return { tab: "team", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null, taskId: null };
+    return { tab: "team", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null, taskId: null, recurringId: null };
   }
   const tab = TABS.some((t) => t.id === parts[0]) ? parts[0] : TABS[0].id;
   const num = /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null;
   const agentId = tab === "team" ? num : null;
   const taskId = tab === "tasks" ? num : null;
-  return { tab, agentId, taskId };
+  // #/p/3/tasks/recurring/5 deschide Run history al sarcinii recurente 5 peste board
+  const recurringId = tab === "tasks" && parts[1] === "recurring" && /^\d+$/.test(parts[2] || "") ? Number(parts[2]) : null;
+  return { tab, agentId, taskId, recurringId };
 }
 
 export async function workspaceView(root, projectId, route) {
@@ -107,6 +110,7 @@ export async function workspaceView(root, projectId, route) {
   let editor = null;     // formularul din Detalii
   let editorKey = "";    // editableKey pentru datele din formular
   let modal = null;      // modala task-ului deschis (adresa #/p/<id>/tasks/<taskId>)
+  let history = null;    // modala Run history deschisa (adresa #/p/<id>/tasks/recurring/<id>)
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const dropResets = []; // resetari de contor + outline, apelate la orice drop/dragend
@@ -166,7 +170,7 @@ export async function workspaceView(root, projectId, route) {
   let dragFrom = null, dragOver = null; // coloana de unde a plecat cardul si cea peste care e acum
   let cardMenu = null; // meniul "⋯" deschis ({ btn, close }); unul singur odata
   let boardStale = false; // un refresh venit cat tragi / cat e meniul deschis: se deseneaza dupa
-  let recurring = null; // panoul Recurring cand e deschis ({ el, update })
+  let recurring = null; // panoul Recurring cand e deschis ({ el, update, edit })
   const boardHint = el("p", { class: "hint board-hint" }, "Every project is different: set up your own columns (work stages) with the Columns button.");
   const filesList = el("div", { class: "files-list" });
   const projectPicker = el("input", { type: "file", multiple: true, hidden: true });
@@ -587,6 +591,7 @@ export async function workspaceView(root, projectId, route) {
     const keep = keepPanel;
     keepPanel = false;
     syncModal(r.taskId);
+    syncHistory(r.recurringId);
     if (r.tab === "team" && state.tab !== "team" && !keep) state.panel = "details"; // intrarea pe Echipa arata Detaliile
     if (r.tab !== "team" && state.tab === "team" && !keep) state.panel = "chat"; // iesirea de pe Echipa: inapoi la chat
     const enteringStats = r.tab === "stats" && state.tab !== "stats";
@@ -1475,6 +1480,26 @@ export async function workspaceView(root, projectId, route) {
     if (closed) board.querySelector(`[data-task-id="${closed}"]`)?.focus();
   }
 
+  // syncHistory: deschide / inchide Run history dupa recurringId din adresa
+  function syncHistory(recurringId) {
+    if (history && history.recurringId === recurringId) return;
+    history?.destroy();
+    history = null;
+    if (!recurringId || gone()) return;
+    history = recurringHistory({
+      projectId, recurringId,
+      onClose: () => { location.hash = `#/p/${projectId}/tasks`; },
+      // Edit: inchide modala (prin adresa), apoi deschide panoul Recurring cu formularul sarcinii
+      onEdit: (rec) => {
+        window.addEventListener("hashchange", () => {
+          if (boardPanel !== "recurring") toggleRecurring();
+          recurring?.edit(rec);
+        }, { once: true });
+        location.hash = `#/p/${projectId}/tasks`;
+      },
+    });
+  }
+
   function firstRootId() {
     return state.project.agents.find((a) => a.isRoot)?.id ?? state.project.agents[0]?.id ?? null;
   }
@@ -1881,6 +1906,7 @@ export async function workspaceView(root, projectId, route) {
 
   renderAll();
   syncModal(route.taskId); // refresh pe adresa unui task: modala se redeschide
+  syncHistory(route.recurringId);
   loadFiles();
   await loadThread();
   syncLive();
@@ -1890,6 +1916,7 @@ export async function workspaceView(root, projectId, route) {
   if (gone()) {
     stopLive();
     modal?.destroy();
+    history?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
@@ -1903,6 +1930,8 @@ export async function workspaceView(root, projectId, route) {
     try { ev = JSON.parse(msg.data); } catch { return; }
     if (ev.type === "message" && ev.data.agentId === state.selected) addMessage(ev.data);
     if (ev.type === "files") loadFiles();
+    // Run history: doar la schimbarile de task (o rulare noua, un status, fisiere atasate), nu la fiecare mesaj
+    if (ev.type === "task") history?.refresh();
     scheduleReload();
   };
   events.onerror = () => { hadError = true; };
@@ -1921,6 +1950,7 @@ export async function workspaceView(root, projectId, route) {
     disposed = true;
     editor?.destroy();
     modal?.destroy();
+    history?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);

@@ -138,6 +138,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/recurring/{id}", s.updateRecurring)
 	mux.HandleFunc("DELETE /api/recurring/{id}", s.deleteRecurring)
 	mux.HandleFunc("POST /api/recurring/{id}/run", s.runRecurring)
+	mux.HandleFunc("GET /api/recurring/{id}/history", s.recurringHistory)
+	mux.HandleFunc("GET /api/recurring/{id}/files", s.recurringFiles)
 	mux.HandleFunc("GET /api/tasks/{id}", s.getTask)
 	mux.HandleFunc("GET /api/tasks/{id}/changes", s.getTaskChanges)
 	mux.HandleFunc("GET /api/tasks/{id}/modified", s.getTaskModified)

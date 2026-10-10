@@ -49,13 +49,13 @@ cu autorul "You". Fara fisiere: sectiunea lipseste.
 
 **Runs**. Rularile, cea mai noua prima. Randul: data si ora crearii, T-N (link spre modala task-ului), status
 (eticheta ca pe board), agentul asignat, eticheta `📎 N` daca are fisiere. Sub el, primul paragraf din raport
-(`tasks.result` pana la primul rand gol, max 300 de caractere); click pe rand desface raportul intreg (Markdown, ca in
-modala de task) si numele fisierelor rularii (click = preview in sectiunea Files). Fara raport: "No report yet"
+(`tasks.result` pana la primul rand gol, max 300 de caractere); click pe data desface raportul intreg (Markdown, ca in
+modala de task); fisierele rularii se vad in Files (cu T-N-ul pe fiecare versiune). Fara raport: "No report yet"
 (in lucru) sau "No report" (gata fara raport). Rularile arhivate apar estompate cu eticheta "Deleted".
 Primele 20, apoi "Load more" (urmatoarele 20).
 
-Live: modala se reincarca la evenimentul SSE `task` al proiectului (emis si la fisierele atasate) cand task-ul are
-`recurringId` egal cu sarcina deschisa (debounce 1 s), ca o rulare noua sa apara fara refresh.
+Live: modala se reincarca la fiecare reincarcare a proiectului (scheduleReload, deja cu debounce, pornita de orice
+eveniment SSE), ca o rulare noua sau un fisier nou sa apara fara refresh.
 
 ## API
 
@@ -88,7 +88,7 @@ merg prin `GET /api/task-files/{id}` (existent), deci aceleasi reguli (serveStor
 
 ## Store
 
-- `RecurringRuns(projectID) (map[int64]int, error)`: numarul de rulari per sarcina, pentru lista.
+- Numarul de rulari din lista (`runs`) vine din `RecurringCounts`, apelat in `recurringView`.
 - `RecurringHistory(id, before int64, limit int) ([]RecurringRun, bool, error)`: task-urile cu `recurring_id = id`
   (si arhivate), `id < before` cand `before > 0`, ordonate `id DESC`, `limit+1` pentru `more`; numarul de fisiere
   per rulare din `CountTaskFilesTree` (sau un singur query agregat, daca e simplu).
@@ -113,7 +113,7 @@ aceeasi rulare (sub-task-uri diferite) sunt versiuni separate.
 ## Teste
 
 - store: `RecurringHistory` (ordine, paginare cu `before`, `more`, arhivate incluse, alta sarcina exclusa),
-  `RecurringCounts`, `RecurringFiles` (include sub-task-urile, exclude alte sarcini), `RecurringRuns`.
+  `RecurringCounts`, `RecurringFiles` (include sub-task-urile, exclude alte sarcini).
 - web: `GET /api/recurring/{id}/history` (forma, 404, limita) si `/files` (grupare pe cale, versiuni cu ref).
 - JS: `node --check` pe recurring-history.js / recurring.js / workspace.js copiate ca .mjs.
 - UI: screenshot cu Chrome headless prin CDP al modalei pe "Scount the internet" (lat si ~400 px).

@@ -5,6 +5,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"hobstack/internal/schedule"
+	"hobstack/internal/store"
 )
 
 func TestRecurringAPI(t *testing.T) {
@@ -75,5 +79,113 @@ func TestRecurringAPI(t *testing.T) {
 	_, raw = e.do(t, "GET", "/api/tasks/"+itoa(task.ID), nil)
 	if !strings.Contains(string(raw), `"recurring":null`) {
 		t.Fatalf("getTask dupa delete: %s", raw)
+	}
+}
+
+func TestRecurringHistoryAPI(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
+	rec := store.RecurringTask{ProjectID: p.ID, Title: "Scout", AssigneeID: &root.ID,
+		Schedule: schedule.Spec{Kind: schedule.KindDaily, At: "09:00"}, Enabled: true, NextRunAt: time.Now()}
+	if err := e.st.CreateRecurring(&rec); err != nil {
+		t.Fatal(err)
+	}
+	run := func() store.Task {
+		task := store.Task{ProjectID: p.ID, Title: "Scout", AssigneeID: root.ID, ByUser: true, RecurringID: &rec.ID}
+		if err := e.st.CreateTask(&task); err != nil {
+			t.Fatal(err)
+		}
+		return task
+	}
+	r1, r2 := run(), run()
+	e.addTaskFile(t, r1, "leads.csv", "text/csv", "a")
+	e.addTaskFile(t, r2, "leads.csv", "text/csv", "ab")
+	e.addTaskFile(t, r2, "round2.md", "text/markdown", "# r2")
+	base := "/api/recurring/" + itoa(rec.ID)
+
+	// runs in detaliul proiectului
+	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
+	if !strings.Contains(string(raw), `"runs":2`) {
+		t.Fatalf("detaliu fara runs: %s", raw)
+	}
+
+	var h struct {
+		Recurring struct {
+			ID   int64 `json:"id"`
+			Runs int   `json:"runs"`
+		} `json:"recurring"`
+		Counts struct {
+			Total int `json:"total"`
+			Open  int `json:"open"`
+		} `json:"counts"`
+		Runs []struct {
+			ID       int64  `json:"id"`
+			Ref      string `json:"ref"`
+			Assignee string `json:"assignee"`
+			Files    int    `json:"files"`
+			Status   string `json:"status"`
+		} `json:"runs"`
+		More bool `json:"more"`
+	}
+	code, raw := e.do(t, "GET", base+"/history", nil)
+	json.Unmarshal(raw, &h)
+	if code != 200 || h.Recurring.ID != rec.ID || h.Recurring.Runs != 2 || h.Counts.Total != 2 || h.Counts.Open != 2 || h.More {
+		t.Fatalf("history: %d %s", code, raw)
+	}
+	if len(h.Runs) != 2 || h.Runs[0].ID != r2.ID || h.Runs[0].Ref != r2.Ref() || h.Runs[0].Assignee != root.Name || h.Runs[0].Files != 2 {
+		t.Fatalf("runs: %s", raw)
+	}
+
+	// paginare
+	h.Runs = nil
+	_, raw = e.do(t, "GET", base+"/history?limit=1", nil)
+	json.Unmarshal(raw, &h)
+	if len(h.Runs) != 1 || !h.More || h.Runs[0].ID != r2.ID {
+		t.Fatalf("limit=1: %s", raw)
+	}
+	h.Runs = nil
+	_, raw = e.do(t, "GET", base+"/history?limit=1&before="+itoa(r2.ID), nil)
+	json.Unmarshal(raw, &h)
+	if len(h.Runs) != 1 || h.More || h.Runs[0].ID != r1.ID {
+		t.Fatalf("before: %s", raw)
+	}
+
+	// parametri invalizi -> 400; sarcina inexistenta -> 404
+	for _, q := range []string{"?limit=0", "?limit=51", "?limit=x", "?before=-1", "?before=x"} {
+		if code, raw := e.do(t, "GET", base+"/history"+q, nil); code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", q, code, raw)
+		}
+	}
+	for _, path := range []string{"/api/recurring/9999/history", "/api/recurring/9999/files"} {
+		if code, _ := e.do(t, "GET", path, nil); code != http.StatusNotFound {
+			t.Errorf("%s: %d", path, code)
+		}
+	}
+
+	// fisiere: grupate pe cale, ultima versiune sus, versiunile cu ref
+	var f struct {
+		Files []struct {
+			Path     string `json:"path"`
+			Ref      string `json:"ref"`
+			Size     int64  `json:"size"`
+			Versions []struct {
+				TaskID int64  `json:"taskId"`
+				Ref    string `json:"ref"`
+			} `json:"versions"`
+		} `json:"files"`
+		Subtasks []any `json:"subtasks"`
+	}
+	code, raw = e.do(t, "GET", base+"/files", nil)
+	json.Unmarshal(raw, &f)
+	if code != 200 || len(f.Files) != 2 || f.Subtasks == nil {
+		t.Fatalf("files: %d %s", code, raw)
+	}
+	var leads = f.Files[0]
+	if leads.Path != "leads.csv" {
+		leads = f.Files[1]
+	}
+	if leads.Ref != r2.Ref() || leads.Size != 2 || len(leads.Versions) != 1 || leads.Versions[0].TaskID != r1.ID || leads.Versions[0].Ref != r1.Ref() {
+		t.Fatalf("leads.csv: %s", raw)
 	}
 }
