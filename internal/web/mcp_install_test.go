@@ -135,7 +135,7 @@ func TestRegistryProxyUnavailable(t *testing.T) {
 	}
 	var out map[string]string
 	json.Unmarshal(raw, &out)
-	if out["error"] != "The MCP registry is not reachable right now. Try again in a minute." {
+	if out["error"] != "The MCP registry is slow or not reachable right now. Try again in a minute." {
 		t.Fatalf("%s", raw)
 	}
 }

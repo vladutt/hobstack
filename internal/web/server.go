@@ -55,8 +55,12 @@ type Server struct {
 	drafts  *draft.Manager  // nil = "Let AI draft this agent" nu e disponibil
 	lib     *library.Lib    // nil = rutele Library raspund 503
 
-	registry *mcpregistry.Client    // registrul MCP (cautare din Library -> Add MCP server)
-	home     func() (string, error) // folderul utilizatorului pentru configurarile Claude (testele dau unul temporar)
+	registry *mcpregistry.Client // registrul MCP (cautare din Library -> Add MCP server)
+	// catalog: copia locala a registrului (nil = cautarea merge doar la registru); catalogCtx e contextul
+	// aplicatiei, folosit de "Update now" (sincronizarea nu se opreste cand se termina cererea HTTP)
+	catalog    *mcpregistry.Catalog
+	catalogCtx context.Context
+	home       func() (string, error) // folderul utilizatorului pentru configurarile Claude (testele dau unul temporar)
 
 	codeCache *codefiles.Cache // fisierele de cod pentru @ in chat (cateva secunde in memorie)
 }
@@ -70,6 +74,12 @@ func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, 
 
 // SetSetup activeaza wizard-ul "Proiect nou cu AI".
 func (s *Server) SetSetup(m *wizard.Manager) { s.wizard = m }
+
+// SetCatalog activeaza catalogul local al registrului MCP; ctx traieste cat aplicatia (sincronizarile pornite din UI).
+func (s *Server) SetCatalog(cat *mcpregistry.Catalog, ctx context.Context) {
+	s.catalog = cat
+	s.catalogCtx = ctx
+}
 
 // SetDraft activeaza "Let AI draft this agent".
 func (s *Server) SetDraft(m *draft.Manager) { s.drafts = m }
@@ -178,6 +188,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/library", s.listLibrary)
 	mux.HandleFunc("POST /api/library", s.createLibraryItem)
 	mux.HandleFunc("GET /api/library/registry", s.searchRegistry)
+	mux.HandleFunc("GET /api/library/registry/status", s.registryStatus)
+	mux.HandleFunc("POST /api/library/registry/sync", s.syncRegistry)
 	mux.HandleFunc("GET /api/library/local-mcp", s.localMCP)
 	mux.HandleFunc("POST /api/library/install-mcp", s.installMCP)
 	mux.HandleFunc("GET /api/library/{id}", s.getLibraryItem)

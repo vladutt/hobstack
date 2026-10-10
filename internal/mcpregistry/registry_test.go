@@ -59,7 +59,7 @@ func TestNewClientReadsEnv(t *testing.T) {
 	if c.BaseURL != "https://registry.modelcontextprotocol.io" {
 		t.Fatalf("BaseURL = %q", c.BaseURL)
 	}
-	if c.HTTP == nil || c.HTTP.Timeout != 10*time.Second || c.TTL != 10*time.Minute {
+	if c.HTTP == nil || c.HTTP.Timeout != 60*time.Second || c.TTL != 10*time.Minute {
 		t.Fatalf("defaults: %+v ttl=%v", c.HTTP, c.TTL)
 	}
 }

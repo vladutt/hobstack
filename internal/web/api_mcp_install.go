@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,7 +21,9 @@ import (
 // mcpProbeTimeout: cat asteptam la Install un server MCP local (un `npx` / `uvx` poate descarca pachetul).
 var mcpProbeTimeout = 30 * time.Second
 
-const registryDownMsg = "The MCP registry is not reachable right now. Try again in a minute."
+const registryDownMsg = "The MCP registry is slow or not reachable right now. Try again in a minute."
+
+const catalogReadMsg = "The local MCP catalog cannot be read right now. Try again in a minute."
 
 // mcpIndex: ce servere MCP are deja Library (pentru "In library" in rezultate).
 type mcpIndex struct {
@@ -67,16 +71,43 @@ type registryView struct {
 	InLibrary bool `json:"inLibrary"`
 }
 
-// searchRegistry: GET /api/library/registry?search=&cursor= — proxy catre registrul MCP (browserul ramane pe localhost).
+// catalogStatus: starea catalogului local, nil (null in JSON) cand nu exista catalog.
+func (s *Server) catalogStatus() *mcpregistry.CatalogStatus {
+	if s.catalog == nil {
+		return nil
+	}
+	st := s.catalog.Status()
+	return &st
+}
+
+// searchRegistry: GET /api/library/registry?search=&cursor= — din catalogul local cand e gata, altfel proxy
+// catre registrul MCP (browserul ramane pe localhost). Raspunsul are si starea catalogului.
 func (s *Server) searchRegistry(w http.ResponseWriter, r *http.Request) {
 	if !s.libraryOK(w) {
 		return
 	}
 	q := r.URL.Query()
-	servers, next, err := s.registry.Search(r.Context(), q.Get("search"), q.Get("cursor"))
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, registryDownMsg)
-		return
+	var servers []mcpregistry.Server
+	var next string
+	var err error
+	if s.catalog != nil && s.catalog.Ready() {
+		servers, next, err = s.catalog.Search(q.Get("search"), q.Get("cursor"))
+		if errors.Is(err, mcpregistry.ErrBadCursor) {
+			writeErr(w, http.StatusBadRequest, "Invalid cursor.")
+			return
+		}
+		if err != nil {
+			// fisierul catalogului nu se poate citi (spec: singurul 502 cu catalogul gata)
+			log.Printf("mcp catalog: search: %v", err)
+			writeJSON(w, http.StatusBadGateway, map[string]any{"error": catalogReadMsg, "catalog": s.catalogStatus()})
+			return
+		}
+	} else {
+		servers, next, err = s.registry.Search(r.Context(), q.Get("search"), q.Get("cursor"))
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{"error": registryDownMsg, "catalog": s.catalogStatus()})
+			return
+		}
 	}
 	ix, err := s.mcpLibraryIndex()
 	if err != nil {
@@ -89,7 +120,40 @@ func (s *Server) searchRegistry(w http.ResponseWriter, r *http.Request) {
 		in := ix.has(sv.SuggestedName, sv.Command, sv.Args, sv.URL)
 		out = append(out, registryView{Server: sv, InLibrary: in})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"servers": out, "nextCursor": next})
+	writeJSON(w, http.StatusOK, map[string]any{"servers": out, "nextCursor": next, "catalog": s.catalogStatus()})
+}
+
+// registryStatus: GET /api/library/registry/status — starea catalogului (null fara catalog).
+func (s *Server) registryStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"catalog": s.catalogStatus()})
+}
+
+// syncRegistry: POST /api/library/registry/sync — "Update now". Sincronizarea ruleaza in fundal pe contextul
+// aplicatiei, nu pe al cererii (altfel s-ar opri cand raspundem).
+func (s *Server) syncRegistry(w http.ResponseWriter, r *http.Request) {
+	if s.catalog == nil {
+		writeErr(w, http.StatusNotFound, "The MCP catalog is not available.")
+		return
+	}
+	st := s.catalog.Status()
+	if st.Syncing {
+		writeErr(w, http.StatusConflict, "The catalog is already updating.")
+		return
+	}
+	ctx := s.catalogCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cat := s.catalog
+	go func() {
+		// ErrSyncRunning (a pornit alta intre timp) nu e o problema; celelalte erori sunt salvate in catalog (last_error)
+		if err := cat.Sync(ctx); err != nil && !errors.Is(err, mcpregistry.ErrSyncRunning) && ctx.Err() == nil {
+			log.Printf("mcp catalog: sync: %v", err)
+		}
+	}()
+	// goroutine-ul poate sa nu fi pornit inca: raspunsul spune deja ca se actualizeaza
+	st.Syncing = true
+	writeJSON(w, http.StatusAccepted, map[string]any{"catalog": st})
 }
 
 type localView struct {

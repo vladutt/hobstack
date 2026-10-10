@@ -92,7 +92,7 @@ type cacheEntry struct {
 }
 
 // NewClient foloseste HOBSTACK_MCP_REGISTRY_URL daca e setat (teste), altfel registrul oficial;
-// timeout 10 s si cache 10 min.
+// timeout 60 s (registrul raspunde uneori greu) si cache 10 min.
 func NewClient() *Client {
 	// doar URL-uri http/https cu host; orice altceva => registrul oficial
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("HOBSTACK_MCP_REGISTRY_URL")), "/")
@@ -101,7 +101,7 @@ func NewClient() *Client {
 	}
 	return &Client{
 		BaseURL: base,
-		HTTP:    &http.Client{Timeout: 10 * time.Second},
+		HTTP:    &http.Client{Timeout: 60 * time.Second},
 		TTL:     10 * time.Minute,
 	}
 }

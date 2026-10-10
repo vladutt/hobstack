@@ -21,6 +21,7 @@ import (
 	"hobstack/internal/events"
 	"hobstack/internal/library"
 	"hobstack/internal/mcp"
+	"hobstack/internal/mcpregistry"
 	"hobstack/internal/opener"
 	"hobstack/internal/picker"
 	"hobstack/internal/runner"
@@ -131,6 +132,16 @@ func start(args []string) error {
 	webSrv.SetSetup(sm)
 	webSrv.SetDraft(dm)
 	webSrv.SetLibrary(lib)
+	// catalogul local al registrului MCP: cautarea din Add MCP server nu mai depinde de registru.
+	// Daca nu se poate deschide, cautarea ramane direct pe registru (nu oprim aplicatia).
+	catPath := filepath.Join(paths.Root, "mcp-registry.db")
+	if cat, err := mcpregistry.OpenCatalog(catPath, mcpregistry.NewClient().BaseURL); err != nil {
+		log.Printf("mcp catalog: cannot open, search goes to the registry: %v", err)
+	} else {
+		defer cat.Close()
+		webSrv.SetCatalog(cat, ctx)
+		go syncCatalog(ctx, cat)
+	}
 	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
 	webSrv.SetOpener(opener.New())
 
@@ -163,6 +174,27 @@ func start(args []string) error {
 	shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return srv.Shutdown(shCtx)
+}
+
+// syncCatalog sincronizeaza catalogul MCP la pornire si apoi la fiecare ora, cand e nevoie (Due).
+// Erorile raman in catalog (last_error) si in log; urmatoarea incercare e la urmatorul tick.
+func syncCatalog(ctx context.Context, cat *mcpregistry.Catalog) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		if cat.Due(time.Now()) {
+			err := cat.Sync(ctx)
+			// ErrSyncRunning: a pornit "Update now" din UI; context anulat: aplicatia se opreste
+			if err != nil && !errors.Is(err, mcpregistry.ErrSyncRunning) && ctx.Err() == nil {
+				log.Printf("mcp catalog: sync: %v", err)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 // backfillTokens completeaza tokenii run-urilor vechi din logs/runs/<id>.jsonl;
