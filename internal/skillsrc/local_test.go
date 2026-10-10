@@ -102,6 +102,7 @@ func TestCopyLocal(t *testing.T) {
 	}
 
 	big := t.TempDir()
+	writeFile(t, filepath.Join(big, "SKILL.md"), "---\nname: big\n---\n")
 	for i := 0; i < 201; i++ {
 		writeFile(t, filepath.Join(big, fmt.Sprintf("f%d", i)), "x")
 	}
@@ -109,6 +110,7 @@ func TestCopyLocal(t *testing.T) {
 		t.Errorf("201 files: %v", err)
 	}
 	huge := t.TempDir()
+	writeFile(t, filepath.Join(huge, "SKILL.md"), "---\nname: huge\n---\n")
 	if err := os.WriteFile(filepath.Join(huge, "blob"), make([]byte, 11<<20), 0o644); err != nil {
 		t.Fatal(err)
 	}

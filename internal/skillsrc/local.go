@@ -239,6 +239,11 @@ func CopyLocal(src, destDir string) error {
 	if err != nil {
 		return err
 	}
+	// folderul de acum (si tinta unui symlink) trebuie sa fie tot un skill: un link schimbat intre timp
+	// spre alt folder nu se copiaza
+	if fi, err := os.Lstat(filepath.Join(src, "SKILL.md")); err != nil || !fi.Mode().IsRegular() {
+		return errorf(ErrNotFound, "This folder has no SKILL.md.")
+	}
 	files, err := walkFiles(src)
 	if err != nil {
 		return err

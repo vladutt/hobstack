@@ -178,3 +178,27 @@ func TestFetchPath(t *testing.T) {
 		t.Fatalf("cale invalida: %v", err)
 	}
 }
+
+// TestCopyLocalNeedsSkillMD: folderul copiat (si cel la care duce un symlink) trebuie sa aiba un SKILL.md obisnuit;
+// un link indreptat mai tarziu spre alt folder (de ex. ~/.ssh) nu se copiaza.
+func TestCopyLocalNeedsSkillMD(t *testing.T) {
+	base := t.TempDir()
+	other := filepath.Join(base, "other")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "id_rsa"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "skill")
+	if err := os.Symlink(other, link); err != nil {
+		t.Skip("symlink not available:", err)
+	}
+	err := CopyLocal(link, filepath.Join(base, "dest"))
+	if err == nil || !errors.Is(err, ErrNotFound) {
+		t.Fatalf("vreau ErrNotFound pentru un folder fara SKILL.md, am %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "dest", "id_rsa")); err == nil {
+		t.Fatal("fisierul a fost copiat")
+	}
+}
