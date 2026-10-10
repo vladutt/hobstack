@@ -76,13 +76,16 @@ export function recurringPanel({ projectId, project, assignable, onClose, onChan
       const who = r.assigneeId ? (r.assignee || "?") : (first ? "First free agent in " + first.name : "?");
       return el("div", { class: "rec-row" + (r.enabled ? "" : " off") },
         el("div", { class: "rec-main" },
-          el("strong", { class: "rec-title" }, r.title),
+          r.runs ? el("a", { class: "rec-title", href: `#/p/${projectId}/tasks/recurring/${r.id}` }, el("strong", {}, r.title))
+            : el("strong", { class: "rec-title" }, r.title),
           el("div", { class: "rec-info" },
             el("span", {}, r.scheduleText),
             el("span", {}, who),
             el("span", { class: r.enabled ? "" : "hint" }, r.enabled ? "Next: " + when(r.nextRunAt) : "Off"),
+            r.runs ? el("a", { class: "rec-runs", href: `#/p/${projectId}/tasks/recurring/${r.id}`, title: "Run history" },
+              `${r.runs} ${r.runs === 1 ? "run" : "runs"}`) : null,
             r.lastTask ? el("a", { href: `#/p/${projectId}/tasks/${r.lastTask.id}` },
-              `T-${r.lastTask.number} · ${STATUS[r.lastTask.status] || r.lastTask.status}`) : null,
+              `last T-${r.lastTask.number} · ${STATUS[r.lastTask.status] || r.lastTask.status}`) : null,
             r.autoAccept ? el("span", { class: "hint" }, "auto-accept") : null),
           r.lastNote ? el("span", { class: r.lastNote.startsWith("Skipped") ? "hint" : "rec-error" }, r.lastNote) : null),
         el("div", { class: "rec-actions" },
@@ -266,6 +269,8 @@ export function recurringPanel({ projectId, project, assignable, onClose, onChan
       current = p;
       if (!editing) renderList(p);
     },
+    // edit: formularul sarcinii (din Run history)
+    edit(r) { openForm(r); },
   };
 }
 

@@ -765,6 +765,8 @@ pre.md-pre:not(.diff) { padding: 8px 12px; }
 .rec-opt input[type=radio] { accent-color: var(--amber); }
 .rec-opt input[type=number] { width: 76px; }
 .rec-info .rec-runs { color: var(--amber); }
+a.rec-title { color: inherit; text-decoration: none; }
+a.rec-title:hover { text-decoration: underline; }
 .rh-head { margin: 0 0 10px; font-size: 15px; font-weight: 650; }
 .rh-files .tfiles-more { margin-top: 8px; }
 .rh-runs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

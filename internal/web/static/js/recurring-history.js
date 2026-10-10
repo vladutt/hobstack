@@ -124,7 +124,8 @@ export function recurringHistory({ projectId, recurringId, onClose, onEdit }) {
     if (counts.open) parts.push(`${counts.open} open`);
     if (counts.archived) parts.push(`${counts.archived} deleted`);
     const row = (label, value) => el("div", { class: "rh-side-row" }, el("span", { class: "hint" }, label), el("span", {}, value));
-    side.replaceChildren(
+    // replaceChildren scrie "null" pentru un copil null: filtram randurile lipsa
+    side.replaceChildren(...[
       row("Schedule", rec.scheduleText),
       row("Assignee", rec.assignee || "First stage"),
       row("Next run", rec.enabled ? day(rec.nextRunAt) : "Off"),
@@ -133,7 +134,8 @@ export function recurringHistory({ projectId, recurringId, onClose, onEdit }) {
       rec.lastNote ? el("p", { class: rec.lastNote.startsWith("Skipped") ? "hint" : "rec-error" }, rec.lastNote) : null,
       el("div", { class: "rh-side-actions" },
         el("button", { type: "button", class: "btn small", onclick: runNow }, "Run now"),
-        el("button", { type: "button", class: "btn small", onclick: () => onEdit(rec) }, "Edit")));
+        el("button", { type: "button", class: "btn small", onclick: () => onEdit(rec) }, "Edit")),
+    ].filter(Boolean));
   }
 
   function renderRuns() {
