@@ -219,7 +219,7 @@ func TestFetchHostile(t *testing.T) {
 			if err == nil {
 				t.Fatal("hostile archive accepted")
 			}
-			if !strings.Contains(err.Error(), "path") {
+			if !errors.Is(err, ErrBadArchive) || !strings.Contains(err.Error(), "path") {
 				t.Errorf("unexpected error: %v", err)
 			}
 			if got := listDir(t, filepath.Dir(dest)); len(got) != 0 {
@@ -299,7 +299,7 @@ func TestFetchErrors(t *testing.T) {
 	if _, err := r.Fetch(ctx, "o/limit", testSHA, "pdf", dest); !errors.Is(err, ErrRateLimited) {
 		t.Errorf("429: %v", err)
 	}
-	if _, err := r.Fetch(ctx, "o/broken", testSHA, "pdf", dest); !errors.Is(err, ErrUnavailable) {
+	if _, err := r.Fetch(ctx, "o/broken", testSHA, "pdf", dest); !errors.Is(err, ErrBadArchive) {
 		t.Errorf("broken: %v", err)
 	}
 	if _, err := r.Fetch(ctx, "o/missing", testSHA, "pdf", dest); !errors.Is(err, ErrNotFound) {
@@ -310,5 +310,82 @@ func TestFetchErrors(t *testing.T) {
 	}
 	if _, err := r.Fetch(ctx, "o/x", testSHA, "../pdf", dest); err == nil {
 		t.Error("bad skill id accepted")
+	}
+}
+
+// Intrarile din afara folderului ales nu se scriu, deci nu pot strica Fetch-ul.
+func TestFetchIgnoresOtherEntries(t *testing.T) {
+	r := fetchRemote(t, tarball(t,
+		tarEntry{Name: "README", Body: "file"},
+		tarEntry{Name: "readme/notes.md", Body: "dir on a case-insensitive disk"},
+		tarEntry{Name: "docs/" + strings.Repeat("n", 300), Body: "long name"},
+		tarEntry{Name: "skills/pdf/SKILL.md", Body: skill("pdf")},
+	))
+	p, dest, err := fetch(t, r, "pdf")
+	if err != nil || p != "skills/pdf" {
+		t.Fatalf("%q %v", p, err)
+	}
+	if got := listDir(t, dest); strings.Join(got, ",") != "SKILL.md" {
+		t.Errorf("files = %v", got)
+	}
+}
+
+// Limita de dezarhivare numara orice intrare, si pe cele sarite (.git/, nume cu \\).
+func TestFetchUnpackedLimitCountsSkipped(t *testing.T) {
+	old := maxUnpacked
+	maxUnpacked = 1 << 20
+	t.Cleanup(func() { maxUnpacked = old })
+	for _, name := range []string{".git/objects/pack/big.pack", `odd\\name.bin`} {
+		r := fetchRemote(t, tarball(t,
+			tarEntry{Name: "skills/pdf/SKILL.md", Body: skill("pdf")},
+			tarEntry{Name: name, Size: 2 << 20},
+		))
+		if _, _, err := fetch(t, r, "pdf"); !errors.Is(err, ErrTooLarge) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// staging-uri ramase in parintele destinatiei
+func leftovers(t *testing.T, parent string) []string {
+	t.Helper()
+	m, _ := filepath.Glob(filepath.Join(parent, ".staging-src-*"))
+	return m
+}
+
+func TestFetchNoLeftovers(t *testing.T) {
+	ok := tarball(t, tarEntry{Name: "skills/pdf/SKILL.md", Body: skill("pdf")})
+	started := make(chan struct{}, 1)
+	r := testRemote(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/cl/o/ok/tar.gz/" + testSHA:
+			w.Write(ok)
+		case "/cl/o/bad/tar.gz/" + testSHA:
+			w.Write([]byte("garbage"))
+		case "/cl/o/slow/tar.gz/" + testSHA:
+			w.Write(ok[:10])
+			w.(http.Flusher).Flush()
+			started <- struct{}{}
+			<-req.Context().Done()
+		}
+	})
+	for _, repo := range []string{"o/ok", "o/bad", "o/slow"} {
+		parent := t.TempDir()
+		dest := filepath.Join(parent, "dest")
+		ctx, cancel := context.WithCancel(context.Background())
+		if repo == "o/slow" {
+			go func() { <-started; cancel() }()
+		}
+		_, err := r.Fetch(ctx, repo, testSHA, "pdf", dest)
+		cancel()
+		if (repo == "o/ok") != (err == nil) {
+			t.Errorf("%s: %v", repo, err)
+		}
+		if repo == "o/slow" && !errors.Is(err, context.Canceled) {
+			t.Errorf("cancel: %v", err)
+		}
+		if l := leftovers(t, parent); len(l) != 0 {
+			t.Errorf("%s left %v", repo, l)
+		}
 	}
 }

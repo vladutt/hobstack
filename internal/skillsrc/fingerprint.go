@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -13,8 +15,9 @@ import (
 	"strings"
 )
 
-// Fingerprint e amprenta continutului unui folder: sha256 peste (cale relativa + "\x00" +
-// continut) pentru fiecare fisier obisnuit, in ordinea cailor. Folosita ca "ref" la sursele locale.
+// Fingerprint e amprenta continutului unui folder: sha256 peste (cale relativa + "\x00" + un octet
+// pentru bitul executabil + marimea pe 8 octeti + continut) pentru fiecare fisier obisnuit, in
+// ordinea cailor. Folosita ca "ref" la sursele locale.
 func Fingerprint(dir string) (string, error) {
 	files, err := walkFiles(dir)
 	if err != nil {
@@ -31,8 +34,21 @@ func Fingerprint(dir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// cale, bitul executabil si marimea inainte de continut: fara coliziuni intre fisiere
 		io.WriteString(h, f.rel+"\x00")
-		_, err = io.Copy(h, in)
+		exec := byte(0)
+		if f.mode&0o111 != 0 {
+			exec = 1
+		}
+		var meta [9]byte
+		meta[0] = exec
+		binary.BigEndian.PutUint64(meta[1:], uint64(f.size))
+		h.Write(meta[:])
+		var n int64
+		n, err = io.Copy(h, in)
+		if err == nil && n != f.size {
+			err = fmt.Errorf("%s changed while reading", f.rel)
+		}
 		in.Close()
 		if err != nil {
 			return "", err
@@ -43,9 +59,10 @@ func Fingerprint(dir string) (string, error) {
 
 // FileInfo descrie un fisier pregatit pentru install.
 type FileInfo struct {
-	Path   string `json:"path"` // relativa, cu /
-	Size   int64  `json:"size"`
-	Script bool   `json:"script"`
+	Path      string `json:"path"` // relativa, cu /
+	Size      int64  `json:"size"`
+	Script    bool   `json:"script"`
+	Sensitive bool   `json:"sensitive"`
 }
 
 // scriptExt: extensiile considerate scripturi (pe langa bitul executabil).
@@ -63,9 +80,22 @@ func ListFiles(dir string) ([]FileInfo, error) {
 	out := make([]FileInfo, 0, len(files))
 	for _, f := range files {
 		script := scriptExt[strings.ToLower(path.Ext(f.rel))] || f.mode&0o111 != 0
-		out = append(out, FileInfo{Path: f.rel, Size: f.size, Script: script})
+		out = append(out, FileInfo{Path: f.rel, Size: f.size, Script: script, Sensitive: sensitive(f.rel)})
 	}
 	return out, nil
+}
+
+// sensitive: fisiere care de obicei au secrete (.env, chei, credentiale de registru); UI-ul avertizeaza,
+// dar fisierele se copiaza.
+func sensitive(rel string) bool {
+	base := strings.ToLower(path.Base(rel))
+	switch {
+	case base == ".env", strings.HasPrefix(base, ".env."),
+		strings.HasSuffix(base, ".pem"), strings.HasSuffix(base, ".key"),
+		strings.HasPrefix(base, "id_rsa"), base == ".npmrc", base == ".pypirc":
+		return true
+	}
+	return false
 }
 
 // Frontmatter citeste name si description din frontmatter-ul YAML al unui SKILL.md

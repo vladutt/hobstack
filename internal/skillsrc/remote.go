@@ -13,9 +13,11 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -29,6 +31,8 @@ var (
 	ErrNotFound = errors.New("skill not found")
 	// ErrTooLarge: skill-ul trece de limitele Library sau arhiva de limita de citire.
 	ErrTooLarge = errors.New("skill too large")
+	// ErrBadArchive: arhiva are o cale interzisa sau un format stricat.
+	ErrBadArchive = errors.New("bad skill archive")
 )
 
 // srcError e o eroare cu mesaj pentru utilizator care raspunde la errors.Is(err, kind).
@@ -57,7 +61,8 @@ const (
 // Remote vorbeste cu skills.sh si GitHub. Doar GET, fara credentiale.
 type Remote struct {
 	SkillsURL, APIURL, CodeloadURL, RawURL string
-	HTTP                                   *http.Client
+	HTTP                                   *http.Client // pentru cererile mici (timeout 30 s)
+	fetchHTTP                              *http.Client // pentru arhive, vezi fetchClient
 
 	mu       sync.Mutex
 	searches map[string]searchEntry
@@ -73,13 +78,15 @@ type searchEntry struct {
 // NewRemote ia URL-urile de baza din HOBSTACK_* (doar pentru teste); o valoare care nu e
 // http/https cu host lasa implicitul.
 func NewRemote() *Remote {
-	return &Remote{
+	r := &Remote{
 		SkillsURL:   baseURL("HOBSTACK_SKILLS_URL", "https://skills.sh"),
 		APIURL:      baseURL("HOBSTACK_GITHUB_API_URL", "https://api.github.com"),
 		CodeloadURL: baseURL("HOBSTACK_GITHUB_CODELOAD_URL", "https://codeload.github.com"),
 		RawURL:      baseURL("HOBSTACK_GITHUB_RAW_URL", "https://raw.githubusercontent.com"),
 		HTTP:        &http.Client{Timeout: 30 * time.Second},
 	}
+	r.fetchClient()
+	return r
 }
 
 func baseURL(env, def string) string {
@@ -112,17 +119,21 @@ func ValidSkillID(id string) bool { return validPart(id) }
 
 var shaRe = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
 
-// get face cererea GET si intoarce corpul (de inchis de apelant) doar pentru 200.
+// get face cererea GET cu clientul obisnuit si intoarce corpul (de inchis de apelant) doar pentru 200.
 func (r *Remote) get(ctx context.Context, u string) (io.ReadCloser, error) {
+	client := r.HTTP
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
+	return r.getWith(ctx, client, u)
+}
+
+func (r *Remote) getWith(ctx context.Context, client *http.Client, u string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	req.Header.Set("User-Agent", "HobStack")
-	client := r.HTTP
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -135,8 +146,10 @@ func (r *Remote) get(ctx context.Context, u string) (io.ReadCloser, error) {
 	}
 	resp.Body.Close()
 	switch {
+	// limita primara (403 + X-RateLimit-Remaining: 0), cea secundara (403 + Retry-After) si 429
 	case resp.StatusCode == http.StatusTooManyRequests,
-		resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0":
+		resp.StatusCode == http.StatusForbidden && (resp.Header.Get("X-RateLimit-Remaining") == "0" ||
+			resp.Header.Get("Retry-After") != ""):
 		return nil, errorf(ErrRateLimited, "GitHub is rate limiting requests; try again in a few minutes.")
 	case resp.StatusCode == http.StatusNotFound:
 		return nil, fmt.Errorf("%w: %s returned 404", ErrNotFound, redactURL(u))
@@ -185,7 +198,7 @@ func (r *Remote) Search(ctx context.Context, q string) ([]Hit, error) {
 	r.mu.Lock()
 	if e, ok := r.searches[q]; ok && time.Since(e.at) < searchTTL {
 		r.mu.Unlock()
-		return e.hits, nil
+		return slices.Clone(e.hits), nil
 	}
 	r.mu.Unlock()
 
@@ -217,7 +230,7 @@ func (r *Remote) Search(ctx context.Context, q string) ([]Hit, error) {
 	if r.searches == nil || len(r.searches) >= maxCached {
 		r.searches = map[string]searchEntry{}
 	}
-	r.searches[q] = searchEntry{hits: hits, at: time.Now()}
+	r.searches[q] = searchEntry{hits: slices.Clone(hits), at: time.Now()}
 	r.mu.Unlock()
 	return hits, nil
 }
@@ -234,7 +247,7 @@ type Official struct {
 func (r *Remote) Official(ctx context.Context) ([]Official, error) {
 	r.mu.Lock()
 	if r.official != nil && time.Since(r.offAt) < officialTTL {
-		list := r.official
+		list := slices.Clone(r.official)
 		r.mu.Unlock()
 		return list, nil
 	}
@@ -256,7 +269,9 @@ func (r *Remote) Official(ctx context.Context) ([]Official, error) {
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 
-	// descrierile in paralel, cate 4; un SKILL.md care lipseste lasa descrierea goala
+	// descrierile in paralel, cate 4; un SKILL.md care lipseste lasa descrierea goala,
+	// iar lista nu se tine in cache (la urmatoarea cerere se incearca din nou)
+	var failed atomic.Bool
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
 	for i := range list {
@@ -267,10 +282,14 @@ func (r *Remote) Official(ctx context.Context) ([]Official, error) {
 			defer func() { <-sem }()
 			body, err := r.get(ctx, r.RawURL+"/"+OfficialRepo+"/HEAD/"+o.Path+"/SKILL.md")
 			if err != nil {
+				failed.Store(true)
 				return
 			}
 			defer body.Close()
-			data, _ := io.ReadAll(io.LimitReader(body, maxSkillMD))
+			data, err := io.ReadAll(io.LimitReader(body, maxSkillMD))
+			if err != nil {
+				failed.Store(true)
+			}
 			_, o.Description = Frontmatter(data)
 		}(&list[i])
 	}
@@ -279,9 +298,11 @@ func (r *Remote) Official(ctx context.Context) ([]Official, error) {
 		return nil, ctx.Err()
 	}
 
-	r.mu.Lock()
-	r.official, r.offAt = list, time.Now()
-	r.mu.Unlock()
+	if !failed.Load() {
+		r.mu.Lock()
+		r.official, r.offAt = slices.Clone(list), time.Now()
+		r.mu.Unlock()
+	}
 	return list, nil
 }
 
@@ -321,4 +342,15 @@ func (r *Remote) PathCommit(ctx context.Context, repo, path string) (string, err
 		return "", fmt.Errorf("%w: bad commit from GitHub", ErrUnavailable)
 	}
 	return list[0].SHA, nil
+}
+
+// fetchClient e clientul pentru arhive: fara timeout pe tot corpul (o arhiva mare pe o retea lenta
+// poate dura), doar 30 s pana la header-ele raspunsului; restul il opreste ctx-ul cererii.
+func (r *Remote) fetchClient() *http.Client {
+	if r.fetchHTTP == nil {
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.ResponseHeaderTimeout = 30 * time.Second
+		r.fetchHTTP = &http.Client{Transport: tr}
+	}
+	return r.fetchHTTP
 }

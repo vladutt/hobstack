@@ -30,8 +30,57 @@ func TestFingerprint(t *testing.T) {
 	if d, _ := Fingerprint(other); d == a {
 		t.Error("new file not detected")
 	}
+	if runtime.GOOS != "windows" {
+		before, _ := Fingerprint(other)
+		if err := os.Chmod(filepath.Join(other, "ref", "b.md"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if after, _ := Fingerprint(other); after == before {
+			t.Error("chmod +x not detected")
+		}
+	}
 	if _, err := Fingerprint(filepath.Join(dir, "missing")); err == nil {
 		t.Error("missing folder gave no error")
+	}
+}
+
+// Fara marime in amprenta, "a"="1b\x002" si "a"="1" + "b"="2" dadeau acelasi sir.
+func TestFingerprintNoCollision(t *testing.T) {
+	one := t.TempDir()
+	writeFile(t, filepath.Join(one, "a"), "1b\x002")
+	two := t.TempDir()
+	writeFile(t, filepath.Join(two, "a"), "1")
+	writeFile(t, filepath.Join(two, "b"), "2")
+	f1, _ := Fingerprint(one)
+	f2, _ := Fingerprint(two)
+	if f1 == f2 {
+		t.Error("collision")
+	}
+}
+
+func TestListFilesSensitive(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{".env", ".env.local", "certs/server.pem", "tls.KEY", "id_rsa", "id_rsa.pub",
+		".npmrc", ".pypirc", "SKILL.md", "env.md", "keys.txt"} {
+		writeFile(t, filepath.Join(dir, n), "x")
+	}
+	files, err := ListFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	safe := map[string]bool{"SKILL.md": true, "env.md": true, "keys.txt": true}
+	for _, f := range files {
+		if f.Sensitive == safe[f.Path] {
+			t.Errorf("%s: Sensitive = %v", f.Path, f.Sensitive)
+		}
+	}
+	// fisierele sensibile se copiaza totusi
+	dest := filepath.Join(t.TempDir(), "d")
+	if err := CopyLocal(dir, dest); err != nil {
+		t.Fatal(err)
+	}
+	if got := listDir(t, dest); len(got) != len(files) {
+		t.Errorf("copied %v", got)
 	}
 }
 

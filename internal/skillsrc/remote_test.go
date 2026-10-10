@@ -39,6 +39,12 @@ func TestNewRemoteEnv(t *testing.T) {
 	if r.HTTP == nil || r.HTTP.Timeout.Seconds() != 30 {
 		t.Errorf("timeout: %+v", r.HTTP)
 	}
+	// arhiva: fara timeout pe tot corpul, doar pe header-ele raspunsului
+	fc := r.fetchClient()
+	tr, ok := fc.Transport.(*http.Transport)
+	if fc.Timeout != 0 || !ok || tr.ResponseHeaderTimeout.Seconds() != 30 {
+		t.Errorf("fetch client: timeout %v transport %+v", fc.Timeout, fc.Transport)
+	}
 }
 
 func TestSearch(t *testing.T) {
@@ -71,9 +77,14 @@ func TestSearch(t *testing.T) {
 	if hits[1].Source != "someone/tools" || hits[1].Official || hits[2].SkillID != "pdf-kit" {
 		t.Errorf("order = %+v", hits)
 	}
-	// a doua cerere identica vine din cache
-	if _, err := r.Search(context.Background(), "pdf"); err != nil || calls.Load() != 1 {
+	// a doua cerere identica vine din cache, ca o copie
+	hits[0].Name = "changed"
+	again, err := r.Search(context.Background(), "pdf")
+	if err != nil || calls.Load() != 1 {
 		t.Errorf("cache: calls = %d err = %v", calls.Load(), err)
+	}
+	if again[0].Name != "pdf" {
+		t.Errorf("cache shared with caller: %+v", again[0])
 	}
 	// un caracter: fara cerere
 	if h, err := r.Search(context.Background(), " p "); h != nil || err != nil || calls.Load() != 1 {
@@ -127,8 +138,37 @@ func TestOfficial(t *testing.T) {
 		t.Fatalf("list = %+v", list)
 	}
 	n := calls.Load()
-	if _, err := r.Official(context.Background()); err != nil || calls.Load() != n {
+	list[0].Description = "changed"
+	again, err := r.Official(context.Background())
+	if err != nil || calls.Load() != n {
 		t.Errorf("cache: %d -> %d", n, calls.Load())
+	}
+	if again[0].Description != "Word documents" {
+		t.Errorf("cache shared with caller: %+v", again[0])
+	}
+}
+
+func TestOfficialNotCachedOnFailure(t *testing.T) {
+	var rawCalls atomic.Int32
+	r := testRemote(t, func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/api/repos/anthropics/skills/contents/skills":
+			w.Write([]byte(`[{"name":"pdf","path":"skills/pdf","type":"dir"}]`))
+		case "/raw/anthropics/skills/HEAD/skills/pdf/SKILL.md":
+			if rawCalls.Add(1) == 1 {
+				http.Error(w, "boom", 500)
+				return
+			}
+			w.Write([]byte("---\ndescription: PDFs\n---\n"))
+		}
+	})
+	list, err := r.Official(context.Background())
+	if err != nil || len(list) != 1 || list[0].Description != "" {
+		t.Fatalf("first: %+v %v", list, err)
+	}
+	list, err = r.Official(context.Background())
+	if err != nil || list[0].Description != "PDFs" || rawCalls.Load() != 2 {
+		t.Errorf("second: %+v %v raw calls %d", list, err, rawCalls.Load())
 	}
 }
 
@@ -148,6 +188,9 @@ func TestCommits(t *testing.T) {
 			http.Error(w, "rate", 403)
 		case req.URL.Path == "/api/repos/many/r/commits/HEAD":
 			http.Error(w, "slow down", 429)
+		case req.URL.Path == "/api/repos/retry/r/commits/HEAD":
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "secondary limit", 403)
 		case req.URL.Path == "/api/repos/forbid/r/commits/HEAD":
 			w.Header().Set("X-RateLimit-Remaining", "12")
 			http.Error(w, "no", 403)
@@ -170,6 +213,9 @@ func TestCommits(t *testing.T) {
 	}
 	if _, err := r.HeadCommit(ctx, "many/r"); !errors.Is(err, ErrRateLimited) {
 		t.Errorf("429: %v", err)
+	}
+	if _, err := r.HeadCommit(ctx, "retry/r"); !errors.Is(err, ErrRateLimited) {
+		t.Errorf("403 Retry-After: %v", err)
 	}
 	if _, err := r.HeadCommit(ctx, "forbid/r"); errors.Is(err, ErrRateLimited) || err == nil {
 		t.Errorf("403 without limit: %v", err)
