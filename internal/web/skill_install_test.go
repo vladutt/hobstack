@@ -31,6 +31,7 @@ type fakeGitHub struct {
 	officialD map[string]string // nume -> SKILL.md
 	searchSt  int               // != 0: statusul raspunsului la cautare
 	limited   bool              // API-ul raspunde 403 cu X-RateLimit-Remaining: 0
+	pathRefs  []string          // parametrul sha din cererile commits?path=
 	apiCalls  int
 }
 
@@ -77,6 +78,7 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if repo, ok := strings.CutSuffix(rest, "/commits"); ok {
+			f.pathRefs = append(f.pathRefs, r.URL.Query().Get("sha"))
 			sha, ok := f.pathSHA[repo+":"+r.URL.Query().Get("path")]
 			if !ok {
 				json.NewEncoder(w).Encode([]any{})
@@ -694,5 +696,154 @@ func TestSkillLocalInstallAndCheck(t *testing.T) {
 	e.st.AddLibraryItem(&plain)
 	if code, _ := e.do(t, "POST", "/api/library/items/"+itoa(plain.ID)+"/source/check", nil); code != http.StatusNotFound {
 		t.Fatalf("fara sursa: %d", code)
+	}
+}
+
+func TestSkillPrepareAsksPathCommitAtFetchedSHA(t *testing.T) {
+	e := setupSkills(t)
+	e.prepareGitHub(t)
+	e.gh.set(func(f *fakeGitHub) {
+		if len(f.pathRefs) != 1 || f.pathRefs[0] != shaOne {
+			t.Fatalf("commits?path= fara sha-ul descarcat: %v", f.pathRefs)
+		}
+	})
+}
+
+// newCommit pune pe skills/pdf un commit nou cu fisierele date.
+func (e *skillEnv) newCommit(sha string, files map[string]string) {
+	e.gh.set(func(f *fakeGitHub) {
+		f.pathSHA["o/skills:skills/pdf"] = sha
+		arch := map[string]string{}
+		for p, b := range files {
+			arch["skills/pdf/"+p] = b
+		}
+		f.archives["o/skills@"+sha] = arch
+	})
+}
+
+func (e *skillEnv) sourcePrepare(t *testing.T, id int64) prepOut {
+	t.Helper()
+	code, raw := e.do(t, "POST", "/api/library/items/"+itoa(id)+"/source/prepare", nil)
+	if code != http.StatusOK {
+		t.Fatalf("source/prepare: %d %s", code, raw)
+	}
+	var out prepOut
+	json.Unmarshal(raw, &out)
+	return out
+}
+
+func TestSkillUpdateConcurrentAndStale(t *testing.T) {
+	e := setupSkills(t)
+	it := e.install(t, map[string]any{"token": e.prepareGitHub(t).Token, "name": "pdf"})
+	setA := map[string]string{"SKILL.md": pdfSkill("A."), "a.txt": "a"}
+	setB := map[string]string{"SKILL.md": pdfSkill("B."), "b.txt": "b"}
+	e.newCommit("5555555aaaa", setA)
+	a := e.sourcePrepare(t, it.ID)
+	e.newCommit("6666666bbbb", setB)
+	b := e.sourcePrepare(t, it.ID)
+
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i, tok := range []string{a.Token, b.Token} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			codes[i], _ = e.do(t, "POST", "/api/library/items/"+itoa(it.ID)+"/source/update", map[string]string{"token": tok})
+		}()
+	}
+	wg.Wait()
+	ok := 0
+	for _, c := range codes {
+		if c == http.StatusOK {
+			ok++
+		} else if c != http.StatusConflict {
+			t.Fatalf("codes %v", codes)
+		}
+	}
+	if ok == 0 {
+		t.Fatalf("niciun update: %v", codes)
+	}
+	vs, _ := e.st.ListLibraryVersions(it.ID)
+	for _, v := range vs[:ok] {
+		var got []string
+		filepath.Walk(v.Dir, func(p string, fi os.FileInfo, err error) error {
+			if err == nil && !fi.IsDir() {
+				rel, _ := filepath.Rel(v.Dir, p)
+				got = append(got, rel)
+			}
+			return nil
+		})
+		sort.Strings(got)
+		if len(got) != 2 || got[0] != "SKILL.md" || (got[1] != "a.txt" && got[1] != "b.txt") {
+			t.Fatalf("versiunea %s amesteca fisierele: %v", v.Version, got)
+		}
+	}
+}
+
+func TestSkillUpdateStaleToken(t *testing.T) {
+	e := setupSkills(t)
+	it := e.install(t, map[string]any{"token": e.prepareGitHub(t).Token, "name": "pdf"})
+	e.newCommit("5555555aaaa", map[string]string{"SKILL.md": pdfSkill("A.")})
+	a := e.sourcePrepare(t, it.ID)
+	b := e.sourcePrepare(t, it.ID)
+	if code, raw := e.do(t, "POST", "/api/library/items/"+itoa(it.ID)+"/source/update", map[string]string{"token": a.Token}); code != 200 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	code, raw := e.do(t, "POST", "/api/library/items/"+itoa(it.ID)+"/source/update", map[string]string{"token": b.Token})
+	if code != http.StatusConflict || errMsg(raw) != "The skill changed since this update was prepared; open it again." {
+		t.Fatalf("token vechi: %d %s", code, raw)
+	}
+	if e.srv.preps.dirOf(b.Token) == "" {
+		t.Fatal("tokenul vechi s-a consumat")
+	}
+}
+
+func TestSkillUpdateNotPublished(t *testing.T) {
+	e := setupSkills(t)
+	it := e.install(t, map[string]any{"token": e.prepareGitHub(t).Token, "name": "pdf"})
+	e.newCommit("5555555aaaa", map[string]string{"SKILL.md": pdfSkill("A.")})
+	tok := e.sourcePrepare(t, it.ID).Token
+	e.st.SetLibraryStatus(it.ID, store.ItemUnpublished)
+	const msg = "Only published skills can be updated."
+	code, raw := e.do(t, "POST", "/api/library/items/"+itoa(it.ID)+"/source/prepare", nil)
+	if code != http.StatusConflict || errMsg(raw) != msg {
+		t.Fatalf("prepare: %d %s", code, raw)
+	}
+	code, raw = e.do(t, "POST", "/api/library/items/"+itoa(it.ID)+"/source/update", map[string]string{"token": tok})
+	if code != http.StatusConflict || errMsg(raw) != msg {
+		t.Fatalf("update: %d %s", code, raw)
+	}
+	if e.srv.preps.dirOf(tok) == "" {
+		t.Fatal("tokenul s-a consumat")
+	}
+}
+
+func TestSkillUpdateModeOnly(t *testing.T) {
+	e := setupSkills(t)
+	mine := e.localSkill(t, "mine", map[string]string{"SKILL.md": "---\nname: mine\ndescription: M.\n---\n", "run": "echo\n"})
+	it := e.install(t, map[string]any{"token": e.prepare(t, map[string]string{"kind": "local", "path": mine}).Token, "name": "mine"})
+	os.Chmod(filepath.Join(mine, "run"), 0o755)
+	p := e.sourcePrepare(t, it.ID)
+	if len(p.Diff) != 1 || p.Diff[0]["path"] != "run" || p.Diff[0]["change"] != "mode" ||
+		p.Diff[0]["before"] != nil || p.Diff[0]["after"] != nil {
+		t.Fatalf("diff %+v", p.Diff)
+	}
+}
+
+func TestSkillCopyErrorHidesPaths(t *testing.T) {
+	e := setupSkills(t)
+	p := e.prepareGitHub(t)
+	os.RemoveAll(e.srv.preps.dirOf(p.Token))
+	code, raw := e.do(t, "POST", "/api/library/skills/install", map[string]any{"token": p.Token, "name": "pdf"})
+	if code != http.StatusUnprocessableEntity || errMsg(raw) != "The skill files could not be copied." || strings.Contains(string(raw), "/") {
+		t.Fatalf("%d %s", code, raw)
+	}
+	it := e.install(t, map[string]any{"token": e.prepareGitHub(t).Token, "name": "pdf"})
+	e.newCommit("5555555aaaa", map[string]string{"SKILL.md": pdfSkill("A.")})
+	up := e.sourcePrepare(t, it.ID)
+	os.RemoveAll(e.srv.preps.dirOf(up.Token))
+	code, raw = e.do(t, "POST", "/api/library/items/"+itoa(it.ID)+"/source/update", map[string]string{"token": up.Token})
+	if code != http.StatusUnprocessableEntity || errMsg(raw) != "The skill files could not be copied." || strings.Contains(string(raw), "/") {
+		t.Fatalf("update: %d %s", code, raw)
 	}
 }

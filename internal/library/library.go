@@ -368,7 +368,36 @@ func (l *Lib) publish(itemID int64, note string, keep, skipTest, replace bool) (
 	mu := l.lockFor(l.itemMus, itemID)
 	mu.Lock()
 	defer mu.Unlock()
+	return l.publishLocked(itemID, note, keep, skipTest, replace)
+}
 
+// PublishReplaceStaged: Update-ul unui skill publicat din sursa lui. Sub lock-ul item-ului muta folderul de lucru
+// (din CopyStaged) la locul propunerii si publica cu PublishReplace: doua update-uri concurente nu-si amesteca
+// fisierele si nu-si iau unul altuia propunerea. Elementul trebuie sa fie published (altfel ErrStatus, fara
+// nimic schimbat). La eroare propunerea se sterge; staging-ul ramane al apelantului.
+func (l *Lib) PublishReplaceStaged(itemID int64, staging, note string) (store.LibraryVersion, error) {
+	mu := l.lockFor(l.itemMus, itemID)
+	mu.Lock()
+	defer mu.Unlock()
+	it, err := l.St.GetLibraryItem(itemID)
+	if err != nil {
+		return store.LibraryVersion{}, err
+	}
+	if it.Status != store.ItemPublished {
+		return store.LibraryVersion{}, ErrStatus
+	}
+	if _, err := l.AdoptStaged(staging, itemID); err != nil {
+		return store.LibraryVersion{}, err
+	}
+	v, err := l.publishLocked(itemID, note, false, true, true)
+	if err != nil {
+		l.DiscardProposal(itemID)
+	}
+	return v, err
+}
+
+// publishLocked: corpul lui publish; apelantul tine lock-ul item-ului.
+func (l *Lib) publishLocked(itemID int64, note string, keep, skipTest, replace bool) (store.LibraryVersion, error) {
 	it, err := l.St.GetLibraryItem(itemID)
 	if err != nil {
 		return store.LibraryVersion{}, err

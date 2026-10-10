@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -37,6 +38,9 @@ const (
 	unknownLocal   = "Unknown local skill."
 	sourceGoneMsg  = "Source no longer on this machine."
 	prepGoneMsg    = "This skill is no longer prepared. Open it again."
+	copyFailedMsg  = "The skill files could not be copied."
+	staleMsg       = "The skill changed since this update was prepared; open it again."
+	notUpdatable   = "Only published skills can be updated."
 
 	prepTTL = 30 * time.Minute // cat traieste un folder pregatit
 )
@@ -52,6 +56,7 @@ type prepared struct {
 	files       []skillsrc.FileInfo
 	source      store.LibrarySource // Ref = referinta adusa acum
 	itemID      int64
+	baseRef     string // la Update: ref-ul elementului cand s-a pregatit (alt ref acum = pregatire veche)
 	created     time.Time
 }
 
@@ -393,7 +398,7 @@ func (s *Server) storePrep(w http.ResponseWriter, pr *prepared, diff []fileChang
 }
 
 // fetchGitHub aduce skillID din repo la commit-ul sha in dir. Ref-ul intors e ultimul commit pe folderul
-// skill-ului (acelasi continut ca la sha), ca verificarea pe cale sa nu vada un update fals; daca GitHub nu
+// skill-ului pana la sha (acelasi continut ca la sha), ca verificarea pe cale sa nu vada un update fals; daca GitHub nu
 // raspunde la a doua cerere ramane sha.
 func (s *Server) fetchGitHub(ctx context.Context, repo, sha, skillID, dir string) (store.LibrarySource, error) {
 	p, err := s.skills.Fetch(ctx, repo, sha, skillID, dir)
@@ -402,7 +407,7 @@ func (s *Server) fetchGitHub(ctx context.Context, repo, sha, skillID, dir string
 	}
 	ref := sha
 	if p != "" {
-		if c, err := s.skills.PathCommit(ctx, repo, p); err == nil {
+		if c, err := s.skills.PathCommitAt(ctx, repo, p, sha); err == nil {
 			ref = c
 		}
 	}
@@ -606,7 +611,9 @@ func (s *Server) installSkill(w http.ResponseWriter, r *http.Request) {
 	// aceleasi verificari ca la orice element (cai, symlink-uri, limite), intr-un folder de lucru nou
 	staging, _, _, err := s.lib.CopyStaged(store.KindSkill, pr.dir, paths)
 	if err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, "The skill files could not be copied: "+err.Error())
+		// eroarea are cai de pe disc: doar in log
+		log.Printf("skill install: copy %s: %v", pr.dir, err)
+		writeErr(w, http.StatusUnprocessableEntity, copyFailedMsg)
 		return
 	}
 	defer os.RemoveAll(staging) // dupa AdoptStaged nu mai exista
@@ -614,6 +621,8 @@ func (s *Server) installSkill(w http.ResponseWriter, r *http.Request) {
 	it := store.LibraryItem{Kind: v.Kind, Name: v.Name, Description: v.Description, MadeBy: "You",
 		Status: store.ItemDeclined} // ascuns cat se pregateste; PublishSkipTest il face published
 	if err := s.st.AddLibraryItem(&it); errors.Is(err, store.ErrConflict) {
+		// alt Install a luat numele intre verificarea de sus si acum: tokenul e deja consumat (folderul se
+		// sterge), deci utilizatorul redeschide skill-ul. Cazul e rar si nu merita o rezervare a numelui.
 		conflict()
 		return
 	} else if err != nil {
@@ -751,6 +760,10 @@ func (s *Server) prepareSourceUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if it.Status != store.ItemPublished {
+		writeErr(w, http.StatusConflict, notUpdatable)
+		return
+	}
 	latest, err := skillsrc.CheckSource(r.Context(), s.skills, src)
 	switch {
 	case err == nil:
@@ -794,7 +807,7 @@ func (s *Server) prepareSourceUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	pr.itemID, pr.name = it.ID, it.Name
+	pr.itemID, pr.name, pr.baseRef = it.ID, it.Name, src.Ref
 	if !fill(w, pr, it.Name) {
 		return
 	}
@@ -840,6 +853,15 @@ func (s *Server) updateFromSource(w http.ResponseWriter, r *http.Request) {
 		fail(w, badRequest("This update was prepared for another item."))
 		return
 	}
+	// verificarile inainte sa se consume tokenul: un refuz lasa fereastra deschisa
+	if it.Status != store.ItemPublished {
+		writeErr(w, http.StatusConflict, notUpdatable)
+		return
+	}
+	if src.Ref != pr.baseRef {
+		writeErr(w, http.StatusConflict, staleMsg)
+		return
+	}
 	if pr, ok = s.preps.get(in.Token, s.now(), true); !ok {
 		writeErr(w, http.StatusGone, prepGoneMsg)
 		return
@@ -847,17 +869,17 @@ func (s *Server) updateFromSource(w http.ResponseWriter, r *http.Request) {
 	defer os.RemoveAll(pr.dir)
 	staging, _, _, err := s.lib.CopyStaged(store.KindSkill, pr.dir, filePaths(pr.files))
 	if err != nil {
-		writeErr(w, http.StatusUnprocessableEntity, "The skill files could not be copied: "+err.Error())
+		log.Printf("skill update: copy %s: %v", pr.dir, err)
+		writeErr(w, http.StatusUnprocessableEntity, copyFailedMsg)
 		return
 	}
-	defer os.RemoveAll(staging)
-	if _, err := s.lib.AdoptStaged(staging, it.ID); err != nil {
-		fail(w, err)
+	defer os.RemoveAll(staging) // dupa adoptare nu mai exista
+	// mutarea in propunere si publicarea sub acelasi lock al elementului; versiunea noua are exact fisierele
+	// sursei (fara cele sterse intre timp la sursa)
+	if _, err := s.lib.PublishReplaceStaged(it.ID, staging, "Updated from "+src.Label); errors.Is(err, library.ErrStatus) {
+		writeErr(w, http.StatusConflict, notUpdatable)
 		return
-	}
-	// versiunea noua are exact fisierele sursei (fara cele sterse intre timp la sursa)
-	if _, err := s.lib.PublishReplace(it.ID, "Updated from "+src.Label); err != nil {
-		s.lib.DiscardProposal(it.ID)
+	} else if err != nil {
 		libraryErr(w, err)
 		return
 	}
@@ -892,10 +914,10 @@ func (s *Server) updateFromSource(w http.ResponseWriter, r *http.Request) {
 // --- diferente ---
 
 // fileChange: un fisier diferit intre versiunea curenta si sursa adusa. Before/After lipsesc pentru fisierele
-// binare (Binary) sau mai mari de MaxViewBytes (TooLarge).
+// binare (Binary), mai mari de MaxViewBytes (TooLarge) si cand s-a schimbat doar bitul executabil ("mode").
 type fileChange struct {
 	Path     string  `json:"path"`
-	Change   string  `json:"change"` // added | removed | modified
+	Change   string  `json:"change"` // added | removed | modified | mode
 	Before   *string `json:"before,omitempty"`
 	After    *string `json:"after,omitempty"`
 	Binary   bool    `json:"binary,omitempty"`
@@ -949,6 +971,11 @@ func skillDiff(oldDir, newDir string) ([]fileChange, error) {
 					return nil, err
 				}
 				if same {
+					if isExec(oldDir, p) == isExec(newDir, p) {
+						continue
+					}
+					c.Change = "mode" // acelasi continut, alt bit executabil: fara text
+					out = append(out, c)
 					continue
 				}
 			}
@@ -997,6 +1024,12 @@ func (c *fileChange) attach(dir, rel string, dst **string) error {
 	s := string(data)
 	*dst = &s
 	return nil
+}
+
+// isExec: fisierul are bitul executabil (folderele sunt ale noastre: pregatirea sau o versiune).
+func isExec(dir, rel string) bool {
+	fi, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(rel)))
+	return err == nil && fi.Mode()&0o111 != 0
 }
 
 // sameFile compara continutul (sha256) aceluiasi fisier din doua foldere, citit prin os.OpenRoot.

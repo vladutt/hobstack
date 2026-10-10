@@ -323,15 +323,28 @@ func (r *Remote) HeadCommit(ctx context.Context, repo string) (string, error) {
 	return c.SHA, nil
 }
 
-// PathCommit: ultimul commit care atinge calea (commits?path=&per_page=1); niciunul = ErrNotFound.
+// PathCommit: ultimul commit de pe ramura implicita care atinge calea (commits?path=&per_page=1);
+// niciunul = ErrNotFound.
 func (r *Remote) PathCommit(ctx context.Context, repo, path string) (string, error) {
+	return r.PathCommitAt(ctx, repo, path, "")
+}
+
+// PathCommitAt: ca PathCommit, dar istoria pleaca de la commit-ul at (&sha=at); at "" = ramura implicita.
+// La install: commit-ul care a schimbat ultima data folderul in arhiva descarcata (nu unul venit intre timp).
+func (r *Remote) PathCommitAt(ctx context.Context, repo, path, at string) (string, error) {
 	if !ValidRepo(repo) {
 		return "", fmt.Errorf("invalid repository %q", repo)
+	}
+	if at != "" && !shaRe.MatchString(at) {
+		return "", fmt.Errorf("invalid commit %q", at)
 	}
 	var list []struct {
 		SHA string `json:"sha"`
 	}
 	u := r.APIURL + "/repos/" + repo + "/commits?path=" + url.QueryEscape(path) + "&per_page=1"
+	if at != "" {
+		u += "&sha=" + at
+	}
 	if err := r.getJSON(ctx, u, &list); err != nil {
 		return "", err
 	}
