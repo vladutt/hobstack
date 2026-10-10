@@ -82,7 +82,7 @@ func (t *Team) ProposeLibraryItem(c mcp.Caller, in mcp.LibraryInput) (string, er
 	// Publish, la actiunea utilizatorului.
 	var staging string
 	if len(in.Files) > 0 {
-		if staging, _, _, err = t.lib.CopyStaged(home.Path, in.Files); err != nil {
+		if staging, _, _, err = t.lib.CopyStaged(in.Kind, home.Path, in.Files); err != nil {
 			return "", err
 		}
 	} else {

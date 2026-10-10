@@ -28,10 +28,14 @@ import (
 	"hobstack/internal/store"
 )
 
-const (
-	maxFiles = 20
-	maxBytes = 1 << 20 // 1 MB in total
-)
+// Limits: cate fisiere si cati octeti (in total) are voie sa aiba un element de tipul dat.
+// Un skill poate avea multe fisiere (referinte, exemple); tool-urile si serverele MCP raman mici.
+func Limits(kind string) (files int, bytes int64) {
+	if kind == store.KindSkill {
+		return 200, 10 << 20
+	}
+	return 20, 1 << 20
+}
 
 // Lib lucreaza pe disc in Root (~/.hobstack/library) si in store.
 type Lib struct {
@@ -102,9 +106,13 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // CopyProposal copiaza fisierele din folderul agentului in Root/proposals/<item-id>/.
 // Fiecare cale trebuie sa fie relativa si sa ramana in srcDir: fara "..", fara cai absolute,
-// fara symlink-uri (nici pe parcurs), fara foldere, cel mult 20 de fisiere si 1 MB.
+// fara symlink-uri (nici pe parcurs), fara foldere, cu limitele tipului (vezi Limits).
 func (l *Lib) CopyProposal(itemID int64, srcDir string, files []string) (dir string, nfiles, lines int, err error) {
-	staging, nfiles, lines, err := l.CopyStaged(srcDir, files)
+	kind := store.KindTool // tipul decide limitele; un item negasit primeste limitele stricte
+	if it, err := l.St.GetLibraryItem(itemID); err == nil {
+		kind = it.Kind
+	}
+	staging, nfiles, lines, err := l.CopyStaged(kind, srcDir, files)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -154,10 +162,11 @@ func (l *Lib) sweepStaging() {
 
 // CopyStaged face aceleasi verificari ca CopyProposal, dar scrie intr-un folder de lucru (.staging-*),
 // fara element in baza. Chemati AdoptStaged ca sa-l faceti propunerea unui item, sau stergeti-l.
-func (l *Lib) CopyStaged(srcDir string, files []string) (staging string, nfiles, lines int, err error) {
+func (l *Lib) CopyStaged(kind, srcDir string, files []string) (staging string, nfiles, lines int, err error) {
 	if len(files) == 0 {
 		return "", 0, 0, errors.New("no files to copy")
 	}
+	maxFiles, maxBytes := Limits(kind)
 	if len(files) > maxFiles {
 		return "", 0, 0, fmt.Errorf("too many files (max %d)", maxFiles)
 	}
@@ -178,7 +187,7 @@ func (l *Lib) CopyStaged(srcDir string, files []string) (staging string, nfiles,
 	}
 	var list []file
 	seen := map[string]bool{}
-	total := 0
+	total := int64(0)
 	for _, raw := range files {
 		rel, err := checkRel(raw)
 		if err != nil {
@@ -200,7 +209,7 @@ func (l *Lib) CopyStaged(srcDir string, files []string) (staging string, nfiles,
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("%q: %w", raw, err)
 		}
-		total += len(data)
+		total += int64(len(data))
 		mode := fs.FileMode(0o644)
 		if fi.Mode()&0o111 != 0 {
 			mode = 0o755
@@ -273,7 +282,7 @@ func lstatPath(base, rel string) (fs.FileInfo, error) {
 
 // readFile deschide fisierul prin root, cere sa fie acelasi fisier vazut de Lstat si il citeste
 // cel mult budget octeti (cu unul in plus, ca sa stim ca s-a depasit).
-func readFile(root *os.Root, rel string, lst fs.FileInfo, budget int) ([]byte, error) {
+func readFile(root *os.Root, rel string, lst fs.FileInfo, budget int64) ([]byte, error) {
 	// O_NONBLOCK: un FIFO pus in locul fisierului nu ne blocheaza la open
 	f, err := root.OpenFile(rel, os.O_RDONLY|oNonblock, 0)
 	if err != nil {
@@ -287,12 +296,12 @@ func readFile(root *os.Root, rel string, lst fs.FileInfo, budget int) ([]byte, e
 	if !fi.Mode().IsRegular() || !os.SameFile(lst, fi) || hardLinked(fi) {
 		return nil, errors.New("file changed or is not a plain file")
 	}
-	data, err := io.ReadAll(io.LimitReader(f, int64(budget)+1))
+	data, err := io.ReadAll(io.LimitReader(f, budget+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > budget {
-		return nil, errors.New("files are bigger than 1 MB in total")
+	if int64(len(data)) > budget {
+		return nil, errors.New("files are bigger than the size limit in total")
 	}
 	return data, nil
 }

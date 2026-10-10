@@ -458,7 +458,7 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 	var staging string
 	if len(files) > 0 {
 		var ue library.UserError
-		if staging, _, _, err = s.lib.WriteStaged(files); errors.As(err, &ue) {
+		if staging, _, _, err = s.lib.WriteStaged(v.Kind, files); errors.As(err, &ue) {
 			fail(w, badRequest(ue.Msg))
 			return
 		} else if err != nil {
