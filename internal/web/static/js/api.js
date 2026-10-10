@@ -2,16 +2,24 @@
 // serverului daca raspunsul nu e ok.
 // Serverul cere Content-Type: application/json pe orice request care nu e GET
 // (chiar si fara body), ca protectie impotriva request-urilor cross-site.
-export async function api(path, { method = "GET", body } = {}) {
+// signal (optional, AbortController) anuleaza cererea: fetch arunca atunci un AbortError.
+// Eroarea aruncata are si status (codul HTTP) si data (corpul JSON), pentru cine are nevoie de ele.
+export async function api(path, { method = "GET", body, signal } = {}) {
   const res = await fetch(path, {
     method,
     headers: method === "GET" ? {} : { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   });
   if (res.status === 204) return null;
   // 202 poate veni cu corp (ex. sesiunea la /chat) sau fara (ex. /stop): fara corp -> null
   const data = await res.json().catch(() => (res.status === 202 ? null : {}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) {
+    const err = new Error(data.error || res.statusText);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 

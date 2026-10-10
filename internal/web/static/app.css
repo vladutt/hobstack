@@ -1446,6 +1446,12 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .mcp-h2 { margin: 6px 0 0; font-size: 18px; }
 input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
 .mcp-status { margin: 0; }
+.mcp-catalog { margin: -4px 0 0; padding: 0 2px; font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.mcp-catalog[hidden] { display: none; }
+.mcp-catalog .link-btn { color: var(--soft); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line-2); }
+.mcp-catalog .link-btn:hover { color: var(--text); text-decoration-color: currentColor; }
+.mcp-catalog-busy { color: var(--soft); }
+.mcp-catalog-err { color: var(--amber); }
 .mcp-status:empty { display: none; }
 .mcp-list { display: grid; border: 1px solid var(--line); border-radius: 14px; background: var(--col); min-width: 0; }
 .mcp-list:empty { display: none; }

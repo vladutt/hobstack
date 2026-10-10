@@ -25,6 +25,19 @@ function truncate(text, max) {
   return chars.length <= max ? chars.join("") : chars.slice(0, max - 1).join("") + "…";
 }
 
+// ago: "just now", "12 min ago", "3 h ago", "2 d ago" (ui.js nu are un helper comun)
+function ago(iso) {
+  const mins = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (!(mins >= 1)) return "just now"; // si pentru un ceas usor decalat (valoare negativa)
+  if (mins < 60) return `${Math.floor(mins)} min ago`;
+  if (mins < 60 * 24) return `${Math.floor(mins / 60)} h ago`;
+  return `${Math.floor(mins / 60 / 24)} d ago`;
+}
+
+const num = (n) => (n || 0).toLocaleString("en-US");
+const POLL_MS = 3000; // cat timp catalogul se actualizeaza, starea se cere la 3 s
+const BUILDING_WAIT = "Searching the registry\u2026 this can take up to a minute.";
+
 // postInstall: ca api(), dar pastreaza testFailed din raspunsul 422 (proba picata)
 async function postInstall(body) {
   const res = await fetch("/api/library/install-mcp", {
@@ -50,12 +63,18 @@ export async function mcpAddView(root, projectId) {
   let query = "";
   let cursor = "";
   let results = [];
+  let ctrl = null; // AbortController-ul cautarii in curs (o cautare noua o anuleaza pe cea veche)
+  let searching = false; // prima pagina a cautarii curente inca asteapta raspunsul
+  let catalog; // starea catalogului local: undefined = nu stim inca, null = fara catalog
+  let pollTimer = null;
 
   const search = el("input", {
     type: "search", class: "mcp-search", placeholder: "Search the MCP registry: postgres, github, notion…",
     "aria-label": "Search the MCP registry", autocomplete: "off",
   });
   const status = el("p", { class: "hint mcp-status", role: "status" });
+  // randul de stare al catalogului local, sub cautare (ascuns fara catalog)
+  const catalogRow = el("p", { class: "hint mcp-catalog", hidden: true });
   const list = el("div", { class: "mcp-list" });
   const more = el("div", { class: "mcp-more" });
   const localList = el("div", { class: "mcp-list" }, el("p", { class: "hint" }, "Reading your Claude config…"));
@@ -68,18 +87,92 @@ export async function mcpAddView(root, projectId) {
     timer = setTimeout(() => { query = q; load(false); }, 300);
   });
 
+  // waitText: cat asteapta cautarea; in modul "building" ea merge la registru si poate dura
+  const waitText = () => (catalog?.state === "building" ? BUILDING_WAIT : "Searching\u2026");
+
+  // updateButton: "Update now" (link-buton) sau "Updating…" cat timp catalogul se actualizeaza
+  function updateButton() {
+    if (catalog.syncing) return el("span", { class: "mcp-catalog-busy" }, "Updating\u2026");
+    const btn = el("button", { type: "button", class: "link-btn mcp-catalog-act" }, "Update now");
+    btn.addEventListener("click", () => syncNow(btn));
+    return btn;
+  }
+
+  // drawCatalog: randul de stare din ultima stare cunoscuta
+  function drawCatalog() {
+    if (!catalog) { catalogRow.hidden = true; catalogRow.replaceChildren(); return; }
+    catalogRow.hidden = false;
+    const c = catalog;
+    if (c.state === "building" && (c.syncing || !c.lastError)) {
+      catalogRow.replaceChildren(`Building local catalog\u2026 ${num(c.count)} servers so far. Search uses the live registry until it's done.`);
+    } else if (c.lastError && !c.syncing) {
+      catalogRow.replaceChildren(el("span", { class: "mcp-catalog-err" }, `Last update failed: ${c.lastError}`), " \u00b7 ", updateButton());
+    } else {
+      catalogRow.replaceChildren(`Catalog: ${num(c.count)} servers`,
+        c.updatedAt ? ` \u00b7 updated ${ago(c.updatedAt)}` : "", " \u00b7 ", updateButton());
+    }
+  }
+
+  // setCatalog: starea noua (din orice raspuns). Din building in ready cautarea curenta se reface (acum local);
+  // cat timp syncing, starea se cere din nou la 3 s.
+  function setCatalog(c) {
+    if (closed || c === undefined) return;
+    const was = catalog;
+    catalog = c;
+    drawCatalog();
+    if (searching) status.textContent = waitText();
+    if (was?.state === "building" && c?.state === "ready") load(false);
+    clearTimeout(pollTimer);
+    pollTimer = c?.syncing ? setTimeout(poll, POLL_MS) : null;
+  }
+
+  async function poll() {
+    pollTimer = null;
+    try {
+      const data = await api("/api/library/registry/status");
+      setCatalog(data.catalog);
+    } catch {
+      // o eroare trecatoare: incercam din nou peste 3 s, cat timp stim ca se actualizeaza
+      if (!closed && catalog?.syncing) pollTimer = setTimeout(poll, POLL_MS);
+    }
+  }
+
+  // syncNow: "Update now". 409 (deja se actualizeaza) = doar starea; alta eroare = toast
+  async function syncNow(btn) {
+    btn.disabled = true;
+    try {
+      const data = await api("/api/library/registry/sync", { method: "POST" });
+      setCatalog(data?.catalog);
+    } catch (err) {
+      if (closed) return;
+      if (err.status === 409) { poll(); return; }
+      btn.disabled = false;
+      toast(err.message);
+    }
+  }
+
   // load: prima pagina (append=false) sau "Load more" (append=true, cu cursorul)
   async function load(append) {
     const my = ++seq;
-    if (!append) { cursor = ""; results = []; list.replaceChildren(); more.replaceChildren(); status.textContent = "Searching…"; }
+    ctrl?.abort(); // cererea precedenta nu mai conteaza
+    ctrl = new AbortController();
+    const signal = ctrl.signal;
+    if (!append) {
+      cursor = ""; results = []; list.replaceChildren(); more.replaceChildren();
+      searching = true;
+      status.textContent = waitText();
+    }
     const params = new URLSearchParams();
     if (query) params.set("search", query);
     if (append && cursor) params.set("cursor", cursor);
     let data;
     try {
-      data = await api(`/api/library/registry?${params}`);
+      data = await api(`/api/library/registry?${params}`, { signal });
     } catch (err) {
-      if (closed || my !== seq) return;
+      // anulata de o cautare noua / de iesirea din pagina: fara eroare
+      if (err.name === "AbortError" || closed || my !== seq) return;
+      searching = false;
+      if (err.data && "catalog" in err.data) setCatalog(err.data.catalog);
       status.textContent = "";
       const retry = el("button", { type: "button", class: "btn small" }, "Retry");
       retry.addEventListener("click", () => load(append));
@@ -88,6 +181,7 @@ export async function mcpAddView(root, projectId) {
       return;
     }
     if (closed || my !== seq) return;
+    searching = false;
     results.push(...(data.servers || []));
     cursor = data.nextCursor || "";
     status.textContent = results.length ? "" : (query ? `No servers match “${query}”.` : "The registry returned no servers.");
@@ -97,6 +191,8 @@ export async function mcpAddView(root, projectId) {
       btn.addEventListener("click", () => { btn.disabled = true; btn.textContent = "Loading…"; load(true); });
       more.replaceChildren(btn);
     } else more.replaceChildren();
+    // la final: daca starea trece din building in ready, setCatalog reface cautarea
+    setCatalog(data.catalog);
   }
 
   // action: Install / In library / Install dezactivat cu motivul
@@ -358,18 +454,21 @@ export async function mcpAddView(root, projectId) {
         el("p", { class: "lib-sub" }, project
           ? `Search the official MCP registry or install a server you already use in Claude. Installs into the Library and ${project.name}.`
           : "Search the official MCP registry or install a server you already use in Claude.")),
-      el("section", { class: "mcp-section" }, search, status, list, more),
+      el("section", { class: "mcp-section" }, search, catalogRow, status, list, more),
       el("section", { class: "mcp-section" },
         el("h2", { class: "mcp-h2" }, "From your Claude"),
         el("p", { class: "hint" }, "Servers in ~/.claude.json and Claude Desktop. Only variable names are read, never their values."),
         localList)));
   search.focus();
+  poll(); // starea catalogului (randul de sub cautare si textul de asteptare), fara sa astepte cautarea
   load(false);
   loadLocal();
 
   return () => {
     closed = true;
     clearTimeout(timer);
+    clearTimeout(pollTimer);
+    ctrl?.abort();
     dialogs.forEach((d) => d.remove());
   };
 }
