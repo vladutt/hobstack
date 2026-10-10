@@ -52,7 +52,17 @@ export async function skillAddView(root, projectId) {
   search.addEventListener("input", () => {
     clearTimeout(timer);
     const q = search.value.trim();
-    if (q.length === 1) return; // 1 caracter nu cauta nimic (prea larg)
+    if (q.length === 1) {
+      // 1 caracter nu cauta nimic (prea larg): rezultatele vechi dispar, cererea in curs se anuleaza
+      ++seq;
+      ctrl?.abort();
+      query = q;
+      listTitle.textContent = "Results";
+      listHint.hidden = true;
+      list.replaceChildren();
+      status.textContent = "Type at least 2 characters to search.";
+      return;
+    }
     timer = setTimeout(() => { query = q; load(); }, 300);
   });
 
@@ -91,7 +101,12 @@ export async function skillAddView(root, projectId) {
     return btn;
   }
 
-  const repoLink = (repo) => el("a", { class: "mono skill-repo", href: githubURL(repo), target: "_blank", rel: "noopener noreferrer" }, repo);
+  // repoLink: owner/repo cu link catre GitHub; un repo cu alta forma ramane text
+  const repoLink = (repo) => {
+    const href = githubURL(repo);
+    return href ? el("a", { class: "mono skill-repo", href, target: "_blank", rel: "noopener noreferrer" }, repo)
+      : el("span", { class: "mono skill-repo" }, repo);
+  };
 
   function searchRow(s) {
     return el("article", { class: "mcp-row" },
@@ -175,11 +190,14 @@ export async function skillAddView(root, projectId) {
     const foot = el("div", { class: "lib-form-foot" });
     const btn = (label, cls, onclick) => el("button", { type: "button", class: "btn " + cls, onclick }, label);
 
+    const onKey = (e) => { if (e.key === "Escape") close(); };
     function close() {
       if (busy) return;
       overlay.remove();
+      document.removeEventListener("keydown", onKey);
       dialogs.delete(close);
       dropToken(token);
+      token = "";
     }
 
     function validName() {
@@ -250,8 +268,9 @@ export async function skillAddView(root, projectId) {
         if (!closed) location.hash = `#/library/item/${it.id}`;
       } catch (err) {
         busy = false;
+        // pagina parasita cat se instala: doar toast-ul, fereastra (si pregatirea) dispar
+        if (closed) { toast(err.message); close(); return; }
         if (err.status === 410) token = ""; // pregatirea a expirat: doar Cancel (si Install din nou din lista)
-        if (closed) { toast(err.message); return; }
         form(err.message);
         if (err.status === 409) { name.focus(); name.select(); }
       }
@@ -259,8 +278,8 @@ export async function skillAddView(root, projectId) {
 
     const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) close(); } },
       el("div", { class: "modal lib-form mcp-dialog skill-dialog", role: "dialog", "aria-modal": "true", "aria-label": `Install ${title}` }, body, foot));
-    overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
     form();
+    document.addEventListener("keydown", onKey); // Esc inchide fereastra oriunde ar fi focusul
     validName();
     document.body.append(overlay);
     name.focus();

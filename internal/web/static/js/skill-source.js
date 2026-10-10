@@ -19,8 +19,11 @@ export function sourceText(src) {
   return src.label || src.kind;
 }
 
-// githubURL: pagina folderului pe GitHub, la commit-ul dat (sau ramura implicita)
+// githubURL: pagina folderului pe GitHub, la commit-ul dat (sau ramura implicita); null pentru un repo care
+// nu are forma owner/repo (datele vin din afara: fara link-uri catre altceva)
+const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 export function githubURL(repo, path, ref) {
+  if (!REPO_RE.test(String(repo || ""))) return null;
   const base = `https://github.com/${repo}`;
   if (!path && !ref) return base;
   return `${base}/tree/${ref || "HEAD"}/${path || ""}`.replace(/\/$/, "");
@@ -28,8 +31,9 @@ export function githubURL(repo, path, ref) {
 
 // sourceNode: textul sursei, cu link catre GitHub cand e cazul
 export function sourceNode(src) {
-  if (src?.kind !== "github" || !src.repo) return el("span", {}, sourceText(src));
-  return el("a", { href: githubURL(src.repo, src.path, src.ref), target: "_blank", rel: "noopener noreferrer" }, sourceText(src));
+  const href = src?.kind === "github" ? githubURL(src.repo, src.path, src.ref) : null;
+  if (!href) return el("span", {}, sourceText(src));
+  return el("a", { href, target: "_blank", rel: "noopener noreferrer" }, sourceText(src));
 }
 
 // sizeText: 512 B / 1.2 KB / 3.4 MB
@@ -185,7 +189,29 @@ function closeHunk(h, ops, last) {
   if (!h.newLines) h.newStart = Math.max(0, h.newStart - 1);
 }
 
+const MAX_DIFF_LINES = 3000; // peste atat pe fisier aratam doar inceputul
+
+// capHunks: primele MAX_DIFF_LINES linii din fragmente; more = cate linii au ramas pe dinafara
+function capHunks(hunks) {
+  let left = MAX_DIFF_LINES, more = 0;
+  const out = [];
+  for (const h of hunks) {
+    if (left <= 0) { more += h.lines.length; continue; }
+    if (h.lines.length <= left) { out.push(h); left -= h.lines.length; continue; }
+    out.push({ ...h, lines: h.lines.slice(0, left) });
+    more += h.lines.length - left;
+    left = 0;
+  }
+  return { hunks: out, more };
+}
+
 const CHANGE = { added: "added", removed: "removed", modified: "modified", mode: "mode changed" };
+
+// diffNode: diff-ul unui fisier, taiat la MAX_DIFF_LINES linii, cu nota pentru rest
+function diffNode(path, hunks) {
+  const { hunks: shown, more } = capHunks(hunks);
+  return [diffBlock(path, shown), more ? el("p", { class: "hint skill-diff-cut" }, `Diff truncated: ${more} more ${more === 1 ? "line" : "lines"}.`) : null];
+}
 
 // diffList: lista schimbarilor pe fisiere (primele 3 deschise), fiecare cu diff-ul ei
 export function diffList(diff) {
@@ -203,7 +229,7 @@ export function diffList(diff) {
       : d.binary ? "Binary file: no diff." : d.tooLarge ? "Too large to show the diff." : null;
     const body = el("div", { class: "change-body", hidden: i >= 3 },
       note ? el("p", { class: "hint" }, note) : null,
-      hunks ? (hunks.length ? diffBlock(d.path, hunks)
+      hunks ? (hunks.length ? diffNode(d.path, hunks)
         : el("p", { class: "hint" }, d.before || d.after ? "Only the newline at the end of the file changed." : "Empty file.")) : null);
     const btn = el("button", { type: "button", class: "change-file", "aria-expanded": String(i < 3) },
       el("span", { class: "change-path" }, d.path),
@@ -238,22 +264,61 @@ export async function updateDialog(item, button, onDone) {
     button.textContent = label;
   }
   let busy = false;
+  let left = false; // pagina parasita: la finalul unei cereri in curs fereastra se inchide singura
   let token = prep.token; // "" dupa ce s-a folosit sau a expirat
   const err = el("p", { class: "mcp-dlg-error", role: "alert", hidden: true });
+  const onKey = (e) => { if (e.key === "Escape") close(); };
   const close = () => {
     if (busy) return;
     overlay.remove();
+    document.removeEventListener("keydown", onKey);
     dropToken(token);
+    token = "";
   };
   const diff = prep.diff || [];
+  const files = prep.files || [];
   const counts = ["added", "modified", "removed", "mode"].map((c) => [c, diff.filter((d) => d.change === c).length]).filter(([, n]) => n);
-  const newScripts = diff.filter((d) => d.change === "added" && (prep.files || []).some((f) => f.path === d.path && f.script));
-  const go = el("button", { type: "button", class: "btn primary" }, `Update to ${shortRef(prep.source?.ref)}`);
-  go.addEventListener("click", async () => {
-    if (newScripts.length && !confirm(`This update adds ${plural(newScripts.length, "script", "scripts")} that agents can run. Update?`)) return;
+  // scripturile noi, schimbate sau devenite scripturi (bitul executabil apare ca "mode"): orice fisier din diff,
+  // in afara de cele sterse, care in versiunea noua e script. Un fisier neschimbat nu apare in diff.
+  const scriptNow = new Set(files.filter((f) => f.script).map((f) => f.path));
+  const scripts = diff.filter((d) => d.change !== "removed" && scriptNow.has(d.path));
+  const goLabel = `Update to ${shortRef(prep.source?.ref)}`;
+  const body = el("div", { class: "lib-form-body" });
+  const foot = el("div", { class: "lib-form-foot" });
+  const btn = (text, cls, onclick) => el("button", { type: "button", class: "btn " + cls, onclick }, text);
+  const diffNode = diffList(diff);
+
+  function form() {
+    body.replaceChildren(
+      el("h2", {}, `Update ${item.name}`),
+      el("p", { class: "skill-src-line" }, "From ", sourceNode(item.source), " to ",
+        el("span", { class: "mono" }, shortRef(prep.source?.ref))),
+      err,
+      el("p", { class: "hint" }, counts.length
+        ? counts.map(([c, n]) => `${n} ${CHANGE[c]}`).join(" · ") + ` · ${plural(files.length, "file", "files")} in the new version`
+        : "Nothing changed in the files."),
+      diffNode,
+      el("p", { class: "hint" }, "Projects that installed it can move to the new version in Instructions › Library, like with any new Library version."));
+    const go = btn(goLabel, "primary", () => { if (scripts.length) confirmStep(); else send(go); });
+    go.disabled = !token;
+    foot.replaceChildren(btn("Cancel", "ghost", close), el("span", { class: "grow" }), go);
+  }
+
+  // confirmStep: ca la install, scripturile pe care agentii le pot rula cer confirmarea
+  function confirmStep() {
+    body.replaceChildren(
+      el("h2", {}, `Update ${item.name}`),
+      el("p", { class: "mcp-confirm" }, `This update adds or changes ${plural(scripts.length, "script", "scripts")} that agents can run. Update?`),
+      el("ul", { class: "skill-script-list" }, scripts.map((d) => el("li", { class: "mono" }, d.path))));
+    const go = btn(goLabel, "primary", () => send(go));
+    foot.replaceChildren(btn("Back", "ghost", () => form()), el("span", { class: "grow" }), go);
+    go.focus();
+  }
+
+  async function send(go) {
     busy = true;
     err.hidden = true;
-    overlay.querySelectorAll(".lib-form-foot button").forEach((b) => { b.disabled = true; });
+    foot.querySelectorAll("button").forEach((b) => { b.disabled = true; });
     go.classList.add("busy");
     go.textContent = "Updating…";
     try {
@@ -262,34 +327,24 @@ export async function updateDialog(item, button, onDone) {
       busy = false;
       toast(`${it.name} updated to v${it.version?.version || ""}`, "ok");
       close();
-      onDone?.(it);
+      if (!left) onDone?.(it);
     } catch (e) {
       busy = false;
-      if (e.status === 410 || e.status === 409) token = ""; // pregatirea nu mai e buna: doar Cancel
+      if (left) { toast(e.message); close(); return; } // close() sterge si pregatirea
+      // pregatirea nu mai e buna: doar Cancel. O stergem acum (409 = serverul inca o tine)
+      if (e.status === 410 || e.status === 409) { dropToken(token); token = ""; }
       err.textContent = e.message;
       err.hidden = false;
-      go.classList.remove("busy");
-      go.textContent = `Update to ${shortRef(prep.source?.ref)}`;
-      overlay.querySelectorAll(".lib-form-foot button").forEach((b) => { b.disabled = false; });
-      go.disabled = !token;
+      form();
     }
-  });
-  const box = el("div", { class: "modal lib-form mcp-dialog skill-dialog", role: "dialog", "aria-modal": "true", "aria-label": `Update ${item.name}` },
-    el("div", { class: "lib-form-body" },
-      el("h2", {}, `Update ${item.name}`),
-      el("p", { class: "skill-src-line" }, "From ", sourceNode(item.source), " to ",
-        el("span", { class: "mono" }, shortRef(prep.source?.ref))),
-      err,
-      el("p", { class: "hint" }, counts.length
-        ? counts.map(([c, n]) => `${n} ${CHANGE[c]}`).join(" · ") + ` · ${plural((prep.files || []).length, "file", "files")} in the new version`
-        : "Nothing changed in the files."),
-      diffList(diff),
-      el("p", { class: "hint" }, "Projects that installed it can move to the new version in Instructions › Library, like with any new Library version.")),
-    el("div", { class: "lib-form-foot" },
-      el("button", { type: "button", class: "btn ghost", onclick: close }, "Cancel"), el("span", { class: "grow" }), go));
+  }
+
+  const box = el("div", { class: "modal lib-form mcp-dialog skill-dialog", role: "dialog", "aria-modal": "true", "aria-label": `Update ${item.name}` }, body, foot);
   const overlay = el("div", { class: "modal-overlay", onclick: (e) => { if (e.target === overlay) close(); } }, box);
-  overlay.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  form();
+  document.addEventListener("keydown", onKey);
   document.body.append(overlay);
-  go.focus();
-  return close;
+  foot.querySelector(".btn.primary")?.focus();
+  // la iesirea din pagina: fereastra se inchide acum, sau la finalul cererii in curs
+  return () => { left = true; close(); };
 }
