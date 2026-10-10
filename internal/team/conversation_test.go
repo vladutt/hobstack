@@ -203,7 +203,7 @@ func TestConvFinishedWithoutReport(t *testing.T) {
 	wantEvent(t, f, task.ID, "reported", "Vera", "Vera finished without report_done")
 }
 
-// fara decident: blocat, decide utilizatorul
+// task-ul propriu al unei radacini: raportul merge la utilizator, task-ul trece singur in Done
 func TestConvFinishedWithoutReportNoDecider(t *testing.T) {
 	f := setup(t)
 	wes := f.agent(t, "Wes", nil, nil)
@@ -211,7 +211,7 @@ func TestConvFinishedWithoutReportNoDecider(t *testing.T) {
 	f.st.CreateTask(&task)
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, wes).ID, runner.Outcome{Status: "done", Result: "gata"})
-	f.wantStatus(t, 1, store.StatusBlocked)
+	f.wantStatus(t, 1, store.StatusDone)
 	wantMsg(t, f, task.ID, "reported", "Wes", "You", "gata")
 }
 

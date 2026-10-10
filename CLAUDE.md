@@ -50,7 +50,9 @@ Gata (modala de task, spec in docs/superpowers/specs/2026-10-01-foreman-task-mod
 (task_events) inregistrat pe toate drumurile; card compact pe board si modala cu descriere, istoric, raport ascuns si actiuni.
 Gata (full autonomy, spec in docs/superpowers/specs/2026-10-01-foreman-autonomy-design.md): comutator per proiect (agentii nu
 intreaba, radacina decide in locul utilizatorului, fara bucla la blocaj); cererile de acces din permission_denials apar in
-"Needs you" in toate modurile, cu Enable Shell / Dismiss. Un task creat din board si dat radacinii nu trece singur in Done
+"Needs you" in toate modurile, cu Enable Shell / Dismiss. Task-ul propriu al unei radacini (start_task dintr-o notificare:
+fara creator, nu din board, fara etapa; team.ownRootTask) trece singur in Done si fara autonomie, dupa reviewer daca are
+("Accepted automatically (the root lead's own task)"); inainte ramanea Blocked la utilizator. Un task creat din board si dat radacinii nu trece singur in Done
 nici in modul autonom (decide utilizatorul), iar un run oprit fara report_done (cand agentul il putea chema) nu se accepta automat.
 Gata (new chat): butonul "New chat" din chat-ul unui agent sterge sesiunea Claude (urmatorul mesaj porneste una noua) si
 ascunde istoricul (agents.chat_from); mesajele vechi raman salvate, vizibile prin "Earlier messages".

@@ -332,10 +332,10 @@ func TestReviewRejectBlocksAtThree(t *testing.T) {
 	}
 }
 
-func TestReviewWithoutDeciderBlocksTask(t *testing.T) {
+func TestReviewWithoutDeciderOwnRootTaskDone(t *testing.T) {
 	f := setup(t)
-	// task-ul ajunge in review prin run-ul terminat fara report_done, dupa ce
-	// asignatul a ramas fara sef si fara creator
+	// task-ul ajunge in review prin run-ul terminat fara report_done, iar
+	// asignatul e radacina, fara creator: task-ul ei propriu, Done automat
 	wes := f.agent(t, "Wes", nil, nil)
 	task := f.task(t, "A", wes, store.StatusInProgress)
 	task.CreatorID = nil
@@ -349,12 +349,12 @@ func TestReviewWithoutDeciderBlocksTask(t *testing.T) {
 	if who.ID != 0 {
 		t.Fatalf("nu trebuia notificat nimeni: %+v", who)
 	}
-	got := f.wantStatus(t, 1, store.StatusBlocked)
+	got := f.wantStatus(t, 1, store.StatusDone)
 	if got.ReviewStage != store.StageNone {
 		t.Fatalf("stage = %q", got.ReviewStage)
 	}
-	if !f.hasMessage(wes.ID, "No one can check T-1. The user decides from the board (Accept / Unblock).") {
-		t.Fatal("asignatul trebuie anuntat")
+	if f.hasMessage(wes.ID, "No one can check T-1") {
+		t.Fatal("task-ul propriu al radacinii nu ramane la utilizator")
 	}
 }
 

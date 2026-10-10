@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"hobstack/internal/mcp"
+	"hobstack/internal/runner"
 	"hobstack/internal/store"
 )
 
@@ -112,5 +113,27 @@ func TestUserCommentPointsToFollowUpTask(t *testing.T) {
 	}
 	if !f.hasMessage(f.rook.ID, `mcp__team__start_task with continues: "T-1"`) {
 		t.Fatal("comentariul nu spune cum se fac modificarile")
+	}
+}
+
+// radacina cu reviewer isi porneste singura un task (dintr-o notificare): dupa aprobarea
+// reviewer-ului trece in Done, nu ramane blocat la utilizator
+func TestStartTaskByRootDoneAfterReview(t *testing.T) {
+	f := setup(t)
+	solo := f.agent(t, "Solo", nil, &f.vera)
+	if _, err := f.tm.StartTask(mcp.Caller{ProjectID: f.p.ID, AgentID: solo.ID}, "Commit", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	f.fs.finish(f.fs.last(t, solo).ID, runner.Outcome{Status: store.RunDone, Result: "commit facut"})
+	f.wantStatus(t, 1, store.StatusReview)
+	vc := f.workerCaller(f.vera, 0)
+	vc.IsReviewer = true
+	if text, err := f.tm.ReviewApprove(vc, "T-1", ""); err != nil || text != "T-1 is Done: accepted automatically (the root lead's own task)." {
+		t.Fatalf("%q %v", text, err)
+	}
+	got := f.wantStatus(t, 1, store.StatusDone)
+	if lastEventText(t, f, got.ID) != ownRootAcceptText {
+		t.Fatalf("istoric: %q", lastEventText(t, f, got.ID))
 	}
 }

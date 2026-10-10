@@ -275,8 +275,10 @@ func TestRootAssigneeWithoutDeciderGetsUserNote(t *testing.T) {
 	if _, err := f.tm.toReview(&task, solo, agents, "Solo a terminat", taskNote{}, true); err != nil {
 		t.Fatal(err)
 	}
-	if !f.hasMessage(solo.ID, "The user decides from the board (Accept / Unblock).") || f.hasMessage(solo.ID, "Link it") {
-		t.Fatal("radacina trebuie trimisa la board, fara sfatul cu liderul")
+	// task-ul propriu al radacinii trece singur in Done, fara nota "decide utilizatorul"
+	f.wantStatus(t, task.Number, store.StatusDone)
+	if f.hasMessage(solo.ID, "The user decides") || f.hasMessage(solo.ID, "Link it") {
+		t.Fatal("radacina nu trebuia trimisa la board")
 	}
 	// un agent cu sef sters ramane cu sfatul vechi
 	orphan := f.agent(t, "Orph", nil, nil)
@@ -359,7 +361,9 @@ func TestLinksChangedMovesOrphanReviewToLead(t *testing.T) {
 	}
 }
 
-func TestLinksChangedBlocksRootWithoutDecider(t *testing.T) {
+// reviewer-ul radacinii a disparut: task-ul ei propriu trece singur in Done,
+// cel din board ramane la utilizator (blocat)
+func TestLinksChangedRootWithoutDecider(t *testing.T) {
 	f := setup(t)
 	solo := f.agent(t, "Solo", nil, &f.vera)
 	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: solo.ID} // fara creator
@@ -371,7 +375,23 @@ func TestLinksChangedBlocksRootWithoutDecider(t *testing.T) {
 	if err := f.tm.LinksChanged(f.p.ID); err != nil {
 		t.Fatal(err)
 	}
-	f.wantStatus(t, 1, store.StatusBlocked)
+	f.wantStatus(t, 1, store.StatusDone)
+	if got := lastEventText(t, f, task.ID); got != ownRootAcceptText {
+		t.Fatalf("%q", got)
+	}
+
+	solo.ReviewerID = &f.vera.ID
+	f.st.UpdateAgent(solo)
+	mine := store.Task{ProjectID: f.p.ID, Title: "B", AssigneeID: solo.ID, ByUser: true}
+	f.st.CreateTask(&mine)
+	mine.Status, mine.ReviewStage = store.StatusReview, store.StageReviewer
+	f.st.SaveTask(&mine)
+	solo.ReviewerID = nil
+	f.st.UpdateAgent(solo)
+	if err := f.tm.LinksChanged(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.wantStatus(t, 2, store.StatusBlocked)
 	if !f.hasMessage(solo.ID, "The user decides from the board") {
 		t.Fatal("radacina trebuie trimisa la board")
 	}

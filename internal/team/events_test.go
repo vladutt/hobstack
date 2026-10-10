@@ -157,8 +157,8 @@ func TestEventsReviewer(t *testing.T) {
 	wantEvent(t, f, t2.ID, "rejected", "Rev", "Rev rejected: fara teste")
 }
 
-// fara decident: run terminat fara report_done (toReview) -> blocat, cu motivul
-func TestEventsBlockedWithoutDecider(t *testing.T) {
+// radacina fara decident: run terminat fara report_done (toReview) -> Done automat, cu motivul
+func TestEventsOwnRootTaskAccepted(t *testing.T) {
 	f := setup(t)
 	wes := f.agent(t, "Wes", nil, nil)
 	task := store.Task{ProjectID: f.p.ID, Title: "A", AssigneeID: wes.ID} // fara creator
@@ -167,10 +167,10 @@ func TestEventsBlockedWithoutDecider(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, wes).ID, runner.Outcome{Status: "done", Result: "gata"})
-	f.wantStatus(t, 1, store.StatusBlocked)
+	f.wantStatus(t, 1, store.StatusDone)
 	wantEvent(t, f, task.ID, "reported", "Wes", "Wes finished without report_done")
-	wantEvent(t, f, task.ID, "blocked", "HobStack", "no one can check it")
-	want := []string{"started", "reported", "blocked"}
+	wantEvent(t, f, task.ID, "accepted", "HobStack", ownRootAcceptText)
+	want := []string{"started", "reported", "accepted"}
 	if got := eventKinds(t, f, task.ID); !slices.Equal(got, want) {
 		t.Fatalf("ordinea: %v", got)
 	}
