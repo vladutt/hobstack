@@ -244,6 +244,9 @@ Gata (fara review cand nu s-a schimbat nimic): report_done sare peste reviewer d
 n-a rulat comenzi (runner.Manager.Activity, numarat din stream-json in timpul run-ului) si ultima decizie a reviewer-ului pe
 task a fost approved (team.skipReview); raportul merge la decident, evenimentul review_skipped. Dupa o respingere, la primul
 raport sau cu activitatea necunoscuta, reviewer-ul il primeste ca inainte.
+Gata (imagini lipite): Cmd+V cu o imagine in chat (deja era), in formularul New task (adauga la Files) si oriunde in modala de
+task (urca in Files, ca Upload; nu pe task-urile sterse); static/js/paste.js (onPasteFiles: textul se lipeste normal, numele
+generic "image.png" devine screenshot-HHMMSSmmm.png; fileThumb / releaseThumb: miniaturi pe URL blob in chip-uri si in lista).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

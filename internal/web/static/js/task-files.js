@@ -63,7 +63,7 @@ export function taskFilesView({ onUpload = null, canUpload = () => true, limit =
   const uploadBtn = el("button", { type: "button", class: "btn small", onclick: () => picker.click() }, "Upload");
   const status = el("span", { class: "hint tfiles-status", "aria-live": "polite" });
   const bar = el("div", { class: "tfiles-bar" }, uploadBtn,
-    el("span", { class: "hint" }, "or drop files here. The agent reads them on this task."), status, picker);
+    el("span", { class: "hint" }, "or drop or paste files here. The agent reads them on this task."), status, picker);
 
   let depth = 0; // dragenter/dragleave se declanseaza si pe copii
   const dropOn = () => onUpload && canUpload();

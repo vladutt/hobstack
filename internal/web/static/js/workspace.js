@@ -20,6 +20,7 @@ import { openCodeExplorer, shortcutLabel, modKey } from "./code-explorer.js";
 import { libraryProposalBox, librarySharePrompt } from "./library-cards.js";
 import { moveAction, moveTask } from "./board-move.js";
 import { deletedPanel } from "./deleted.js";
+import { onPasteFiles, fileThumb, releaseThumb } from "./paste.js";
 
 const SUB_STATUS = {
   queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done",
@@ -113,7 +114,7 @@ export async function workspaceView(root, projectId, route) {
   let editor = null;     // formularul din Detalii
   let editorKey = "";    // editableKey pentru datele din formular
   let modal = null;      // modala task-ului deschis (adresa #/p/<id>/tasks/<taskId>)
-  let history = null;    // modala Run history deschisa (adresa #/p/<id>/tasks/recurring/<id>)
+  let runHistory = null; // modala Run history deschisa (adresa #/p/<id>/tasks/recurring/<id>); nu "history", ar ascunde window.history
 
   const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
   const dropResets = []; // resetari de contor + outline, apelate la orice drop/dragend
@@ -209,13 +210,7 @@ export async function workspaceView(root, projectId, route) {
   let sending = false; // trimitere in curs: blocheaza dublul submit
   const sendBtn = el("button", { type: "submit", class: "btn primary" }, "Send");
   const composer = el("form", { onsubmit: send }, clip, chatPicker, input, sendBtn);
-  input.addEventListener("paste", (e) => {
-    const files = e.clipboardData?.files;
-    if (!files || !files.length) return;
-    // daca e si text (ex. copiat din Word), lasam textul sa se lipeasca
-    if (!e.clipboardData.getData("text/plain")) e.preventDefault();
-    addPending(files);
-  });
+  onPasteFiles(input, addPending);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1313,7 +1308,7 @@ export async function workspaceView(root, projectId, route) {
       onchange: () => { addFiles(picker.files); picker.value = ""; } });
     const attach = el("div", { class: "tf-attach" },
       el("button", { type: "button", id: "tf-attach-btn", class: "btn small", onclick: () => picker.click() }, "\u{1F4CE} Attach files"),
-      el("span", { class: "hint" }, "or drop them on this form. The agent reads them with the task."), picker);
+      el("span", { class: "hint" }, "or drop or paste them on this form. The agent reads them with the task."), picker);
     const addBtn = el("button", { type: "submit", class: "btn primary" }, "Add");
     const form = el("form", { class: "section task-form", onsubmit: submit },
       el("h2", {}, "New task"),
@@ -1324,6 +1319,7 @@ export async function workspaceView(root, projectId, route) {
       el("div", { class: "actions" }, el("span", { class: "grow" }),
         el("button", { type: "button", class: "btn", onclick: closePanel }, "Cancel"), addBtn));
     setupDrop(form, addFiles);
+    onPasteFiles(form, addFiles);
     showPanel("task", form);
     title.focus();
 
@@ -1335,10 +1331,11 @@ export async function workspaceView(root, projectId, route) {
     }
     function drawFiles() {
       fileList.replaceChildren(...files.map((f, i) => el("li", { class: "tf-file" },
+        fileThumb(f),
         el("span", { class: "tf-file-name", title: f.name }, f.name),
         el("span", { class: "hint" }, fileSize(f.size)),
         el("button", { type: "button", class: "tf-remove", "aria-label": `Remove ${f.name}`, title: "Remove",
-          onclick: () => { files.splice(i, 1); drawFiles(); } }, "\u00d7"))));
+          onclick: () => { releaseThumb(f); files.splice(i, 1); drawFiles(); } }, "\u00d7"))));
     }
 
     async function submit(e) {
@@ -1360,6 +1357,7 @@ export async function workspaceView(root, projectId, route) {
           } });
         }
         closePanel();
+        files.forEach(releaseThumb);
         await reload();
       } catch (err) {
         toast(err.message);
@@ -1555,11 +1553,11 @@ export async function workspaceView(root, projectId, route) {
 
   // syncHistory: deschide / inchide Run history dupa recurringId din adresa
   function syncHistory(recurringId) {
-    if (history && history.recurringId === recurringId) return;
-    history?.destroy();
-    history = null;
+    if (runHistory && runHistory.recurringId === recurringId) return;
+    runHistory?.destroy();
+    runHistory = null;
     if (!recurringId || gone()) return;
-    history = recurringHistory({
+    runHistory = recurringHistory({
       projectId, recurringId,
       onClose: () => { location.hash = `#/p/${projectId}/tasks`; },
       // Edit: inchide modala (prin adresa), apoi deschide panoul Recurring cu formularul sarcinii
@@ -1623,8 +1621,7 @@ export async function workspaceView(root, projectId, route) {
   async function select(id, panel) {
     if (id !== state.selected) {
       if (!leaveEditor()) { renderTeam(); return; }
-      state.pending = [];
-      renderChips();
+      clearPending();
     }
     const changed = id !== state.selected;
     state.selected = id;
@@ -1763,8 +1760,7 @@ export async function workspaceView(root, projectId, route) {
       // daca userul a schimbat agentul intre timp, nu atingem chatul si lista celuilalt agent
       if (state.selected === agentId) {
         input.value = "";
-        state.pending = [];
-        renderChips();
+        clearPending();
         addMessage(m);
         scrollDown(true);
       }
@@ -1778,27 +1774,22 @@ export async function workspaceView(root, projectId, route) {
 
   // ---------- atasamente in chat ----------
   function addPending(fileList) {
-    for (const f of Array.from(fileList)) {
-      // imaginile lipite (Cmd+V) vin adesea cu numele generic "image.png"
-      const generic = f.type.startsWith("image/") && (!f.name || /^image\.\w+$/.test(f.name));
-      let file = f;
-      if (generic) {
-        const ext = { "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" }[f.type] || "png";
-        const d = new Date();
-        const t = d.toTimeString().slice(0, 8).replaceAll(":", "") + String(d.getMilliseconds()).padStart(3, "0");
-        file = new File([f], `screenshot-${t}.${ext}`, { type: f.type });
-      }
-      state.pending.push(file);
-    }
+    state.pending.push(...Array.from(fileList));
+    renderChips();
+  }
+
+  function clearPending() {
+    state.pending.forEach(releaseThumb);
+    state.pending = [];
     renderChips();
   }
 
   function renderChips() {
     chips.replaceChildren(...state.pending.map((f, i) =>
-      el("span", { class: "chip" }, f.name,
+      el("span", { class: "chip" }, fileThumb(f), f.name,
         el("button", {
           type: "button", "aria-label": `Remove ${f.name}`,
-          onclick: () => { state.pending.splice(i, 1); renderChips(); },
+          onclick: () => { releaseThumb(f); state.pending.splice(i, 1); renderChips(); },
         }, "\u00d7"))));
   }
 
@@ -1989,7 +1980,7 @@ export async function workspaceView(root, projectId, route) {
   if (gone()) {
     stopLive();
     modal?.destroy();
-    history?.destroy();
+    runHistory?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
@@ -2007,7 +1998,7 @@ export async function workspaceView(root, projectId, route) {
     if (ev.type === "message" && ev.data.agentId === state.selected) addMessage(ev.data);
     if (ev.type === "files") loadFiles();
     // Run history: doar la schimbarile de task (o rulare noua, un status, fisiere atasate), nu la fiecare mesaj
-    if (ev.type === "task") history?.refresh();
+    if (ev.type === "task") runHistory?.refresh();
     scheduleReload();
   };
   events.onerror = () => { hadError = true; };
@@ -2026,7 +2017,7 @@ export async function workspaceView(root, projectId, route) {
     disposed = true;
     editor?.destroy();
     modal?.destroy();
-    history?.destroy();
+    runHistory?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);

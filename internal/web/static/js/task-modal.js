@@ -8,6 +8,7 @@ import { taskFilesView } from "./task-files.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
 import { decideBox, todoCopy } from "./decide.js";
 import { attachMentions } from "./mentions.js";
+import { onPasteFiles } from "./paste.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
 const STATUS = {
@@ -55,14 +56,15 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   // Upload din tab-ul Files: dupa raspuns se reincarca task-ul (filesCount) si lista
   const filesView = taskFilesView({
     canUpload: () => data?.task?.status !== "archived",
-    onUpload: async (list) => {
-      const fd = new FormData();
-      for (const f of list) fd.append("files", f);
-      await upload(`/api/tasks/${taskId}/files`, fd);
-      filesCount = null;
-      await load();
-    },
+    onUpload: uploadFiles,
   });
+  async function uploadFiles(list) {
+    const fd = new FormData();
+    for (const f of list) fd.append("files", f);
+    await upload(`/api/tasks/${taskId}/files`, fd);
+    filesCount = null;
+    await load();
+  }
   let flowSeq = 0;        // ca seq, pentru cererea Flow
   let flowKey = null;     // ultimul raspuns Flow desenat (serializat)
   const flow = flowView({ projectId, open: flowOpen });
@@ -147,6 +149,22 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       body, actionsBox),
     side);
   const overlay = el("div", { class: "modal-overlay" }, dialog);
+  // Cmd+V cu o imagine oriunde in fereastra (comentariu, nota, ...): urcata in Files, ca Upload
+  let pasting = false;
+  onPasteFiles(dialog, async (list) => {
+    if (pasting || destroyed) return;
+    if (data?.task?.status === "archived") { toast("This task is deleted. Restore it to add files."); return; }
+    pasting = true;
+    toast(list.length === 1 ? `Uploading ${list[0].name}...` : `Uploading ${list.length} files...`, "ok");
+    try {
+      await uploadFiles(list);
+      toast(list.length === 1 ? `Uploaded ${list[0].name} to Files` : `Uploaded ${list.length} files to Files`, "ok");
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      pasting = false;
+    }
+  });
   // click pe fundal (nu in fereastra) inchide; mousedown ca o selectie de text
   // inceputa in fereastra si terminata pe fundal sa nu inchida
   let downOnOverlay = false;

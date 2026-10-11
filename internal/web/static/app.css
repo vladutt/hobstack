@@ -1410,6 +1410,10 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .tf-files:empty { display: none; }
 .tf-file { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 6px 6px 12px; border-radius: 8px; background: var(--deep); border: 1px solid var(--line-2); }
 .tf-file-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* miniatura unei imagini atasate (lipita / aleasa), in chip-ul din chat si in lista din formularul de task */
+.file-thumb { flex: none; object-fit: cover; border-radius: 4px; background: var(--deep); }
+.chip .file-thumb { width: 22px; height: 22px; margin-left: -6px; }
+.tf-file .file-thumb { width: 40px; height: 40px; margin-left: -6px; border: 1px solid var(--line-2); }
 .tf-remove { flex: none; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 8px; border-radius: 6px; }
 .tf-remove:hover, .tf-remove:focus-visible { color: var(--amber); }
 .tfiles.dropping { outline-offset: 4px; border-radius: 8px; }
