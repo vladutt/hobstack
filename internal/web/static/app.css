@@ -1496,6 +1496,18 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .cx-view { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .cx-head { position: relative; min-height: 52px; }
 .cx-head .btn[hidden] { display: none; }
+/* cautarea in fisier: in antetul codului, rezultatele marcate in cod */
+.cx-head { flex-wrap: wrap; row-gap: 8px; }
+.cx-find { display: flex; align-items: center; gap: 4px; margin-left: auto; padding: 3px; background: var(--deep); border: 1px solid var(--line-2); border-radius: 9px; }
+.cx-find[hidden] { display: none; }
+.cx-find + .fv-actions { margin-left: 6px; }
+.cx-find-input { width: 200px; padding: 5px 8px; font: 13px var(--mono); background: transparent; border: 0; }
+.cx-find-input:focus { outline: none; }
+.cx-find-count { min-width: 64px; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; padding-right: 4px; }
+.cx-find-case[aria-pressed="true"] { background: var(--amber); color: var(--ink, #1b1f26); }
+.cx-code mark.cx-hit { background: rgba(240, 180, 75, .28); color: inherit; border-radius: 2px; }
+.cx-code mark.cx-hit-cur { background: var(--amber); color: #1b1f26; }
+.cx-code mark.cx-hit-cur * { color: inherit; }
 .cx-code { position: relative; overflow: auto; flex: 1; min-height: 0; padding: 8px 0 16px; }
 .cx-empty { padding: 8px 18px; }
 .cx-code .fv-num { cursor: pointer; }

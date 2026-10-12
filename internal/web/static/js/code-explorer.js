@@ -80,6 +80,19 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
   const moreBtn = el("button", { type: "button", class: "btn small", "aria-label": "More", hidden: true,
     onclick: (e) => { e.stopPropagation(); toggleMenu([["Copy absolute path", () => copyText(absPath(folderOf(current.folder), current.path))]]); } }, "⋯");
   const copyBtn = el("button", { type: "button", class: "btn small", hidden: true, onclick: () => copyText(copyPath(current)) }, "Copy path");
+  // cautarea in fisierul deschis (Cmd/Ctrl+F): campul, "3 of 17", sageti, Aa, inchidere
+  const findInput = el("input", { type: "text", class: "cx-find-input", placeholder: "Find in file", "aria-label": "Find in file",
+    autocomplete: "off", spellcheck: "false" });
+  const findCount = el("span", { class: "cx-find-count", "aria-live": "polite" });
+  const findCase = el("button", { type: "button", class: "btn small cx-find-case", title: "Match case", "aria-pressed": "false",
+    onclick: () => { findCase.setAttribute("aria-pressed", String(findCase.getAttribute("aria-pressed") !== "true")); runFind(); findInput.focus(); } }, "Aa");
+  const findBar = el("div", { class: "cx-find", hidden: true, role: "search" }, findInput, findCount,
+    el("button", { type: "button", class: "btn small", title: "Previous (Shift+Enter)", "aria-label": "Previous match", onclick: () => stepFind(-1) }, "↑"),
+    el("button", { type: "button", class: "btn small", title: "Next (Enter)", "aria-label": "Next match", onclick: () => stepFind(1) }, "↓"),
+    findCase,
+    el("button", { type: "button", class: "btn small", "aria-label": "Close search", onclick: () => closeFind() }, "×"));
+  const findBtn = el("button", { type: "button", class: "btn small", hidden: true, title: "Find in file (" + (isMac ? "⌘F" : "Ctrl+F") + ")",
+    "aria-label": "Find in file", onclick: () => openFind() }, "Find");
   const codeBox = el("div", { class: "cx-code" }, el("p", { class: "hint cx-empty" }, `Pick a file on the left or search with ${shortcutLabel}.`));
   const bar = el("div", { class: "cx-bar", hidden: true });
   const closeBtn = el("button", { type: "button", class: "modal-close", "aria-label": "Close", onclick: () => close() }, "×");
@@ -87,7 +100,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     el("div", { class: "cx-top" }, el("div", { class: "cx-search-wrap" }, search, resultsBox), closeBtn),
     el("div", { class: "cx-main" }, tree,
       el("div", { class: "cx-view" },
-        el("div", { class: "fv-head cx-head" }, pathBox, el("span", { class: "fv-actions" }, copyBtn, moreBtn), menuBox),
+        el("div", { class: "fv-head cx-head" }, pathBox, findBar, el("span", { class: "fv-actions" }, findBtn, copyBtn, moreBtn), menuBox),
         codeBox, bar)));
   const overlay = el("div", { class: "modal-overlay cx-overlay", onclick: (e) => { if (e.target === overlay) close(); } }, box);
   const before = document.activeElement;
@@ -227,6 +240,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     pathBox.replaceChildren(el("span", { class: "change-dir" }, (folders.length > 1 ? f.name + "/" : "") + c.path.slice(0, cut)),
       el("span", { class: "change-name" }, c.path.slice(cut)));
     copyBtn.hidden = moreBtn.hidden = false;
+    setHasCode(false);
     codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "Loading..."));
     const my = ++seq;
     try {
@@ -236,9 +250,10 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
       if (v.notRegular) codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "Not a regular file (a folder or a git submodule): no preview."));
       else if (v.binary) codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "Binary file: no preview."));
       else if (v.tooLarge) codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "The file is larger than 1 MB: no preview."));
-      else codeBox.replaceChildren(codeWithMarkers(v.content, languageFor(c.path), null));
+      else { codeBox.replaceChildren(codeWithMarkers(v.content, languageFor(c.path), null)); setHasCode(true); }
       codeBox.scrollTop = 0;
       codeBox.scrollLeft = 0;
+      if (!findBar.hidden) runFind();
     } catch (err) {
       if (my !== seq || closed) return;
       if (err.status === 404) {
@@ -333,6 +348,134 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     }
   });
 
+  // ---------- cautarea in fisier ----------
+  // Rezultatele se marcheaza cu <mark> in nodurile de text deja colorate (o potrivire poate trece prin mai
+  // multe <span>-uri de culoare: atunci are mai multe <mark>, cu acelasi data-i).
+  const MAX_HITS = 2000;
+  let hasCode = false;
+  let hits = [];          // [{ line, marks: [mark] }]
+  let hitIdx = -1;
+  let findTimer = null;
+
+  function setHasCode(on) {
+    hasCode = on;
+    findBtn.hidden = !on || !findBar.hidden;
+    if (!on) { hits = []; hitIdx = -1; findCount.textContent = ""; }
+  }
+
+  function openFind() {
+    if (!hasCode) return;
+    findBar.hidden = false;
+    findBtn.hidden = true;
+    findInput.focus();
+    findInput.select();
+    if (findInput.value) runFind();
+  }
+
+  function closeFind() {
+    clearMarks();
+    hits = [];
+    hitIdx = -1;
+    findCount.textContent = "";
+    findBar.hidden = true;
+    findBtn.hidden = !hasCode;
+  }
+
+  // clearMarks: scoate <mark>-urile si lipeste la loc nodurile de text
+  function clearMarks() {
+    const rows = new Set();
+    for (const m of codeBox.querySelectorAll("mark.cx-hit")) {
+      rows.add(m.parentNode);
+      m.replaceWith(...m.childNodes);
+    }
+    for (const r of rows) r.normalize();
+  }
+
+  // wrapRange: marcheaza caracterele [start, end) din textul unui rand; intoarce <mark>-urile create
+  function wrapRange(rowEl, start, end, i) {
+    const marks = [];
+    const walker = document.createTreeWalker(rowEl, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let pos = 0;
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) { nodes.push([n, pos]); pos += n.length; }
+    for (const [node, at] of nodes) {
+      const len = node.length; // splitText scurteaza nodul: lungimea de dinainte
+      const s = Math.max(start, at), e = Math.min(end, at + len);
+      if (s >= e) continue;
+      let target = node;
+      if (s > at) target = target.splitText(s - at);
+      if (e < at + len) target.splitText(e - s);
+      const m = el("mark", { class: "cx-hit", "data-i": String(i) });
+      target.replaceWith(m);
+      m.append(target);
+      marks.push(m);
+    }
+    return marks;
+  }
+
+  function runFind() {
+    clearTimeout(findTimer);
+    clearMarks();
+    hits = [];
+    hitIdx = -1;
+    const q = findInput.value;
+    if (!q || !hasCode) { findCount.textContent = ""; return; }
+    const matchCase = findCase.getAttribute("aria-pressed") === "true";
+    const needle = matchCase ? q : q.toLowerCase();
+    const rows = codeBox.querySelectorAll(".fv-line .fv-text");
+    let capped = false;
+    for (let li = 0; li < rows.length && !capped; li++) {
+      const text = matchCase ? rows[li].textContent : rows[li].textContent.toLowerCase();
+      const found = [];
+      for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + needle.length)) {
+        if (hits.length + found.length >= MAX_HITS) { capped = true; break; }
+        found.push(at);
+      }
+      // de la dreapta la stanga: impartirea nodurilor nu muta pozitiile potrivirilor ramase
+      const base = hits.length;
+      const lineHits = found.map((at, k) => ({ line: li + 1, marks: [], at, k }));
+      for (let k = found.length - 1; k >= 0; k--) lineHits[k].marks = wrapRange(rows[li], found[k], found[k] + needle.length, base + k);
+      for (const h of lineHits) hits.push({ line: h.line, marks: h.marks });
+    }
+    findCount.dataset.capped = capped ? "1" : "";
+    if (!hits.length) { findCount.textContent = "No results"; return; }
+    // primul rezultat de la linia selectata (sau de la inceput)
+    const from = sel ? hits.findIndex((h) => h.line >= sel.from) : 0;
+    showHit(from < 0 ? 0 : from);
+  }
+
+  function showHit(i) {
+    for (const m of hits[hitIdx]?.marks || []) m.classList.remove("cx-hit-cur");
+    hitIdx = i;
+    const h = hits[i];
+    for (const m of h.marks) m.classList.add("cx-hit-cur");
+    findCount.textContent = `${i + 1} of ${hits.length}${findCount.dataset.capped ? "+" : ""}`;
+    h.marks[0]?.scrollIntoView({ block: "center", inline: "nearest" });
+  }
+
+  function stepFind(d) {
+    if (!hits.length) return;
+    showHit((hitIdx + d + hits.length) % hits.length);
+    findInput.focus();
+  }
+
+  findInput.addEventListener("input", () => { clearTimeout(findTimer); findTimer = setTimeout(runFind, 120); });
+  findInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    if (findTimer) { clearTimeout(findTimer); findTimer = null; if (!hits.length && findInput.value) runFind(); }
+    if (modKey(e)) {
+      // Cmd/Ctrl+Enter: linia rezultatului devine selectia (Copy reference / Ask)
+      const h = hits[hitIdx];
+      if (!h) return;
+      sel = { from: h.line, to: h.line };
+      anchorLine = h.line;
+      paintSelection();
+      return;
+    }
+    stepFind(e.shiftKey ? -1 : 1);
+  });
+
   // ---------- tastatura ----------
   // pe window, in capture: ruleaza inaintea ascultatorilor de pe document (modala de fisier, modala de task);
   // tastele tratate aici se opresc cu stopImmediatePropagation
@@ -342,9 +485,14 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
       e.preventDefault();
       e.stopImmediatePropagation();
       if (!menuBox.hidden) menuBox.hidden = true;
+      else if (!findBar.hidden && (document.activeElement === findInput || !sel)) closeFind();
       else if (document.activeElement === search && search.value) { search.value = ""; results = []; resultsBox.hidden = true; }
       else if (sel) { sel = null; anchorLine = null; paintSelection(); }
       else close();
+    } else if (mod && !e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (hasCode) openFind();
     } else if (e.key === "Tab") {
       e.stopImmediatePropagation();
     } else if (mod && e.shiftKey && e.key.toLowerCase() === "c" && current) {
@@ -352,7 +500,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
       e.stopImmediatePropagation();
       copyText(copyPath(current));
     } else if (mod && !e.shiftKey && e.key.toLowerCase() === "c" && current
-      && !(document.activeElement === search && search.selectionStart !== search.selectionEnd)
+      && !(document.activeElement?.tagName === "INPUT" && document.activeElement.selectionStart !== document.activeElement.selectionEnd)
       && !(window.getSelection()?.toString())) {
       e.preventDefault();
       e.stopImmediatePropagation();
