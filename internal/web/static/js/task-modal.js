@@ -1,13 +1,13 @@
 import { api, upload } from "./api.js";
 import { el, avatar, clock, kindOf, toast } from "./ui.js";
-import { changesView } from "./changes.js";
-import { modifiedView } from "./modified.js";
+import { commandsView } from "./changes.js";
 import { openFileView } from "./file-view.js";
 import { flowView } from "./flow.js";
 import { agentPicker } from "./agent-picker.js";
 import { taskFilesView } from "./task-files.js";
 import { renderMarkdown, changeStats, statBadge } from "./md.js";
 import { decideBox, todoCopy } from "./decide.js";
+import { attachMentions } from "./mentions.js";
 
 // Etichetele starilor unui task (pill-ul din antetul modalei).
 const STATUS = {
@@ -37,15 +37,19 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   let descOpen = false;   // descrierea lunga ramane desfasurata la refresh
   let filesKey = null;    // ce s-a desenat ultima data in rezumatul fisierelor
   let actionsKey = null;  // ce s-a desenat ultima data in zona de actiuni
-  let tab = initialTab;   // "conversation" | "history" | "changes" | "modified" | "files" | "flow"; null = inca nealeasa (se alege la primul raspuns)
+  let tab = initialTab;   // "conversation" | "history" | "commands" | "files" | "flow"; null = inca nealeasa (se alege la primul raspuns)
   let convKey = null;     // ce s-a desenat ultima data in conversatie
   let histKey = null;     // idem pentru istoric
-  let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele Changes (null = neincarcat)
-  let chgSeq = 0;         // ca seq, pentru cererea Changes
-  const changes = changesView({ openFile: (path) => openFileView({ taskId, path }) });
-  let modCount = null;    // changesCount-ul pentru care s-a incarcat tab-ul Modified (null = neincarcat)
-  let modSeq = 0;         // ca seq, pentru cererea Modified
-  const modified = modifiedView({ onOpen: (f) => openFileView({ taskId, subTaskId: f.taskId, path: f.path }) });
+  let chgCount = null;    // changesCount-ul pentru care s-au incarcat datele /changes (null = neincarcat)
+  let chgSeq = 0;         // ca seq, pentru cererea /changes
+  const commands = commandsView();
+  let cmdCount = 0;       // comenzile rulate pe task (tab-ul Commands apare doar cu ele)
+  let modKey = null;      // cheia (modificari + sub-task-uri) pentru care s-a incarcat /modified (null = neincarcat)
+  let modSeq = 0;         // ca seq, pentru cererea /modified
+  let modList = [];       // fisierele modificate de task si de sub-task-uri: rezumatul de sus si lista din modala de fisier
+  let filesAll = false;   // rezumatul fisierelor desfasurat ("N more files")
+  // openFile: modala de fisier, cu toate fisierele modificate in stanga
+  const openFile = (f) => openFileView({ taskId, subTaskId: f.taskId, path: f.path, files: modList });
   let filesCount = null;  // filesCount (+ sters) pentru care s-a incarcat tab-ul Files (null = neincarcat)
   let filesSeq = 0;       // ca seq, pentru cererea Files
   // Upload din tab-ul Files: dupa raspuns se reincarca task-ul (filesCount) si lista
@@ -83,16 +87,14 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   const histPane = el("div", { id: `hist-${taskId}`, role: "tabpanel", hidden: true });
   const tabConv = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": convPane.id, onclick: () => setTab("conversation") }, "Conversation");
   const tabHist = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": histPane.id, onclick: () => setTab("history") }, "Activity");
-  const chgPane = el("div", { id: `chg-${taskId}`, role: "tabpanel", hidden: true }, changes.el);
-  const tabChg = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": chgPane.id, onclick: () => setTab("changes") }, "Changes");
-  const modPane = el("div", { id: `mod-${taskId}`, role: "tabpanel", hidden: true }, modified.el);
-  const tabMod = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": modPane.id, onclick: () => setTab("modified") }, "Modified");
+  const cmdPane = el("div", { id: `cmd-${taskId}`, role: "tabpanel", hidden: true }, commands.el);
+  const tabCmd = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": cmdPane.id, hidden: true, onclick: () => setTab("commands") }, "Commands");
   const filesPane = el("div", { id: `files-${taskId}`, role: "tabpanel", hidden: true }, filesView.el);
   const tabFiles = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": filesPane.id, onclick: () => setTab("files") }, "Files");
   const flowPane = el("div", { id: `flow-${taskId}`, role: "tabpanel", hidden: true }, flow.el);
   const tabFlow = el("button", { type: "button", class: "tab", role: "tab", "aria-controls": flowPane.id, onclick: () => setTab("flow") }, "Flow");
   const tabsSection = el("section", { class: "modal-section", hidden: true },
-    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabChg, tabMod, tabFiles, tabFlow), convPane, histPane, chgPane, modPane, filesPane, flowPane);
+    el("div", { class: "modal-tabs", role: "tablist" }, tabHist, tabConv, tabCmd, tabFiles, tabFlow), convPane, histPane, cmdPane, filesPane, flowPane);
   // formularul de comentarii: creat o singura data, ca textul scris sa nu se piarda la refresh.
   // Cand decide utilizatorul, se muta in zona de actiuni si textul lui e si feedback-ul pentru Send back.
   const commentInput = el("textarea", { rows: 2, placeholder: "Reply to the agent...", "aria-label": "Comment" });
@@ -107,6 +109,13 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       load();
     } catch (err) { toast(err.message); }
   } }, commentInput, el("button", { type: "submit", class: "btn primary small" }, "Send"));
+  // @ in comentariu: fisierele proiectului, cele modificate pe task primele; caile relative la folderul
+  // agentului care primeste comentariul (cel care a lasat punctele de bifat, altfel asignatul)
+  attachMentions(commentInput, commentForm, async (q) => {
+    const to = (data?.todos || []).length && data.todosById ? data.todosById : data?.task.assigneeId;
+    const res = await api(`/api/projects/${projectId}/code-files?q=${encodeURIComponent(q)}&task=${taskId}${to ? `&agent=${to}` : ""}`);
+    return res.files;
+  });
   // typing: deasupra comentariilor, "Vex is working…" / "Vex is writing…" cat timp agentul ruleaza pe task
   // (doar tipul evenimentelor din stream-ul run-ului, nu continutul)
   const typingText = el("span", {});
@@ -351,8 +360,8 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     row("From", t.fromProject ? el("span", { class: "side-value" }, el("span", { class: "dot", style: "background:var(--teal)" }), t.fromProject) : null);
     row("Recurring", data.recurring ? el("span", { class: "side-value" },
       el("button", { type: "button", class: "link-btn", onclick: () => actions.openRecurring() }, data.recurring.title)) : null);
-    row("Files", data.changesCount ? el("span", { class: "side-value" },
-      el("button", { type: "button", class: "link-btn", onclick: () => setTab("changes") }, filesLabel())) : null);
+    row("Files", data.changesCount || modList.length ? el("span", { class: "side-value" },
+      el("button", { type: "button", class: "link-btn", onclick: () => filesBox.scrollIntoView({ block: "nearest" }) }, filesLabel())) : null);
     if (t.sendBacks) row("Sent back", el("span", { class: "side-value" }, `${t.sendBacks}\u00d7`));
     // consumul run-urilor de pe task (toti agentii care au lucrat pe el)
     const u = data.usage || {};
@@ -377,32 +386,36 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
         t.updatedAt && t.updatedAt !== t.createdAt ? el("span", {}, (t.status === "done" ? "Resolved " : "Updated ") + when(t.updatedAt)) : null));
   }
 
-  // filesLabel: "11 files +437 −16" din statisticile incarcate (sau doar numarul de modificari)
+  // filesLabel: "11 files +437 −16" din fisierele incarcate (sau doar numarul de modificari)
   function filesLabel() {
-    if (!stats.size) return `${data.changesCount} ${data.changesCount === 1 ? "change" : "changes"}`;
+    if (!modList.length) return `${data.changesCount} ${data.changesCount === 1 ? "change" : "changes"}`;
     let added = 0, removed = 0;
-    for (const v of stats.values()) { added += v.added; removed += v.removed; }
-    return el("span", { class: "md-stat" }, `${stats.size} ${stats.size === 1 ? "file" : "files"}\u00a0`, statBadge({ added, removed }));
+    for (const f of modList) { added += f.added; removed += f.removed; }
+    return el("span", { class: "md-stat" }, `${modList.length} ${modList.length === 1 ? "file" : "files"}\u00a0`, statBadge({ added, removed }));
   }
 
-  // renderFiles: primele fisiere modificate, deasupra tab-urilor; click duce in Changes
+  // renderFiles: fisierele modificate (si de sub-task-uri), deasupra tab-urilor; clic = modala de fisier.
+  // Se vad primele 3; "N more files" le desfasoara pe toate.
   function renderFiles() {
-    const list = [...stats.entries()].sort((a, b) => (b[1].added + b[1].removed) - (a[1].added + a[1].removed));
-    const key = list.map(([p, v]) => `${p}:${v.added}:${v.removed}`).join("|");
+    const list = [...modList].sort((a, b) => (b.added + b.removed) - (a.added + a.removed));
+    const key = JSON.stringify([filesAll, list.map((f) => [f.taskId, f.path, f.added, f.removed])]);
     if (key === filesKey) return;
     filesKey = key;
     if (!list.length) { filesBox.replaceChildren(); return; }
-    const open = () => { setTab("changes"); tabsSection.scrollIntoView({ block: "nearest" }); };
-    const top = list.slice(0, 3);
+    const shown = filesAll ? list : list.slice(0, 3);
+    const more = list.length - 3;
+    const toggle = () => { filesAll = !filesAll; renderFiles(); };
     filesBox.replaceChildren(el("section", { class: "modal-section" },
       el("div", { class: "files-head" }, "Changes \u00b7 ", filesLabel()),
       el("div", { class: "files-box" },
-        top.map(([path, v]) => el("button", { type: "button", class: "files-box-row", onclick: open, title: path },
-          el("span", { class: "fb-dir" }, path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : ""),
-          el("span", { class: "fb-name" }, path.slice(path.lastIndexOf("/") + 1)),
-          el("span", { class: "grow" }), statBadge(v))),
-        list.length > top.length ? el("button", { type: "button", class: "files-box-row files-box-more", onclick: open },
-          `${list.length - top.length} more ${list.length - top.length === 1 ? "file" : "files"}`) : null)));
+        shown.map((f) => el("button", { type: "button", class: "files-box-row", onclick: () => openFile(f), title: f.path },
+          el("span", { class: "fb-dir" }, f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/") + 1) : ""),
+          el("span", { class: "fb-name" }, f.path.slice(f.path.lastIndexOf("/") + 1)),
+          el("span", { class: "grow" }),
+          f.taskId !== taskId ? el("span", { class: "modified-ref fb-ref" }, f.ref) : null,
+          statBadge({ added: f.added, removed: f.removed, kind: f.created ? "create" : "edit" }))),
+        more > 0 ? el("button", { type: "button", class: "files-box-row files-box-more", onclick: toggle },
+          filesAll ? "Show less" : `${more} more ${more === 1 ? "file" : "files"}`) : null)));
   }
 
   function renderReport() {
@@ -418,9 +431,10 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   }
 
   function applyTab() {
-    const names = ["conversation", "history", "changes", "modified", "files", "flow"];
-    const tabs = [tabConv, tabHist, tabChg, tabMod, tabFiles, tabFlow];
-    const panes = [convPane, histPane, chgPane, modPane, filesPane, flowPane];
+    if (tab === "commands" && tabCmd.hidden && chgCount !== null) tab = "history"; // fara comenzi, tab-ul nu exista
+    const names = ["conversation", "history", "commands", "files", "flow"];
+    const tabs = [tabConv, tabHist, tabCmd, tabFiles, tabFlow];
+    const panes = [convPane, histPane, cmdPane, filesPane, flowPane];
     names.forEach((n, i) => {
       const on = tab === n;
       tabs[i].setAttribute("aria-selected", String(on));
@@ -433,24 +447,30 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     syncFlow();
   }
 
-  // syncModified: /modified se cere cand tab-ul e deschis si changesCount s-a schimbat de la ultima incarcare
+  // syncModified: /modified (fisierele task-ului si ale sub-task-urilor) se cere cand s-au schimbat
+  // modificarile task-ului sau starea sub-task-urilor (un sub-task care termina si-a scris fisierele)
   async function syncModified() {
-    if (!data || tab !== "modified") return;
-    const count = data.changesCount || 0;
-    if (count === modCount) return;
+    if (!data) return;
+    const subs = [];
+    const walk = (id) => {
+      for (const x of project.tasks || []) {
+        if (x.parentTaskId === id && x.id !== id && !subs.some((y) => y.id === x.id)) { subs.push(x); walk(x.id); }
+      }
+    };
+    walk(taskId);
+    if (!data.changesCount && !subs.length) { modList = []; modKey = null; return; }
+    const key = JSON.stringify([data.changesCount, subs.map((x) => [x.id, x.status])]);
+    if (key === modKey) return;
     const my = ++modSeq;
     try {
       const res = await api(`/api/tasks/${taskId}/modified`);
       if (destroyed || my !== modSeq) return;
-      modCount = count;
-      const n = (res.files || []).length;
-      // numarul intr-un span separat: pe telefon se ascunde, ca tab-urile sa incapa pe un rand
-      tabMod.replaceChildren("Modified", n ? el("span", { class: "tab-count" }, ` (${n})`) : "");
-      modified.show(res, taskId);
-    } catch (err) {
+      modKey = key;
+      modList = res.files || [];
+      render(); // rezumatul si coloana din dreapta (Files), cu lista noua
+    } catch {
       if (destroyed || my !== modSeq) return;
-      modCount = null;
-      modified.error(err.message);
+      modKey = null; // la urmatorul refresh se incearca din nou
     }
   }
 
@@ -500,22 +520,24 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
   async function syncChanges() {
     if (!data) return;
     const count = data.changesCount;
-    if (tab !== "changes" && !count) return;
+    if (!count) { tabCmd.hidden = true; return; }
     if (count === chgCount) return;
     const my = ++chgSeq;
     try {
       const res = await api(`/api/tasks/${taskId}/changes`);
       if (destroyed || my !== chgSeq) return;
       chgCount = count;
-      stats = changeStats(res, (path) => openFileView({ taskId, path }));
+      stats = changeStats(res, (path) => openFile({ path, taskId }));
       convKey = reportKey = null; // se redeseneaza cu badge-urile noi
       render(); // conversatia, raportul, rezumatul si coloana din dreapta, cu statisticile noi
-      const hasSubtasks = (project.tasks || []).some((x) => x.parentTaskId === taskId);
-      changes.show(res, hasSubtasks);
+      cmdCount = commands.show(res);
+      tabCmd.hidden = !cmdCount;
+      tabCmd.replaceChildren("Commands", cmdCount ? el("span", { class: "tab-count" }, ` (${cmdCount})`) : "");
+      if (tab === "commands" && !cmdCount) setTab("history");
     } catch (err) {
       if (destroyed || my !== chgSeq) return;
       chgCount = null; // la urmatorul refresh se incearca din nou
-      changes.error(err.message);
+      commands.error(err.message);
     }
   }
 

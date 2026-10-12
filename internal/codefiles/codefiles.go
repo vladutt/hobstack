@@ -44,8 +44,18 @@ func gitFiles(dir string) ([]string, bool) {
 	if err != nil {
 		return nil, false
 	}
-	var files []string
+	// fisierele urmarite dar sterse de pe disc (rm / mv fara commit) raman in --cached: le scoatem
 	seen := map[string]bool{}
+	del := exec.Command("git", "ls-files", "--deleted", "-z")
+	del.Dir = dir
+	if out, err := del.Output(); err == nil {
+		for _, f := range bytes.Split(out, []byte{0}) {
+			if len(f) > 0 {
+				seen[string(f)] = true
+			}
+		}
+	}
+	var files []string
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
 	sc.Split(splitNUL)
@@ -207,4 +217,11 @@ func (c *Cache) Files(dir string) ([]string, error) {
 	c.m[dir] = cached{time.Now(), files}
 	c.mu.Unlock()
 	return files, nil
+}
+
+// Invalidate scoate folderul din cache: urmatorul Files il reciteste de pe disc.
+func (c *Cache) Invalidate(dir string) {
+	c.mu.Lock()
+	delete(c.m, dir)
+	c.mu.Unlock()
 }

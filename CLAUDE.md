@@ -92,6 +92,8 @@ Gata (redesign UI dupa mockup-urile din ../screenshots): tema ardezie rece + fon
 in loc de sidebar; Proiecte ca tabel; pe proiect board-ul pe toata latimea cu "Needs you" ca prima coloana, Done cu "Show N more";
 chat-ul si detaliile agentului intr-un panou lateral care se inchide (starea in localStorage "hobstack-drawer"); modala de task pe
 doua coloane (continut + detalii); avatare colorate dupa nume (ui.toneOf, amber = radacina); canvas-ul se incadreaza pe noduri.
+Echipa nu mai e in bara de sus: avatarele stau langa filtrele board-ului (clic = chat cu agentul); peste TEAM_SHOWN (5)
+se vad primii 4 si "+N", care deschide lista restului.
 Gata (Stats, spec in docs/superpowers/specs/2026-10-08-foreman-project-stats-design.md): tab-ul Stats pe proiect
 (Today / 7d / 30d / All): cheltuiala si tokeni pe agent si pe zi, task-uri create/terminate, mediana pana la Done,
 rata de succes a run-urilor, fisiere si comenzi, intrebari; store.ProjectStats + GET /api/projects/{id}/stats, grafice SVG in stats.js.
@@ -139,6 +141,16 @@ GET /api/tasks/{id}/file?path=&task=): fisierul de acum de pe disc, doar cai din
 binar = NUL in primii 8 KB; marcajele added/modified/deleted din store.FileMarkers (fragmentele aplicate in ordine;
 exact=false fara numere de linie / trunchiat / Write fara fragmente). Deschisa din Modified, "View file" din Changes si
 numele de fisiere +/- din rapoarte; Esc inchide doar modala de fisier.
+Gata (fisierele doar sus): rezumatul "Changes" de deasupra tab-urilor e singura lista de fisiere (GET /modified, cu
+sub-task-urile; primele 3, "N more files" le desfasoara) si deschide direct modala de fisier; tab-urile Changes si Modified au
+disparut, comenzile rulate sunt in tab-ul Commands (doar cand exista). Modala de fisier are in stanga lista fisierelor
+modificate (grupate pe foldere, sagetile sus/jos trec intre ele), File/Diff ramane la schimbarea fisierului.
+Gata (explorer de cod, spec in docs/superpowers/specs/2026-10-12-hobstack-code-explorer-design.md): Cmd/Ctrl+P sau butonul
+Code pe paginile proiectului deschide code-explorer.js (doar citire): arbore pe foldere (desenare lenesa, starea in
+localStorage "hobstack-code-<pid>"), cautare dupa nume, cod colorat. GET /api/projects/{id}/tree (lista de la @, cu
+truncated/error) si /code-file?folder=&path= (doar cai din lista, cache invalidat o data, readIn + isBinary). Clic / Shift+clic
+pe numere selecteaza linii: Copy reference (cale:42-50, prefixul folderului cu mai multe foldere), Ask <agent> pune
+"@cale:42-50 " in chat (prefillChat; calea ca la @). Cmd+C fara text selectat = referinta, Cmd+Shift+C = calea.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
@@ -172,6 +184,8 @@ Gata (@ in chat): in chat-ul cu un agent, @ deschide lista fisierelor de cod ale
 git ls-files cu .gitignore, altfel parcurgere fara node_modules/vendor/dist/build/foldere ascunse; max 20000 pe folder,
 cache 30 s; GET /api/projects/{id}/code-files?q=&agent=); alegerea scrie @cale (relativa in folderul agentului, absoluta
 in celelalte), agentul citeste singur fisierul. UI: static/js/mentions.js.
+@ merge si in comentariul de pe task: ?task= pune primele fisierele modificate de task si de sub-task-uri (eticheta
+"changed", cele mai recente primele, fara dubluri), cu caile relative la folderul agentului care primeste comentariul.
 Gata (limitele contului pe Stats): runner-ul retine ultimul rate_limit_event din stream-json (fereastra de 5 ore si cea
 saptamanala: utilization + resetsAt, status allowed/allowed_warning/rejected) in Outcome.RateLimit; team.finish il salveaza
 pe contul proiectului (account_usage, migrarea 028, account_id 0 = Default); GET /api/projects/{id}/stats are "usage" si

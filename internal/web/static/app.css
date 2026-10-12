@@ -77,10 +77,6 @@ a.crumb:hover { color: var(--text); }
 .top-tabs .tab { padding: 7px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 500; font-size: 14px; }
 .top-tabs .tab:hover { color: var(--text); background: var(--card); }
 .top-tabs .tab[aria-current="page"] { color: var(--text); background: var(--card); }
-.avatar-stack { display: inline-flex; align-items: center; background: none; border: 0; padding: 0 6px 0 0; cursor: pointer; border-radius: 999px; }
-.avatar-stack .avatar + .avatar { margin-left: -9px; }
-.avatar-stack .avatar { box-shadow: 0 0 0 2px var(--deep); }
-.avatar-stack:hover .avatar { box-shadow: 0 0 0 2px var(--line-2); }
 
 /* bara veche de cap (formulare, wizard): titlul paginii sub bara de sus */
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
@@ -234,6 +230,19 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .tab-body[hidden], .team-strip[hidden], .details[hidden], .chat[hidden], .panel-tabs[hidden], .console[hidden], .paused-note[hidden] { display: none; }
 .tasks-body { display: grid; gap: 16px; min-width: 0; }
 .board-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 38px; }
+/* echipa langa filtre: avatare suprapuse, "+N" deschide lista restului */
+.board-team { display: flex; align-items: center; padding-left: 4px; }
+.board-team[hidden] { display: none; }
+.team-face { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; position: relative; }
+.board-team > * + * { margin-left: -8px; }
+.team-face .avatar, .team-more > summary { box-shadow: 0 0 0 2px var(--bg); }
+.team-face:hover, .team-face:focus-visible { z-index: 1; outline: none; }
+.team-face:hover .avatar, .team-face:focus-visible .avatar { box-shadow: 0 0 0 2px var(--amber); }
+.team-face.working::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 2px var(--bg); }
+.team-more > summary { cursor: pointer; }
+.team-more > summary::after { display: none; }
+.team-more[open] > summary, .team-more > summary:hover { background: var(--card-hi); color: var(--text); }
+.team-more .filter-panel { min-width: 200px; }
 .folder-chips { display: flex; gap: 4px; flex-wrap: wrap; }
 .folder-chips[hidden] { display: none; }
 .seg { height: 36px; padding: 0 14px; border-radius: 9px; border: 0; background: none; color: var(--muted); font: 500 14px var(--sans); cursor: pointer; }
@@ -457,7 +466,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .stats-list li > span, .stats-list li > strong { white-space: nowrap; }
 .stats-list a { color: var(--text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .stats-list a:hover { color: var(--amber); }
-.stats-list code { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; direction: rtl; text-align: left; }
+.stats-list code { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .stats-status { height: 20px; padding: 0 8px; font-size: 11px; background: var(--card); color: var(--muted); }
 .stats-status.st-done { background: var(--teal-bg); color: var(--teal); }
 .stats-status.st-blocked { background: var(--red-bg); color: var(--red); }
@@ -485,7 +494,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .attachments img { display: block; max-width: 180px; max-height: 180px; border-radius: 8px; border: 1px solid var(--line); }
 .attachments .file-link { font-size: 12px; color: var(--amber); overflow-wrap: anywhere; }
 
-.toast { position: fixed; bottom: 20px; right: 20px; background: #3a2422; color: #f6d9d5; border: 1px solid #5c302c; padding: 11px 15px; border-radius: 11px; max-width: 420px; z-index: 40; box-shadow: 0 10px 30px rgba(0,0,0,.4); } /* peste modala */
+.toast { position: fixed; bottom: 20px; right: 20px; background: #3a2422; color: #f6d9d5; border: 1px solid #5c302c; padding: 11px 15px; border-radius: 11px; max-width: 420px; z-index: 80; box-shadow: 0 10px 30px rgba(0,0,0,.4); } /* peste modale si peste explorer-ul de cod (70) */
 .toast.ok { background: #173129; color: #cdeee4; border-color: #2a5a4d; }
 
 /* ---------- canvas echipa ---------- */
@@ -1374,8 +1383,12 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .mention-item { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: 6px; cursor: pointer; min-width: 0; }
 .mention-item.active, .mention-item:hover { background: var(--card-hi); }
 .mention-name { color: var(--text); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
-.mention-dir { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; min-width: 0; }
+.mention-dir { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .mention-empty { padding: 8px 10px; color: var(--muted); font-size: 13px; }
+.mention-changed { flex: none; font-size: 11px; font-weight: 600; color: var(--green); border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; align-self: center; }
+/* @ in comentariul de pe task: lista sta deasupra formularului */
+.comment-form { position: relative; }
+.comment-form .mention-list { left: 0; right: 0; bottom: calc(100% + 6px); }
 
 /* Stats: limitele contului Claude (5 ore / saptamanal) */
 .usage-rows { display: grid; gap: 14px; }
@@ -1429,7 +1442,26 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .fv-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .fv-head .change-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fv-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+.modal.fv.with-tree { max-width: 1340px; }
+.fv-main { display: flex; flex: 1; min-height: 0; }
+.fv-content { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .fv-file, .fv-diff { overflow: auto; flex: 1; min-height: 0; padding: 8px 0 16px; }
+/* lista fisierelor modificate din stanga: un grup pe folder */
+.fv-tree { width: 280px; flex: none; overflow-y: auto; border-right: 1px solid var(--line); background: var(--deep); padding: 10px 0 14px; }
+.fv-tree-head { font: 600 12px var(--sans); color: var(--muted); padding: 2px 14px 8px; }
+.fv-tree-dir { font: 11.5px var(--mono); color: var(--dim); padding: 10px 14px 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-tree-file { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; border-left: 2px solid transparent; color: var(--soft); cursor: pointer; text-align: left; padding: 5px 12px 5px 22px; font: 12.5px var(--mono); font-variant-ligatures: none; }
+.fv-tree-file.root { padding-left: 14px; }
+.fv-tree-file:hover { background: #191d23; color: var(--text); }
+.fv-tree-file:focus-visible { outline: none; background: #191d23; }
+.fv-tree-file.on { background: var(--card); color: var(--text); border-left-color: var(--blue); }
+.fv-tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-tree-file .md-stat { flex: none; font-size: 11.5px; }
+.fv-tree-file .modified-ref { flex: none; }
+@media (max-width: 720px) {
+  .fv-main { flex-direction: column; }
+  .fv-tree { width: auto; max-height: 32%; border-right: 0; border-bottom: 1px solid var(--line); }
+}
 .fv-file > .hint, .fv-diff > .change-run { padding: 0 18px; }
 .fv-code { font: 12.5px/1.6 var(--mono); font-variant-ligatures: none; width: max-content; min-width: 100%; }
 .fv-line { display: flex; position: relative; }
@@ -1442,12 +1474,52 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .fv-del-before::before { content: ""; position: absolute; left: calc(4.2em - 3px); top: -4px; border: 4px solid transparent; border-left-color: var(--red); }
 .fv-text { white-space: pre; padding-right: 18px; }
 .fv-diff .diff { margin: 6px 18px 14px; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; background: var(--deep); }
+/* explorer de cod (Cmd/Ctrl+P): cautare sus, arbore in stanga, cod in dreapta; peste modala de fisier */
+.cx-overlay { z-index: 70; }
+.modal.cx { display: flex; flex-direction: column; max-width: 1340px; height: min(880px, 100%); }
+.cx-top { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+.cx-search-wrap { position: relative; flex: 1; min-width: 0; }
+.cx-search { width: 100%; font: 14px var(--sans); }
+.cx-results { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 5; max-height: 360px; overflow-y: auto;
+  margin: 0; padding: 4px; list-style: none; background: var(--deep); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+.cx-results[hidden] { display: none; }
+.cx-main { display: flex; flex: 1; min-height: 0; }
+.cx-tree { width: 300px; flex: none; overflow: auto; border-right: 1px solid var(--line); background: var(--deep); padding: 8px 0 14px; }
+.cx-dir, .cx-file { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; border-left: 2px solid transparent;
+  color: var(--soft); cursor: pointer; text-align: left; padding: 4px 12px; font: 12.5px var(--mono); font-variant-ligatures: none; white-space: nowrap; }
+.cx-dir:hover, .cx-file:hover, .cx-dir:focus-visible, .cx-file:focus-visible { background: #191d23; color: var(--text); outline: none; }
+.cx-file { padding-left: 30px; }
+.cx-file.on { background: var(--card); color: var(--text); border-left-color: var(--blue); }
+.cx-root { font: 600 13px var(--sans); color: var(--text); padding-top: 8px; }
+.cx-caret { width: 12px; flex: none; color: var(--muted); font-size: 10px; }
+.cx-note { padding: 4px 14px; margin: 0; font-size: 12.5px; }
+.cx-view { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.cx-head { position: relative; min-height: 52px; }
+.cx-head .btn[hidden] { display: none; }
+.cx-code { position: relative; overflow: auto; flex: 1; min-height: 0; padding: 8px 0 16px; }
+.cx-empty { padding: 8px 18px; }
+.cx-code .fv-num { cursor: pointer; }
+.cx-code .fv-num:hover { color: var(--text); }
+.cx-code .fv-line.cx-sel { background: rgba(240, 180, 75, .1); }
+.cx-code .fv-line.cx-sel .fv-gutter { background: var(--amber); }
+.cx-bar { position: absolute; left: calc(4.2em + 20px); z-index: 2; display: flex; gap: 6px; align-items: center; padding: 4px;
+  background: var(--deep); border: 1px solid var(--line-2); border-radius: 9px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); font-family: var(--sans); }
+.cx-bar[hidden] { display: none; }
+.cx-ask { display: inline-flex; }
+.cx-ask .btn:first-child:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cx-pick { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: 1px; padding-left: 7px; padding-right: 7px; }
+.cx-menu { position: absolute; right: 14px; top: calc(100% - 4px); z-index: 6; min-width: 200px; display: grid; gap: 2px; padding: 6px;
+  background: var(--col); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.cx-menu[hidden] { display: none; }
+.cx-menu.cx-menu-bar { right: auto; left: 0; top: calc(100% + 4px); }
+@media (max-width: 720px) {
+  .cx-main { flex-direction: column; }
+  .cx-tree { width: auto; max-height: 35%; border-right: 0; border-bottom: 1px solid var(--line); }
+}
 .change-row { display: flex; align-items: center; gap: 6px; }
 .change-row .change-file { flex: 1; min-width: 0; }
-.modified { display: grid; gap: 4px; }
-.modified-row { display: flex; gap: 10px; align-items: center; width: 100%; }
 .modified-ref { color: var(--amber); font-size: 12px; }
-.modified-meta { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.files-box-row .fb-ref { flex: none; margin-right: 10px; font-family: var(--sans); }
 .md-file-link { cursor: pointer; }
 .md-file-link code { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
 /* <code> din blocurile colorate nu ia stilul codului din text (fundal, padding) */

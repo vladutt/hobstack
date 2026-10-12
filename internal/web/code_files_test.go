@@ -56,3 +56,45 @@ func TestCodeFilesAPI(t *testing.T) {
 		t.Fatalf("proiect lipsa: %d", code)
 	}
 }
+
+// ?task=: fisierele modificate de task (si de sub-task-uri) vin primele, marcate changed, fara dubluri
+func TestCodeFilesTaskFirst(t *testing.T) {
+	e, p, w, task, dir := codeSetup(t)
+	os.WriteFile(filepath.Join(dir, "app", "y.php"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("x"), 0o644)
+	sub := store.Task{ProjectID: p.ID, Title: "B", AssigneeID: w.ID, ParentTaskID: &task.ID}
+	e.st.CreateTask(&sub)
+	e.st.AddTaskChanges([]store.TaskChange{{TaskID: sub.ID, RunID: "r3", AgentID: &w.ID, AgentName: "Beacon", Kind: "edit", Tool: "Edit", Path: "README.md"}})
+
+	get := func(q string) []codeFile {
+		t.Helper()
+		code, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID)+"/code-files?"+q, nil)
+		if code != 200 {
+			t.Fatalf("%d %s", code, raw)
+		}
+		var res struct{ Files []codeFile }
+		json.Unmarshal(raw, &res)
+		return res.Files
+	}
+	files := get("task=" + itoa(task.ID) + "&agent=" + itoa(w.ID))
+	if len(files) < 4 || !files[0].Changed || !files[1].Changed || files[2].Changed {
+		t.Fatalf("%+v", files)
+	}
+	got := map[string]int{}
+	for _, f := range files {
+		got[f.Path]++
+	}
+	if got["app/x.php"] != 1 || got["README.md"] != 1 || got["app/y.php"] != 1 {
+		t.Fatalf("dubluri sau lipsa: %+v", files)
+	}
+	// cautarea filtreaza si fisierele modificate
+	files = get("q=x.php&task=" + itoa(task.ID) + "&agent=" + itoa(w.ID))
+	if len(files) != 1 || files[0].Path != "app/x.php" || !files[0].Changed {
+		t.Fatalf("%+v", files)
+	}
+	// task din alt proiect: 404
+	other := e.createProject(t, t.TempDir())
+	if code, _ := e.do(t, "GET", "/api/projects/"+itoa(other.ID)+"/code-files?task="+itoa(task.ID), nil); code != http.StatusNotFound {
+		t.Fatalf("alt proiect: %d", code)
+	}
+}

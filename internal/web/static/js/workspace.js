@@ -16,6 +16,7 @@ import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
 import { renderMarkdown } from "./md.js";
 import { attachMentions } from "./mentions.js";
+import { openCodeExplorer, shortcutLabel } from "./code-explorer.js";
 import { libraryProposalBox, librarySharePrompt } from "./library-cards.js";
 import { moveAction, moveTask } from "./board-move.js";
 import { deletedPanel } from "./deleted.js";
@@ -35,6 +36,8 @@ const ref = (t) => `T-${t.number}`;
 
 // Coloana Done arata la inceput atatea carduri; "Show N more" le aduce pe toate.
 const DONE_PAGE = 12;
+// Cati agenti se vad langa filtrele board-ului; peste, ultimul loc e "+N" cu lista restului.
+const TEAM_SHOWN = 5;
 
 // savedDrawer / saveDrawer: panoul din dreapta ramane deschis sau inchis intre pagini.
 // Pe ecrane inguste panoul acopera board-ul, deci acolo pornim mereu cu el inchis.
@@ -164,9 +167,13 @@ export async function workspaceView(root, projectId, route) {
   const pausedNote = el("span", { class: "paused-note", hidden: true });
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
   const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter by folder" });
+  // avatarele echipei, langa filtre: click = chat cu agentul; peste TEAM_SHOWN agenti, ultimul e "+N" cu restul in lista
+  const teamBox = el("div", { class: "board-team", role: "group", "aria-label": "Team" });
+  let teamKey = null; // ce s-a desenat ultima data (lista ramane deschisa intre refresh-uri)
   const subsOpen = new Set(); // grupurile desfasurate pe board (id-ul radacinii); raman la refresh
   let boardPanel = null; // "stages" | "task" | "recurring" | "deleted" | null
   let dragging = null; // task-ul tras acum pe board (null = niciunul)
+  let explorer = null; // explorer-ul de cod deschis (Cmd/Ctrl+P), null = inchis
   let dragFrom = null, dragOver = null; // coloana de unde a plecat cardul si cea peste care e acum
   let cardMenu = null; // meniul "⋯" deschis ({ btn, close }); unul singur odata
   let boardStale = false; // un refresh venit cat tragi / cat e meniul deschis: se deseneaza dupa
@@ -249,7 +256,7 @@ export async function workspaceView(root, projectId, route) {
   const bodies = {
     "team": el("div", { class: "tab-body team-body" }, canvas.el),
     "tasks": el("section", { class: "tab-body tasks-body" },
-      el("div", { class: "board-toolbar" }, folderChips, pausedNote, el("span", { class: "grow" }), boardTools, count),
+      el("div", { class: "board-toolbar" }, folderChips, teamBox, pausedNote, el("span", { class: "grow" }), boardTools, count),
       editorSlot,
       el("div", { class: "board-row" }, needsBox, board),
       boardHint),
@@ -282,6 +289,36 @@ export async function workspaceView(root, projectId, route) {
     await select(id, panel);
     renderHeader();
   }
+
+  // toggleExplorer: deschide / inchide explorer-ul de cod (Cmd/Ctrl+P, butonul Code)
+  function toggleExplorer() {
+    if (explorer) { explorer.close(); return; }
+    const rootId = state.project.agents.find((a) => a.isRoot && !a.detached)?.id ?? firstRootId();
+    explorer = openCodeExplorer({
+      projectId, project: state.project,
+      defaultAgentId: state.drawer && state.selected ? state.selected : rootId,
+      onAsk: prefillChat,
+      onClose: () => { explorer = null; },
+    });
+  }
+
+  // prefillChat: chat-ul agentului deschis, cu text la inceputul campului (textul scris ramane dupa el)
+  async function prefillChat(agentId, text) {
+    if (!(state.drawer && state.selected === agentId && state.panel === "chat")) await openAgent(agentId, "chat");
+    input.value = text + input.value.replace(/^\s+/, "");
+    input.setSelectionRange(text.length, text.length);
+    input.dispatchEvent(new Event("input", { bubbles: true })); // inaltimea campului, ciorna
+    input.focus();
+  }
+
+  // Cmd/Ctrl+P pe paginile proiectului: explorer-ul de cod in locul dialogului de print
+  const onShortcut = (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      toggleExplorer();
+    }
+  };
+  document.addEventListener("keydown", onShortcut);
 
   // ---------- desenare ----------
   function renderAll() {
@@ -626,13 +663,6 @@ export async function workspaceView(root, projectId, route) {
       : el("span", { class: "status-chip" + (working ? " on" : "") },
         el("span", { class: "dot" + (working ? " working" : "") }),
         working ? `${working} ${working === 1 ? "agent" : "agents"} working` : "Idle");
-    // avatarele echipei: click deschide chat-ul cu agentul ales (sau radacina)
-    const shown = p.agents.slice(0, 4);
-    const stack = el("button", {
-      type: "button", class: "avatar-stack", title: "Chat with the team",
-      onclick: () => openAgent(state.selected ?? firstRootId(), "chat"),
-    }, shown.map((a) => avatar(a.name, kindOf(a), 30)),
-      p.agents.length > shown.length ? el("span", { class: "avatar more", style: "--size:30px" }, `+${p.agents.length - shown.length}`) : null);
     const root = state.project.agents.find((a) => a.id === firstRootId());
     const chatOpen = state.drawer && state.panel === "chat" && state.selected === root?.id;
     header.replaceChildren(topbar(
@@ -644,7 +674,7 @@ export async function workspaceView(root, projectId, route) {
           onclick: () => saveCategory(p.category) }, p.category) : null,
         needsChip),
       el("span", { class: "grow" }),
-      p.agents.length ? stack : null,
+      el("button", { type: "button", class: "btn ghost", title: `Code explorer (${shortcutLabel})`, onclick: toggleExplorer }, "Code"),
       tabsNav,
       openMenu,
       el("a", { class: "btn ghost", href: `#/p/${projectId}/edit`, title: "Goal, shared context, folders, linked projects" }, "Instructions"),
@@ -657,6 +687,43 @@ export async function workspaceView(root, projectId, route) {
       }, `Chat with ${root.name}`) : null,
       el("button", { type: "button", class: "btn primary", onclick: newTaskFromTop }, "+ Task")));
     header.querySelector(".crumb.current").title = p.goal ? "Goal: " + p.goal : "";
+  }
+
+  // renderTeamFaces: avatarele echipei langa filtre. Pana la TEAM_SHOWN se vad toti; peste, primii
+  // TEAM_SHOWN-1 si "+N", care deschide lista cu restul. Se redeseneaza doar cand se schimba echipa.
+  function renderTeamFaces(agents) {
+    const working = (a) => (a.status || "").toLowerCase() === "working";
+    const key = JSON.stringify(agents.map((a) => [a.id, a.name, kindOf(a), working(a)]));
+    if (key === teamKey) return;
+    teamKey = key;
+    const shown = agents.length > TEAM_SHOWN ? agents.slice(0, TEAM_SHOWN - 1) : agents;
+    const rest = agents.slice(shown.length);
+    const face = (a) => el("button", {
+      type: "button", class: "team-face" + (working(a) ? " working" : ""), title: `${a.name}${working(a) ? " (working)" : ""}: chat`,
+      "aria-label": `Chat with ${a.name}`, onclick: () => openAgent(a.id, "chat"),
+    }, avatar(a.name, kindOf(a), 30));
+    let more = null;
+    if (rest.length) {
+      more = el("details", { class: "menu team-more" },
+        el("summary", { class: "avatar more", style: "--size:30px", title: `${rest.length} more`, "aria-label": `${rest.length} more agents` }, `+${rest.length}`),
+        el("div", { class: "menu-panel filter-panel" },
+          el("span", { class: "menu-label" }, "Team"),
+          rest.map((a) => el("button", {
+            type: "button", class: "filter-item", title: `Chat with ${a.name}`,
+            onclick: () => { more.open = false; openAgent(a.id, "chat"); },
+          }, avatar(a.name, kindOf(a), 22), el("span", { class: "grow" }, a.name),
+            working(a) ? el("span", { class: "dot working", title: "Working" }) : null))));
+    }
+    if (more) {
+      // clic in afara inchide lista; ascultatorul exista doar cat e deschisa
+      const outside = (e) => { if (!more.contains(e.target)) more.open = false; };
+      more.addEventListener("toggle", () => {
+        if (more.open) document.addEventListener("click", outside);
+        else document.removeEventListener("click", outside);
+      });
+    }
+    teamBox.replaceChildren(...shown.map(face), ...(more ? [more] : []));
+    teamBox.hidden = !agents.length;
   }
 
   // newTaskFromTop: "+ Task" din bara de sus: board-ul cu formularul deschis
@@ -733,6 +800,7 @@ export async function workspaceView(root, projectId, route) {
         }, a ? [avatar(a.name, kindOf(a), 20), a.name] : "Everyone"))));
     folderChips.replaceChildren(chip(null, "All tasks"), mineChip,
       ...(folders.length > 1 ? folders.map((f) => chip(f.id, f.name)) : []), filter);
+    renderTeamFaces(p.agents);
     pausedNote.hidden = !p.paused;
     pausedNote.replaceChildren(el("span", { class: "dot" }), "Paused: agents answer messages but don't pick up tasks. ",
       el("button", { type: "button", class: "link-btn", onclick: () => projectAction("resume") }, "Start team"));
@@ -1921,6 +1989,8 @@ export async function workspaceView(root, projectId, route) {
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
     document.removeEventListener("pointerdown", closeMenus);
+    document.removeEventListener("keydown", onShortcut);
+    explorer?.close();
     return () => {};
   }
   let hadError = false;
@@ -1956,6 +2026,8 @@ export async function workspaceView(root, projectId, route) {
     window.removeEventListener("dragend", guardEnd);
     events.close();
     document.removeEventListener("pointerdown", closeMenus);
+    document.removeEventListener("keydown", onShortcut);
+    explorer?.close();
     canvas.destroy();
     stopLive();
     clearTimeout(reloadTimer);

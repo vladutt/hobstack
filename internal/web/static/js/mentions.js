@@ -11,7 +11,7 @@ export function mentionAt(text, caret) {
 
 // attachMentions: @ in textarea deschide o lista cu fisierele proiectului.
 // - input: textarea-ul; anchor: elementul deasupra caruia sta lista (pozitionat relativ)
-// - search(query) -> Promise<[{ path, name, folder }]>
+// - search(query) -> Promise<[{ path, name, folder, changed? }]> (changed: modificat pe task, cu eticheta lui)
 // Sageti / Enter / Tab aleg, Esc inchide; alegerea scrie "@cale " in locul mentiunii.
 // Intoarce { close() }.
 export function attachMentions(input, anchor, search) {
@@ -62,7 +62,9 @@ export function attachMentions(input, anchor, search) {
         "aria-selected": String(i === active),
         // mousedown, nu click: textarea-ul nu pierde focusul
         onmousedown: (e) => { e.preventDefault(); pick(i); },
-      }, el("span", { class: "mention-name" }, f.name), el("span", { class: "mention-dir" }, dir || f.folder));
+      }, el("span", { class: "mention-name" }, f.name),
+        f.changed ? el("span", { class: "mention-changed", title: "Changed on this task" }, "changed") : null,
+        el("span", { class: "mention-dir" }, dir || f.folder));
     }));
     list.hidden = false;
     input.setAttribute("aria-activedescendant", `mention-${active}`);

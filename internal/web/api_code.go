@@ -175,11 +175,7 @@ func (s *Server) getTaskFile(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		v.Exists = true
-		head := content
-		if len(head) > 8192 {
-			head = head[:8192]
-		}
-		if strings.IndexByte(head, 0) >= 0 {
+		if isBinary(content) {
 			v.Binary = true
 		} else {
 			v.Content = content

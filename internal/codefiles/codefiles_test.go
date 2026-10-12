@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 )
 
 func touch(t *testing.T, root string, rels ...string) {
@@ -107,5 +108,23 @@ func TestSearchRanksNameMatchesFirst(t *testing.T) {
 	}
 	if got := Search(files, "nothing-here", 5); len(got) != 0 {
 		t.Fatalf("fara potrivire: %v", got)
+	}
+}
+
+// Invalidate: un fisier creat dupa ce lista a intrat in cache apare abia dupa invalidare
+func TestCacheInvalidate(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, dir, "a.go")
+	c := NewCache(time.Hour)
+	if got, _ := c.Files(dir); len(got) != 1 {
+		t.Fatalf("got %v", got)
+	}
+	touch(t, dir, "b.go")
+	if got, _ := c.Files(dir); len(got) != 1 {
+		t.Fatalf("cache-ul trebuia sa raspunda tot cu lista veche: %v", got)
+	}
+	c.Invalidate(dir)
+	if got, _ := c.Files(dir); len(got) != 2 {
+		t.Fatalf("dupa Invalidate: %v", got)
 	}
 }
