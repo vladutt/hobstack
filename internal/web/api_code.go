@@ -163,7 +163,7 @@ func (s *Server) getTaskFile(w http.ResponseWriter, r *http.Request) {
 	v.Markers, v.Exact = store.FileMarkers(cs)
 	content, err := s.readTaskFile(target.ProjectID, cs[len(cs)-1].AgentID, path)
 	switch {
-	case errors.Is(err, errOutside):
+	case errors.Is(err, errOutside), errors.Is(err, errNotRegular):
 		fail(w, store.ErrNotFound)
 		return
 	case errors.Is(err, fs.ErrNotExist):
@@ -187,6 +187,8 @@ func (s *Server) getTaskFile(w http.ResponseWriter, r *http.Request) {
 var (
 	errOutside  = errors.New("the path is outside the project folders")
 	errTooLarge = errors.New("the file is too large")
+	// errNotRegular: calea e un folder (ex. submodul git) sau un fisier special
+	errNotRegular = errors.New("not a regular file")
 )
 
 // readTaskFile citeste o cale din task_changes: relativa la folderul agentului (sau, daca agentul nu
@@ -260,6 +262,11 @@ func readIn(root, rel string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
+	if fi, err := f.Stat(); err != nil {
+		return "", err
+	} else if !fi.Mode().IsRegular() {
+		return "", errNotRegular
+	}
 	b, err := io.ReadAll(io.LimitReader(f, maxFileView+1))
 	if err != nil {
 		return "", err

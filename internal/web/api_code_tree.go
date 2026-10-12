@@ -71,6 +71,8 @@ type codeFileView struct {
 	Content  string `json:"content,omitempty"`
 	Binary   bool   `json:"binary"`
 	TooLarge bool   `json:"tooLarge"`
+	// NotRegular: un folder (ex. submodul git) sau un fisier special, listat de git
+	NotRegular bool `json:"notRegular"`
 }
 
 // isBinary: NUL in primii 8 KB (ca in modala de fisier a task-ului)
@@ -125,6 +127,8 @@ func (s *Server) getCodeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, errTooLarge):
 		v.TooLarge = true
+	case errors.Is(err, errNotRegular):
+		v.NotRegular = true
 	case err != nil:
 		fail(w, err)
 		return

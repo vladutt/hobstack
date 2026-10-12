@@ -245,3 +245,40 @@ func TestCodeFileSymlinkOutside(t *testing.T) {
 		t.Fatalf("symlink in afara: %d %+v", code, res)
 	}
 }
+
+// submodul git (gitlink): apare in lista ca fisier, dar e un folder; raspunsul spune asta, fara 500
+func TestCodeFileSubmodule(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git lipseste")
+	}
+	e := setup(t)
+	dir := t.TempDir()
+	inner := filepath.Join(dir, "lib")
+	writeFiles(t, inner, "x.go")
+	git := func(d string, args ...string) {
+		t.Helper()
+		full := append([]string{"-C", d, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "protocol.file.allow=always"}, args...)
+		if out, err := exec.Command("git", full...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	git(inner, "init", "-q")
+	git(inner, "add", "x.go")
+	git(inner, "commit", "-q", "-m", "x")
+	git(dir, "init", "-q")
+	git(dir, "add", "lib")
+	p := e.createProject(t, dir)
+	if files := getTree(t, e, p.ID).Folders[0].Files; !slices.Contains(files, "lib") {
+		t.Fatalf("submodulul lipseste din lista: %v", files)
+	}
+	q := url.Values{"folder": {itoa(p.Folders[0].ID)}, "path": {"lib"}}
+	code, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID)+"/code-file?"+q.Encode(), nil)
+	var res struct {
+		NotRegular bool   `json:"notRegular"`
+		Content    string `json:"content"`
+	}
+	json.Unmarshal(raw, &res)
+	if code != 200 || !res.NotRegular || res.Content != "" {
+		t.Fatalf("%d %s", code, raw)
+	}
+}

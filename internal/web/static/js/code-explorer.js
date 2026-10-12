@@ -5,6 +5,8 @@ import { codeWithMarkers, copyText } from "./file-view.js";
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 export const shortcutLabel = isMac ? "⌘P" : "Ctrl+P";
+// modKey: Cmd pe macOS, Ctrl in rest (pe macOS Ctrl+P / Ctrl+C raman ale campurilor de text)
+export const modKey = (e) => (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
 
 // searchFiles: cautarea dupa nume, in ordinea din codefiles.SearchIdx: numele incepe cu q, numele
 // contine q, calea contine q; la egalitate numele mai scurt, apoi calea. items: [{ folder, path }].
@@ -86,7 +88,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     el("div", { class: "cx-main" }, tree,
       el("div", { class: "cx-view" },
         el("div", { class: "fv-head cx-head" }, pathBox, el("span", { class: "fv-actions" }, copyBtn, moreBtn), menuBox),
-        codeBox)));
+        codeBox, bar)));
   const overlay = el("div", { class: "modal-overlay cx-overlay", onclick: (e) => { if (e.target === overlay) close(); } }, box);
   const before = document.activeElement;
 
@@ -116,23 +118,46 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     return root;
   }
 
-  // renderDir: randurile unui folder desfasurat; subfolderele se deseneaza doar daca sunt deschise
+  // toggleDir: desfasoara / restrange un folder si pastreaza focusul pe butonul lui (dupa cheie)
+  function toggleDir(key) {
+    if (openDirs.has(key)) openDirs.delete(key); else openDirs.add(key);
+    persist();
+    renderTree();
+    tree.querySelector(`.cx-dir[data-key="${CSS.escape(key)}"]`)?.focus();
+  }
+  const fileKey = (c) => `${c.folder}:${c.path}`;
+
+  // renderDir: randurile unui folder desfasurat; subfolderele se deseneaza doar daca sunt deschise.
+  // Numele sortate se tin pe nod (sortarea se face o data, nu la fiecare desenare).
   function renderDir(f, node, dir, depth, out) {
     const pad = `${10 + depth * 14}px`;
-    for (const name of [...node.dirs.keys()].sort((a, b) => a.localeCompare(b))) {
+    node.dirNames ||= [...node.dirs.keys()].sort((a, b) => a.localeCompare(b));
+    node.fileNames ||= [...node.files].sort((a, b) => a.localeCompare(b));
+    for (const name of node.dirNames) {
       const path = dir + name + "/";
       const key = `${f.id}/${path}`;
       const open = openDirs.has(key);
       out.push(el("button", { type: "button", class: "cx-dir", style: `padding-left:${pad}`, "aria-expanded": String(open),
-        onclick: () => { if (open) openDirs.delete(key); else openDirs.add(key); persist(); renderTree(); } },
+        "data-key": key, onclick: () => toggleDir(key) },
         el("span", { class: "cx-caret" }, open ? "▾" : "▸"), name));
       if (open) renderDir(f, node.dirs.get(name), path, depth + 1, out);
     }
-    for (const name of [...node.files].sort((a, b) => a.localeCompare(b))) {
+    for (const name of node.fileNames) {
       const path = dir + name;
       const on = current && current.folder === f.id && current.path === path;
       out.push(el("button", { type: "button", class: "cx-file" + (on ? " on" : ""), style: `padding-left:${pad}`, title: path,
-        "aria-current": on ? "true" : null, onclick: () => openFile({ folder: f.id, path }, false) }, name));
+        "data-key": fileKey({ folder: f.id, path }), "aria-current": on ? "true" : null,
+        onclick: () => openFile({ folder: f.id, path }, false) }, name));
+    }
+  }
+
+  // markCurrent: doar evidentierea fisierului deschis (fara redesenare: focusul din arbore ramane)
+  function markCurrent() {
+    const k = current ? fileKey(current) : "";
+    for (const b of tree.querySelectorAll(".cx-file")) {
+      const on = b.dataset.key === k;
+      b.classList.toggle("on", on);
+      if (on) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current");
     }
   }
 
@@ -142,7 +167,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
       const key = `${f.id}/`;
       const open = openDirs.has(key);
       out.push(el("button", { type: "button", class: "cx-dir cx-root", "aria-expanded": String(open),
-        onclick: () => { if (open) openDirs.delete(key); else openDirs.add(key); persist(); renderTree(); } },
+        "data-key": key, onclick: () => toggleDir(key) },
         el("span", { class: "cx-caret" }, open ? "▾" : "▸"), f.name));
       if (!open) continue;
       if (f.error) { out.push(el("p", { class: "hint cx-note" }, f.error)); continue; }
@@ -153,13 +178,19 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     tree.replaceChildren(...out);
   }
 
-  // reveal: desfasoara folderele parinte ale fisierului si il aduce in zona vizibila
+  // reveal: desfasoara folderele parinte ale fisierului (redesenare doar daca s-a deschis ceva) si il aduce in zona vizibila
   function reveal(c) {
-    openDirs.add(`${c.folder}/`);
     const parts = c.path.split("/");
-    for (let i = 1; i < parts.length; i++) openDirs.add(`${c.folder}/${parts.slice(0, i).join("/")}/`);
-    persist();
-    renderTree();
+    const need = [`${c.folder}/`];
+    for (let i = 1; i < parts.length; i++) need.push(`${c.folder}/${parts.slice(0, i).join("/")}/`);
+    const missing = need.filter((k) => !openDirs.has(k));
+    if (missing.length) {
+      for (const k of missing) openDirs.add(k);
+      persist();
+      renderTree();
+    } else {
+      markCurrent();
+    }
     tree.querySelector(".cx-file.on")?.scrollIntoView({ block: "nearest" });
   }
 
@@ -190,7 +221,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     anchorLine = null;
     bar.hidden = true;
     persist();
-    if (doReveal) reveal(current); else renderTree();
+    if (doReveal) reveal(current); else markCurrent();
     const f = folderOf(c.folder);
     const cut = c.path.lastIndexOf("/") + 1;
     pathBox.replaceChildren(el("span", { class: "change-dir" }, (folders.length > 1 ? f.name + "/" : "") + c.path.slice(0, cut)),
@@ -202,9 +233,10 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
       const q = new URLSearchParams({ folder: String(c.folder), path: c.path });
       const v = await api(`/api/projects/${projectId}/code-file?${q}`);
       if (my !== seq || closed) return;
-      if (v.binary) codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "Binary file: no preview."));
+      if (v.notRegular) codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "Not a regular file (a folder or a git submodule): no preview."));
+      else if (v.binary) codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "Binary file: no preview."));
       else if (v.tooLarge) codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "The file is larger than 1 MB: no preview."));
-      else codeBox.replaceChildren(codeWithMarkers(v.content, languageFor(c.path), null), bar);
+      else codeBox.replaceChildren(codeWithMarkers(v.content, languageFor(c.path), null));
       codeBox.scrollTop = 0;
       codeBox.scrollLeft = 0;
     } catch (err) {
@@ -223,14 +255,12 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     const rows = codeBox.querySelectorAll(".fv-line");
     rows.forEach((row, i) => row.classList.toggle("cx-sel", !!sel && i + 1 >= sel.from && i + 1 <= sel.to));
     if (!sel) { bar.hidden = true; return; }
-    const first = rows[sel.from - 1];
     const askBtn = el("button", { type: "button", class: "btn small primary", onclick: () => ask(agentId) }, `Ask ${agentName(agentId)}`);
     const pick = agents.length > 1 ? el("button", { type: "button", class: "btn small primary cx-pick", "aria-label": "Ask another agent",
       onclick: (e) => { e.stopPropagation(); toggleMenu(agents.filter((a) => a.id !== agentId).map((a) => [`Ask ${a.name}`, () => { agentId = a.id; ask(a.id); }]), true); } }, "▾") : null;
     bar.replaceChildren(el("button", { type: "button", class: "btn small", onclick: () => copyText(copyPath(current) + lines()) }, "Copy reference"),
       el("span", { class: "cx-ask" }, askBtn, pick));
     bar.hidden = false;
-    bar.style.top = `${Math.max(0, first.offsetTop - bar.offsetHeight - 4)}px`;
   }
 
   codeBox.addEventListener("click", (e) => {
@@ -299,10 +329,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     const open = b.getAttribute("aria-expanded") === "true";
     if ((e.key === "ArrowRight" && !open) || (e.key === "ArrowLeft" && open)) {
       e.preventDefault();
-      const label = b.textContent;
-      b.click();
-      // butonul a fost redesenat: focusul pe noul buton cu acelasi text
-      [...tree.querySelectorAll(".cx-dir")].find((x) => x.textContent.slice(1) === label.slice(1))?.focus();
+      toggleDir(b.dataset.key); // redeseneaza si pune focusul inapoi pe acelasi folder
     }
   });
 
@@ -310,7 +337,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
   // pe window, in capture: ruleaza inaintea ascultatorilor de pe document (modala de fisier, modala de task);
   // tastele tratate aici se opresc cu stopImmediatePropagation
   function onKey(e) {
-    const mod = e.metaKey || e.ctrlKey;
+    const mod = modKey(e);
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -324,7 +351,8 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
       e.preventDefault();
       e.stopImmediatePropagation();
       copyText(copyPath(current));
-    } else if (mod && !e.shiftKey && e.key.toLowerCase() === "c" && current && document.activeElement !== search
+    } else if (mod && !e.shiftKey && e.key.toLowerCase() === "c" && current
+      && !(document.activeElement === search && search.selectionStart !== search.selectionEnd)
       && !(window.getSelection()?.toString())) {
       e.preventDefault();
       e.stopImmediatePropagation();

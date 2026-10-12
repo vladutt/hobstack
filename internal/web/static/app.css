@@ -1493,7 +1493,7 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .cx-root { font: 600 13px var(--sans); color: var(--text); padding-top: 8px; }
 .cx-caret { width: 12px; flex: none; color: var(--muted); font-size: 10px; }
 .cx-note { padding: 4px 14px; margin: 0; font-size: 12.5px; }
-.cx-view { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.cx-view { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .cx-head { position: relative; min-height: 52px; }
 .cx-head .btn[hidden] { display: none; }
 .cx-code { position: relative; overflow: auto; flex: 1; min-height: 0; padding: 8px 0 16px; }
@@ -1502,7 +1502,8 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .cx-code .fv-num:hover { color: var(--text); }
 .cx-code .fv-line.cx-sel { background: rgba(240, 180, 75, .1); }
 .cx-code .fv-line.cx-sel .fv-gutter { background: var(--amber); }
-.cx-bar { position: absolute; left: calc(4.2em + 20px); z-index: 2; display: flex; gap: 6px; align-items: center; padding: 4px;
+/* bara de referinta: fixa in coltul de sus al zonei de cod, vizibila oricat de lunga e selectia */
+.cx-bar { position: absolute; top: 62px; right: 28px; z-index: 3; display: flex; gap: 6px; align-items: center; padding: 4px;
   background: var(--deep); border: 1px solid var(--line-2); border-radius: 9px; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); font-family: var(--sans); }
 .cx-bar[hidden] { display: none; }
 .cx-ask { display: inline-flex; }
@@ -1511,7 +1512,7 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .cx-menu { position: absolute; right: 14px; top: calc(100% - 4px); z-index: 6; min-width: 200px; display: grid; gap: 2px; padding: 6px;
   background: var(--col); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
 .cx-menu[hidden] { display: none; }
-.cx-menu.cx-menu-bar { right: auto; left: 0; top: calc(100% + 4px); }
+.cx-menu.cx-menu-bar { right: 0; left: auto; top: calc(100% + 4px); }
 @media (max-width: 720px) {
   .cx-main { flex-direction: column; }
   .cx-tree { width: auto; max-height: 35%; border-right: 0; border-bottom: 1px solid var(--line); }

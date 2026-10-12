@@ -151,6 +151,8 @@ localStorage "hobstack-code-<pid>"), cautare dupa nume, cod colorat. GET /api/pr
 truncated/error) si /code-file?folder=&path= (doar cai din lista, cache invalidat o data, readIn + isBinary). Clic / Shift+clic
 pe numere selecteaza linii: Copy reference (cale:42-50, prefixul folderului cu mai multe foldere), Ask <agent> pune
 "@cale:42-50 " in chat (prefillChat; calea ca la @). Cmd+C fara text selectat = referinta, Cmd+Shift+C = calea.
+Scurtaturile folosesc modKey (Cmd pe macOS, Ctrl in rest). Un fisier sters dispare din lista (cache invalidat la 404,
+git ls-files --deleted scazut); un submodul / fisier special vine cu notRegular (readIn refuza ce nu e fisier obisnuit).
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din

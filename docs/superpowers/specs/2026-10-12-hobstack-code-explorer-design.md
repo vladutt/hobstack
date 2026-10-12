@@ -20,7 +20,7 @@ altor proiecte, cautare in continutul fisierelor.
 
 ### Deschidere
 
-- **Cmd+P** (macOS) / **Ctrl+P** (in rest) pe orice pagina a unui proiect (`#/p/<pid>/...`: board, Team, Files,
+- **Cmd+P** (macOS; acolo Ctrl+P ramane al campurilor de text) / **Ctrl+P** (in rest) pe orice pagina a unui proiect (`#/p/<pid>/...`: board, Team, Files,
   Stats, cu sau fara modala de task deschisa). Interceptam scurtatura (`preventDefault`), deci pe paginile de
   proiect nu se mai deschide dialogul de print al browserului. In afara proiectelor (Proiecte, Library, Settings)
   scurtatura nu face nimic (browserul ramane cu print).
@@ -56,7 +56,8 @@ Pe ecran ingust (<= 720px) arborele trece deasupra codului (max 35% din inaltime
 
 - Clic pe numarul unei linii o selecteaza (fundal evidentiat); Shift+clic pe alt numar selecteaza intervalul.
   Clic pe aceeasi linie selectata deselecteaza. Selectia se sterge la schimbarea fisierului.
-- Cu o selectie, deasupra primei linii selectate (lipita de cod, sticky in zona vizibila) apare o bara mica:
+- Cu o selectie, in coltul din dreapta-sus al zonei de cod (fixa, nu se scrolleaza cu codul, deci vizibila oricat de
+  lunga e selectia) apare o bara mica:
   - **Copy reference** → `<cale>:42` sau `<cale>:42-50`;
   - **Ask <agent>** → vezi mai jos; sageata de langa el deschide lista agentilor proiectului (nedetasati) ca sa
     alegi altul.
@@ -77,7 +78,7 @@ Pe ecran ingust (<= 720px) arborele trece deasupra codului (max 35% din inaltime
 
 ### Ask <agent>
 
-- Agentul implicit: cel deschis in panoul lateral (drawer) daca exista, altfel prima radacina nedetasata
+- Agentul implicit: cel deschis in panoul lateral (drawer) daca exista si nu e nelegat, altfel prima radacina nedetasata
   (`firstRootId()`). Butonul arata numele lui ("Ask Foreman").
 - La clic: explorer-ul se inchide, se deschide chat-ul agentului (`openAgent(id, "chat")`, ca butonul "Chat with
   ..."), iar campul de mesaj primeste `@<cale>:42-50 ` la inceput (textul deja scris ramane dupa referinta), cu

@@ -16,7 +16,7 @@ import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
 import { renderMarkdown } from "./md.js";
 import { attachMentions } from "./mentions.js";
-import { openCodeExplorer, shortcutLabel } from "./code-explorer.js";
+import { openCodeExplorer, shortcutLabel, modKey } from "./code-explorer.js";
 import { libraryProposalBox, librarySharePrompt } from "./library-cards.js";
 import { moveAction, moveTask } from "./board-move.js";
 import { deletedPanel } from "./deleted.js";
@@ -170,6 +170,7 @@ export async function workspaceView(root, projectId, route) {
   // avatarele echipei, langa filtre: click = chat cu agentul; peste TEAM_SHOWN agenti, ultimul e "+N" cu restul in lista
   const teamBox = el("div", { class: "board-team", role: "group", "aria-label": "Team" });
   let teamKey = null; // ce s-a desenat ultima data (lista ramane deschisa intre refresh-uri)
+  let teamOutside = null; // ascultatorul "clic in afara" al listei "+N" deschise
   const subsOpen = new Set(); // grupurile desfasurate pe board (id-ul radacinii); raman la refresh
   let boardPanel = null; // "stages" | "task" | "recurring" | "deleted" | null
   let dragging = null; // task-ul tras acum pe board (null = niciunul)
@@ -296,7 +297,8 @@ export async function workspaceView(root, projectId, route) {
     const rootId = state.project.agents.find((a) => a.isRoot && !a.detached)?.id ?? firstRootId();
     explorer = openCodeExplorer({
       projectId, project: state.project,
-      defaultAgentId: state.drawer && state.selected ? state.selected : rootId,
+      // agentul din panou, daca poate primi mesaje (un agent nelegat nu lucreaza): altfel radacina
+      defaultAgentId: state.drawer && state.project.agents.some((a) => a.id === state.selected && !a.detached) ? state.selected : rootId,
       onAsk: prefillChat,
       onClose: () => { explorer = null; },
     });
@@ -313,7 +315,7 @@ export async function workspaceView(root, projectId, route) {
 
   // Cmd/Ctrl+P pe paginile proiectului: explorer-ul de cod in locul dialogului de print
   const onShortcut = (e) => {
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+    if (modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
       e.preventDefault();
       toggleExplorer();
     }
@@ -702,6 +704,8 @@ export async function workspaceView(root, projectId, route) {
       type: "button", class: "team-face" + (working(a) ? " working" : ""), title: `${a.name}${working(a) ? " (working)" : ""}: chat`,
       "aria-label": `Chat with ${a.name}`, onclick: () => openAgent(a.id, "chat"),
     }, avatar(a.name, kindOf(a), 30));
+    const wasOpen = !!teamBox.querySelector(".team-more[open]");
+    if (teamOutside) { document.removeEventListener("click", teamOutside); teamOutside = null; }
     let more = null;
     if (rest.length) {
       more = el("details", { class: "menu team-more" },
@@ -718,11 +722,12 @@ export async function workspaceView(root, projectId, route) {
       // clic in afara inchide lista; ascultatorul exista doar cat e deschisa
       const outside = (e) => { if (!more.contains(e.target)) more.open = false; };
       more.addEventListener("toggle", () => {
-        if (more.open) document.addEventListener("click", outside);
-        else document.removeEventListener("click", outside);
+        if (more.open) { document.addEventListener("click", outside); teamOutside = outside; }
+        else { document.removeEventListener("click", outside); if (teamOutside === outside) teamOutside = null; }
       });
     }
     teamBox.replaceChildren(...shown.map(face), ...(more ? [more] : []));
+    if (more && wasOpen) more.open = true; // redesenata cat era deschisa (ex. un agent a inceput sa lucreze)
     teamBox.hidden = !agents.length;
   }
 
@@ -1990,6 +1995,7 @@ export async function workspaceView(root, projectId, route) {
     window.removeEventListener("dragend", guardEnd);
     document.removeEventListener("pointerdown", closeMenus);
     document.removeEventListener("keydown", onShortcut);
+    if (teamOutside) document.removeEventListener("click", teamOutside);
     explorer?.close();
     return () => {};
   }
@@ -2027,6 +2033,7 @@ export async function workspaceView(root, projectId, route) {
     events.close();
     document.removeEventListener("pointerdown", closeMenus);
     document.removeEventListener("keydown", onShortcut);
+    if (teamOutside) document.removeEventListener("click", teamOutside);
     explorer?.close();
     canvas.destroy();
     stopLive();
