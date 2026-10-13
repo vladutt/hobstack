@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"hobstack/internal/clipfiles"
 	"hobstack/internal/codefiles"
 	"hobstack/internal/config"
 	"hobstack/internal/draft"
@@ -68,6 +69,8 @@ type Server struct {
 	skills *skillsrc.Remote // skills.sh si GitHub (Library -> Add skill)
 	preps  *preparations    // skill-urile pregatite pentru Install / Update (doar in memorie)
 	now    func() time.Time // ceasul pentru expirarea pregatirilor (testele dau unul fals)
+
+	clip func(context.Context) ([]string, error) // caile fisierelor din clipboard-ul sistemului (testele dau unul fals)
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
@@ -75,7 +78,7 @@ func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, 
 	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick,
 		codeCache: codefiles.NewCache(30 * time.Second),
 		registry:  mcpregistry.NewClient(), home: os.UserHomeDir,
-		skills: skillsrc.NewRemote(), preps: newPreparations(), now: time.Now}
+		skills: skillsrc.NewRemote(), preps: newPreparations(), now: time.Now, clip: clipfiles.Paths}
 }
 
 // SetSetup activeaza wizard-ul "Proiect nou cu AI".
@@ -136,6 +139,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/files/{id}", s.serveFile)
 	mux.HandleFunc("DELETE /api/files/{id}", s.deleteFile)
 	mux.HandleFunc("POST /api/pick-folder", s.pickFolder)
+	mux.HandleFunc("POST /api/clipboard/files", s.clipboardFiles)
+	mux.HandleFunc("POST /api/clipboard/file", s.clipboardFile)
 	mux.HandleFunc("GET /api/folder-context", s.folderContext)
 
 	mux.HandleFunc("PUT /api/projects/{id}/stages", s.saveStages)

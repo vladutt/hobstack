@@ -257,6 +257,13 @@ GIT_OPTIONAL_LOCKS=0 ca sa nu ia index.lock. UI: eticheta "shell" (shellTag) in 
 Gata (chat lizibil): mesajele utilizatorului raman text simplu, dar blocurile ``` devin cod colorat (md.userText); un mesaj al
 utilizatorului peste 12 linii / 1200 de caractere si blocurile de cod ale agentilor peste 18 linii se arata restranse (md.collapsible,
 clasele .fold*: 10 / 14 linii, "Show all · N lines"). Campul de scris creste cu textul pana la min(45vh, 360px).
+Gata (mai multe fisiere lipite): Firefox da paginii doar primul fisier copiat din Finder / Explorer (verificat cu Firefox 157;
+Chrome le da pe toate). La paste cu fisiere, paste.js (fromSystem) cere serverului fisierele din clipboard-ul sistemului
+(pachetul internal/clipfiles: JXA / NSPasteboard pe macOS, PowerShell Get-Clipboard -Format FileDropList pe Windows,
+wl-paste / xclip text/uri-list in rest; max 50) prin POST /api/clipboard/files si /api/clipboard/file (doar POST cu JSON;
+continutul doar pentru o cale aflata chiar atunci in clipboard, fisier obisnuit, max 50 MB). Se iau de acolo doar daca sunt
+mai multe decat a dat browserul si printre ele e primul fisier al browserului; altfel (captura de ecran, eroare) raman ale
+browserului. Merge in chat, New task si modala de task.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
