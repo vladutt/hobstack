@@ -53,6 +53,16 @@ func TestModifiedFiles(t *testing.T) {
 	if d.Files[1].Ref != "T-2" || d.Files[1].Path != "README.md" || d.Files[1].Added != 1 || d.Files[1].Removed != 1 {
 		t.Fatalf("%+v", d.Files[1])
 	}
+	if f.Shell || d.Files[1].Shell {
+		t.Fatal("Edit / Write changes are not shell changes")
+	}
+	// o modificare gasita din git (Tool "Shell") marcheaza fisierul
+	e.st.AddTaskChanges([]store.TaskChange{{TaskID: task.ID, RunID: "r4", AgentName: "Beacon", Kind: "edit", Tool: "Shell", Path: "app/x.php"}})
+	_, raw = e.do(t, "GET", "/api/tasks/"+itoa(task.ID)+"/modified", nil)
+	json.Unmarshal(raw, &d)
+	if !d.Files[0].Shell || d.Files[0].Edits != 3 {
+		t.Fatalf("%+v", d.Files[0])
+	}
 }
 
 func TestFileView(t *testing.T) {

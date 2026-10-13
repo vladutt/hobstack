@@ -1,6 +1,8 @@
 package team
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -83,5 +85,57 @@ func TestRunChangesPrefixedWithFolderNameWhenMultiFolder(t *testing.T) {
 	cs, _ := f.st.ListTaskChanges(task.ID)
 	if len(cs) != 1 || cs[0].Path != "Landing/src/package.json" {
 		t.Fatalf("%+v", cs)
+	}
+}
+
+// Fisierele schimbate prin shell (fara Edit / Write) se gasesc din git la finalul run-ului.
+func TestRunShellChangesFromGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git lipseste")
+	}
+	f := setup(t)
+	dir := f.p.Workdir
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	gitRun("init", "-q")
+	os.WriteFile(filepath.Join(dir, "a.php"), []byte("one\ntwo\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.php"), []byte("b\n"), 0o644)
+	gitRun("add", "-A")
+	gitRun("commit", "-q", "-m", "init")
+
+	task := f.task(t, "A", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	// in timpul run-ului: a.php prin sed -i, c.php prin cat >, b.php prin Edit (inregistrat de runner)
+	os.WriteFile(filepath.Join(dir, "a.php"), []byte("one\nTWO\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "c.php"), []byte("<?php\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.php"), []byte("b2\n"), 0o644)
+	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: store.RunDone,
+		Changes: []runner.FileChange{{Tool: "Edit", Path: filepath.Join(dir, "b.php"), Kind: "edit", Patch: hunk("-b", "+b2")}}})
+
+	cs, err := f.st.ListTaskChanges(task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]store.TaskChange{}
+	for _, c := range cs {
+		got[c.Path] = c
+	}
+	if len(cs) != 3 {
+		t.Fatalf("want b.php (Edit) + a.php, c.php (Shell): %+v", cs)
+	}
+	if c := got["b.php"]; c.Tool != "Edit" {
+		t.Errorf("b.php keeps only the Edit diff: %+v", c)
+	}
+	if c := got["a.php"]; c.Tool != "Shell" || c.Kind != "edit" || len(c.Patch) != 1 || c.Patch[0].NewStart != 1 {
+		t.Errorf("a.php: %+v", c)
+	}
+	if c := got["c.php"]; c.Tool != "Shell" || c.Kind != "create" {
+		t.Errorf("c.php: %+v", c)
 	}
 }

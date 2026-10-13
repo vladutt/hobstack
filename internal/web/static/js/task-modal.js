@@ -1,7 +1,7 @@
 import { api, upload } from "./api.js";
 import { el, avatar, clock, kindOf, toast } from "./ui.js";
 import { commandsView } from "./changes.js";
-import { openFileView } from "./file-view.js";
+import { openFileView, shellTag } from "./file-view.js";
 import { flowView } from "./flow.js";
 import { agentPicker } from "./agent-picker.js";
 import { taskFilesView } from "./task-files.js";
@@ -431,6 +431,7 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
           el("span", { class: "fb-name" }, f.path.slice(f.path.lastIndexOf("/") + 1)),
           el("span", { class: "grow" }),
           f.taskId !== taskId ? el("span", { class: "modified-ref fb-ref" }, f.ref) : null,
+          f.shell ? shellTag() : null,
           statBadge({ added: f.added, removed: f.removed, kind: f.created ? "create" : "edit" }))),
         more > 0 ? el("button", { type: "button", class: "files-box-row files-box-more", onclick: toggle },
           filesAll ? "Show less" : `${more} more ${more === 1 ? "file" : "files"}`) : null)));

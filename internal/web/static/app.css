@@ -1677,3 +1677,6 @@ input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
   .ps-overlay { padding-top: 10vh; }
   .ps-cat { display: none; }
 }
+
+/* fisier schimbat prin shell (gitsnap): eticheta langa +/- in Changes si in lista modalei de fisier */
+.shell-tag { flex: none; font: 600 10.5px var(--mono); color: var(--purple); border: 1px solid rgba(199, 155, 242, .45); padding: 0 6px; border-radius: 999px; white-space: nowrap; }

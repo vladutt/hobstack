@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"hobstack/internal/config"
+	"hobstack/internal/gitsnap"
 	"hobstack/internal/library"
 	"hobstack/internal/mcp"
 	"hobstack/internal/prompt"
@@ -148,12 +149,21 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 			fromRequest = task.RequestID != nil
 		}
 	}
+	// plasa de siguranta pentru fisierele schimbate prin shell (cat >, sed -i, scripturi): starea git de acum,
+	// comparata la final (finish). Doar pe task si doar daca run-ul poate scrie; fara repo git nu face nimic.
+	var snap *gitsnap.Snapshot
+	if taskID != 0 && (slices.Contains(runTools, "write") || slices.Contains(runTools, "shell")) {
+		if snap, err = gitsnap.Take(home.Path); err != nil {
+			log.Printf("agent %d: git snapshot: %v", a.ID, err)
+			snap = nil
+		}
+	}
 	// intr-un proiect cu etape, radacinile creeaza task-uri chiar fara copii
 	isLead := roles.IsLead || (len(stages) > 0 && roles.IsRoot)
 	t.mu.Lock()
 	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
 		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0, CanAddAgents: isLead || roles.IsRoot, HasLinks: hasLinks, IsRoot: roles.IsRoot, FromRequest: fromRequest, CanWrite: slices.Contains(runTools, "write")}
-	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token, accountID: accountID}
+	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token, accountID: accountID, snap: snap}
 	t.mu.Unlock()
 
 	// URL-ul MCP in linie; cu servere din Library (secrete in env/headers) config-ul merge intr-un
@@ -247,6 +257,7 @@ func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
 	if t.lib != nil {
 		t.lib.RemoveMCPConfig(o.RunID) // fisierul cu secrete nu mai trebuie
 	}
+	o.Changes = t.shellChanges(agentID, o) // git, inainte de lock: poate dura
 	t.work.Lock()
 	defer t.work.Unlock()
 
@@ -270,6 +281,38 @@ func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
 	t.settleQuestions(ar, o)
 	t.emit(ar.projectID, "agent", map[string]int64{"id": agentID})
 	t.Kick(ar.projectID)
+}
+
+// shellChanges: o.Changes plus fisierele schimbate pe alte drumuri decat Edit / Write (gitsnap), cu
+// Tool "Shell". Fisierele deja inregistrate de Edit / Write raman doar cu diff-ul lor exact.
+func (t *Team) shellChanges(agentID int64, o runner.Outcome) []runner.FileChange {
+	t.mu.Lock()
+	ar, ok := t.active[agentID]
+	t.mu.Unlock()
+	if !ok || ar.runID != o.RunID || ar.snap == nil {
+		return o.Changes
+	}
+	dir := ar.snap.Dir()
+	skip := map[string]bool{}
+	for _, c := range o.Changes {
+		if rel, err := filepath.Rel(dir, c.Path); err == nil && filepath.IsLocal(rel) {
+			skip[filepath.ToSlash(rel)] = true
+		}
+	}
+	extra, err := ar.snap.Changes(skip)
+	if err != nil {
+		log.Printf("run %s: git changes: %v", o.RunID, err)
+		return o.Changes
+	}
+	out := slices.Clone(o.Changes)
+	for _, c := range extra {
+		var hunks []runner.Hunk
+		for _, h := range c.Patch {
+			hunks = append(hunks, runner.Hunk{OldStart: h.OldStart, OldLines: h.OldLines, NewStart: h.NewStart, NewLines: h.NewLines, Lines: h.Lines})
+		}
+		out = append(out, runner.FileChange{Tool: "Shell", Path: filepath.Join(dir, filepath.FromSlash(c.Path)), Kind: c.Kind, Patch: hunks, Truncated: c.Truncated})
+	}
+	return out
 }
 
 // saveUsage tine minte limitele contului Claude al proiectului (Stats le arata); un run care nu le-a

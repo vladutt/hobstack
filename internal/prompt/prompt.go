@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 
 	"hobstack/internal/store"
@@ -102,6 +103,12 @@ const howLeftForUser = `If the work needs values only the user can give (a compa
 const howFiles = `When the task asks for a file as its result (a document, an image, an export), save it in your folder ` +
 	`(or in the project files folder, with its absolute path) and list its path in files when you call report_done, ` +
 	`so the user can open it from the task. Do this on every run of a recurring task too.`
+
+// howEdits: modificarile prin Edit / Write se vad pe task cu diff exact; cele prin shell doar prin plasa din git (gitsnap).
+const howEdits = `Change files only with the Edit and Write tools, never through the shell: no cat, echo or printf ` +
+	`redirected into a file, no heredocs, no sed -i, no scripts (python, php, node) that rewrite files. HobStack records ` +
+	`Edit and Write changes on the task, so the user and the reviewer see the exact diff. Use the shell to run things ` +
+	`(tests, builds, linters, git) and let tools that generate files (formatters, code generators, installers) write them.`
 
 const howWorker = `Work only on the task you received and do not change anything outside it. ` +
 	`When you finish, call mcp__team__report_done with the requested summary. ` +
@@ -230,6 +237,9 @@ func System(p store.Project, a store.Agent, l Links) string {
 		how = append(how, howAsk)
 	default:
 		how = append(how, howAsk, howAskWait)
+	}
+	if slices.Contains(a.Tools, "write") {
+		how = append(how, howEdits)
 	}
 	how = append(how, howDenied)
 	if len(l.BlockedCommands) > 0 {

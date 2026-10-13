@@ -247,6 +247,13 @@ raport sau cu activitatea necunoscuta, reviewer-ul il primeste ca inainte.
 Gata (imagini lipite): Cmd+V cu o imagine in chat (deja era), in formularul New task (adauga la Files) si oriunde in modala de
 task (urca in Files, ca Upload; nu pe task-urile sterse); static/js/paste.js (onPasteFiles: textul se lipeste normal, numele
 generic "image.png" devine screenshot-HHMMSSmmm.png; fileThumb / releaseThumb: miniaturi pe URL blob in chip-uri si in lista).
+Gata (modificari prin shell): agentii cu write primesc in prompt regula howEdits (fisierele se schimba doar cu Edit / Write,
+nu cu cat >, heredoc, sed -i sau scripturi). Plasa de siguranta, pachetul internal/gitsnap: la pornirea unui run pe task care
+poate scrie, Take retine HEAD-ul si fisierele deja modificate din folderul agentului (cu continutul, max 1 MB / 32 MB); la final
+(team.shellChanges, inainte de lock) Changes compara cu starea de acum (git status + commit-urile facute in run, hash-object,
+diff prin git diff --no-index) si adauga fisierele schimbate altfel, cu Tool "Shell" (create / edit / delete, max 100). Fara repo
+git nu face nimic; fisierele ignorate nu se vad; un agent care lucreaza in acelasi folder in acelasi timp poate aparea si el.
+GIT_OPTIONAL_LOCKS=0 ca sa nu ia index.lock. UI: eticheta "shell" (shellTag) in Changes si in lista modalei de fisier (modifiedView.shell).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

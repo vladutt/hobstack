@@ -381,3 +381,14 @@ func TestLeftForUserMentionsDecisionsAndSteps(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 }
+
+// agentii care scriu fisiere afla ca modificarile se fac cu Edit / Write (altfel nu se vad pe task cu diff exact)
+func TestSystemEditsOnlyWithEditWrite(t *testing.T) {
+	want := "Change files only with the Edit and Write tools, never through the shell"
+	if got := System(proj, store.Agent{Name: "A", Tools: []string{"write", "shell"}}, Links{BossName: "Atlas"}); !strings.Contains(got, want) {
+		t.Fatalf("lipseste regula pentru agentul cu write:\n%s", got)
+	}
+	if got := System(proj, store.Agent{Name: "A", Tools: []string{"shell"}}, Links{BossName: "Atlas"}); strings.Contains(got, want) {
+		t.Fatal("agentul fara write nu primeste regula")
+	}
+}

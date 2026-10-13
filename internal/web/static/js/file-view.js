@@ -124,6 +124,7 @@ export async function openFileView({ taskId, subTaskId, path, files }) {
         const btn = el("button", { type: "button", class: "fv-tree-file" + (dir ? "" : " root"), title: f.path, onclick: () => open(f) },
           el("span", { class: "fv-tree-name" }, name),
           f.taskId && f.taskId !== taskId && f.ref ? el("span", { class: "modified-ref" }, f.ref) : null,
+          f.shell ? shellTag() : null,
           f.added != null ? statBadge({ added: f.added, removed: f.removed, kind: f.created ? "create" : "edit" }) : null);
         rows.push([f, btn]);
         nodes.push(btn);
@@ -228,4 +229,9 @@ function splitHighlighted(code) {
   out.push(cur);
   if (out.length > 1 && out[out.length - 1] === "") out.pop(); // ultimul "\n" din fisier
   return out;
+}
+
+// shellTag: eticheta "shell" pe un fisier schimbat prin shell (gasit din git, nu din Edit / Write)
+export function shellTag() {
+  return el("span", { class: "shell-tag", title: "Changed through the shell, not with Edit or Write: found by comparing git before and after the run. Another agent working in the same folder at the same time could also have made it." }, "shell");
 }

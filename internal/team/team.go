@@ -15,6 +15,7 @@ import (
 
 	"hobstack/internal/config"
 	"hobstack/internal/events"
+	"hobstack/internal/gitsnap"
 	"hobstack/internal/library"
 	"hobstack/internal/mcp"
 	"hobstack/internal/runner"
@@ -69,9 +70,10 @@ type activeRun struct {
 	projectID int64
 	taskID    int64
 	token     string
-	accountID int64          // contul Claude al run-ului; 0 = Default
-	request   *store.Message // ultimul mesaj al utilizatorului livrat la pornire (doar run-urile de chat)
-	questions []int64        // intrebarile din alte proiecte livrate run-ului: nu poate intreba la randul lui (anti-bucla), iar la final se inchid
+	accountID int64             // contul Claude al run-ului; 0 = Default
+	request   *store.Message    // ultimul mesaj al utilizatorului livrat la pornire (doar run-urile de chat)
+	questions []int64           // intrebarile din alte proiecte livrate run-ului: nu poate intreba la randul lui (anti-bucla), iar la final se inchid
+	snap      *gitsnap.Snapshot // starea git a folderului la pornire (run pe task care poate scrie); nil = fara repo
 }
 
 // setRequest retine mesajul utilizatorului care a pornit run-ul activ al agentului.
