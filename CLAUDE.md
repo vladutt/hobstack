@@ -156,6 +156,10 @@ git ls-files --deleted scazut); un submodul / fisier special vine cu notRegular 
 Cautare in fisier in explorer (Cmd/Ctrl+F sau Find): "N of M", Enter / Shift+Enter, Aa, max 2000 rezultate; potrivirile
 se marcheaza cu <mark> in nodurile de text deja colorate (wrapRange), Cmd/Ctrl+Enter selecteaza linia rezultatului (Copy
 reference / Ask); se reia la schimbarea fisierului, Esc inchide doar cautarea.
+Gata (switcher de proiecte): Cmd/Ctrl+K pe orice pagina (sau butonul ⌘K de langa logo) deschide project-switcher.js:
+fara text, proiectele deschise recent primele (localStorage "hobstack-recent-projects", max 20, actualizat in app.js la intrarea
+pe #/p/<id>), apoi favoritele, cel curent ultimul; cu text, numele incepe / contine, apoi categoria. Enter pastreaza tab-ul
+(Stats -> Stats), Cmd/Ctrl+Enter in tab nou; sta peste explorer-ul de cod (explorer-ul si modala de fisier ignora tastele din .ps-overlay).
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din

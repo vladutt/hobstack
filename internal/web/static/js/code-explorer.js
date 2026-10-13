@@ -3,7 +3,7 @@ import { el } from "./ui.js";
 import { languageFor } from "./highlight.js";
 import { codeWithMarkers, copyText } from "./file-view.js";
 
-const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 export const shortcutLabel = isMac ? "⌘P" : "Ctrl+P";
 // modKey: Cmd pe macOS, Ctrl in rest (pe macOS Ctrl+P / Ctrl+C raman ale campurilor de text)
 export const modKey = (e) => (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
@@ -480,6 +480,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
   // pe window, in capture: ruleaza inaintea ascultatorilor de pe document (modala de fisier, modala de task);
   // tastele tratate aici se opresc cu stopImmediatePropagation
   function onKey(e) {
+    if (e.target?.closest?.(".ps-overlay")) return; // tastele din switcher-ul de proiecte (Cmd/Ctrl+K)
     const mod = modKey(e);
     if (e.key === "Escape") {
       e.preventDefault();

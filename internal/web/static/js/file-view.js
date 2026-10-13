@@ -138,6 +138,7 @@ export async function openFileView({ taskId, subTaskId, path, files }) {
   // capture: Esc inchide doar modala de fisier, iar Tab nu ajunge la capcana de focus a modalei de task.
   // In lista, sagetile sus / jos trec pe fisierul vecin.
   const onKey = (e) => {
+    if (e.target?.closest?.(".ps-overlay")) return; // tastele din switcher-ul de proiecte (Cmd/Ctrl+K)
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
     else if (e.key === "Tab") e.stopPropagation();
     else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && tree?.contains(document.activeElement)) {

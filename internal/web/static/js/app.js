@@ -9,6 +9,8 @@ import { settingsView } from "./settings.js";
 import { libraryView, libraryItemView } from "./library.js";
 import { mcpAddView } from "./mcp-add.js";
 import { skillAddView } from "./skill-add.js";
+import { toggleSwitcher, touchRecent } from "./project-switcher.js";
+import { modKey } from "./code-explorer.js";
 
 // Aplicatia se numea foreman: preferintele salvate ("foreman-drawer", "foreman-category"...) trec o data
 // pe cheile noi "hobstack-...", ca sa nu se piarda starea panourilor si filtrele.
@@ -60,6 +62,8 @@ async function route() {
     return;
   }
   const { r, m } = found;
+  const inProject = hash.match(/^#\/p\/(\d+)/);
+  if (inProject) touchRecent(Number(inProject[1])); // ordinea din switcher-ul de proiecte
   const key = r.key ? r.key(m) : null;
   if (key && current && current.key === key && current.update) {
     current.update(m);
@@ -90,6 +94,17 @@ async function route() {
 }
 
 window.addEventListener("hashchange", route);
+
+// Cmd/Ctrl+K pe orice pagina: switcher-ul de proiecte. Pe window, in capture, inregistrat inaintea modalelor:
+// merge si peste explorer-ul de cod sau modala de task. Butonul din bara de sus trimite evenimentul hobstack:switch.
+window.addEventListener("keydown", (e) => {
+  if (modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    toggleSwitcher();
+  }
+}, true);
+window.addEventListener("hobstack:switch", toggleSwitcher);
 route();
 
 api("/api/info").then(({ name }) => {

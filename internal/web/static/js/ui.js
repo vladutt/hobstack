@@ -87,6 +87,13 @@ export function avatar(name, kind, size = 32) {
   }, (name || "?").charAt(0).toUpperCase());
 }
 
+// switchButton: butonul mic de langa logo care deschide switcher-ul de proiecte (ca Cmd/Ctrl+K; vezi project-switcher.js)
+const switchKeys = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K";
+function switchButton() {
+  return el("button", { type: "button", class: "ps-hint", title: `Switch project (${switchKeys})`, "aria-label": "Switch project",
+    onclick: () => window.dispatchEvent(new Event("hobstack:switch")) }, switchKeys);
+}
+
 // topbar: bara de sus a fiecarei pagini: logo, firimituri (crumbs: [text, href?]),
 // apoi ce primeste in dreapta (butoane, tab-uri).
 // crumbs poate fi si "projects" / "library" / "settings": atunci in loc de firimituri apare navigatia principala.
@@ -94,6 +101,7 @@ export function topbar(crumbs, ...right) {
   if (typeof crumbs === "string") {
     return el("header", { class: "topbar" },
       el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "H"),
+      switchButton(),
       el("nav", { class: "mainnav", "aria-label": "Main" },
         [["projects", "Projects", "#/"], ["library", "Library", "#/library/tools"], ["settings", "Settings", "#/settings"]].map(([id, label, href]) =>
           el("a", { class: "navlink" + (id === crumbs ? " active" : ""), href, "aria-current": id === crumbs ? "page" : null }, label))),
@@ -106,6 +114,7 @@ export function topbar(crumbs, ...right) {
   });
   return el("header", { class: "topbar" },
     el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "H"),
+    switchButton(),
     el("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, parts),
     el("div", { class: "topbar-right" }, right));
 }

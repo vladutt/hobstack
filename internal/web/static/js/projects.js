@@ -137,13 +137,20 @@ function setupCard(s, refresh) {
     el("div", { class: "card-actions" }, buttons));
 }
 
+// needsCount: cate lucruri asteapta utilizatorul pe proiect ("N need you"): intrebari, task-uri blocate, cereri de acces,
+// cereri de agenti noi, cereri de lucru, de completat, propuneri pentru Library, contul Claude cazut
+export function needsCount(p) {
+  return (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0)
+    + (p.fillIns || 0) + (p.libraryProposals || 0) + (p.accountError ? 1 : 0);
+}
+
 // projectRow: un rand din tabelul de proiecte; click oriunde pe rand deschide proiectul.
 // peak: cea mai mare activitate zilnica din tabel (barele au aceeasi scara pe toate randurile;
 // radical, ca o zi cu 250 de run-uri sa nu faca invizibile zilele cu 5).
 // projectRow: un rand din tabelul Proiecte; onCategory(categorie) la click pe eticheta categoriei
 function projectRow(p, peak, onCategory) {
   const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const asks = (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0) + (p.fillIns || 0) + (p.libraryProposals || 0) + (p.accountError ? 1 : 0); // intrebari, task-uri blocate, cereri de acces, cereri de agenti noi, cereri de lucru, contul Claude cazut
+  const asks = needsCount(p);
   const href = `#/p/${p.id}`;
   const lead = p.team.find((m) => m.isRoot) || p.team[0];
   const shown = p.team.slice(0, 3);
