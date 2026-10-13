@@ -14,13 +14,17 @@ import { saveCategory } from "./category.js";
 import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
-import { renderMarkdown } from "./md.js";
+import { renderMarkdown, userText, collapsible } from "./md.js";
 import { attachMentions } from "./mentions.js";
 import { openCodeExplorer, shortcutLabel, modKey } from "./code-explorer.js";
 import { libraryProposalBox, librarySharePrompt } from "./library-cards.js";
 import { moveAction, moveTask } from "./board-move.js";
 import { deletedPanel } from "./deleted.js";
 import { onPasteFiles, fileThumb, releaseThumb } from "./paste.js";
+
+// mesajele lungi din chat se arata restranse: liniile vizibile (mesaj al utilizatorului / bloc de cod al agentului)
+const USER_LINES = 10;
+const CODE_LINES = 14;
 
 const SUB_STATUS = {
   queued: "Queued", in_progress: "In progress", review: "Review", blocked: "Blocked", done: "Done",
@@ -211,6 +215,12 @@ export async function workspaceView(root, projectId, route) {
   const sendBtn = el("button", { type: "submit", class: "btn primary" }, "Send");
   const composer = el("form", { onsubmit: send }, clip, chatPicker, input, sendBtn);
   onPasteFiles(input, addPending);
+  // campul creste cu textul (pana la max-height din CSS, apoi scroll); dupa trimitere revine la un rand
+  const grow = () => {
+    input.style.height = "auto";
+    input.style.height = input.scrollHeight + "px";
+  };
+  input.addEventListener("input", grow);
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1696,10 +1706,29 @@ export async function workspaceView(root, projectId, route) {
     const mine = m.author === "user";
     return el("div", { class: "msg" + (mine ? " me" : ""), "data-id": m.id },
       el("span", { class: "msg-meta" }, `${mine ? "You" : m.author} · ${clock(m.createdAt)}`),
-      // mesajele agentilor vin in markdown; ale utilizatorului raman text simplu
-      m.text ? el("div", { class: "bubble" + (mine ? "" : " md-bubble") }, mine ? m.text : renderMarkdown(m.text)) : null,
+      m.text ? messageBody(m.text, mine) : null,
       m.attachments && m.attachments.length > 0 && el("div", { class: "attachments" }, m.attachments.map(attachmentNode)),
       mine && !m.delivered && el("span", { class: "pending" }, "queued"));
+  }
+
+  // messageBody: mesajele agentilor vin in markdown; ale utilizatorului raman text simplu (doar ``` devine cod).
+  // Un mesaj al utilizatorului lung (cod lipit) si blocurile de cod lungi ale agentilor se arata restranse.
+  function messageBody(text, mine) {
+    const lines = text.split("\n").length;
+    if (mine) {
+      const bubble = el("div", { class: "bubble" }, userText(text));
+      const long = lines > USER_LINES + 2 || text.length > 1200;
+      return long ? collapsible(bubble, USER_LINES, lines) : bubble;
+    }
+    const bubble = el("div", { class: "bubble md-bubble" }, renderMarkdown(text));
+    for (const pre of bubble.querySelectorAll(".md-pre")) {
+      const n = pre.textContent.split("\n").length;
+      if (n > CODE_LINES + 4) {
+        const at = pre.nextSibling, parent = pre.parentNode;
+        parent.insertBefore(collapsible(pre, CODE_LINES, n), at);
+      }
+    }
+    return bubble;
   }
 
   // scrollDown: coboara la capat daca utilizatorul era jos inainte de mesajul nou (stickBottom, din ultimul scroll).
@@ -1760,6 +1789,7 @@ export async function workspaceView(root, projectId, route) {
       // daca userul a schimbat agentul intre timp, nu atingem chatul si lista celuilalt agent
       if (state.selected === agentId) {
         input.value = "";
+        grow();
         clearPending();
         addMessage(m);
         scrollDown(true);

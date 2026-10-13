@@ -254,6 +254,9 @@ poate scrie, Take retine HEAD-ul si fisierele deja modificate din folderul agent
 diff prin git diff --no-index) si adauga fisierele schimbate altfel, cu Tool "Shell" (create / edit / delete, max 100). Fara repo
 git nu face nimic; fisierele ignorate nu se vad; un agent care lucreaza in acelasi folder in acelasi timp poate aparea si el.
 GIT_OPTIONAL_LOCKS=0 ca sa nu ia index.lock. UI: eticheta "shell" (shellTag) in Changes si in lista modalei de fisier (modifiedView.shell).
+Gata (chat lizibil): mesajele utilizatorului raman text simplu, dar blocurile ``` devin cod colorat (md.userText); un mesaj al
+utilizatorului peste 12 linii / 1200 de caractere si blocurile de cod ale agentilor peste 18 linii se arata restranse (md.collapsible,
+clasele .fold*: 10 / 14 linii, "Show all · N lines"). Campul de scris creste cu textul pana la min(45vh, 360px).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

@@ -401,9 +401,9 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 :is(.thread, .wizard, .hobstack-chat) .live pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; max-height: 240px; overflow: auto; font-family: var(--mono); }
 .err { color: var(--red); }
 .composer { border-top: 1px solid var(--line); padding: 14px 20px 16px; display: grid; position: relative; gap: 8px; }
-.composer form { display: flex; gap: 8px; align-items: center; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }
+.composer form { display: flex; gap: 8px; align-items: flex-end; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }
 .composer form:focus-within { border-color: var(--amber); }
-.composer textarea { min-height: 40px; height: 44px; max-height: 200px; border: 0; background: transparent; padding: 10px 8px; box-shadow: none !important; resize: none; }
+.composer textarea { min-height: 40px; height: 44px; max-height: min(45vh, 360px); border: 0; background: transparent; padding: 10px 8px; box-shadow: none !important; resize: none; }
 .composer .btn { height: 36px; }
 .composer .hint:empty { display: none; }
 .empty { color: var(--muted); text-align: center; margin: auto; padding: 20px; }
@@ -1680,3 +1680,16 @@ input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
 
 /* fisier schimbat prin shell (gitsnap): eticheta langa +/- in Changes si in lista modalei de fisier */
 .shell-tag { flex: none; font: 600 10.5px var(--mono); color: var(--purple); border: 1px solid rgba(199, 155, 242, .45); padding: 0 6px; border-radius: 999px; white-space: nowrap; }
+
+/* blocuri lungi in chat (md.js collapsible): restranse la --fold-lines linii, cu "Show all" sub ele */
+.fold-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+.msg.me .fold-wrap { align-items: flex-end; }
+.fold:not(.open) { max-height: calc(var(--fold-lines) * 1.55em + 24px); overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent); }
+.md-pre.fold:not(.open) { max-height: calc(var(--fold-lines) * 1.55em + 8px); }
+.fold-toggle { align-self: flex-start; background: none; border: 0; padding: 2px 4px; color: var(--blue); font: 600 12.5px var(--sans); cursor: pointer; }
+.msg.me .fold-toggle { align-self: flex-end; }
+.fold-toggle:hover { text-decoration: underline; }
+.bubble .md-pre { margin: 6px 0; white-space: pre; }
+/* in .thread (flex pe coloana) un mesaj deschis nu are voie sa se strice: fara micsorare */
+.thread > .msg, .fold-wrap > * { flex-shrink: 0; }

@@ -179,3 +179,41 @@ function fileLabel(code, s) {
   return el("span", { class: "md-file md-file-link", role: "button", tabindex: "0", title: "View file",
     onclick: () => s.open(), onkeydown: (e) => { if (e.key === "Enter") s.open(); } }, el("code", {}, code), statBadge(s));
 }
+
+// userText: textul unui mesaj al utilizatorului. Ramane text simplu (nu markdown), doar blocurile ```
+// devin cod colorat, ca un fragment lipit sa se citeasca.
+export function userText(text) {
+  const parts = text.split(/^\s*```[^\n]*$/m);
+  if (parts.length < 3) return document.createTextNode(text);
+  const frag = document.createDocumentFragment();
+  const tags = [...text.matchAll(/^\s*```([^\n]*)$/gm)].map((m) => m[1].trim());
+  parts.forEach((part, i) => {
+    const inCode = i % 2 === 1 && i < parts.length - 1; // un ``` neinchis ramane text
+    if (!inCode) {
+      const t = part.replace(/^\n|\n$/g, "");
+      if (t) frag.append(t);
+      return;
+    }
+    const tag = tags[i - 1] || "";
+    const code = el("code", {});
+    highlightInto(code, part.replace(/^\n|\n$/g, ""), tag ? (languageFor("x." + tag) || tag) : null);
+    frag.append(el("pre", { class: "md-pre" }, code));
+  });
+  return frag;
+}
+
+// collapsible: un bloc lung (cod lipit, mesaj lung) se arata restrans la `lines` linii, cu "Show all"
+// / "Show less" sub el. total = cate linii are de fapt (pentru eticheta).
+export function collapsible(node, lines, total) {
+  node.classList.add("fold");
+  node.style.setProperty("--fold-lines", lines);
+  const btn = el("button", { type: "button", class: "fold-toggle" });
+  const paint = () => {
+    const open = node.classList.contains("open");
+    btn.textContent = open ? "Show less" : `Show all · ${total} lines`;
+    btn.setAttribute("aria-expanded", String(open));
+  };
+  btn.addEventListener("click", () => { node.classList.toggle("open"); paint(); });
+  paint();
+  return el("div", { class: "fold-wrap" }, node, btn);
+}
