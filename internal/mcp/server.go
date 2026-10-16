@@ -370,9 +370,9 @@ func argSchedule(args map[string]any, key string) *RecurringSchedule {
 	return s
 }
 
-// argStrPtr: un text optional (nil = lipseste, deci nu se schimba)
+// argStrPtr: un text optional (nil = lipseste sau null, deci nu se schimba)
 func argStrPtr(args map[string]any, key string) *string {
-	if _, ok := args[key]; !ok {
+	if args[key] == nil {
 		return nil
 	}
 	v := argString(args, key)

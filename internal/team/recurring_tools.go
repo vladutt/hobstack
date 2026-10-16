@@ -245,7 +245,8 @@ func (t *Team) UpdateRecurringFor(c mcp.Caller, ch mcp.RecurringChange) (string,
 	if ch.Description != nil {
 		in.Description, changed = *ch.Description, true
 	}
-	if ch.Assignee != nil {
+	// assignee gol = neschimbat (gol inseamna "eu" doar la creare)
+	if ch.Assignee != nil && strings.TrimSpace(*ch.Assignee) != "" {
 		who, err := assigneeOf(lead, agents, *ch.Assignee)
 		if err != nil {
 			return "", err

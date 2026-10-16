@@ -210,3 +210,19 @@ func TestRecurringOtherProject(t *testing.T) {
 		t.Fatal("the other project's task must stay")
 	}
 }
+
+func TestUpdateRecurringBlankAssigneeKeepsIt(t *testing.T) {
+	f := setup(t)
+	c := chatCaller(f, f.lead)
+	if _, err := f.tm.CreateRecurringFor(c, mcp.RecurringArgs{Title: "Tests", Assignee: "Rook", Schedule: dailyAt9}); err != nil {
+		t.Fatal(err)
+	}
+	id := onlyRecurring(t, f).ID
+	// assignee gol la update = neschimbat (gol inseamna "eu" doar la creare)
+	if _, err := f.tm.UpdateRecurringFor(c, mcp.RecurringChange{ID: fmt.Sprint(id), Assignee: ptrOf("  "), Enabled: ptrOf(false)}); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := f.st.GetRecurring(id); *r.AssigneeID != f.rook.ID || r.Enabled {
+		t.Fatalf("%+v", r)
+	}
+}

@@ -785,6 +785,7 @@ func TestRecurringTools(t *testing.T) {
 		`{"name":"update_recurring","arguments":{"id":"R-3","enabled":false}}`,
 		`{"name":"update_recurring","arguments":{"id":3,"title":"New","schedule":{"kind":"every_hours","every_hours":2},"auto_accept":false}}`,
 		`{"name":"delete_recurring","arguments":{"id":"R-3"}}`,
+		`{"name":"update_recurring","arguments":{"id":"R-4","title":null,"description":null,"assignee":null,"schedule":null,"auto_accept":null,"enabled":true}}`,
 	}
 	for i, call := range calls {
 		_, resp := rpc(t, ts, "leadadd", fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":%s}`, i+2, call))
@@ -799,6 +800,7 @@ func TestRecurringTools(t *testing.T) {
 		"update_recurring|R-3|-|-|-|-|-|false",
 		"update_recurring|3|New|-|-|every_hours/2|false|-",
 		"delete_recurring|R-3",
+		"update_recurring|R-4|-|-|-|-|-|true", // null = campul nu se schimba
 	}
 	if strings.Join(fb.calls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("calls:\n%s", strings.Join(fb.calls, "\n"))
