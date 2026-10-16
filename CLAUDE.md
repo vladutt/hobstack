@@ -264,6 +264,12 @@ wl-paste / xclip text/uri-list in rest; max 50) prin POST /api/clipboard/files s
 continutul doar pentru o cale aflata chiar atunci in clipboard, fisier obisnuit, max 50 MB). Se iau de acolo doar daca sunt
 mai multe decat a dat browserul si printre ele e primul fisier al browserului; altfel (captura de ecran, eroare) raman ale
 browserului. Merge in chat, New task si modala de task.
+Gata (liderul si sarcinile recurente, spec in docs/superpowers/specs/2026-10-16-hobstack-lead-recurring-design.md):
+liderii si radacinile au list_recurring / create_recurring / update_recurring / delete_recurring (team/recurring_tools.go);
+schimbarile doar intr-un run pornit dintr-un mesaj al utilizatorului (requestOf; Full autonomy nu ajunge), doar pentru ei
+insisi, echipa directa sau prima etapa (radacina), si doar pe sarcinile din zona lor. Aparitiile merg ca la sarcinile
+utilizatorului. recurring_tasks.created_by (migrarea 032), "Created by <agent>" in panoul Recurring; trim-ul si limitele
+titlului / descrierii sunt in team (RecurringInput.clean), comune cu UI-ul.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
