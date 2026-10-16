@@ -47,6 +47,29 @@ type AddAgentInput struct {
 	ToolsSet                                                     bool
 }
 
+// RecurringSchedule e programul din argumentele tool-urilor *_recurring (zilele ca nume, ex. "mon").
+type RecurringSchedule struct {
+	Kind       string
+	EveryHours int
+	At         string
+	Weekdays   []string
+}
+
+// RecurringArgs sunt argumentele lui create_recurring.
+type RecurringArgs struct {
+	Title, Description, Assignee string
+	Schedule                     RecurringSchedule
+	AutoAccept                   bool
+}
+
+// RecurringChange sunt argumentele lui update_recurring: nil = campul nu se schimba.
+type RecurringChange struct {
+	ID                           string
+	Title, Description, Assignee *string
+	Schedule                     *RecurringSchedule
+	AutoAccept, Enabled          *bool
+}
+
 // Backend face munca propriu-zisa. Erorile intoarse ajung la agent ca
 // rezultat cu isError, deci trebuie sa fie mesaje clare pentru el.
 type Backend interface {
