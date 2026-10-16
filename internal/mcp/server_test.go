@@ -104,6 +104,45 @@ func (f *fakeBackend) RemoveAgent(c Caller, name string) (string, error) {
 	return "ok", f.err
 }
 
+func (f *fakeBackend) ListRecurringFor(c Caller) (string, error) {
+	f.calls = append(f.calls, "list_recurring")
+	return "No recurring tasks in this project.", f.err
+}
+
+func (f *fakeBackend) CreateRecurringFor(c Caller, in RecurringArgs) (string, error) {
+	s := in.Schedule
+	f.calls = append(f.calls, fmt.Sprintf("create_recurring|%s|%s|%s|%s|%d|%s|%s|%v",
+		in.Title, in.Description, in.Assignee, s.Kind, s.EveryHours, s.At, strings.Join(s.Weekdays, ","), in.AutoAccept))
+	return "ok", f.err
+}
+
+func (f *fakeBackend) UpdateRecurringFor(c Caller, ch RecurringChange) (string, error) {
+	show := func(p *string) string {
+		if p == nil {
+			return "-"
+		}
+		return *p
+	}
+	showB := func(p *bool) string {
+		if p == nil {
+			return "-"
+		}
+		return fmt.Sprint(*p)
+	}
+	sched := "-"
+	if ch.Schedule != nil {
+		sched = fmt.Sprintf("%s/%d", ch.Schedule.Kind, ch.Schedule.EveryHours)
+	}
+	f.calls = append(f.calls, fmt.Sprintf("update_recurring|%s|%s|%s|%s|%s|%s|%s",
+		ch.ID, show(ch.Title), show(ch.Description), show(ch.Assignee), sched, showB(ch.AutoAccept), showB(ch.Enabled)))
+	return "ok", f.err
+}
+
+func (f *fakeBackend) DeleteRecurringFor(c Caller, ref string) (string, error) {
+	f.calls = append(f.calls, "delete_recurring|"+ref)
+	return "ok", f.err
+}
+
 func (f *fakeBackend) ListLinkedProjects(c Caller) (string, error) {
 	f.calls = append(f.calls, "list_linked_projects")
 	return "Linked projects: Backend", f.err
@@ -477,11 +516,11 @@ func TestAddAgentTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,start_task,ask_user" {
+	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user" {
 		t.Fatalf("leadadd: %s", got)
 	}
 	// radacina fara echipa: create_task + list_tasks ca sa-i dea de lucru agentului nou, fara accept/send_back
-	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,start_task,ask_user" {
+	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user" {
 		t.Fatalf("rootsolo: %s", got)
 	}
 	for _, token := range []string{"worker", "sublead", "setup"} {
@@ -525,7 +564,7 @@ func TestLinkedProjectTools(t *testing.T) {
 	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,start_task,ask_user" {
 		t.Fatalf("linkedworker: %s", got)
 	}
-	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_linked_projects,ask_project,reply_to_project,request_project_work,start_task,ask_user" {
+	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,list_linked_projects,ask_project,reply_to_project,request_project_work,start_task,ask_user" {
 		t.Fatalf("linkedlead: %s", got)
 	}
 	// radacina intr-un run pe un task venit din alt proiect: report_done chiar fara sef
@@ -727,5 +766,41 @@ func TestReportDoneDecisionsInvalid(t *testing.T) {
 		if len(fb.calls) != 0 {
 			t.Errorf("%s: report_done a rulat desi era invalid: %v", name, fb.calls)
 		}
+	}
+}
+
+func TestRecurringTools(t *testing.T) {
+	fb, ts := setup(t)
+	for _, token := range []string{"worker", "sublead", "reviewer", "setup", "stagework"} {
+		_, resp := rpc(t, ts, token, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+		raw, _ := json.Marshal(resp)
+		if strings.Contains(string(raw), "_recurring") {
+			t.Fatalf("%s must not get recurring tools", token)
+		}
+	}
+	calls := []string{
+		`{"name":"list_recurring","arguments":{}}`,
+		`{"name":"create_recurring","arguments":{"title":"Tests","description":"run","assignee":"Rook","schedule":{"kind":"weekly","at":"09:00","weekdays":["mon","fri"]},"auto_accept":true}}`,
+		`{"name":"create_recurring","arguments":{"title":"Ping","schedule":{"kind":"every_hours","every_hours":"3"}}}`,
+		`{"name":"update_recurring","arguments":{"id":"R-3","enabled":false}}`,
+		`{"name":"update_recurring","arguments":{"id":3,"title":"New","schedule":{"kind":"every_hours","every_hours":2},"auto_accept":false}}`,
+		`{"name":"delete_recurring","arguments":{"id":"R-3"}}`,
+	}
+	for i, call := range calls {
+		_, resp := rpc(t, ts, "leadadd", fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":%s}`, i+2, call))
+		if text, isErr := toolText(t, resp); isErr {
+			t.Fatalf("%s: %s", call, text)
+		}
+	}
+	want := []string{
+		"list_recurring",
+		"create_recurring|Tests|run|Rook|weekly|0|09:00|mon,fri|true",
+		"create_recurring|Ping|||every_hours|3|||false",
+		"update_recurring|R-3|-|-|-|-|-|false",
+		"update_recurring|3|New|-|-|every_hours/2|false|-",
+		"delete_recurring|R-3",
+	}
+	if strings.Join(fb.calls, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("calls:\n%s", strings.Join(fb.calls, "\n"))
 	}
 }

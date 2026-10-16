@@ -258,6 +258,62 @@ var addAgentTools = []Tool{
 	},
 }
 
+// scheduleArg: programul unei sarcini recurente (ora locala a masinii)
+var scheduleArg = map[string]any{
+	"type":        "object",
+	"description": "When it runs (local time). every_hours: every N hours; daily: every day at `at`; weekly: on `weekdays` at `at`",
+	"properties": map[string]any{
+		"kind":        map[string]any{"type": "string", "enum": []string{"every_hours", "daily", "weekly"}},
+		"every_hours": map[string]any{"type": "integer", "description": "every_hours: 1-24"},
+		"at":          str("daily / weekly: HH:MM, 24h"),
+		"weekdays":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": `weekly: days, e.g. ["mon", "wed", "fri"]`},
+	},
+	"required": []string{"kind"},
+}
+
+var recurringIDArg = str("The recurring task, e.g. R-3 (from list_recurring)")
+
+// recurringTools: liderii si radacinile; schimbarile doar la cererea utilizatorului din chat (verificat la apel)
+var recurringTools = []Tool{
+	{
+		Name:        "list_recurring",
+		Description: "Lists this project's recurring tasks (R-N): schedule, who does them, on or paused, next run.",
+		InputSchema: schema([]string{}, map[string]any{}),
+	},
+	{
+		Name: "create_recurring",
+		Description: "Creates a recurring task: it puts a task on the board on a schedule, done by you or an agent of your direct team. " +
+			"Use it ONLY when the user asks for it in this chat; otherwise suggest it in your reply. The user decides each run " +
+			"(or it is accepted automatically with auto_accept). Check list_recurring first so you do not create a duplicate.",
+		InputSchema: schema([]string{"title", "schedule"}, map[string]any{
+			"title":       str("Short, clear title"),
+			"description": str("What to do on each run and what to report"),
+			"assignee":    str(`Who does it: you, an agent of your direct team, or "first stage" (root agent, projects with stages). Default: you`),
+			"schedule":    scheduleArg,
+			"auto_accept": map[string]any{"type": "boolean", "description": "Accept each run automatically when it finishes (default false)"},
+		}),
+	},
+	{
+		Name: "update_recurring",
+		Description: "Changes a recurring task when the user asks for it in this chat. Pass only what changes; " +
+			"enabled false pauses it, true resumes it.",
+		InputSchema: schema([]string{"id"}, map[string]any{
+			"id":          recurringIDArg,
+			"title":       str("New title"),
+			"description": str("New description"),
+			"assignee":    str(`Who does it: you, an agent of your direct team, or "first stage"`),
+			"schedule":    scheduleArg,
+			"auto_accept": map[string]any{"type": "boolean"},
+			"enabled":     map[string]any{"type": "boolean", "description": "false = pause, true = resume"},
+		}),
+	},
+	{
+		Name:        "delete_recurring",
+		Description: "Deletes a recurring task when the user asks for it in this chat. Tasks it already created stay on the board.",
+		InputSchema: schema([]string{"id"}, map[string]any{"id": recurringIDArg}),
+	},
+}
+
 var linkedProjectsTool = Tool{
 	Name:        "list_linked_projects",
 	Description: "Lists the projects linked with yours: name, goal and root agent. Questions and work requests go to their root agent.",
@@ -332,6 +388,7 @@ func toolsFor(c Caller) []Tool {
 			out = append(out, leadTools[0], leadTools[1])
 		}
 		out = append(out, addAgentTools...)
+		out = append(out, recurringTools...)
 	}
 	if c.HasParent {
 		out = append(out, reportTool)

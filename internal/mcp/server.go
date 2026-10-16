@@ -94,6 +94,10 @@ type Backend interface {
 	AskUser(c Caller, question string, options []string) (string, error)
 	AddAgent(c Caller, in AddAgentInput) (string, error)
 	RemoveAgent(c Caller, name string) (string, error)
+	ListRecurringFor(c Caller) (string, error)
+	CreateRecurringFor(c Caller, in RecurringArgs) (string, error)
+	UpdateRecurringFor(c Caller, ch RecurringChange) (string, error)
+	DeleteRecurringFor(c Caller, ref string) (string, error)
 	ListLinkedProjects(c Caller) (string, error)
 	AskProject(c Caller, project, question string) (string, error)
 	ReplyToProject(c Caller, request, answer string) (string, error)
@@ -280,6 +284,25 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		})
 	case "remove_agent":
 		text, err = s.backend.RemoveAgent(c, arg("name"))
+	case "list_recurring":
+		text, err = s.backend.ListRecurringFor(c)
+	case "create_recurring":
+		in := RecurringArgs{Title: arg("title"), Description: arg("description"), Assignee: arg("assignee")}
+		if sc := argSchedule(p.Arguments, "schedule"); sc != nil {
+			in.Schedule = *sc
+		}
+		if b := argBoolPtr(p.Arguments, "auto_accept"); b != nil {
+			in.AutoAccept = *b
+		}
+		text, err = s.backend.CreateRecurringFor(c, in)
+	case "update_recurring":
+		text, err = s.backend.UpdateRecurringFor(c, RecurringChange{
+			ID: arg("id"), Title: argStrPtr(p.Arguments, "title"), Description: argStrPtr(p.Arguments, "description"),
+			Assignee: argStrPtr(p.Arguments, "assignee"), Schedule: argSchedule(p.Arguments, "schedule"),
+			AutoAccept: argBoolPtr(p.Arguments, "auto_accept"), Enabled: argBoolPtr(p.Arguments, "enabled"),
+		})
+	case "delete_recurring":
+		text, err = s.backend.DeleteRecurringFor(c, arg("id"))
 	case "list_linked_projects":
 		text, err = s.backend.ListLinkedProjects(c)
 	case "ask_project":
@@ -332,6 +355,37 @@ func argString(args map[string]any, key string) string {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
+}
+
+// argSchedule citeste obiectul schedule al tool-urilor *_recurring (nil daca lipseste)
+func argSchedule(args map[string]any, key string) *RecurringSchedule {
+	m, ok := args[key].(map[string]any)
+	if !ok {
+		return nil
+	}
+	s := &RecurringSchedule{Kind: argString(m, "kind"), At: argString(m, "at"), Weekdays: argList(m, "weekdays")}
+	if n, err := strconv.Atoi(strings.TrimSpace(argString(m, "every_hours"))); err == nil {
+		s.EveryHours = n // numar sau text ("3")
+	}
+	return s
+}
+
+// argStrPtr: un text optional (nil = lipseste, deci nu se schimba)
+func argStrPtr(args map[string]any, key string) *string {
+	if _, ok := args[key]; !ok {
+		return nil
+	}
+	v := argString(args, key)
+	return &v
+}
+
+// argBoolPtr: un bool optional (nil = lipseste sau nu e bool)
+func argBoolPtr(args map[string]any, key string) *bool {
+	v, ok := args[key].(bool)
+	if !ok {
+		return nil
+	}
+	return &v
 }
 
 // argList citeste un argument lista de texte (ignora elementele care nu sunt text).
