@@ -378,3 +378,24 @@ func TestReconcileReviewerGoneAutoAccept(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestRecurringInputClean(t *testing.T) {
+	f := setup(t)
+	var re RecurringError
+	for _, title := range []string{"   ", strings.Repeat("x", 201)} {
+		if _, err := f.tm.CreateRecurring(f.p.ID, RecurringInput{Title: title, AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true}); !errors.As(err, &re) {
+			t.Fatalf("title %q: %v", title, err)
+		}
+	}
+	if _, err := f.tm.CreateRecurring(f.p.ID, RecurringInput{Title: "x", Description: strings.Repeat("d", 10001), AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true}); !errors.As(err, &re) {
+		t.Fatalf("description: %v", err)
+	}
+	by := f.lead.ID
+	r, err := f.tm.CreateRecurring(f.p.ID, RecurringInput{Title: "  Tests ", Description: " d ", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true, CreatedBy: &by})
+	if err != nil || r.Title != "Tests" || r.Description != "d" || r.CreatedBy == nil || *r.CreatedBy != f.lead.ID {
+		t.Fatalf("%+v %v", r, err)
+	}
+	if _, err := f.tm.UpdateRecurring(r.ID, RecurringInput{Title: " ", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true}); !errors.As(err, &re) {
+		t.Fatalf("update title: %v", err)
+	}
+}

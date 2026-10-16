@@ -3,7 +3,6 @@ package web
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"hobstack/internal/schedule"
 	"hobstack/internal/store"
@@ -69,17 +68,8 @@ func recurringInput(r *http.Request) (team.RecurringInput, error) {
 	if err := decode(r, &in); err != nil {
 		return team.RecurringInput{}, err
 	}
-	title := strings.TrimSpace(in.Title)
-	if title == "" {
-		return team.RecurringInput{}, badRequest("title is required")
-	}
-	desc := strings.TrimSpace(in.Description)
-	for _, err := range []error{maxLen("title", title, 200), maxLen("description", desc, 10000)} {
-		if err != nil {
-			return team.RecurringInput{}, err
-		}
-	}
-	return team.RecurringInput{Title: title, Description: desc, AssigneeID: in.AssigneeID, Schedule: in.Schedule,
+	// trim-ul si limitele titlului / descrierii le face team (RecurringInput.clean), ca pentru tool-urile MCP
+	return team.RecurringInput{Title: in.Title, Description: in.Description, AssigneeID: in.AssigneeID, Schedule: in.Schedule,
 		AutoAccept: in.AutoAccept, Enabled: in.Enabled}, nil
 }
 

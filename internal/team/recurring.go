@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"hobstack/internal/schedule"
 	"hobstack/internal/store"
@@ -23,6 +24,21 @@ type RecurringInput struct {
 	Schedule           schedule.Spec
 	AutoAccept         bool
 	Enabled            bool
+	CreatedBy          *int64 // doar la creare: agentul care a creat-o la cererea utilizatorului (nil = utilizatorul)
+}
+
+// clean curata titlul si descrierea si verifica limitele (aceleasi pentru UI si pentru tool-urile MCP)
+func (in *RecurringInput) clean() error {
+	in.Title, in.Description = strings.TrimSpace(in.Title), strings.TrimSpace(in.Description)
+	switch {
+	case in.Title == "":
+		return RecurringError("title is required")
+	case utf8.RuneCountInString(in.Title) > 200:
+		return RecurringError("title: at most 200 characters")
+	case utf8.RuneCountInString(in.Description) > 10000:
+		return RecurringError("description: at most 10000 characters")
+	}
+	return nil
 }
 
 // checkRecurring valideaza programul si asignatul (ca la un task nou din board).
@@ -68,12 +84,21 @@ func (t *Team) checkRecurring(projectID int64, in RecurringInput, checkWho bool)
 func (t *Team) CreateRecurring(projectID int64, in RecurringInput) (store.RecurringTask, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
+	return t.createRecurring(projectID, in)
+}
+
+// createRecurring: ca CreateRecurring, cu t.work tinut
+func (t *Team) createRecurring(projectID int64, in RecurringInput) (store.RecurringTask, error) {
+	if err := in.clean(); err != nil {
+		return store.RecurringTask{}, err
+	}
 	who, err := t.checkRecurring(projectID, in, in.Enabled)
 	if err != nil {
 		return store.RecurringTask{}, err
 	}
 	r := store.RecurringTask{ProjectID: projectID, Title: in.Title, Description: in.Description, AssigneeID: who,
-		Schedule: in.Schedule, AutoAccept: in.AutoAccept, Enabled: in.Enabled, NextRunAt: in.Schedule.Next(t.now())}
+		Schedule: in.Schedule, AutoAccept: in.AutoAccept, Enabled: in.Enabled, NextRunAt: in.Schedule.Next(t.now()),
+		CreatedBy: in.CreatedBy}
 	if err := t.st.CreateRecurring(&r); err != nil {
 		return store.RecurringTask{}, err
 	}
@@ -84,6 +109,14 @@ func (t *Team) CreateRecurring(projectID int64, in RecurringInput) (store.Recurr
 func (t *Team) UpdateRecurring(id int64, in RecurringInput) (store.RecurringTask, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
+	return t.updateRecurring(id, in)
+}
+
+// updateRecurring: ca UpdateRecurring, cu t.work tinut (CreatedBy din in se ignora)
+func (t *Team) updateRecurring(id int64, in RecurringInput) (store.RecurringTask, error) {
+	if err := in.clean(); err != nil {
+		return store.RecurringTask{}, err
+	}
 	r, err := t.st.GetRecurring(id)
 	if err != nil {
 		return store.RecurringTask{}, err
@@ -112,7 +145,12 @@ func (t *Team) DeleteRecurring(id int64) error {
 	if err != nil {
 		return err
 	}
-	if err := t.st.DeleteRecurring(id); err != nil {
+	return t.deleteRecurring(r)
+}
+
+// deleteRecurring: sterge sarcina (task-urile create raman), cu t.work tinut
+func (t *Team) deleteRecurring(r store.RecurringTask) error {
+	if err := t.st.DeleteRecurring(r.ID); err != nil {
 		return err
 	}
 	t.emit(r.ProjectID, "recurring", r)
