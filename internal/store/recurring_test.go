@@ -215,3 +215,29 @@ func TestRecurringHistory(t *testing.T) {
 		t.Fatalf("goala files: %+v %v", files, err)
 	}
 }
+
+func TestRecurringCreatedBy(t *testing.T) {
+	s, p, lead := recurringFixture(t)
+	next := time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)
+	daily := schedule.Spec{Kind: schedule.KindDaily, At: "09:00"}
+	mine := RecurringTask{ProjectID: p.ID, Title: "Mine", AssigneeID: &lead.ID, Schedule: daily, Enabled: true, NextRunAt: next}
+	byLead := RecurringTask{ProjectID: p.ID, Title: "Lead's", AssigneeID: &lead.ID, Schedule: daily, Enabled: true, NextRunAt: next, CreatedBy: &lead.ID}
+	for _, r := range []*RecurringTask{&mine, &byLead} {
+		if err := s.CreateRecurring(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := s.GetRecurring(byLead.ID)
+	if got.CreatedBy == nil || *got.CreatedBy != lead.ID {
+		t.Fatalf("created_by: %+v", got.CreatedBy)
+	}
+	// SaveRecurring nu atinge created_by
+	got.Title = "Renamed"
+	if err := s.SaveRecurring(&got); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.ListRecurring(p.ID)
+	if list[0].CreatedBy != nil || list[1].CreatedBy == nil || list[1].Title != "Renamed" {
+		t.Fatalf("%+v", list)
+	}
+}

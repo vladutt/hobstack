@@ -23,6 +23,7 @@ type RecurringTask struct {
 	LastTaskID  *int64        `json:"lastTaskId"`
 	LastNote    string        `json:"lastNote"`
 	CreatedAt   time.Time     `json:"createdAt"`
+	CreatedBy   *int64        `json:"createdBy"` // agentul care a creat-o la cererea utilizatorului; nil = utilizatorul
 }
 
 // runAtLayout are lungime fixa: next_run_at se compara ca text in DueRecurring.
@@ -31,7 +32,7 @@ const runAtLayout = "2006-01-02T15:04:05.000000000Z07:00"
 func runAt(t time.Time) string { return t.UTC().Format(runAtLayout) }
 
 const recurringCols = `id, project_id, title, description, assignee_id, kind, every_hours, at, weekdays,
-	auto_accept, enabled, next_run_at, last_run_at, last_task_id, last_note, created_at`
+	auto_accept, enabled, next_run_at, last_run_at, last_task_id, last_note, created_at, created_by`
 
 func scanRecurring(sc scanner) (RecurringTask, error) {
 	var r RecurringTask
@@ -39,7 +40,7 @@ func scanRecurring(sc scanner) (RecurringTask, error) {
 	var last sql.NullString
 	err := sc.Scan(&r.ID, &r.ProjectID, &r.Title, &r.Description, &r.AssigneeID,
 		&r.Schedule.Kind, &r.Schedule.EveryHours, &r.Schedule.At, &r.Schedule.Weekdays,
-		&r.AutoAccept, &r.Enabled, &next, &last, &r.LastTaskID, &r.LastNote, &created)
+		&r.AutoAccept, &r.Enabled, &next, &last, &r.LastTaskID, &r.LastNote, &created, &r.CreatedBy)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RecurringTask{}, ErrNotFound
 	}
@@ -57,9 +58,9 @@ func scanRecurring(sc scanner) (RecurringTask, error) {
 func (s *Store) CreateRecurring(r *RecurringTask) error {
 	ts := now()
 	res, err := s.db.Exec(`INSERT INTO recurring_tasks (project_id, title, description, assignee_id, kind, every_hours, at, weekdays,
-		auto_accept, enabled, next_run_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		auto_accept, enabled, next_run_at, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ProjectID, r.Title, r.Description, nullPtr(r.AssigneeID), r.Schedule.Kind, r.Schedule.EveryHours, r.Schedule.At,
-		r.Schedule.Weekdays, r.AutoAccept, r.Enabled, runAt(r.NextRunAt), ts)
+		r.Schedule.Weekdays, r.AutoAccept, r.Enabled, runAt(r.NextRunAt), ts, nullPtr(r.CreatedBy))
 	if err != nil {
 		return err
 	}
