@@ -12,10 +12,11 @@ import (
 // recurringView: sarcina recurenta cu ce mai trebuie aratat in UI.
 type recurringView struct {
 	store.RecurringTask
-	ScheduleText string        `json:"scheduleText"`
-	Assignee     string        `json:"assignee"` // "" = prima etapa
-	LastTask     *lastTaskView `json:"lastTask"`
-	Runs         int           `json:"runs"` // task-urile create de sarcina (si arhivate)
+	ScheduleText  string        `json:"scheduleText"`
+	Assignee      string        `json:"assignee"`      // "" = prima etapa
+	CreatedByName string        `json:"createdByName"` // agentul care a creat-o la cererea utilizatorului; "" = utilizatorul
+	LastTask      *lastTaskView `json:"lastTask"`
+	Runs          int           `json:"runs"` // task-urile create de sarcina (si arhivate)
 }
 
 type lastTaskView struct {
@@ -29,6 +30,11 @@ func (s *Server) recurringView(r store.RecurringTask) recurringView {
 	if r.AssigneeID != nil {
 		if a, err := s.st.GetAgent(*r.AssigneeID); err == nil {
 			v.Assignee = a.Name
+		}
+	}
+	if r.CreatedBy != nil {
+		if a, err := s.st.GetAgent(*r.CreatedBy); err == nil {
+			v.CreatedByName = a.Name
 		}
 	}
 	if r.LastTaskID != nil {

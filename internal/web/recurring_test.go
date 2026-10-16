@@ -9,6 +9,7 @@ import (
 
 	"hobstack/internal/schedule"
 	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 func TestRecurringAPI(t *testing.T) {
@@ -187,5 +188,20 @@ func TestRecurringHistoryAPI(t *testing.T) {
 	}
 	if leads.Ref != r2.Ref() || leads.Size != 2 || len(leads.Versions) != 1 || leads.Versions[0].TaskID != r1.ID || leads.Versions[0].Ref != r1.Ref() {
 		t.Fatalf("leads.csv: %s", raw)
+	}
+}
+
+func TestRecurringCreatedByName(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	root := e.root(t, p.ID)
+	by := root.ID
+	if _, err := e.tm.CreateRecurring(p.ID, team.RecurringInput{Title: "By lead", AssigneeID: root.ID,
+		Schedule: schedule.Spec{Kind: schedule.KindDaily, At: "09:00"}, Enabled: true, CreatedBy: &by}); err != nil {
+		t.Fatal(err)
+	}
+	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID), nil)
+	if !strings.Contains(string(raw), `"createdByName":"`+root.Name+`"`) {
+		t.Fatalf("%s", raw)
 	}
 }
