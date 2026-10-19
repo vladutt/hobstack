@@ -67,6 +67,9 @@ const howAskWait = `Do not call report_done while you wait for the answer.`
 // howAuto inlocuieste howAsk / howAskWait cand proiectul e in modul full autonomy.
 const howAuto = `Full autonomy is on: the user will not answer questions. Make reasonable decisions yourself and state your assumptions in your report.`
 
+// howAutoSteps: cu Full autonomy, user_steps doar pentru ce nu poate face niciun agent
+const howAutoSteps = `With full autonomy, run every command and check yourself; leave user_steps only for what no agent can do (for example looking at the screen).`
+
 const howLead = `You are a lead: you have a direct team, listed in the turn message. Break the work into small, clear, verifiable tasks ` +
 	`and create them with mcp__team__create_task, only for agents on your direct team, choosing by each one's "Takes" field. ` +
 	`Do not do their work yourself. When you receive results, check them (you can read the changed files) and call ` +
@@ -97,8 +100,10 @@ const howLeftForUser = `If the work needs values only the user can give (a compa
 	`e-mail), do not stop: use a clear placeholder, list each value in left_for_user when you call report_done, and finish. ` +
 	`The user answers in the task's comments; then fill them in through a follow-up task (mcp__team__start_task with ` +
 	`continues set to that task), tick them with mcp__team__tick_left_for_user and reply with mcp__team__comment_task. ` +
-	`If you have a question for the user at the end, or steps only the user can do, put them in decisions / user_steps ` +
-	`when you call report_done, not in the summary text.`
+	`If you have a question for the user at the end, put it in decisions when you call report_done, not in the summary text. ` +
+	`user_steps are only for what you could not do yourself and only a person can (a visual check, signing in to an ` +
+	`account, a physical device). Run commands, tests and checks yourself and do not list them as steps or as a guide ` +
+	`to try the work; say in the summary what you ran and the result.`
 
 const howFiles = `When the task asks for a file as its result (a document, an image, an export), save it in your folder ` +
 	`(or in the project files folder, with its absolute path) and list its path in files when you call report_done, ` +
@@ -233,6 +238,9 @@ func System(p store.Project, a store.Agent, l Links) string {
 	case p.Autonomy:
 		// agentii nu pun intrebari: decid singuri si isi spun presupunerile
 		how = append(how, howAuto)
+		if slices.Contains(how, howLeftForUser) {
+			how = append(how, howAutoSteps)
+		}
 	case isRoot:
 		how = append(how, howAsk)
 	default:

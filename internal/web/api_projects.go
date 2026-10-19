@@ -296,7 +296,8 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 		return projectCard{}, nil, nil, nil, err
 	}
 	c.Links = len(linked)
-	fills, err := s.st.ListFillIns(p.ID)
+	// cu Full autonomy pasii lasati utilizatorului nu intra in "need you" (raman pe task, in Your steps)
+	fills, err := s.st.ListFillIns(p.ID, !p.Autonomy)
 	if err != nil {
 		return projectCard{}, nil, nil, nil, err
 	}

@@ -270,6 +270,10 @@ schimbarile doar intr-un run pornit dintr-un mesaj al utilizatorului (requestOf;
 insisi, echipa directa sau prima etapa (radacina), si doar pe sarcinile din zona lor. Aparitiile merg ca la sarcinile
 utilizatorului. recurring_tasks.created_by (migrarea 032), "Created by <agent>" in panoul Recurring; trim-ul si limitele
 titlului / descrierii sunt in team (RecurringInput.clean), comune cu UI-ul.
+Gata (pasii pentru utilizator doar cand chiar trebuie): user_steps (report_done) sunt doar ce agentul n-a putut face si
+poate doar un om (verificare vizuala, cont, dispozitiv); comenzile, testele si verificarile le ruleaza singur si le spune in
+raport (howLeftForUser, descrierea user_steps). Cu Full autonomy promptul adauga howAutoSteps, iar pasii (task_todos kind
+step) nu mai intra in "need you" (store.ListFillIns(pid, withSteps=!autonomy)); raman pe task, in Your steps.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

@@ -62,3 +62,53 @@ func TestTodosAPI(t *testing.T) {
 		t.Fatalf("bifa pe sters: %d %s", code, raw)
 	}
 }
+
+// Full autonomy: pasii lasati utilizatorului nu intra in "need you" (raman pe task)
+func TestFillInsAutonomySkipsSteps(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	w := e.addWorker(t, p.ID, "Canvas")
+	task := store.Task{ProjectID: p.ID, Title: "Map", AssigneeID: w.ID}
+	if err := e.st.CreateTask(&task); err != nil {
+		t.Fatal(err)
+	}
+	e.st.AddTodos(task.ID, []string{"Check the map"}, "step")
+	count := func() (int, int) {
+		_, raw := e.do(t, "GET", "/api/projects/"+strconv.FormatInt(p.ID, 10), nil)
+		var d struct {
+			FillIns []store.FillIn `json:"fillIns"`
+		}
+		json.Unmarshal(raw, &d)
+		_, raw = e.do(t, "GET", "/api/projects", nil)
+		var list []struct {
+			ID      int64 `json:"id"`
+			FillIns int   `json:"fillIns"`
+		}
+		json.Unmarshal(raw, &list)
+		for _, c := range list {
+			if c.ID == p.ID {
+				return len(d.FillIns), c.FillIns
+			}
+		}
+		return len(d.FillIns), -1
+	}
+	if a, b := count(); a != 1 || b != 1 {
+		t.Fatalf("without autonomy: %d %d", a, b)
+	}
+	full, err := e.st.GetProject(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full.Autonomy = true
+	if err := e.st.UpdateProject(full); err != nil {
+		t.Fatal(err)
+	}
+	if a, b := count(); a != 0 || b != 0 {
+		t.Fatalf("with autonomy: %d %d", a, b)
+	}
+	// pe task pasul ramane
+	_, raw := e.do(t, "GET", "/api/tasks/"+strconv.FormatInt(task.ID, 10), nil)
+	if !strings.Contains(string(raw), "Check the map") {
+		t.Fatalf("%s", raw)
+	}
+}

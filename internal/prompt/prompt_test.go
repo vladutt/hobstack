@@ -392,3 +392,19 @@ func TestSystemEditsOnlyWithEditWrite(t *testing.T) {
 		t.Fatal("agentul fara write nu primeste regula")
 	}
 }
+
+// user_steps: doar ce agentul n-a putut face; cu Full autonomy, inca o data mai strict
+func TestSystemUserSteps(t *testing.T) {
+	a := store.Agent{Name: "A", Role: "Dev"}
+	const only = "user_steps are only for what you could not do yourself"
+	const auto = "With full autonomy, run every command and check yourself"
+	normal := System(proj, a, Links{BossName: "Boss"})
+	if !strings.Contains(normal, only) || strings.Contains(normal, auto) || strings.Contains(normal, "steps only the user can do") {
+		t.Fatalf("normal:\n%s", normal)
+	}
+	p := proj
+	p.Autonomy = true
+	if got := System(p, a, Links{BossName: "Boss"}); !strings.Contains(got, only) || !strings.Contains(got, auto) {
+		t.Fatalf("autonomy:\n%s", got)
+	}
+}

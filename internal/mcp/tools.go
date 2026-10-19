@@ -108,7 +108,7 @@ var reportTool = Tool{
 		"user_steps": map[string]any{
 			"type":        "array",
 			"items":       map[string]any{"type": "string"},
-			"description": "Optional: up to 10 things only the user can do (set .env variables, restart a container, run a seeder, a manual check). They appear as a checklist for the user.",
+			"description": "Optional: up to 10 things only a person can do and you could not (a visual check, signing in to an account, a physical device). Never commands, tests or checks you can run yourself, and not a guide to try the work. They appear as a checklist for the user.",
 		},
 		"files": map[string]any{
 			"type":        "array",

@@ -95,13 +95,14 @@ func (s *Store) SetTodo(taskID int64, position int, done bool, by string) error 
 	return mustAffect(s.db.Exec(`UPDATE task_todos SET done_at = NULL, done_by = '' WHERE task_id = ? AND position = ?`, taskID, position))
 }
 
-func (s *Store) ListFillIns(projectID int64) ([]FillIn, error) {
+// withSteps=false (Full autonomy): doar punctele de completat ("value"), fara pasii "step"
+func (s *Store) ListFillIns(projectID int64, withSteps bool) ([]FillIn, error) {
 	rows, err := s.db.Query(`SELECT t.id, t.number, t.title, t.assignee_id,
 		SUM(CASE WHEN d.done_at IS NULL THEN 1 ELSE 0 END), COUNT(*),
-		(SELECT text FROM task_todos x WHERE x.task_id = t.id AND x.done_at IS NULL ORDER BY position LIMIT 1)
-		FROM tasks t JOIN task_todos d ON d.task_id = t.id
-		WHERE t.project_id = ? AND t.status != 'archived' GROUP BY t.id HAVING SUM(CASE WHEN d.done_at IS NULL THEN 1 ELSE 0 END) > 0
-		ORDER BY t.number`, projectID)
+		(SELECT text FROM task_todos x WHERE x.task_id = t.id AND x.done_at IS NULL AND (?1 OR x.kind != 'step') ORDER BY position LIMIT 1)
+		FROM tasks t JOIN task_todos d ON d.task_id = t.id AND (?1 OR d.kind != 'step')
+		WHERE t.project_id = ?2 AND t.status != 'archived' GROUP BY t.id HAVING SUM(CASE WHEN d.done_at IS NULL THEN 1 ELSE 0 END) > 0
+		ORDER BY t.number`, withSteps, projectID)
 	if err != nil {
 		return nil, err
 	}
