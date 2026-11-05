@@ -289,6 +289,12 @@ board-ul are mereu Queued | In progress | <etape> | Review | Done; etapele sunt 
 "<etapa>: first free agent" sau "+ Add a task" pe coloana; liderul: create_task cu stage). tasks.via_stages (migrarea 033):
 Send back intoarce in etapa doar task-urile trecute prin etape; tras pe Queued, task-ul iese din etape.
 Gata (titlul tab-ului): "<Proiect> · <Sectiune> — HobStack" (app.js updateTitle).
+Gata (update din aplicatie, spec in docs/superpowers/specs/2026-11-05-hobstack-self-update-design.md): pachetul
+internal/selfupdate; doar cand HobStack ruleaza din folderul sursa (go.mod + .git langa binar sau HOBSTACK_SOURCE) cu git si go.
+Verificare la pornire + din ora in ora (git fetch pe @{u}, commit-uri fata de vcs.revision din binar); Update: sursa curata,
+merge --ff-only, go build in <exe>.new (la eroare git reset --keep), binarul vechi -> .prev, team.Hold pana nu mai ruleaza
+niciun run, copie VACUUM INTO in ~/.hobstack/backups (ultimele 3), restart prin selfupdate.Reexec cu --no-open. UI: insigna
+din bara de sus (ui.setTopbarExtra), fereastra cu commit-urile si Settings > Version (update.js); /api/update*.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

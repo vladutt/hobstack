@@ -1693,3 +1693,33 @@ input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
 .bubble .md-pre { margin: 6px 0; white-space: pre; }
 /* in .thread (flex pe coloana) un mesaj deschis nu are voie sa se strice: fara micsorare */
 .thread > .msg, .fold-wrap > * { flex-shrink: 0; }
+
+/* update din aplicatie (update.js): insigna din bara de sus, fereastra si sectiunea Version din Settings */
+.upd-badge { flex: none; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--amber-line); background: var(--amber-bg);
+  color: var(--amber); font: 600 12.5px var(--sans); cursor: pointer; white-space: nowrap; }
+.upd-badge:hover { background: rgba(242, 181, 68, .2); }
+.upd-badge.bad { border-color: var(--red); background: var(--red-bg); color: var(--red); }
+.upd-badge.busy { border-color: var(--teal-line); background: var(--teal-bg); color: var(--teal); }
+.upd-badge[hidden] { display: none; }
+.upd-overlay { position: fixed; inset: 0; z-index: 70; background: rgba(8, 10, 13, .55); display: flex; justify-content: center;
+  align-items: flex-start; padding: 10vh 16px 16px; }
+.upd-box { width: 100%; max-width: 620px; max-height: 100%; overflow-y: auto; background: var(--bg); border: 1px solid var(--line-2);
+  border-radius: 14px; box-shadow: 0 18px 48px rgba(0, 0, 0, .45); padding: 18px 22px 20px; display: grid; gap: 10px; }
+.upd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.upd-head h2 { font-size: 18px; }
+.upd-box p, .upd-settings p { margin: 0; }
+.upd-version code, .upd-commit code { font: 12.5px var(--mono); color: var(--soft); }
+.upd-new { font-weight: 600; color: var(--amber); }
+.upd-ok { color: var(--green); }
+.upd-step { color: var(--teal); }
+.upd-error, .upd-note { margin: 0; color: var(--red); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+pre.upd-error, pre.upd-note { font: 12px/1.5 var(--mono); background: var(--deep); border-radius: 8px; padding: 10px 12px; max-height: 260px; overflow: auto; }
+.upd-note { color: var(--soft); }
+.upd-commits { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 340px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 10px; }
+.upd-commit { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; padding: 7px 12px; border-bottom: 1px solid var(--line); min-width: 0; }
+.upd-commit:last-child { border-bottom: 0; }
+.upd-subject { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.upd-commits > .hint { padding: 7px 12px; }
+.upd-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.upd-settings { display: grid; gap: 8px; }

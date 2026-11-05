@@ -13,6 +13,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -25,6 +27,7 @@ import (
 	"hobstack/internal/opener"
 	"hobstack/internal/picker"
 	"hobstack/internal/runner"
+	"hobstack/internal/selfupdate"
 	"hobstack/internal/setup"
 	"hobstack/internal/skillsrc"
 	"hobstack/internal/store"
@@ -51,11 +54,26 @@ func main() {
 		fmt.Printf(usage, config.AppName)
 		os.Exit(1)
 	}
+	var re restartError
+	if errors.As(err, &re) {
+		// dupa update: portul si baza de date sunt inchise; pornim binarul nou fara sa redeschidem browserul
+		args := os.Args[1:]
+		if !slices.Contains(args, "--no-open") && !slices.Contains(args, "-no-open") {
+			args = append(args, "--no-open")
+		}
+		log.Printf("starting the new version")
+		err = selfupdate.Reexec(re.exe, args)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
+
+// restartError: start s-a oprit pentru ca update-ul a pus un binar nou; main il porneste.
+type restartError struct{ exe string }
+
+func (restartError) Error() string { return "restart after update" }
 
 func start(args []string) error {
 	fl := flag.NewFlagSet("start", flag.ExitOnError)
@@ -148,6 +166,26 @@ func start(args []string) error {
 	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
 	webSrv.SetOpener(opener.New())
 
+	// update din aplicatie: git din folderul sursa, build, restart cand nu mai ruleaza niciun agent
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	var restart atomic.Bool
+	if err != nil {
+		log.Printf("update: cannot find the running binary: %v", err)
+	} else {
+		upd := selfupdate.New(exe, selfupdate.Deps{
+			Active:  func() int { return max(mgr.ActiveCount(), tm.ActiveCount()) },
+			Hold:    tm.Hold,
+			Backup:  st.Backup,
+			Backups: filepath.Join(paths.Root, "backups"),
+			Restart: func() { restart.Store(true); stop() },
+		})
+		webSrv.SetUpdater(upd, ctx)
+		go checkUpdates(ctx, upd)
+	}
+
 	srv := &http.Server{
 		Handler:           webSrv.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
@@ -176,7 +214,31 @@ func start(args []string) error {
 	mgr.Shutdown()
 	shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return srv.Shutdown(shCtx)
+	err = srv.Shutdown(shCtx)
+	if restart.Load() {
+		tm.Drain() // un finish in curs isi termina scrierile inainte sa se inchida baza de date
+		return restartError{exe: exe}
+	}
+	return err
+}
+
+// checkUpdates verifica la un minut dupa pornire si apoi la fiecare ora daca exista o versiune noua.
+func checkUpdates(ctx context.Context, u *selfupdate.Updater) {
+	if !u.Status().CanUpdate {
+		return
+	}
+	wait := time.Minute
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		if err := u.Check(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("update check: %v", err)
+		}
+		wait = time.Hour
+	}
 }
 
 // syncCatalog sincronizeaza catalogul MCP la pornire si apoi la fiecare ora, cand e nevoie (Due).

@@ -94,6 +94,10 @@ function switchButton() {
     onclick: () => window.dispatchEvent(new Event("hobstack:switch")) }, switchKeys);
 }
 
+// topbarExtra: un element pus in fiecare bara de sus, inaintea butoanelor din dreapta (insigna de update, update.js)
+let topbarExtra = null;
+export function setTopbarExtra(fn) { topbarExtra = fn; }
+
 // topbar: bara de sus a fiecarei pagini: logo, firimituri (crumbs: [text, href?]),
 // apoi ce primeste in dreapta (butoane, tab-uri).
 // crumbs poate fi si "projects" / "library" / "settings": atunci in loc de firimituri apare navigatia principala.
@@ -105,7 +109,7 @@ export function topbar(crumbs, ...right) {
       el("nav", { class: "mainnav", "aria-label": "Main" },
         [["projects", "Projects", "#/"], ["library", "Library", "#/library/tools"], ["settings", "Settings", "#/settings"]].map(([id, label, href]) =>
           el("a", { class: "navlink" + (id === crumbs ? " active" : ""), href, "aria-current": id === crumbs ? "page" : null }, label))),
-      el("div", { class: "topbar-right" }, right));
+      el("div", { class: "topbar-right" }, right, topbarExtra && topbarExtra()));
   }
   const parts = [];
   crumbs.forEach(([text, href], i) => {
@@ -116,7 +120,7 @@ export function topbar(crumbs, ...right) {
     el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "H"),
     switchButton(),
     el("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, parts),
-    el("div", { class: "topbar-right" }, right));
+    el("div", { class: "topbar-right" }, right, topbarExtra && topbarExtra()));
 }
 
 export const STATUS_LABELS = {

@@ -122,3 +122,9 @@ func mustAffect(res sql.Result, err error) error {
 	}
 	return nil
 }
+
+// Backup scrie o copie consistenta a bazei de date in path (VACUUM INTO; path nu trebuie sa existe).
+func (s *Store) Backup(path string) error {
+	_, err := s.db.Exec("VACUUM INTO ?", path)
+	return err
+}

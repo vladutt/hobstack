@@ -329,6 +329,13 @@ func (m *Manager) Stop(id string) error {
 	return nil
 }
 
+// ActiveCount: cate run-uri ruleaza acum (agenti, wizard, draft).
+func (m *Manager) ActiveCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.active)
+}
+
 // Shutdown opreste toate run-urile active (la Ctrl+C).
 func (m *Manager) Shutdown() {
 	m.mu.Lock()

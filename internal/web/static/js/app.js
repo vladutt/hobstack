@@ -11,6 +11,7 @@ import { mcpAddView } from "./mcp-add.js";
 import { skillAddView } from "./skill-add.js";
 import { toggleSwitcher, touchRecent } from "./project-switcher.js";
 import { modKey } from "./code-explorer.js";
+import { initUpdates } from "./update.js";
 
 // Aplicatia se numea foreman: preferintele salvate ("foreman-drawer", "foreman-category"...) trec o data
 // pe cheile noi "hobstack-...", ca sa nu se piarda starea panourilor si filtrele.
@@ -152,6 +153,9 @@ api("/api/info").then(({ name }) => {
   appTitle = name.charAt(0).toUpperCase() + name.slice(1);
   updateTitle(location.hash || "#/");
 }).catch(() => {});
+
+// insigna de update din bara de sus (inainte de prima desenare, ca s-o puna topbar)
+initUpdates();
 
 // prima desenare la final: route() foloseste starea titlului de mai sus (let-urile trebuie deja initializate)
 route();

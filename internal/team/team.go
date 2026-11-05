@@ -62,6 +62,7 @@ type Team struct {
 	active  map[int64]activeRun // agentID -> run-ul lui activ
 	tokens  map[string]mcp.Caller
 	pending map[int64]bool // proiecte care trebuie reconciliate
+	held    bool           // update-ul asteapta sa termine agentii: nu pornesc run-uri noi (Hold)
 	wake    chan struct{}
 }
 
@@ -174,6 +175,34 @@ func (t *Team) Kick(projectID int64) {
 	case t.wake <- struct{}{}:
 	default: // exista deja un semnal in asteptare
 	}
+}
+
+// Hold opreste (on) sau reia pornirea run-urilor noi in toate proiectele; run-urile care merg isi
+// termina treaba. Il foloseste update-ul cat asteapta agentii. La reluare proiectele amanate se reconciliaza.
+func (t *Team) Hold(on bool) {
+	t.mu.Lock()
+	t.held = on
+	t.mu.Unlock()
+	if !on {
+		select {
+		case t.wake <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// ActiveCount: cate run-uri ale echipelor nu s-au incheiat inca (procesul merge sau finish n-a ajuns la lock).
+func (t *Team) ActiveCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.active)
+}
+
+// Drain asteapta sa se termine reconcilierea sau finish-ul in curs (inainte de restart-ul dupa update,
+// ca baza de date sa nu se inchida in mijlocul unei scrieri).
+func (t *Team) Drain() {
+	t.work.Lock()
+	t.work.Unlock()
 }
 
 // ActiveRunID intoarce run-ul activ al agentului sau "".

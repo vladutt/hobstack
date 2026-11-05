@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hobstack/internal/selfupdate"
 	"io"
 	"io/fs"
 	"log"
@@ -71,6 +72,9 @@ type Server struct {
 	now    func() time.Time // ceasul pentru expirarea pregatirilor (testele dau unul fals)
 
 	clip func(context.Context) ([]string, error) // caile fisierelor din clipboard-ul sistemului (testele dau unul fals)
+
+	updater    *selfupdate.Updater // nil = fara update din aplicatie
+	updaterCtx context.Context
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
@@ -98,6 +102,10 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /", http.FileServerFS(static))
 	mux.HandleFunc("GET /api/info", s.info)
+	mux.HandleFunc("GET /api/update", s.getUpdate)
+	mux.HandleFunc("POST /api/update/check", s.checkUpdate)
+	mux.HandleFunc("POST /api/update", s.startUpdate)
+	mux.HandleFunc("POST /api/update/cancel", s.cancelUpdate)
 
 	mux.HandleFunc("GET /api/projects", s.listProjects)
 	mux.HandleFunc("POST /api/projects", s.createProject)

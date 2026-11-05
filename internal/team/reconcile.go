@@ -71,6 +71,15 @@ func (t *Team) Reconcile(projectID int64) error {
 	t.work.Lock()
 	defer t.work.Unlock()
 
+	// Hold: proiectul ramane de reconciliat dupa reluare
+	t.mu.Lock()
+	if t.held {
+		t.pending[projectID] = true
+		t.mu.Unlock()
+		return nil
+	}
+	t.mu.Unlock()
+
 	p, err := t.st.GetProject(projectID)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil // proiectul a fost sters intre timp
