@@ -15,6 +15,16 @@ const AppName = "hobstack"
 // DisplayName e numele afisat in UI (titlul paginii, panoul din wizard).
 const DisplayName = "HobStack"
 
+// Version e versiunea aplicatiei (semver fara "v"), pusa la build:
+//
+//	go build -ldflags "-X hobstack/internal/config.Version=1.0.0"
+//
+// (scripts/build-release.sh pentru release-uri, scripts/build.sh local). Un go build simplu ramane "dev".
+var Version = "dev"
+
+// UpdateRepo e repo-ul GitHub cu release-urile (update din aplicatie).
+const UpdateRepo = "vladutt/hobstack"
+
 // Paths tine toate locatiile de pe disc folosite de aplicatie.
 type Paths struct {
 	Root string // ~/.hobstack

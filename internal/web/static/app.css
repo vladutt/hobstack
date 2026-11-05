@@ -1708,18 +1708,15 @@ input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
 .upd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .upd-head h2 { font-size: 18px; }
 .upd-box p, .upd-settings p { margin: 0; }
-.upd-version code, .upd-commit code { font: 12.5px var(--mono); color: var(--soft); }
+.upd-version code { font: 12.5px var(--mono); color: var(--soft); }
 .upd-new { font-weight: 600; color: var(--amber); }
 .upd-ok { color: var(--green); }
 .upd-step { color: var(--teal); }
 .upd-error, .upd-note { margin: 0; color: var(--red); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
 pre.upd-error, pre.upd-note { font: 12px/1.5 var(--mono); background: var(--deep); border-radius: 8px; padding: 10px 12px; max-height: 260px; overflow: auto; }
 .upd-note { color: var(--soft); }
-.upd-commits { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 340px; overflow-y: auto;
-  border: 1px solid var(--line); border-radius: 10px; }
-.upd-commit { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; padding: 7px 12px; border-bottom: 1px solid var(--line); min-width: 0; }
-.upd-commit:last-child { border-bottom: 0; }
-.upd-subject { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
-.upd-commits > .hint { padding: 7px 12px; }
 .upd-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .upd-settings { display: grid; gap: 8px; }
+.upd-notes { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--col); }
+.upd-notes .md > :first-child { margin-top: 0; }
+.upd-notes .md > :last-child { margin-bottom: 0; }

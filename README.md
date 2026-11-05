@@ -6,7 +6,22 @@ A project's team is a hierarchy: you give goals to the root agents, leads split 
 only among their direct team, and work goes through the reviewer (if there is one), then to the lead
 that created the task. You can talk to any agent. Everything is visible live on a board and saved in SQLite.
 
-## Running
+## Install
+
+Download the archive for your system from [Releases](https://github.com/vladutt/hobstack/releases/latest)
+(`hobstack_<version>_darwin_arm64.tar.gz` for Apple Silicon Macs, `darwin_amd64` for Intel Macs,
+`linux_amd64` / `linux_arm64`, `windows_amd64.zip`), unpack it and run:
+
+    ./hobstack start
+
+On macOS a file downloaded with the browser is quarantined; allow it once with
+`xattr -d com.apple.quarantine hobstack`. `checksums.txt` has the sha256 of every archive.
+
+HobStack checks GitHub for a new release every hour. When there is one, it shows the version and its notes
+when you open it; "Update and restart" downloads it, verifies it, waits for running agents to finish,
+backs up the database to `~/.hobstack/backups` and restarts. The previous binary stays next to it as `hobstack.prev`.
+
+## Running from source
 
     go run ./cmd/hobstack start
 
@@ -16,8 +31,17 @@ You need `claude` (Claude Code) in PATH, logged in.
 
 ## Build
 
-    go build -o hobstack ./cmd/hobstack
-    GOOS=darwin GOARCH=arm64 go build -o hobstack-mac ./cmd/hobstack
+    scripts/build.sh                 # ./hobstack with the version from git describe (e.g. 1.0.0-3-g657c1cf)
+    go build -o hobstack ./cmd/hobstack   # a "dev" build: it shows releases but does not offer them by itself
+    scripts/build-release.sh 1.0.0   # the release archives and checksums.txt in dist/
+
+## Releasing
+
+Tag a version and push the tag; GitHub Actions (`.github/workflows/release.yml`) runs the tests, builds the
+archives and publishes the release. The tag message becomes the release notes shown in the app:
+
+    git tag -a v1.1.0 -m "- what changed"
+    git push hobstack v1.1.0
 
 ## How it works
 

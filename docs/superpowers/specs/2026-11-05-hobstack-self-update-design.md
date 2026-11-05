@@ -1,41 +1,48 @@
-# HobStack: update din aplicatie (din git)
+# HobStack: versiuni, release-uri pe GitHub si update din aplicatie
 
 Data: 2026-11-05
-Status: cerut de utilizator ("un buton de update last version de pe git"); deciziile de mai jos sunt ale implementarii.
+Status: cerut de utilizator: "update-ul ar trebui sa fie facut in functie de tag-ul de versiune. incepem de la 1.0.0,
+iar cand apare o versiune noua, cand intri pe hobstack sa-ti apara o modala cu versiunea", plus build-ul pe GitHub ca
+sa poata fi descarcat usor. Inlocuieste prima varianta (git pull + go build din folderul sursa).
 
-## Problema
+## Versiuni
 
-HobStack ruleaza din folderul cu codul sursa (binarul `hobstack` e construit in radacina repo-ului, push pe
-github.com/vladutt/hobstack). Pana acum update-ul insemna: git pull, go build, oprit, pornit, si grija sa nu
-opresti agenti in lucru.
+- Taguri semver `vX.Y.Z`, prima `v1.0.0`. `config.Version` se pune la build cu
+  `-ldflags "-X hobstack/internal/config.Version=1.0.0"`; un `go build` simplu e "dev".
+- `scripts/build.sh` (local): versiunea din `git describe --tags --always --dirty` (de ex. 1.0.0-3-g657c1cf).
+- `hobstack version` scrie versiunea (o foloseste si update-ul ca proba pe binarul descarcat).
+- Comparatia (selfupdate.Newer): X.Y.Z numeric; un release cu sufix (rc) nu se propune; la acelasi numar,
+  release-ul e mai nou doar fata de o pre-versiune, nu fata de un build de dupa tag (sufixul git describe).
 
-## Decizia
+## Release pe GitHub
 
-- Varianta din sursa (nu binare din GitHub Releases): merge doar cand HobStack ruleaza din folderul sursa
-  (go.mod cu `module hobstack` si `.git` langa binar, sau HOBSTACK_SOURCE) si exista `git` si `go` in PATH.
-  Altfel Settings > Version arata versiunea si motivul.
-- Versiunea curenta = `vcs.revision` din binar (go build o pune singur, cu vcs.time si vcs.modified).
-- Verificare: la 1 minut dupa pornire, apoi din ora in ora, si la "Check now": `git fetch` pe ramura urmarita
-  (@{u}, de ex. hobstack/main), commit-urile noi = revizia binarului..@{u} (HEAD daca repo-ul nu are revizia).
-  git ruleaza fara prompt-uri (GIT_TERMINAL_PROMPT=0, ssh BatchMode).
-- Update (pachet internal/selfupdate):
-  1. refuz daca sursa are modificari necommit-uite (fara fisierele neurmarite) sau commit-uri locale care nu
-     sunt pe @{u} (ar cere merge);
-  2. `git merge --ff-only <target>`, `go build -o <exe>.new ./cmd/hobstack` (10 min); la eroare sursa revine cu
-     `git reset --keep <vechi>` si nimic nu se schimba (ultimele 20 de linii din build in UI);
-  3. binarul vechi devine `<exe>.prev`, cel nou ia locul lui (rename, merge si pe Windows);
-  4. Hold: echipele nu mai pornesc run-uri noi (Reconcile amana proiectul), se asteapta pana nu mai ruleaza
-     niciun run (runner.ActiveCount si team.ActiveCount); "Cancel restart" lasa binarul nou pus, pentru
-     urmatoarea pornire ("Restart now" nu il mai construieste o data);
-  5. copia bazei de date (VACUUM INTO) in ~/.hobstack/backups, ultimele 3; daca nu merge, nu reporneste;
-  6. restart: contextul aplicatiei se anuleaza, serverul se inchide, team.Drain asteapta finish-ul in curs,
-     baza de date se inchide, apoi main porneste binarul nou cu aceleasi argumente plus --no-open
-     (syscall.Exec pe Unix; proces nou pe Windows).
-- API: GET /api/update, POST /api/update/check, POST /api/update, POST /api/update/cancel.
-- UI (update.js): insigna in bara de sus ("Update · N", pasul curent, "Waiting for N agents", "Update failed");
-  fereastra cu commit-urile (max 30), Update and restart / Check now / Cancel restart; sectiunea Version din Settings.
-  Dupa restart pagina se reincarca singura cand serverul raspunde cu alta revizie.
+- `.github/workflows/release.yml` la push-ul unui tag `v*`: vet, teste, `scripts/build-release.sh`, `gh release create`.
+- Arhive: `hobstack_<ver>_<os>_<arch>.tar.gz` (darwin arm64/amd64, linux amd64/arm64) si `.zip` pe windows/amd64,
+  cu binarul, README si LICENSE in radacina; `checksums.txt` (sha256). CGO_ENABLED=0, -trimpath, -s -w.
+- Notele: mesajul tag-ului adnotat; altfel commit-urile de la tag-ul precedent; la primul "First release of HobStack."
+
+## Update din aplicatie (internal/selfupdate)
+
+- Verificare: la 5 s dupa pornire si din ora in ora, `GET api.github.com/repos/vladutt/hobstack/releases/latest`
+  (config.UpdateRepo; HOBSTACK_UPDATE_URL pentru teste). 404 = niciun release.
+- Se poate instala daca release-ul are arhiva platformei si checksums.txt, iar folderul binarului se poate scrie.
+- Pasi: checksums.txt, arhiva (max 300 MB) verificata cu sha256, binarul scos din arhiva in `<exe>.new`, proba
+  `<exe>.new version` (20 s) trebuie sa raspunda exact versiunea, apoi `<exe>` -> `<exe>.prev` si `.new` -> `<exe>`.
+  Orice eroare inainte de inlocuire lasa totul neschimbat.
+- Apoi ca inainte: team.Hold (nu pornesc run-uri noi) pana nu mai ruleaza niciun run, copie VACUUM INTO in
+  ~/.hobstack/backups (ultimele 3; daca nu merge nu reporneste), restart prin selfupdate.Reexec cu --no-open.
+  "Cancel restart" lasa versiunea instalata pentru urmatoarea pornire ("Restart now" nu o mai descarca).
+- Build "dev": nu propune singur, dar Settings > Version are "Install vX.Y.Z".
+
+## UI (update.js)
+
+- Modala la intrare (o data pe pagina) cand exista o versiune noua: "HobStack vX.Y.Z is available", versiunea curenta,
+  data, notele (Markdown), link la release; Update and restart / Later (pana la urmatoarea sesiune, sessionStorage) /
+  Skip this version (localStorage). In timpul update-ului arata pasul si agentii asteptati.
+- Insigna din bara de sus: "vX.Y.Z available", pasul, "Waiting for N agents", "Update failed", "Restart to update".
+- Settings > Version: versiunea, ultimul release, Check now, Release notes.
+- Dupa restart pagina se reincarca singura si arata "HobStack updated to vX.Y.Z".
 
 ## In afara
 
-Binare gata facute (goreleaser / GitHub Releases), rollback din UI la `.prev`, update automat fara clic.
+Semnarea binarelor (macOS notarization), rollback din UI la `.prev`, canale beta.

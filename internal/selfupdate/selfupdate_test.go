@@ -1,11 +1,20 @@
 package selfupdate
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
-	"errors"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -13,52 +22,100 @@ import (
 	"time"
 )
 
-// repo pregateste un "remote" (bare) si o clona cu go.mod si binarul "hobstack" (continut "old").
-// Intoarce clona si o functie care adauga un commit pe remote.
-func repo(t *testing.T) (src string, push func(msg string)) {
-	t.Helper()
-	root := t.TempDir()
-	bare := filepath.Join(root, "remote.git")
-	src = filepath.Join(root, "src")
-	work := filepath.Join(root, "work")
-	run := func(dir string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=T", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=T", "GIT_COMMITTER_EMAIL=t@t")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+func TestNewer(t *testing.T) {
+	cases := []struct {
+		latest, current string
+		want            bool
+	}{
+		{"1.1.0", "1.0.0", true},
+		{"v1.0.1", "1.0.0", true},
+		{"2.0.0", "1.9.9", true},
+		{"1.10.0", "1.9.0", true},
+		{"1.0.0", "1.0.0", false},
+		{"1.0.0", "1.1.0", false},
+		{"1.0.0", "1.0.0-3-g657c1cf", false},       // build local dupa tag
+		{"1.0.0", "1.0.0-3-g657c1cf-dirty", false}, // la fel, cu modificari
+		{"1.0.1", "1.0.0-3-g657c1cf", true},
+		{"1.0.0", "1.0.0-rc1", true},
+		{"1.1.0-rc1", "1.0.0", false}, // pre-versiunile nu se propun
+		{"1.1.0", "dev", false},
+		{"junk", "1.0.0", false},
+	}
+	for _, c := range cases {
+		if got := Newer(c.latest, c.current); got != c.want {
+			t.Errorf("Newer(%q, %q) = %v, want %v", c.latest, c.current, got, c.want)
 		}
-		return strings.TrimSpace(string(out))
 	}
-	run(root, "init", "--quiet", "--bare", "-b", "main", bare)
-	run(root, "clone", "--quiet", bare, work)
-	os.WriteFile(filepath.Join(work, "go.mod"), []byte("module hobstack\n\ngo 1.24\n"), 0o644)
-	os.WriteFile(filepath.Join(work, ".gitignore"), []byte("/hobstack\n/hobstack.*\n"), 0o644)
-	run(work, "add", ".")
-	run(work, "commit", "--quiet", "-m", "first")
-	run(work, "push", "--quiet", "origin", "HEAD:main")
-	run(root, "clone", "--quiet", bare, src)
-	os.WriteFile(filepath.Join(src, "hobstack"), []byte("old"), 0o755)
-	n := 0
-	push = func(msg string) {
-		n++
-		os.WriteFile(filepath.Join(work, "f.txt"), []byte(msg), 0o644)
-		run(work, "add", ".")
-		run(work, "commit", "--quiet", "-m", msg)
-		run(work, "push", "--quiet", "origin", "HEAD:main")
-	}
-	return src, push
 }
 
-func head(t *testing.T, dir, ref string) string {
+// fakeGitHub serveste /repos/o/r/releases/latest cu arhiva platformei curente; binarul din arhiva e un
+// script care raspunde la "version" cu versiunea data (bin).
+type fakeGitHub struct {
+	srv       *httptest.Server
+	version   string
+	bin       []byte
+	badSum    bool
+	noRelease bool
+	downloads atomic.Int32
+}
+
+func newFakeGitHub(t *testing.T, version string) *fakeGitHub {
 	t.Helper()
-	out, err := exec.Command("git", "-C", dir, "rev-parse", ref).Output()
-	if err != nil {
-		t.Fatal(err)
+	g := &fakeGitHub{version: version, bin: []byte("#!/bin/sh\necho " + version + "\n")}
+	g.srv = httptest.NewServer(http.HandlerFunc(g.serve))
+	t.Cleanup(g.srv.Close)
+	return g
+}
+
+func (g *fakeGitHub) archive() []byte {
+	var buf bytes.Buffer
+	if runtime.GOOS == "windows" {
+		zw := zip.NewWriter(&buf)
+		w, _ := zw.Create("hobstack.exe")
+		w.Write(g.bin)
+		zw.Close()
+		return buf.Bytes()
 	}
-	return strings.TrimSpace(string(out))
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	tw.WriteHeader(&tar.Header{Name: "./README.md", Mode: 0o644, Size: 2, Typeflag: tar.TypeReg})
+	tw.Write([]byte("hi"))
+	tw.WriteHeader(&tar.Header{Name: "./hobstack", Mode: 0o755, Size: int64(len(g.bin)), Typeflag: tar.TypeReg})
+	tw.Write(g.bin)
+	tw.Close()
+	gz.Close()
+	return buf.Bytes()
+}
+
+func (g *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
+	name := archiveName(g.version)
+	switch r.URL.Path {
+	case "/repos/o/r/releases/latest":
+		if g.noRelease {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"tag_name": "v" + g.version, "name": "HobStack v" + g.version, "body": "- faster board",
+			"html_url": "https://github.com/o/r/releases/tag/v" + g.version, "published_at": time.Now().Format(time.RFC3339),
+			"assets": []map[string]any{
+				{"name": name, "browser_download_url": g.srv.URL + "/dl/" + name},
+				{"name": "checksums.txt", "browser_download_url": g.srv.URL + "/dl/checksums.txt"},
+			},
+		})
+	case "/dl/checksums.txt":
+		sum := sha256.Sum256(g.archive())
+		h := hex.EncodeToString(sum[:])
+		if g.badSum {
+			h = strings.Repeat("0", 64)
+		}
+		fmt.Fprintf(w, "%s  hobstack_other.tar.gz\n%s  %s\n", strings.Repeat("1", 64), h, name)
+	case "/dl/" + name:
+		g.downloads.Add(1)
+		w.Write(g.archive())
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 type fake struct {
@@ -66,37 +123,27 @@ type fake struct {
 	held      atomic.Bool
 	restarted chan struct{}
 	backups   atomic.Int32
-	builds    atomic.Int32
-	buildErr  error
 }
 
-func newUpdater(t *testing.T, src string, f *fake) *Updater {
+func newUpdater(t *testing.T, g *fakeGitHub, current string, f *fake) (*Updater, string) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake binary is a shell script")
+	}
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "hobstack")
+	os.WriteFile(exe, []byte("old"), 0o755)
 	f.restarted = make(chan struct{}, 1)
-	t.Setenv("HOBSTACK_SOURCE", src)
-	u := New(filepath.Join(src, "hobstack"), Deps{
+	u := New(exe, Options{Repo: "o/r", API: g.srv.URL, Version: current}, Deps{
 		Active:  func() int { return int(f.active.Load()) },
 		Hold:    func(on bool) { f.held.Store(on) },
 		Backup:  func(path string) error { f.backups.Add(1); return os.WriteFile(path, []byte("db"), 0o644) },
 		Restart: func() { f.restarted <- struct{}{} },
-		Backups: filepath.Join(t.TempDir(), "backups"),
-		Build: func(ctx context.Context, dir, out string) ([]byte, error) {
-			f.builds.Add(1)
-			if f.buildErr != nil {
-				return []byte("main.go:1: syntax error"), f.buildErr
-			}
-			return nil, os.WriteFile(out, []byte("new"), 0o755)
-		},
+		Backups: filepath.Join(dir, "backups"),
 	})
-	if !u.Status().CanUpdate {
-		t.Fatalf("cannot update: %s", u.Status().Reason)
-	}
-	u.rev = head(t, src, "HEAD") // binarul "e facut" din commit-ul curent
-	u.st.Current = short(u.rev)
-	return u
+	return u, exe
 }
 
-// waitState asteapta pana cand starea update-ului devine una din cele date.
 func waitState(t *testing.T, u *Updater, states ...string) Status {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -110,43 +157,62 @@ func waitState(t *testing.T, u *Updater, states ...string) Status {
 	return Status{}
 }
 
-func TestNotFromSource(t *testing.T) {
-	t.Setenv("HOBSTACK_SOURCE", t.TempDir())
-	u := New("/usr/local/bin/hobstack", Deps{})
-	if s := u.Status(); s.CanUpdate || s.Reason == "" {
-		t.Fatalf("a folder without go.mod must not be updatable: %+v", s)
-	}
-	if err := u.Start(context.Background()); err == nil {
-		t.Fatal("Start without a source folder must fail")
+func waitRestart(t *testing.T, u *Updater, f *fake) {
+	t.Helper()
+	select {
+	case <-f.restarted:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("no restart: %+v", u.Status())
 	}
 }
 
-func TestCheckCountsNewCommits(t *testing.T) {
-	src, push := repo(t)
-	u := newUpdater(t, src, &fake{})
-	if err := u.Check(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if s := u.Status(); s.Behind != 0 || s.Upstream != "origin/main" {
-		t.Fatalf("fresh clone: %+v", s)
-	}
-	push("second")
-	push("third")
+func TestCheckFindsNewRelease(t *testing.T) {
+	g := newFakeGitHub(t, "1.1.0")
+	u, _ := newUpdater(t, g, "1.0.0", &fake{})
 	if err := u.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	s := u.Status()
-	if s.Behind != 2 || len(s.Commits) != 2 || s.Commits[0].Subject != "third" || s.CheckedAt.IsZero() {
-		t.Fatalf("after 2 pushes: %+v", s)
+	if !s.Available || !s.CanUpdate || s.Latest != "1.1.0" || s.Notes != "- faster board" || s.CheckedAt.IsZero() {
+		t.Fatalf("status: %+v", s)
+	}
+
+	// la zi: nimic de propus, Start refuza
+	u2, _ := newUpdater(t, g, "1.1.0", &fake{})
+	u2.Check(context.Background())
+	if s := u2.Status(); s.Available {
+		t.Fatalf("same version: %+v", s)
+	}
+	if err := u2.Start(context.Background()); err == nil {
+		t.Fatal("Start without a newer version must fail")
+	}
+
+	// build local fara versiune: nu propune, dar poate instala la cerere
+	u3, _ := newUpdater(t, g, "", &fake{})
+	u3.Check(context.Background())
+	if s := u3.Status(); !s.Dev || s.Available || !s.CanUpdate {
+		t.Fatalf("dev build: %+v", s)
+	}
+}
+
+func TestCheckWithoutReleases(t *testing.T) {
+	g := newFakeGitHub(t, "1.0.0")
+	g.noRelease = true
+	u, _ := newUpdater(t, g, "1.0.0", &fake{})
+	if err := u.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if s := u.Status(); s.Latest != "" || s.Available || s.CheckError != "" {
+		t.Fatalf("no releases: %+v", s)
 	}
 }
 
 func TestUpdateWaitsForAgentsThenRestarts(t *testing.T) {
-	src, push := repo(t)
-	push("second")
+	g := newFakeGitHub(t, "1.1.0")
 	f := &fake{}
 	f.active.Store(1)
-	u := newUpdater(t, src, f)
+	u, exe := newUpdater(t, g, "1.0.0", f)
+	u.Check(context.Background())
 	if err := u.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -154,104 +220,80 @@ func TestUpdateWaitsForAgentsThenRestarts(t *testing.T) {
 	if s.State != StateWaiting || s.Waiting != 1 || !f.held.Load() {
 		t.Fatalf("with an agent running the update must wait and hold new runs: %+v held=%v", s, f.held.Load())
 	}
-	if err := u.Start(context.Background()); !errors.Is(err, ErrBusy) {
+	if err := u.Start(context.Background()); err != ErrBusy {
 		t.Fatalf("second Start: %v", err)
 	}
-	if got, _ := os.ReadFile(filepath.Join(src, "hobstack")); string(got) != "new" {
+	if got, _ := os.ReadFile(exe); !bytes.Equal(got, g.bin) {
 		t.Fatalf("binary: %q", got)
 	}
-	if got, _ := os.ReadFile(filepath.Join(src, "hobstack.prev")); string(got) != "old" {
+	if got, _ := os.ReadFile(exe + ".prev"); string(got) != "old" {
 		t.Fatalf("previous binary: %q", got)
 	}
 	f.active.Store(0)
-	select {
-	case <-f.restarted:
-	case <-time.After(10 * time.Second):
-		t.Fatalf("no restart: %+v", u.Status())
-	}
+	waitRestart(t, u, f)
 	if u.Status().State != StateRestarting || f.backups.Load() != 1 {
 		t.Fatalf("after restart: %+v backups=%d", u.Status(), f.backups.Load())
 	}
-	if head(t, src, "HEAD") != head(t, src, "origin/main") {
-		t.Fatal("the source was not fast-forwarded")
-	}
 }
 
-func TestUpdateRefusesDirtySource(t *testing.T) {
-	src, push := repo(t)
-	push("second")
-	u := newUpdater(t, src, &fake{})
-	before := head(t, src, "HEAD")
-	os.WriteFile(filepath.Join(src, "go.mod"), []byte("module hobstack\n// local\n"), 0o644)
+func TestDamagedDownloadChangesNothing(t *testing.T) {
+	g := newFakeGitHub(t, "1.1.0")
+	g.badSum = true
+	u, exe := newUpdater(t, g, "1.0.0", &fake{})
+	u.Check(context.Background())
 	u.Start(context.Background())
 	s := waitState(t, u, StateFailed, StateRestarting)
-	if s.State != StateFailed || !strings.Contains(s.Error, "uncommitted") {
-		t.Fatalf("dirty source: %+v", s)
+	if s.State != StateFailed || !strings.Contains(s.Error, "damaged") {
+		t.Fatalf("bad checksum: %+v", s)
 	}
-	if head(t, src, "HEAD") != before {
-		t.Fatal("the source moved")
-	}
-}
-
-func TestBuildFailureLeavesEverything(t *testing.T) {
-	src, push := repo(t)
-	push("second")
-	f := &fake{buildErr: errors.New("exit status 1")}
-	u := newUpdater(t, src, f)
-	before := head(t, src, "HEAD")
-	u.Start(context.Background())
-	s := waitState(t, u, StateFailed, StateRestarting)
-	if s.State != StateFailed || !strings.Contains(s.Error, "syntax error") {
-		t.Fatalf("build failure: %+v", s)
-	}
-	if head(t, src, "HEAD") != before {
-		t.Fatal("the source was not put back")
-	}
-	if got, _ := os.ReadFile(filepath.Join(src, "hobstack")); string(got) != "old" {
+	if got, _ := os.ReadFile(exe); string(got) != "old" {
 		t.Fatalf("binary changed: %q", got)
 	}
-	if _, err := os.Stat(filepath.Join(src, "hobstack.new")); err == nil {
+}
+
+func TestBrokenBinaryChangesNothing(t *testing.T) {
+	g := newFakeGitHub(t, "1.1.0")
+	g.bin = []byte("#!/bin/sh\necho 0.9.0\n") // raspunde cu alta versiune
+	u, exe := newUpdater(t, g, "1.0.0", &fake{})
+	u.Check(context.Background())
+	u.Start(context.Background())
+	s := waitState(t, u, StateFailed, StateRestarting)
+	if s.State != StateFailed || !strings.Contains(s.Error, "0.9.0") {
+		t.Fatalf("wrong version inside: %+v", s)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != "old" {
+		t.Fatalf("binary changed: %q", got)
+	}
+	if _, err := os.Stat(exe + ".new"); err == nil {
 		t.Fatal("hobstack.new left behind")
 	}
 }
 
 func TestCancelWhileWaiting(t *testing.T) {
-	src, push := repo(t)
-	push("second")
+	g := newFakeGitHub(t, "1.1.0")
 	f := &fake{}
 	f.active.Store(2)
-	u := newUpdater(t, src, f)
+	u, exe := newUpdater(t, g, "1.0.0", f)
+	u.Check(context.Background())
 	u.Start(context.Background())
 	waitState(t, u, StateWaiting)
 	if !u.Cancel() {
 		t.Fatal("Cancel while waiting")
 	}
 	s := waitState(t, u, StateInstalled)
-	if f.held.Load() {
-		t.Fatal("runs still held after cancel")
+	if f.held.Load() || !strings.Contains(s.Error, "next time") {
+		t.Fatalf("after cancel: %+v held=%v", s, f.held.Load())
 	}
-	if !strings.Contains(s.Error, "next time") {
-		t.Fatalf("cancel message: %q", s.Error)
-	}
-	select {
-	case <-f.restarted:
-		t.Fatal("restarted after cancel")
-	default:
-	}
-	// "Restart now" dupa anulare: binarul e deja pus, deci doar asteapta si reporneste (fara alt build)
+	// "Restart now": binarul e deja pus, deci doar asteapta si reporneste (fara alt download)
 	f.active.Store(0)
 	if err := u.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-f.restarted:
-	case <-time.After(10 * time.Second):
-		t.Fatalf("no restart: %+v", u.Status())
+	waitRestart(t, u, f)
+	if g.downloads.Load() != 1 {
+		t.Fatalf("downloads = %d, want 1", g.downloads.Load())
 	}
-	if f.builds.Load() != 1 {
-		t.Fatalf("builds = %d, want 1", f.builds.Load())
-	}
-	if got, _ := os.ReadFile(filepath.Join(src, "hobstack.prev")); string(got) != "old" {
+	if got, _ := os.ReadFile(exe + ".prev"); string(got) != "old" {
 		t.Fatalf("the previous binary was replaced: %q", got)
 	}
 }

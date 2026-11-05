@@ -39,6 +39,7 @@ const usage = `%[1]s - local Claude Code agent teams
 
 Usage:
   %[1]s start [--port 7777] [--no-open]
+  %[1]s version
 `
 
 func main() {
@@ -50,6 +51,10 @@ func main() {
 	switch os.Args[1] {
 	case "start":
 		err = start(os.Args[2:])
+	case "version", "--version", "-v":
+		// update-ul ruleaza si el comanda asta pe binarul descarcat, ca proba ca porneste pe masina asta
+		fmt.Println(config.Version)
+		return
 	default:
 		fmt.Printf(usage, config.AppName)
 		os.Exit(1)
@@ -166,7 +171,7 @@ func start(args []string) error {
 	// butoanele "Deschide": Finder, editor, browser (editoarele se detecteaza acum)
 	webSrv.SetOpener(opener.New())
 
-	// update din aplicatie: git din folderul sursa, build, restart cand nu mai ruleaza niciun agent
+	// update din aplicatie: ultimul release de pe GitHub, restart cand nu mai ruleaza niciun agent
 	exe, err := os.Executable()
 	if err == nil {
 		exe, err = filepath.EvalSymlinks(exe)
@@ -175,7 +180,7 @@ func start(args []string) error {
 	if err != nil {
 		log.Printf("update: cannot find the running binary: %v", err)
 	} else {
-		upd := selfupdate.New(exe, selfupdate.Deps{
+		upd := selfupdate.New(exe, selfupdate.Options{Repo: config.UpdateRepo, Version: config.Version}, selfupdate.Deps{
 			Active:  func() int { return max(mgr.ActiveCount(), tm.ActiveCount()) },
 			Hold:    tm.Hold,
 			Backup:  st.Backup,
@@ -192,7 +197,7 @@ func start(args []string) error {
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
 
-	log.Printf("%s running at %s", config.AppName, url)
+	log.Printf("%s %s running at %s", config.AppName, config.Version, url)
 	log.Printf("data: %s", paths.Root)
 	log.Printf("claude: %s", claudeBin)
 	if !*noOpen {
@@ -222,12 +227,9 @@ func start(args []string) error {
 	return err
 }
 
-// checkUpdates verifica la un minut dupa pornire si apoi la fiecare ora daca exista o versiune noua.
+// checkUpdates verifica la cateva secunde dupa pornire si apoi la fiecare ora daca exista o versiune noua.
 func checkUpdates(ctx context.Context, u *selfupdate.Updater) {
-	if !u.Status().CanUpdate {
-		return
-	}
-	wait := time.Minute
+	wait := 5 * time.Second
 	for {
 		select {
 		case <-ctx.Done():

@@ -11,3 +11,4 @@ foreman.exe
 /hobstack.prev
 /hobstack-*
 hobstack.exe
+/dist
