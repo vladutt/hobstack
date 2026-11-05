@@ -12,7 +12,12 @@ Download the archive for your system from [Releases](https://github.com/vladutt/
 (`hobstack_<version>_darwin_arm64.tar.gz` for Apple Silicon Macs, `darwin_amd64` for Intel Macs,
 `linux_amd64` / `linux_arm64`, `windows_amd64.zip`), unpack it and run:
 
-    ./hobstack start
+    ./hobstack start      # or just ./hobstack
+
+On Windows, unzip it and double-click `hobstack.exe` (or run it from a terminal): the console window shows the log and
+the browser opens by itself; closing the window stops HobStack. If Windows SmartScreen warns about an unknown app,
+choose "More info" > "Run anyway". HobStack needs Claude Code (`claude`) installed and logged in; if it cannot start,
+the window stays open with the reason.
 
 On macOS a file downloaded with the browser is quarantined; allow it once with
 `xattr -d com.apple.quarantine hobstack`. `checksums.txt` has the sha256 of every archive.

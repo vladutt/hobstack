@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -43,9 +45,9 @@ Usage:
 `
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Printf(usage, config.AppName)
-		os.Exit(1)
+	// fara comanda (dublu-clic pe Windows / macOS) sau doar cu flag-uri: e "start"
+	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") && os.Args[1] != "--version" && os.Args[1] != "-v" {
+		os.Args = append([]string{os.Args[0], "start"}, os.Args[1:]...)
 	}
 	var err error
 	switch os.Args[1] {
@@ -71,6 +73,11 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		// pornit cu dublu-clic: fereastra consolei s-ar inchide inainte sa apuci sa citesti eroarea
+		if ownConsole() {
+			fmt.Fprint(os.Stderr, "\nPress Enter to close this window.")
+			bufio.NewReader(os.Stdin).ReadString('\n')
+		}
 		os.Exit(1)
 	}
 }
@@ -102,9 +109,9 @@ func start(args []string) error {
 	if err := paths.Ensure(); err != nil {
 		return fmt.Errorf("cannot create %s: %w", paths.Root, err)
 	}
-	claudeBin, err := exec.LookPath("claude")
+	claudeBin, err := findClaude(home)
 	if err != nil {
-		return errors.New("'claude' not found in PATH. Install Claude Code and try again")
+		return err
 	}
 	st, err := store.Open(paths.DB)
 	if err != nil {
@@ -299,6 +306,24 @@ func backfillTokens(st *store.Store, logs string) {
 			return
 		}
 	}
+}
+
+// findClaude cauta claude in PATH, apoi unde il pune installer-ul nativ (~/.local/bin): pornit cu dublu-clic,
+// PATH-ul poate fi altul decat in terminal.
+func findClaude(home string) (string, error) {
+	if p, err := exec.LookPath("claude"); err == nil {
+		return p, nil
+	}
+	name := "claude"
+	if runtime.GOOS == "windows" {
+		name = "claude.exe"
+	}
+	p := filepath.Join(home, ".local", "bin", name)
+	if info, err := os.Stat(p); err == nil && !info.IsDir() {
+		return p, nil
+	}
+	return "", errors.New("'claude' (Claude Code) was not found in PATH or in " + filepath.Dir(p) +
+		". Install it from https://claude.com/claude-code, log in with `claude`, then start HobStack again")
 }
 
 func openBrowser(url string) {
