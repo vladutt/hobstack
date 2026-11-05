@@ -25,7 +25,9 @@ func Enabled(home, _ string) bool {
 
 // Enable scrie ~/.config/autostart/hobstack.desktop (XDG autostart, pornit de mediul grafic la login).
 func Enable(home, exe, _ string) error {
-	quote := func(s string) string { return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "`", "\\`", "$", `\$`).Replace(s) + `"` }
+	quote := func(s string) string {
+		return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "`", "\\`", "$", `\$`).Replace(s) + `"`
+	}
 	desktop := "[Desktop Entry]\nType=Application\nName=" + Label + "\nExec=" + quote(exe) + " " + strings.Join(Args, " ") +
 		"\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n"
 	p := desktopPath(home)

@@ -16,7 +16,8 @@ Download the archive for your system from [Releases](https://github.com/vladutt/
 
 On Windows, unzip it and double-click `hobstack.exe`: the browser opens and HobStack keeps running in the background,
 without a window (the log is in `~/.hobstack/hobstack.log`). Its H icon sits next to the clock: click it to open HobStack,
-right-click for Open / Quit. Starting it again opens the running one; you can also quit from Settings > App. Settings > App can also start it when you log in (Windows, macOS, Linux). If Windows SmartScreen warns about an unknown app,
+right-click for Open / Quit. Starting it again opens the running one; you can also quit from Settings > App. It starts by itself when you log in (Windows, macOS, Linux);
+turn that off in Settings > App. If Windows SmartScreen warns about an unknown app,
 choose "More info" > "Run anyway". HobStack needs Claude Code (`claude`): if it is missing or not logged in, the start page
 installs it with the official installer, can add it to your PATH and opens the login.
 

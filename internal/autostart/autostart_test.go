@@ -35,3 +35,17 @@ func TestEnableDisable(t *testing.T) {
 		t.Fatalf("second Disable: %v", err)
 	}
 }
+
+func TestDefaultOnlyOnce(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	on, err := Default(root, home, "/x/hobstack", "/x/log")
+	if err != nil || !on || !Enabled(home, "") {
+		t.Fatalf("first start: %v %v", on, err)
+	}
+	// utilizatorul o opreste: urmatoarea pornire nu o mai porneste
+	Disable(home, "")
+	if on, err := Default(root, home, "/x/hobstack", "/x/log"); err != nil || on || Enabled(home, "") {
+		t.Fatalf("after the user turned it off: %v %v", on, err)
+	}
+}

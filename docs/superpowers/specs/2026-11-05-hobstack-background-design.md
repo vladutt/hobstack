@@ -38,5 +38,8 @@ cu terminalul deschis ca sa mearga".
   de acum plus ~/.local/bin, /opt/homebrew/bin...: launchd porneste cu un PATH minim, iar agentii au nevoie de tool-uri).
 - Linux: ~/.config/autostart/hobstack.desktop (XDG).
 - Calea binarului ramane aceeasi dupa update (swap in loc).
+- Implicit pornita (cerut: "sa fie bifat automat"): o versiune de release (X.Y.Z, nu dev / git describe) o activeaza
+  la prima pornire (autostart.Default) si scrie marcajul ~/.hobstack/autostart-chosen; schimbarea din Settings scrie si
+  ea marcajul, deci o debifare ramane. Build-urile locale nu o activeaza singure.
 - Quit HobStack: POST /api/app/quit; cu agenti care ruleaza cere confirmare (force), task-urile revin in coada la
   urmatoarea pornire. API: GET /api/app, PUT /api/app/autostart.

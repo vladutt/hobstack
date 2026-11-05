@@ -62,4 +62,3 @@ func TestInstallerKeepsOutput(t *testing.T) {
 		t.Fatalf("failing installer: %v %+v", err, in.State())
 	}
 }
-

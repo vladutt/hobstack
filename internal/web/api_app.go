@@ -10,12 +10,13 @@ import (
 // appControl: pornirea la login si oprirea aplicatiei din Settings (HobStack ruleaza fara terminal).
 type appControl struct {
 	exe, home, logFile string
+	root               string // ~/.hobstack: marcajul alegerii pentru pornirea la login
 	quit               func() // opreste aplicatia (contextul din main)
 }
 
 // SetApp activeaza Settings > App.
-func (s *Server) SetApp(exe, home, logFile string, quit func()) {
-	s.app = &appControl{exe: exe, home: home, logFile: logFile, quit: quit}
+func (s *Server) SetApp(exe, home, root, logFile string, quit func()) {
+	s.app = &appControl{exe: exe, home: home, root: root, logFile: logFile, quit: quit}
 }
 
 func (s *Server) appState() map[string]any {
@@ -61,6 +62,7 @@ func (s *Server) setAutostart(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	autostart.MarkChosen(a.root) // alegerea utilizatorului ramane (pornirea implicita nu o mai schimba)
 	writeJSON(w, http.StatusOK, s.appState())
 }
 

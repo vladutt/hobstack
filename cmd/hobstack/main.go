@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"hobstack/internal/autostart"
 	"hobstack/internal/claudecli"
 	"hobstack/internal/config"
 	"hobstack/internal/draft"
@@ -124,6 +126,9 @@ func alreadyRunning(addr string) bool {
 	}
 	return json.NewDecoder(resp.Body).Decode(&info) == nil && info.Name == config.DisplayName
 }
+
+// releaseVersion: o versiune de release (1.2.3), nu dev sau un build de dupa tag (1.2.3-4-gabc).
+var releaseVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
 // restartError: start s-a oprit pentru ca update-ul a pus un binar nou; main il porneste.
 type restartError struct{ exe string }
@@ -253,7 +258,17 @@ func start(args []string) error {
 		webSrv.SetUpdater(upd, ctx)
 		go checkUpdates(ctx, upd)
 		// Settings > App: pornirea la login si Quit (HobStack ruleaza si fara terminal)
-		webSrv.SetApp(exe, home, filepath.Join(paths.Root, config.AppName+".log"), stop)
+		logFile := filepath.Join(paths.Root, config.AppName+".log")
+		webSrv.SetApp(exe, home, paths.Root, logFile, stop)
+		// o versiune oficiala porneste la login de la sine, pana cand utilizatorul alege altfel in Settings;
+		// build-urile locale (dev, git describe) nu, ca sa nu lege login-ul de un binar de lucru
+		if releaseVersion.MatchString(config.Version) {
+			if on, err := autostart.Default(paths.Root, home, exe, logFile); err != nil {
+				log.Printf("start at login: %v", err)
+			} else if on {
+				log.Printf("HobStack now starts when you log in (turn it off in Settings > App)")
+			}
+		}
 	}
 
 	srv := &http.Server{

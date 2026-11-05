@@ -160,8 +160,8 @@ type Manager struct {
 
 	mu        sync.Mutex
 	claudeBin string // "" = Claude Code nu e instalat inca (SetClaude il pune dupa instalare)
-	runs   map[string]*Run
-	active map[string]string // Key -> id-ul run-ului activ
+	runs      map[string]*Run
+	active    map[string]string // Key -> id-ul run-ului activ
 }
 
 func NewManager(claudeBin, logDir string) *Manager {
