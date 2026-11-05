@@ -1,0 +1,37 @@
+//go:build !windows
+
+package autostart
+
+import (
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestEnableDisable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if Enabled(home, "") {
+		t.Fatal("enabled in an empty home")
+	}
+	exe := "/Applications/Hob Stack/hobstack"
+	if err := Enable(home, exe, home+"/.hobstack/hobstack.log"); err != nil {
+		t.Fatal(err)
+	}
+	if !Enabled(home, "") {
+		t.Fatal("not enabled after Enable")
+	}
+	var b []byte
+	if p := plistOrDesktop(home); p != "" {
+		b, _ = os.ReadFile(p)
+	}
+	if !strings.Contains(string(b), "Hob Stack") || !strings.Contains(string(b), "--no-open") {
+		t.Fatalf("file: %s", b)
+	}
+	if err := Disable(home, ""); err != nil || Enabled(home, "") {
+		t.Fatalf("Disable: %v", err)
+	}
+	if err := Disable(home, ""); err != nil {
+		t.Fatalf("second Disable: %v", err)
+	}
+}

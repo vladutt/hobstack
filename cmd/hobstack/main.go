@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -50,6 +50,14 @@ func main() {
 	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") && os.Args[1] != "--version" && os.Args[1] != "-v" {
 		os.Args = append([]string{os.Args[0], "start"}, os.Args[1:]...)
 	}
+	// pe Windows, pornit cu dublu-clic sau la login: fara fereastra de consola; log-ul merge in fisier
+	background := os.Args[1] == "start" && ownConsole()
+	if background {
+		if err := logToFile(); err != nil {
+			messageBox("HobStack cannot write its log: " + err.Error())
+		}
+		hideConsole()
+	}
 	var err error
 	switch os.Args[1] {
 	case "start":
@@ -74,13 +82,47 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
-		// pornit cu dublu-clic: fereastra consolei s-ar inchide inainte sa apuci sa citesti eroarea
-		if ownConsole() {
-			fmt.Fprint(os.Stderr, "\nPress Enter to close this window.")
-			bufio.NewReader(os.Stdin).ReadString('\n')
+		if background {
+			messageBox("HobStack could not start:\n\n" + err.Error())
 		}
 		os.Exit(1)
 	}
+}
+
+// logToFile trimite log-ul (si stdout / stderr) in ~/.hobstack/hobstack.log; peste 10 MB il muta in .1.
+func logToFile() error {
+	paths, err := config.Default()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(paths.Root, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(paths.Root, config.AppName+".log")
+	if info, err := os.Stat(path); err == nil && info.Size() > 10<<20 {
+		os.Rename(path, path+".1")
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	log.SetOutput(f)
+	os.Stdout, os.Stderr = f, f
+	return nil
+}
+
+// alreadyRunning: pe adresa raspunde deja un HobStack (pornit a doua oara, de ex. dublu-clic sau la login).
+func alreadyRunning(addr string) bool {
+	c := &http.Client{Timeout: 2 * time.Second}
+	resp, err := c.Get("http://" + addr + "/api/info")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var info struct {
+		Name string `json:"name"`
+	}
+	return json.NewDecoder(resp.Body).Decode(&info) == nil && info.Name == config.DisplayName
 }
 
 // restartError: start s-a oprit pentru ca update-ul a pus un binar nou; main il porneste.
@@ -137,6 +179,14 @@ func start(args []string) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		if alreadyRunning(addr) {
+			// a doua pornire: deschidem HobStack-ul care ruleaza deja, fara eroare
+			log.Printf("%s is already running at http://%s", config.DisplayName, addr)
+			if !*noOpen {
+				openBrowser("http://" + addr)
+			}
+			return nil
+		}
 		return fmt.Errorf("port %d is in use, try --port: %w", *port, err)
 	}
 	url := "http://" + ln.Addr().String() // portul real, nu cel din flag
@@ -202,6 +252,8 @@ func start(args []string) error {
 		})
 		webSrv.SetUpdater(upd, ctx)
 		go checkUpdates(ctx, upd)
+		// Settings > App: pornirea la login si Quit (HobStack ruleaza si fara terminal)
+		webSrv.SetApp(exe, home, filepath.Join(paths.Root, config.AppName+".log"), stop)
 	}
 
 	srv := &http.Server{
@@ -209,6 +261,10 @@ func start(args []string) error {
 		ReadHeaderTimeout: 5 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
+
+	// Windows: iconita langa ceas (clic = deschide, meniul Open / Quit); scoasa la oprire si inainte de restart
+	tr := startTray(func() { openBrowser(url) }, stop, func() int { return max(mgr.ActiveCount(), tm.ActiveCount()) })
+	defer tr.Close()
 
 	log.Printf("%s %s running at %s", config.AppName, config.Version, url)
 	log.Printf("data: %s", paths.Root)

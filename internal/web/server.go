@@ -77,6 +77,7 @@ type Server struct {
 	updaterCtx context.Context
 
 	claude *claudeSetup // nil = fara pagina Claude Code (testele)
+	app    *appControl  // nil = fara Settings > App (testele)
 }
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
@@ -109,6 +110,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/update", s.startUpdate)
 	mux.HandleFunc("POST /api/update/cancel", s.cancelUpdate)
 	mux.HandleFunc("GET /api/claude", s.getClaude)
+	mux.HandleFunc("GET /api/app", s.getApp)
+	mux.HandleFunc("PUT /api/app/autostart", s.setAutostart)
+	mux.HandleFunc("POST /api/app/quit", s.quitApp)
 	mux.HandleFunc("POST /api/claude/install", s.installClaude)
 	mux.HandleFunc("POST /api/claude/check", s.checkClaude)
 	mux.HandleFunc("POST /api/claude/path", s.claudePath)

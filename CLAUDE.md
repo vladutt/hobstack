@@ -303,6 +303,11 @@ si fara claude (claudecli.Find: PATH, ~/.local/bin, npm global...; team.Hold e c
 dupa instalare, runner.ErrNoClaude cat lipseste). Pagina de start claude-setup.js: Install (installerul oficial, output live),
 Add to PATH (Windows: PATH-ul de utilizator; macOS/Linux: ~/.zshrc / ~/.bash_profile), Log in (terminal cu claude auth login);
 /api/claude*. Fara comanda (dublu-clic) binarul face start; la eroare intr-o consola proprie (Windows) asteapta Enter.
+Gata (iconita, fara terminal, pornire la login, spec in docs/superpowers/specs/2026-11-05-hobstack-background-design.md):
+assets/hobstack.ico + cmd/hobstack/rsrc_windows_amd64.syso (scripts/winres, doar stdlib), favicon.png. Pe Windows, cu consola
+doar a lui, HobStack o ascunde si scrie in ~/.hobstack/hobstack.log (erorile in MessageBox); pornit a doua oara deschide instanta
+care ruleaza; iconita langa ceas (cmd/hobstack/tray_windows.go, Shell_NotifyIconW: clic = Open, meniu Open / Quit).
+internal/autostart (Run key / LaunchAgent app.hobstack / XDG autostart) si Quit in Settings > App (/api/app*).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

@@ -2,5 +2,9 @@
 
 package main
 
-// ownConsole: doar pe Windows o fereastra pornita cu dublu-clic se inchide singura la iesire.
+// ownConsole: doar pe Windows o fereastra de consola e creata pentru HobStack (dublu-clic, pornire la login).
 func ownConsole() bool { return false }
+
+func hideConsole() {}
+
+func messageBox(string) {}
