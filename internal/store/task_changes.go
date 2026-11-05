@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"path/filepath"
 	"time"
 )
 
@@ -126,4 +127,41 @@ func (s *Store) CountTaskChanges(taskID int64) (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM task_changes WHERE task_id = ?`, taskID).Scan(&n)
 	return n, err
+}
+
+// AgentCreatedPaths: caile fisierelor create de agent (Write pe un fisier nou sau un fisier nou prin shell,
+// kind create), pe toate task-urile lui, cu "/" ca separator. Relative la folderul agentului cand sunt in el.
+func (s *Store) AgentCreatedPaths(agentID int64) (map[string]bool, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT path FROM task_changes WHERE agent_id = ? AND kind = 'create' AND path != ''`, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out[filepath.ToSlash(p)] = true
+	}
+	return out, rows.Err()
+}
+
+// AgentMkdirCommands: comenzile agentului care contin mkdir (un folder gol e al lui doar daca l-a creat el).
+func (s *Store) AgentMkdirCommands(agentID int64) ([]string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT command FROM task_changes WHERE agent_id = ? AND kind = 'command' AND command LIKE '%mkdir%'`, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

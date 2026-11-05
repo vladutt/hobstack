@@ -62,6 +62,10 @@ func (f *fakeBackend) AttachFiles(c Caller, task string, paths []string) (string
 	f.calls = append(f.calls, "attach|"+task+"|"+strings.Join(paths, ";"))
 	return "Attached 2 files.", f.err
 }
+func (f *fakeBackend) DeleteFiles(c Caller, paths []string) (string, error) {
+	return "deleted " + strings.Join(paths, ","), nil
+}
+
 func (f *fakeBackend) TickLeftForUser(c Caller, task string, items []int) (string, error) {
 	f.calls = append(f.calls, fmt.Sprint("tick|", task, "|", items))
 	return "ok", f.err

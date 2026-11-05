@@ -318,6 +318,9 @@ HobStack.app universal in HobStack-<v>.dmg (scripts/build-mac.sh, job `mac` pe m
 bundle-ul dupa update), PATH din shell-ul de login cand e pornit fara terminal. Linux: tray prin fyne.io/systray
 (StatusNotifierItem) si `hobstack install` / `uninstall` (meniu, Desktop, ~/.local/bin, datele langa exe). Dupa
 pornirea unei versiuni de release, <exe>.prev se sterge (selfupdate.CleanupPrevious).
+Gata (fisierele proprii, spec in docs/superpowers/specs/2026-11-05-hobstack-own-files-design.md): un agent sterge fara
+sa intrebe ce a creat el (task_changes kind create, in folderul lui, necommis in git): tool-ul MCP delete_files si, pentru
+un `rm` simplu oprit de Ask pe fisiere doar ale lui, HobStack sterge in locul lui fara card (team/own_files.go).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

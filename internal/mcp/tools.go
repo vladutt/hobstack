@@ -209,6 +209,17 @@ var tickLeftTool = Tool{
 	}),
 }
 
+var deleteFilesTool = Tool{
+	Name: "delete_files",
+	Description: "Deletes files or folders that you created yourself (for example scratch files, a temporary folder, " +
+		"build output you made), without asking the user. Use it instead of rm. It refuses anything you did not create, " +
+		"anything outside your folder and anything committed to git; for those, leave them or ask your lead.",
+	InputSchema: schema([]string{"paths"}, map[string]any{
+		"paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+			"description": "Paths relative to your folder (or absolute inside it), e.g. [\".scratch\", \"out/test.log\"]"},
+	}),
+}
+
 var commentTaskTool = Tool{
 	Name:        "comment_task",
 	Description: "Answers the user in a task's comments (for example after they gave you a value you left for them).",
@@ -434,6 +445,10 @@ func toolsFor(c Caller) []Tool {
 	}
 	if c.CanWrite {
 		out = append(out, proposeLibraryTool)
+		// pe un task, agentul isi poate sterge singur fisierele create de el
+		if c.TaskID != 0 {
+			out = append(out, deleteFilesTool)
+		}
 	}
 	// run fara task (chat, notificari): modificarile se fac doar pe task, pornit de agent
 	if c.TaskID == 0 {

@@ -85,6 +85,7 @@ type Backend interface {
 	AskDecisions(c Caller, task string, qs []DecisionInput) (string, error)
 	AttachFiles(c Caller, task string, paths []string) (string, error)
 	TickLeftForUser(c Caller, task string, items []int) (string, error)
+	DeleteFiles(c Caller, paths []string) (string, error)
 	CommentTask(c Caller, task, text string) (string, error)
 	ReviewApprove(c Caller, task, note string) (string, error)
 	ReviewReject(c Caller, task, feedback string) (string, error)
@@ -265,6 +266,8 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 				text += " " + extra
 			}
 		}
+	case "delete_files":
+		text, err = s.backend.DeleteFiles(c, argList(p.Arguments, "paths"))
 	case "tick_left_for_user":
 		text, err = s.backend.TickLeftForUser(c, arg("task"), argInts(p.Arguments, "items"))
 	case "comment_task":

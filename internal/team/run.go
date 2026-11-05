@@ -542,6 +542,15 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 			if cmd == "" {
 				cmd = d.Detail
 			}
+			// `rm` pe fisiere create chiar de agent: le sterge HobStack, fara card (o regula Block ramane Block)
+			if task != nil {
+				if targets, ok := rmTargets(cmd); ok && !blockedCommand(cmd, rules) {
+					if abs, err := t.ownTargets(a, home, targets); err == nil && len(abs) > 0 {
+						t.deleteOwn(task, a, home, abs)
+						continue
+					}
+				}
+			}
 			if hasShell {
 				// agent cu shell: regulile decid (block = fara cerere, ask = cerere pe prefix)
 				mode, pfx := prompt.MatchCommand(cmd, rules)
@@ -595,6 +604,15 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 	if recorded {
 		t.emit(ar.projectID, "access", map[string]any{"agentId": a.ID})
 	}
+}
+
+// blockedCommand: regula decisiva pentru comanda e Block (atunci nici fisierele proprii nu se sterg automat).
+func blockedCommand(cmd string, rules []store.CommandRule) bool {
+	mode, _ := prompt.MatchCommand(cmd, rules)
+	if mode != store.CmdBlock && mode != store.CmdAsk {
+		mode, _ = prompt.DenyingRule(cmd, rules)
+	}
+	return mode == store.CmdBlock
 }
 
 // writeOutside: refuzul e o scriere (Edit / Write...) pe o cale absoluta din afara
