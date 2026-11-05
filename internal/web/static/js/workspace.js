@@ -92,6 +92,7 @@ export async function workspaceView(root, projectId, route) {
     panel: route.tab === "team" ? "details" : "chat", // panoul din dreapta: "details" sau "chat"
     selected: null,   // agentul selectat (chat si detalii)
     seen: new Set(),  // id-urile mesajelor afisate in thread
+    delivered: new Set(), // mesajele vazute deja livrate (un raspuns vechi nu le mai pune "queued")
     agentFilter: null,  // doar task-urile unui agent; null = toti
     liveRunId: null,
     liveStream: null,
@@ -1696,6 +1697,9 @@ export async function workspaceView(root, projectId, route) {
   }
 
   function addMessage(m) {
+    // evenimentul "livrat" poate veni pe SSE inaintea raspunsului la POST (agent liber): livrarea nu se pierde
+    if (m.delivered) state.delivered.add(m.id);
+    else if (state.delivered.has(m.id)) m = { ...m, delivered: true };
     if (state.seen.has(m.id)) {
       // acelasi mesaj, stare noua (ex. livrat): il redesenam pe loc
       thread.querySelector(`[data-id="${m.id}"]`)?.replaceWith(messageNode(m));
