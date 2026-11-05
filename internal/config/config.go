@@ -41,6 +41,14 @@ func Default() (Paths, error) {
 		return Paths{}, err
 	}
 	root := filepath.Join(home, "."+AppName)
+	if dir := InstallDir(); dir != "" {
+		root = filepath.Join(dir, "data")
+	}
+	return PathsAt(home, root), nil
+}
+
+// PathsAt intoarce locatiile pentru datele din root.
+func PathsAt(home, root string) Paths {
 	return Paths{
 		Root: root,
 		DB:   filepath.Join(root, AppName+".db"),
@@ -48,7 +56,26 @@ func Default() (Paths, error) {
 
 		Projects:   filepath.Join(root, "projects"),
 		Workspaces: filepath.Join(home, "HobStack"),
-	}, nil
+	}
+}
+
+// InstallMarker: fisierul pus de installer langa exe; cu el, datele stau in <folder>/data, langa binar.
+const InstallMarker = AppName + ".portable"
+
+// InstallDir: folderul binarului daca HobStack e instalat cu installerul (are InstallMarker langa el), altfel "".
+func InstallDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	dir := filepath.Dir(exe)
+	if _, err := os.Stat(filepath.Join(dir, InstallMarker)); err != nil {
+		return ""
+	}
+	return dir
 }
 
 // Ensure creeaza folderele daca nu exista.

@@ -14,7 +14,10 @@ Download the archive for your system from [Releases](https://github.com/vladutt/
 
     ./hobstack start      # or just ./hobstack
 
-On Windows, unzip it and double-click `hobstack.exe`: the browser opens and HobStack keeps running in the background,
+On Windows the easiest is `HobStack-Setup-<version>.exe`: it installs for your user (no admin), lets you pick the
+folder, adds a desktop and Start menu shortcut and an uninstaller. HobStack then keeps its data (database, logs,
+project files, backups) in a `data` folder next to `hobstack.exe`; data from an earlier HobStack in `~/.hobstack`
+moves there the first time it starts. Without the installer, unzip the archive and double-click `hobstack.exe`: the browser opens and HobStack keeps running in the background,
 without a window (the log is in `~/.hobstack/hobstack.log`). Its H icon sits next to the clock: click it to open HobStack,
 right-click for Open / Quit. Starting it again opens the running one; you can also quit from Settings > App. It starts by itself when you log in (Windows, macOS, Linux);
 turn that off in Settings > App. If Windows SmartScreen warns about an unknown app,

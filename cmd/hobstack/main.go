@@ -44,6 +44,7 @@ const usage = `%[1]s - local Claude Code agent teams
 
 Usage:
   %[1]s start [--port 7777] [--no-open]
+  %[1]s quit [--force]
   %[1]s version
 `
 
@@ -53,17 +54,16 @@ func main() {
 		os.Args = append([]string{os.Args[0], "start"}, os.Args[1:]...)
 	}
 	// pe Windows, pornit cu dublu-clic sau la login: fara fereastra de consola; log-ul merge in fisier
-	background := os.Args[1] == "start" && ownConsole()
+	background = os.Args[1] == "start" && ownConsole()
 	if background {
-		if err := logToFile(); err != nil {
-			messageBox("HobStack cannot write its log: " + err.Error())
-		}
-		hideConsole()
+		hideConsole() // log-ul trece in fisier in start, dupa ce se stie folderul datelor
 	}
 	var err error
 	switch os.Args[1] {
 	case "start":
 		err = start(os.Args[2:])
+	case "quit":
+		os.Exit(quit(os.Args[2:]))
 	case "version", "--version", "-v":
 		// update-ul ruleaza si el comanda asta pe binarul descarcat, ca proba ca porneste pe masina asta
 		fmt.Println(config.Version)
@@ -91,12 +91,11 @@ func main() {
 	}
 }
 
-// logToFile trimite log-ul (si stdout / stderr) in ~/.hobstack/hobstack.log; peste 10 MB il muta in .1.
-func logToFile() error {
-	paths, err := config.Default()
-	if err != nil {
-		return err
-	}
+// background: pornit fara terminal (Windows, consola doar a lui): log-ul in fisier, erorile in MessageBox.
+var background bool
+
+// logToFile trimite log-ul (si stdout / stderr) in <date>/hobstack.log; peste 10 MB il muta in .1.
+func logToFile(paths config.Paths) error {
 	if err := os.MkdirAll(paths.Root, 0o755); err != nil {
 		return err
 	}
@@ -111,6 +110,79 @@ func logToFile() error {
 	log.SetOutput(f)
 	os.Stdout, os.Stderr = f, f
 	return nil
+}
+
+// prepareData alege folderul datelor si face mutarile o singura data: ~/.foreman -> ~/.hobstack (numele vechi),
+// apoi, instalat cu installerul, ~/.hobstack -> <folder>/data. Intoarce folderele vechi, pentru RewriteDataRoot.
+// Daca mutarea in folderul installerului nu merge (de ex. un HobStack vechi tine baza deschisa), ramane pe ~/.hobstack.
+func prepareData(home string) (config.Paths, []string, error) {
+	paths, err := config.Default()
+	if err != nil {
+		return config.Paths{}, nil, err
+	}
+	var moved []string
+	legacyRoot, err := config.MoveLegacyData(home)
+	if err != nil {
+		return config.Paths{}, nil, fmt.Errorf("moving data from %s: %w", legacyRoot, err)
+	}
+	if legacyRoot != "" {
+		moved = append(moved, legacyRoot)
+	}
+	if config.InstallDir() != "" {
+		old, err := config.MoveToInstall(home, paths.Root)
+		switch {
+		case err != nil:
+			log.Printf("keeping the data in ~/.%s: cannot move it next to HobStack: %v", config.AppName, err)
+			paths = config.PathsAt(home, filepath.Join(home, "."+config.AppName))
+		case old != "":
+			moved = append(moved, old)
+		}
+	}
+	return paths, moved, nil
+}
+
+// quit opreste HobStack-ul care ruleaza (installerul il cheama inainte sa inlocuiasca exe-ul).
+// Coduri: 0 = oprit sau nu rula, 2 = lucreaza agenti (fara --force), 1 = eroare.
+func quit(args []string) int {
+	fl := flag.NewFlagSet("quit", flag.ExitOnError)
+	port := fl.Int("port", 7777, "port of the running HobStack")
+	force := fl.Bool("force", false, "quit even if agents are working")
+	fl.Parse(args)
+	addr := fmt.Sprintf("127.0.0.1:%d", *port)
+	if !alreadyRunning(addr) {
+		return 0
+	}
+	body := `{"force":false}`
+	if *force {
+		body = `{"force":true}`
+	}
+	req, _ := http.NewRequest("POST", "http://"+addr+"/api/app/quit", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusNoContent:
+	case http.StatusConflict:
+		fmt.Println("agents are working; use --force to quit anyway")
+		return 2
+	default:
+		fmt.Fprintln(os.Stderr, "error: HobStack answered", resp.Status)
+		return 1
+	}
+	// asteptam sa elibereze portul (si fisierele), cel mult 30 s
+	for range 60 {
+		if ln, err := net.Listen("tcp", addr); err == nil {
+			ln.Close()
+			return 0
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	fmt.Fprintln(os.Stderr, "error: HobStack did not stop in 30 s")
+	return 1
 }
 
 // alreadyRunning: pe adresa raspunde deja un HobStack (pornit a doua oara, de ex. dublu-clic sau la login).
@@ -141,18 +213,27 @@ func start(args []string) error {
 	noOpen := fl.Bool("no-open", false, "don't open the browser automatically")
 	fl.Parse(args)
 
-	paths, err := config.Default()
-	if err != nil {
-		return err
+	// pornit a doua oara: deschidem HobStack-ul care ruleaza, inainte sa atingem datele
+	addr := fmt.Sprintf("127.0.0.1:%d", *port)
+	if alreadyRunning(addr) {
+		log.Printf("%s is already running at http://%s", config.DisplayName, addr)
+		if !*noOpen {
+			openBrowser("http://" + addr)
+		}
+		return nil
 	}
-	// aplicatia se numea foreman: datele din ~/.foreman se muta o data in folderul nou
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	legacyRoot, err := config.MoveLegacyData(home)
+	paths, movedFrom, err := prepareData(home)
 	if err != nil {
-		return fmt.Errorf("moving data from %s: %w", legacyRoot, err)
+		return err
+	}
+	if background {
+		if err := logToFile(paths); err != nil {
+			messageBox("HobStack cannot write its log: " + err.Error())
+		}
 	}
 	if err := paths.Ensure(); err != nil {
 		return fmt.Errorf("cannot create %s: %w", paths.Root, err)
@@ -167,12 +248,12 @@ func start(args []string) error {
 		return err
 	}
 	defer st.Close()
-	if legacyRoot != "" {
+	for _, old := range movedFrom {
 		// calea veche din instructiunile agentilor si din brief-uri devine cea noua
-		if err := st.RewriteDataRoot(legacyRoot, paths.Root); err != nil {
+		if err := st.RewriteDataRoot(old, paths.Root); err != nil {
 			return fmt.Errorf("updating paths after moving data: %w", err)
 		}
-		log.Printf("moved data from %s to %s", legacyRoot, paths.Root)
+		log.Printf("moved data from %s to %s", old, paths.Root)
 	}
 
 	// contextul se anuleaza la Ctrl+C / SIGTERM si ajunge in toate request-urile,
@@ -180,8 +261,7 @@ func start(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// deschidem portul primul, ca sa esuam clar daca e ocupat
-	addr := fmt.Sprintf("127.0.0.1:%d", *port)
+	// portul: ocupat de altceva decat HobStack = eroare clara
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		if alreadyRunning(addr) {
@@ -262,6 +342,9 @@ func start(args []string) error {
 		webSrv.SetApp(exe, home, paths.Root, logFile, stop)
 		// o versiune oficiala porneste la login de la sine, pana cand utilizatorul alege altfel in Settings;
 		// build-urile locale (dev, git describe) nu, ca sa nu lege login-ul de un binar de lucru
+		if config.InstallDir() != "" && releaseVersion.MatchString(config.Version) {
+			autostart.SetInstalledVersion(config.Version) // Add/Remove Programs dupa un update din aplicatie
+		}
 		if releaseVersion.MatchString(config.Version) {
 			if on, err := autostart.Default(paths.Root, home, exe, logFile); err != nil {
 				log.Printf("start at login: %v", err)

@@ -43,3 +43,19 @@ cu terminalul deschis ca sa mearga".
   ea marcajul, deci o debifare ramane. Build-urile locale nu o activeaza singure.
 - Quit HobStack: POST /api/app/quit; cu agenti care ruleaza cere confirmare (force), task-urile revin in coada la
   urmatoarea pornire. API: GET /api/app, PUT /api/app/autostart.
+
+## Installer Windows (cerut: "mini install: sa aleaga unde merge .exe-ul, langa exe log-urile si restul, iconita pe desktop")
+
+- installer/hobstack.nsi (NSIS 3, MUI2), construit de scripts/build-release.sh cu makensis (in CI din apt, obligatoriu
+  prin REQUIRE_INSTALLER=1; local doar daca exista): HobStack-Setup-<ver>.exe in release si in checksums.txt.
+- Pentru utilizatorul curent, fara admin: implicit %LOCALAPPDATA%\Programs\HobStack, folderul se alege. Pagini:
+  Welcome, Directory, Components (Desktop shortcut, Start menu shortcut, bifate), Install, Finish ("Start HobStack").
+- Inainte sa copieze, exe-ul nou (din $PLUGINSDIR) ruleaza `hobstack quit`: opreste HobStack-ul de pe port, oricare
+  ar fi (si o versiune veche pornita din zip); cod 2 = lucreaza agenti -> intreaba, apoi `quit --force`.
+- Scrie hobstack.portable langa exe: config.InstallDir() il vede si datele stau in <folder>\data (config.Default).
+  La prima pornire config.MoveToInstall muta ~/.hobstack acolo (doar daca acolo nu e o baza; la eroare ramane pe
+  ~/.hobstack), apoi RewriteDataRoot pe caile vechi.
+- Add/Remove Programs (HKCU\...\Uninstall\HobStack); dupa un update din aplicatie DisplayVersion se actualizeaza
+  (autostart.SetInstalledVersion). Uninstall: opreste HobStack, sterge cheia Run, scurtaturile si fisierele; datele
+  doar daca raspunzi Da (implicit Nu).
+- `hobstack quit [--force]`: POST /api/app/quit, asteapta pana se elibereaza portul (30 s); 0 / 2 / 1.

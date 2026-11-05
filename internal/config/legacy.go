@@ -41,3 +41,37 @@ func MoveLegacyData(home string) (string, error) {
 	_ = os.Symlink(newRoot, oldRoot)
 	return oldRoot, nil
 }
+
+// MoveToInstall muta o singura data datele din ~/.hobstack in folderul installerului (root = <folder>/data),
+// cand acolo nu e inca o baza de date. Intoarce folderul vechi daca a mutat ceva. La eroare (de ex. un HobStack
+// vechi tine baza deschisa) nu schimba nimic: apelantul ramane pe folderul vechi.
+func MoveToInstall(home, root string) (string, error) {
+	oldRoot := filepath.Join(home, "."+AppName)
+	if filepath.Clean(oldRoot) == filepath.Clean(root) {
+		return "", nil
+	}
+	if _, err := os.Stat(filepath.Join(root, AppName+".db")); err == nil {
+		return "", nil // instalarea are deja datele ei
+	}
+	fi, err := os.Lstat(oldRoot)
+	if err != nil || !fi.IsDir() {
+		return "", nil // nimic de mutat
+	}
+	if _, err := os.Stat(filepath.Join(oldRoot, AppName+".db")); err != nil {
+		return "", nil
+	}
+	// un folder data gol (creat de o pornire anterioara) nu trebuie sa blocheze mutarea
+	if entries, err := os.ReadDir(root); err == nil {
+		if len(entries) > 0 {
+			return "", errors.New(root + " already has files; leaving the data in " + oldRoot)
+		}
+		os.Remove(root)
+	}
+	if err := os.MkdirAll(filepath.Dir(root), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.Rename(oldRoot, root); err != nil {
+		return "", err
+	}
+	return oldRoot, nil
+}

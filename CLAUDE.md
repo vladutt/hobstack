@@ -308,7 +308,10 @@ assets/hobstack.ico + cmd/hobstack/rsrc_windows_amd64.syso (scripts/winres, doar
 doar a lui, HobStack o ascunde si scrie in ~/.hobstack/hobstack.log (erorile in MessageBox); pornit a doua oara deschide instanta
 care ruleaza; iconita langa ceas (cmd/hobstack/tray_windows.go, Shell_NotifyIconW: clic = Open, meniu Open / Quit).
 internal/autostart (Run key / LaunchAgent app.hobstack / XDG autostart; pornita implicit o data de o versiune de release,
-marcajul ~/.hobstack/autostart-chosen pastreaza alegerea) si Quit in Settings > App (/api/app*).
+marcajul autostart-chosen din folderul datelor pastreaza alegerea) si Quit in Settings > App (/api/app*).
+Installer Windows: installer/hobstack.nsi (NSIS, fara admin, folder la alegere, scurtaturi Desktop / Start menu, uninstaller),
+construit in scripts/build-release.sh; hobstack.portable langa exe = datele in <folder>/data (config.InstallDir, o mutare
+din ~/.hobstack prin config.MoveToInstall); `hobstack quit [--force]` opreste instanta care ruleaza.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
