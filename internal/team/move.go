@@ -185,6 +185,17 @@ func (t *Team) closeTask(task store.Task, agents []store.Agent, reason string) e
 func (t *Team) reopenTask(task store.Task, agents []store.Agent, st *store.Stage, reason string) error {
 	task.Status, task.ReviewStage, task.SendBacks, task.Escalated = store.StatusQueued, store.StageNone, 0, false
 	task.Feedback = reason
+	if _, ok := store.FindAgent(agents, task.AssigneeID); st == nil && !ok {
+		// agentul care l-a facut a fost sters: task-ul asteapta sa-l dai cuiva (Assign merge pe Blocked)
+		task.Status = store.StatusBlocked
+		task.StageID, task.ViaStages = nil, false
+		if err := t.st.SaveTask(&task); err != nil {
+			return err
+		}
+		t.taskEvent(task, "reopened", actorUser, "You reopened it: "+reason+". Its agent was deleted; assign it to an agent.")
+		t.emit(task.ProjectID, "task", task)
+		return nil
+	}
 	if st != nil {
 		task.StageID = &st.ID
 		task.AssigneeID = placeholder(*st, task.AssigneeID)

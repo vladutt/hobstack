@@ -126,8 +126,12 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "the agent is working now; stop the team before deleting it")
 		return
 	}
+	var open store.OpenTasksError
 	if err := s.st.DeleteAgent(id); errors.Is(err, store.ErrConflict) {
-		writeErr(w, http.StatusConflict, "agents with tasks and the last agent in the project cannot be deleted")
+		writeErr(w, http.StatusConflict, "the last agent in the project cannot be deleted")
+		return
+	} else if errors.As(err, &open) {
+		writeErr(w, http.StatusConflict, open.Error())
 		return
 	} else if err != nil {
 		fail(w, err)

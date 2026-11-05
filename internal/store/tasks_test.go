@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,17 +72,46 @@ func TestSaveTaskAndRequeue(t *testing.T) {
 	}
 }
 
-func TestDeleteAgentWithTasksRejected(t *testing.T) {
+func TestDeleteAgentWithTasks(t *testing.T) {
 	s := newStore(t)
 	p, _ := newProject(t, s)
 	w := newWorker(t, s, p.ID, "Rook")
-	s.CreateTask(&Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID})
-	if err := s.DeleteAgent(w.ID); !errors.Is(err, ErrConflict) {
-		t.Fatalf("stergere worker cu task-uri: %v", err)
+	open := Task{ProjectID: p.ID, Title: "A", AssigneeID: w.ID}
+	s.CreateTask(&open)
+	// task neterminat: nu se poate
+	var ot OpenTasksError
+	if err := s.DeleteAgent(w.ID); !errors.As(err, &ot) || !strings.Contains(ot.Error(), "T-1") {
+		t.Fatalf("worker with an open task: %v", err)
 	}
+	// task gata: agentul se marcheaza sters, task-ul ramane (neasignat in echipa)
+	open.Status = StatusDone
+	if err := s.SaveTask(&open); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteAgent(w.ID); err != nil {
+		t.Fatalf("worker with done tasks: %v", err)
+	}
+	agents, _ := s.ListAgents(p.ID)
+	for _, a := range agents {
+		if a.ID == w.ID {
+			t.Fatal("the deleted agent is still in the team")
+		}
+	}
+	if got, err := s.GetTask(open.ID); err != nil || got.AssigneeID != w.ID {
+		t.Fatalf("the done task changed: %+v %v", got, err)
+	}
+	// numele e liber pentru un agent nou
+	again := newWorker(t, s, p.ID, "Rook")
+	if again.ID == w.ID {
+		t.Fatal("same id")
+	}
+	// fara task-uri: randul se sterge
 	free := newWorker(t, s, p.ID, "Vera")
 	if err := s.DeleteAgent(free.ID); err != nil {
-		t.Fatalf("stergere worker liber: %v", err)
+		t.Fatalf("free worker: %v", err)
+	}
+	if _, err := s.GetAgent(free.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("free worker row: %v", err)
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -32,18 +34,19 @@ type Agent struct {
 	Responsibilities string   `json:"responsibilities"` // "Ce ia"
 	PosX             *float64 `json:"posX"`             // nil = asezare automata pe canvas
 	PosY             *float64 `json:"posY"`
-	FolderID         *int64   `json:"folderId"`  // nil = primul folder al proiectului
-	CreatedBy        *int64   `json:"createdBy"` // liderul care l-a adaugat (add_agent); nil = utilizatorul sau wizard-ul
+	FolderID         *int64   `json:"folderId"`          // nil = primul folder al proiectului
+	CreatedBy        *int64   `json:"createdBy"`         // liderul care l-a adaugat (add_agent); nil = utilizatorul sau wizard-ul
+	Deleted          bool     `json:"deleted,omitempty"` // sters, pastrat doar pentru task-urile lui gata (DeleteAgent)
 }
 
-const agentCols = `id, project_id, name, role, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y, detached, folder_id, created_by`
+const agentCols = `id, project_id, name, role, model, background, instructions, done_def, tools, session_id, prompt_hash, created_at, parent_id, reviewer_id, responsibilities, pos_x, pos_y, detached, folder_id, created_by, deleted`
 
 func scanAgent(sc scanner) (Agent, error) {
 	var a Agent
 	var tools, created string
 	err := sc.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Role, &a.Model, &a.Background,
 		&a.Instructions, &a.DoneDef, &tools, &a.SessionID, &a.PromptHash, &created,
-		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY, &a.Detached, &a.FolderID, &a.CreatedBy)
+		&a.ParentID, &a.ReviewerID, &a.Responsibilities, &a.PosX, &a.PosY, &a.Detached, &a.FolderID, &a.CreatedBy, &a.Deleted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Agent{}, ErrNotFound
 	}
@@ -176,7 +179,7 @@ func (s *Store) GetAgent(id int64) (Agent, error) {
 // ListAgents intoarce echipa proiectului: radacinile primele, apoi nelegatii,
 // apoi restul, in ordinea adaugarii.
 func (s *Store) ListAgents(projectID int64) ([]Agent, error) {
-	rows, err := s.db.Query(`SELECT `+agentCols+` FROM agents WHERE project_id = ?
+	rows, err := s.db.Query(`SELECT `+agentCols+` FROM agents WHERE project_id = ? AND deleted = 0
 		ORDER BY parent_id IS NOT NULL, detached, id`, projectID)
 	if err != nil {
 		return nil, err
@@ -196,7 +199,7 @@ func (s *Store) ListAgents(projectID int64) ([]Agent, error) {
 // FindAgentByName cauta dupa nume fara diferenta intre litere mari si mici.
 func (s *Store) FindAgentByName(projectID int64, name string) (Agent, error) {
 	return scanAgent(s.db.QueryRow(`SELECT `+agentCols+` FROM agents
-		WHERE project_id = ? AND name = ? COLLATE NOCASE`, projectID, name))
+		WHERE project_id = ? AND deleted = 0 AND name = ? COLLATE NOCASE`, projectID, name))
 }
 
 // UpdateAgent salveaza campurile editabile si legaturile (dupa checkLinks).
@@ -229,36 +232,75 @@ func (s *Store) SetAgentPosition(id int64, x, y float64) error {
 	return mustAffect(s.db.Exec(`UPDATE agents SET pos_x = ?, pos_y = ? WHERE id = ?`, x, y, id))
 }
 
-// DeleteAgent sterge un agent. Copiii lui trec la seful lui; daca nu avea sef,
-// raman nelegati. Cei pe care ii verifica raman fara reviewer. Agentii cu
-// task-uri si ultimul agent din proiect nu se pot sterge (ErrConflict).
+// OpenTasksError: agentul are task-uri neterminate; mesajul le numeste.
+type OpenTasksError string
+
+func (e OpenTasksError) Error() string { return string(e) }
+
+// DeleteAgent sterge un agent. Copiii lui trec la seful lui; daca nu avea sef, raman nelegati. Cei pe care ii
+// verifica raman fara reviewer. Fara niciun task, randul se sterge. Cu task-uri doar terminate (done, sterse
+// dupa ce erau gata), agentul se marcheaza deleted: task-urile il pastreaza ca assignee_id, dar el nu mai apare in
+// echipa (ListAgents), iar numele i se elibereaza; sarcinile recurente raman fara asignat. Task-urile
+// neterminate ale lui -> OpenTasksError; ultimul agent din proiect -> ErrConflict.
 func (s *Store) DeleteAgent(id int64) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	a, err := scanAgent(tx.QueryRow(`SELECT `+agentCols+` FROM agents WHERE id = ?`, id))
+	a, err := scanAgent(tx.QueryRow(`SELECT `+agentCols+` FROM agents WHERE id = ? AND deleted = 0`, id))
 	if err != nil {
 		return err
 	}
-	var tasks, others int
+	var others int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM agents WHERE project_id = ? AND id != ? AND deleted = 0`, a.ProjectID, id).Scan(&others); err != nil {
+		return err
+	}
+	if others == 0 {
+		return ErrConflict
+	}
+	// neterminate: orice status in afara de done, si cele sterse care nu erau gata (Restore le-ar readuce)
+	open, err := tx.Query(`SELECT number FROM tasks WHERE assignee_id = ?
+		AND status != 'done' AND NOT (status = 'archived' AND archived_from = 'done') ORDER BY number LIMIT 6`, id)
+	if err != nil {
+		return err
+	}
+	var refs []string
+	for open.Next() {
+		var n int
+		if err := open.Scan(&n); err != nil {
+			open.Close()
+			return err
+		}
+		refs = append(refs, fmt.Sprintf("T-%d", n))
+	}
+	open.Close()
+	if len(refs) > 0 {
+		return OpenTasksError(fmt.Sprintf("%s still has tasks that are not done: %s. Finish, move or delete them first.", a.Name, strings.Join(refs, ", ")))
+	}
+	var tasks int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM tasks WHERE assignee_id = ?`, id).Scan(&tasks); err != nil {
 		return err
 	}
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM agents WHERE project_id = ? AND id != ?`, a.ProjectID, id).Scan(&others); err != nil {
-		return err
-	}
-	if tasks > 0 || others == 0 {
-		return ErrConflict
-	}
-	if _, err := tx.Exec(`UPDATE agents SET parent_id = ?, detached = ? WHERE parent_id = ?`, nullPtr(a.ParentID), a.ParentID == nil, id); err != nil {
+	if _, err := tx.Exec(`UPDATE agents SET parent_id = ?, detached = ? WHERE parent_id = ? AND deleted = 0`, nullPtr(a.ParentID), a.ParentID == nil, id); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE agents SET reviewer_id = NULL WHERE reviewer_id = ?`, id); err != nil {
 		return err
 	}
-	if err := mustAffect(tx.Exec(`DELETE FROM agents WHERE id = ?`, id)); err != nil {
+	if tasks == 0 {
+		if err := mustAffect(tx.Exec(`DELETE FROM agents WHERE id = ?`, id)); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	// task-uri terminate: agentul ramane doar pentru istoric, numele se elibereaza (indexul unic pe nume);
+	// sarcinile recurente raman fara asignat, ca la stergerea randului (ON DELETE SET NULL)
+	if _, err := tx.Exec(`UPDATE recurring_tasks SET assignee_id = NULL WHERE assignee_id = ?`, id); err != nil {
+		return err
+	}
+	if err := mustAffect(tx.Exec(`UPDATE agents SET deleted = 1, detached = 1, parent_id = NULL, reviewer_id = NULL,
+		session_id = '', name = name || ' (deleted ' || id || ')' WHERE id = ?`, id)); err != nil {
 		return err
 	}
 	return tx.Commit()

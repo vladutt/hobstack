@@ -324,6 +324,10 @@ un `rm` simplu oprit de Ask pe fisiere doar ale lui, HobStack sterge in locul lu
 Gata (chat curat): notificarile echipei (KindEvent: aprobari, rapoarte, trimiteri inapoi) apar in chat doar ca un rand
 scurt (pana la primul ": ", max 200; workspace.js eventNode), cu T-N clicabil spre task; textul intreg ramane in
 Conversation pe task. Blocurile de cod din markdown si din mesajele utilizatorului au butonul Copy (md.js codeBlock).
+Gata (stergerea agentilor cu task-uri gata, spec in docs/superpowers/specs/2026-11-05-hobstack-delete-agents-design.md):
+agents.deleted (migrarea 034); store.DeleteAgent sterge randul fara task-uri, marcheaza deleted (si elibereaza numele) cu
+task-uri doar done, refuza cu OpenTasksError (T-N) altfel; ListAgents ii ascunde, task-urile lui apar neasignate, redeschise
+devin Blocked. Board fara filtrele All tasks / Mine / foldere; clic pe agent in Team = sertarul pe Chat.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

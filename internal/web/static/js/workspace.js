@@ -1,6 +1,6 @@
 import { workRequestBox } from "./project-requests.js";
 import { api, upload } from "./api.js";
-import { el, avatar, toast, clock, kindOf, agentBody, folderOf, field, topbar } from "./ui.js";
+import { el, avatar, toast, clock, kindOf, agentBody, field, topbar } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
 import { liveRenderer } from "./live.js";
@@ -89,8 +89,6 @@ export async function workspaceView(root, projectId, route) {
     panel: route.tab === "team" ? "details" : "chat", // panoul din dreapta: "details" sau "chat"
     selected: null,   // agentul selectat (chat si detalii)
     seen: new Set(),  // id-urile mesajelor afisate in thread
-    folderFilter: null, // id-ul folderului filtrat pe board; null = toate
-    mine: false,        // doar task-urile create de utilizator (din board / recurente)
     agentFilter: null,  // doar task-urile unui agent; null = toti
     liveRunId: null,
     liveStream: null,
@@ -155,7 +153,8 @@ export async function workspaceView(root, projectId, route) {
   let accountKey = null;   // eroarea contului desenata ultima data
   let accessKey = null;    // id:count ale cererilor de acces desenate ultima data
   const canvas = teamCanvas({
-    onSelect: (id) => select(id),
+    // clic pe un agent: sertarul se deschide cu chat-ul lui (dublu-clic = detaliile)
+    onSelect: (id) => { setDrawer(true); select(id, "chat"); },
     onEdit: (id) => select(id, "details"),
     onChanged: () => reload(),
     onCreate: (pos, link) => createAgent(pos, link),
@@ -171,7 +170,7 @@ export async function workspaceView(root, projectId, route) {
   const boardTools = el("div", { class: "actions" }); // Recurring, Coloane
   const pausedNote = el("span", { class: "paused-note", hidden: true });
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
-  const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter by folder" });
+  const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter tasks" });
   // avatarele echipei, langa filtre: click = chat cu agentul; peste TEAM_SHOWN agenti, ultimul e "+N" cu restul in lista
   const teamBox = el("div", { class: "board-team", role: "group", "aria-label": "Team" });
   let teamKey = null; // ce s-a desenat ultima data (lista ramane deschisa intre refresh-uri)
@@ -606,7 +605,7 @@ export async function workspaceView(root, projectId, route) {
   // deleteAgent: butonul x de pe nod
   async function deleteAgent(id) {
     const a = state.project.agents.find((x) => x.id === id);
-    if (!a || !confirm(`Delete agent ${a.name}?`)) return;
+    if (!a || !confirm(`Delete agent ${a.name}? Its finished tasks stay on the board, without an assignee.`)) return;
     try {
       await api(`/api/agents/${id}`, { method: "DELETE" });
     } catch (err) {
@@ -790,18 +789,7 @@ export async function workspaceView(root, projectId, route) {
     const p = state.project;
     const byId = new Map(p.agents.map((a) => [a.id, a]));
     const stages = p.stages || [];
-    const folders = p.folders || [];
-    if (!folders.some((f) => f.id === state.folderFilter)) state.folderFilter = null;
     if (!p.agents.some((a) => a.id === state.agentFilter)) state.agentFilter = null;
-    const chip = (id, label) => el("button", {
-      type: "button", class: "seg" + (state.folderFilter === id && (id !== null || (!state.mine && !state.agentFilter)) ? " active" : ""),
-      "aria-pressed": String(state.folderFilter === id),
-      onclick: () => { state.folderFilter = id; if (id === null) { state.mine = false; state.agentFilter = null; } renderBoard(); },
-    }, label);
-    const mineChip = el("button", {
-      type: "button", class: "seg" + (state.mine ? " active" : ""), "aria-pressed": String(state.mine),
-      title: "Tasks you created", onclick: () => { state.mine = !state.mine; renderBoard(); },
-    }, "Mine");
     // Filter: agentul ales; meniul e un <details> nou la fiecare desenare, deci se inchide singur
     const who = p.agents.find((a) => a.id === state.agentFilter);
     const filter = el("details", { class: "menu board-filter" },
@@ -812,16 +800,12 @@ export async function workspaceView(root, projectId, route) {
           type: "button", class: "filter-item" + ((a?.id ?? null) === state.agentFilter ? " on" : ""),
           onclick: () => { state.agentFilter = a ? a.id : null; renderBoard(); },
         }, a ? [avatar(a.name, kindOf(a), 20), a.name] : "Everyone"))));
-    folderChips.replaceChildren(chip(null, "All tasks"), mineChip,
-      ...(folders.length > 1 ? folders.map((f) => chip(f.id, f.name)) : []), filter);
+    folderChips.replaceChildren(filter); // doar Filter (agentul): All tasks / Mine / folderele au fost scoase
     renderTeamFaces(p.agents);
     pausedNote.hidden = !p.paused;
     pausedNote.replaceChildren(el("span", { class: "dot" }), "Paused: agents answer messages but don't pick up tasks. ",
       el("button", { type: "button", class: "link-btn", onclick: () => projectAction("resume") }, "Start team"));
-    // task-urile fara agent apar mereu; celelalte dupa folderul agentului
-    const passes = (t) => (!state.folderFilter || !t.assigneeId ||
-      folderOf(p, byId.get(t.assigneeId))?.id === state.folderFilter) &&
-      (!state.mine || t.byUser) && (!state.agentFilter || t.assigneeId === state.agentFilter);
+    const passes = (t) => !state.agentFilter || t.assigneeId === state.agentFilter;
     // doar in Done task-urile se grupeaza (arbore sau fir de lucru, din task-urile gata); in
     // celelalte coloane fiecare task are cardul lui, in coloana statusului sau
     const single = (t) => ({ root: t, subs: [], follows: [] });

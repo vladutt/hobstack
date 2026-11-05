@@ -60,7 +60,7 @@ func (s *Server) getTask(w http.ResponseWriter, r *http.Request) {
 		events = []store.TaskEvent{{TaskID: id, At: task.CreatedAt, Kind: "created", Text: "Created"}}
 	}
 	assignee := ""
-	if a, err := s.st.GetAgent(task.AssigneeID); err == nil {
+	if a, err := s.st.GetAgent(task.AssigneeID); err == nil && !a.Deleted { // agent sters: neasignat
 		assignee = a.Name
 	}
 	stage := ""
