@@ -1755,3 +1755,9 @@ pre.upd-error, pre.upd-note { font: 12px/1.5 var(--mono); background: var(--deep
 .copy-buffer { position: fixed; left: -9999px; top: 0; }
 .event a.event-task { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .event a.event-task:hover { color: var(--text); }
+
+/* cautarea pe board (workspace.js taskSearch) */
+input.task-search { flex: none; width: 220px; max-width: 100%; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--card); border: 1px solid transparent;
+  color: var(--text); font: 13.5px var(--sans); }
+input.task-search:focus { border-color: var(--amber); outline: none; }
+@media (max-width: 640px) { input.task-search { flex: 1 1 100%; width: 100%; } }

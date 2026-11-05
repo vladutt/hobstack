@@ -41,6 +41,9 @@ const ref = (t) => `T-${t.number}`;
 
 // Coloana Done arata la inceput atatea carduri; "Show N more" le aduce pe toate.
 const DONE_PAGE = 12;
+
+// fold: litere mici, fara diacritice (cautarea pe board: "sterge" gaseste "Șterge")
+const fold = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 // Cati agenti se vad langa filtrele board-ului; peste, ultimul loc e "+N" cu lista restului.
 const TEAM_SHOWN = 5;
 
@@ -97,6 +100,7 @@ export async function workspaceView(root, projectId, route) {
     // panoul din dreapta (chat / detalii) e deschis; pe Echipa cu un agent in adresa se deschide singur
     drawer: route.tab === "team" && !!route.agentId || savedDrawer(),
     doneShown: DONE_PAGE, // cate carduri arata coloana Done (restul sub "Show N more")
+    query: "",            // cautarea pe board (titlu sau T-N)
   };
   // butoanele "Deschide": create o singura data si mutate in header la fiecare
   // redesenare, ca selectia de editor sa nu se piarda
@@ -171,6 +175,12 @@ export async function workspaceView(root, projectId, route) {
   const pausedNote = el("span", { class: "paused-note", hidden: true });
   const editorSlot = el("div"); // editorul de coloane, deschis la cerere
   const folderChips = el("div", { class: "folder-chips", role: "group", "aria-label": "Filter tasks" });
+  // cautarea dupa titlu (sau numar: T-215 / 215); campul ramane acelasi intre redesenari, ca sa nu piarda focusul
+  const taskSearch = el("input", { type: "search", class: "task-search", placeholder: "Search tasks", "aria-label": "Search tasks by title" });
+  taskSearch.addEventListener("input", () => { state.query = taskSearch.value; renderBoard(); });
+  taskSearch.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && taskSearch.value) { e.stopPropagation(); taskSearch.value = ""; state.query = ""; renderBoard(); }
+  });
   // avatarele echipei, langa filtre: click = chat cu agentul; peste TEAM_SHOWN agenti, ultimul e "+N" cu restul in lista
   const teamBox = el("div", { class: "board-team", role: "group", "aria-label": "Team" });
   let teamKey = null; // ce s-a desenat ultima data (lista ramane deschisa intre refresh-uri)
@@ -261,7 +271,7 @@ export async function workspaceView(root, projectId, route) {
   const bodies = {
     "team": el("div", { class: "tab-body team-body" }, canvas.el),
     "tasks": el("section", { class: "tab-body tasks-body" },
-      el("div", { class: "board-toolbar" }, folderChips, teamBox, pausedNote, el("span", { class: "grow" }), boardTools, count),
+      el("div", { class: "board-toolbar" }, taskSearch, folderChips, teamBox, pausedNote, el("span", { class: "grow" }), boardTools, count),
       editorSlot,
       el("div", { class: "board-row" }, needsBox, board),
       boardHint),
@@ -805,7 +815,10 @@ export async function workspaceView(root, projectId, route) {
     pausedNote.hidden = !p.paused;
     pausedNote.replaceChildren(el("span", { class: "dot" }), "Paused: agents answer messages but don't pick up tasks. ",
       el("button", { type: "button", class: "link-btn", onclick: () => projectAction("resume") }, "Start team"));
-    const passes = (t) => !state.agentFilter || t.assigneeId === state.agentFilter;
+    const q = fold(state.query.trim());
+    const num = /^(?:t-?)?(\d+)$/.exec(q)?.[1];
+    const matches = (t) => !q || fold(t.title).includes(q) || (num && String(t.number) === num);
+    const passes = (t) => (!state.agentFilter || t.assigneeId === state.agentFilter) && matches(t);
     // doar in Done task-urile se grupeaza (arbore sau fir de lucru, din task-urile gata); in
     // celelalte coloane fiecare task are cardul lui, in coloana statusului sau
     const single = (t) => ({ root: t, subs: [], follows: [] });
@@ -883,7 +896,7 @@ export async function workspaceView(root, projectId, route) {
   // opts.target: ce inseamna sa lasi un card aici ("queued" | "done" | "stage:<id>"); lipsa = nu primeste carduri.
   function column(title, items, byId, stage, opts = {}) {
     const agents = stage ? stage.agentIds.map((id) => byId.get(id)).filter(Boolean) : [];
-    const visible = opts.page ? items.slice(0, state.doneShown) : items;
+    const visible = opts.page && !state.query.trim() ? items.slice(0, state.doneShown) : items; // cu cautare: toate
     const hidden = items.length - visible.length;
     const target = opts.target || null;
     return el("div", {

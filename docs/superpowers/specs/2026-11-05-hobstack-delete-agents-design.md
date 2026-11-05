@@ -22,3 +22,6 @@ board); "in team cand dau pe un agent sa-mi deschida sertarul cu chat-ul cu el".
 
 - Board: au disparut butoanele All tasks, Mine si cele pe foldere; ramane Filter (asignatul) si avatarele.
 - Team: clic pe un agent pe canvas deschide sertarul pe Chat (dublu-clic = Details).
+- Cautare pe board ("posibilitatea sa cautam un task dupa titlu"): campul Search tasks din bara board-ului; titlul se
+  compara fara diacritice si litere mari, "T-215" / "215" gaseste numarul; Esc goleste. Coloana Done arata toate
+  potrivirile cat timp e o cautare.

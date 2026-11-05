@@ -328,6 +328,8 @@ Gata (stergerea agentilor cu task-uri gata, spec in docs/superpowers/specs/2026-
 agents.deleted (migrarea 034); store.DeleteAgent sterge randul fara task-uri, marcheaza deleted (si elibereaza numele) cu
 task-uri doar done, refuza cu OpenTasksError (T-N) altfel; ListAgents ii ascunde, task-urile lui apar neasignate, redeschise
 devin Blocked. Board fara filtrele All tasks / Mine / foldere; clic pe agent in Team = sertarul pe Chat.
+Cautare pe board (workspace.js taskSearch): titlu fara diacritice / litere mari sau numar (T-215, 215), Esc goleste; cu
+cautare, Done arata toate potrivirile (fara "Show N more").
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
