@@ -42,6 +42,7 @@ type Change struct {
 	Kind      string // create, edit, delete
 	Patch     []Hunk
 	Truncated bool // fara diff complet (binar, prea mare, prea lung)
+	Committed bool // doar intrat intr-un commit facut in run (era deja modificat la pornire); Patch = diff-ul din commit
 }
 
 // state: un fisier la pornire. hash "" = nu exista.
@@ -118,12 +119,19 @@ func (s *Snapshot) Changes(skip map[string]bool) ([]Change, error) {
 		cand[p] = true
 	}
 	// commit-uri facute in run (git commit, checkout, reset): fisierele dintre HEAD-ul vechi si cel nou
+	newHead := ""
+	committed := map[string]bool{} // fisierele din commit-urile noi (HEAD-ul nou descinde din cel vechi)
 	if head, err := git(ctx, s.dir, nil, "rev-parse", "-q", "--verify", "HEAD"); err == nil && s.head != "" {
 		if h := strings.TrimSpace(string(head)); h != s.head {
 			out, err := git(ctx, s.dir, nil, "diff", "--name-only", "-z", "--no-renames", s.head, h, "--", ".")
 			if err == nil {
+				_, notAncestor := git(ctx, s.dir, nil, "merge-base", "--is-ancestor", s.head, h)
 				for _, p := range splitZ(out) {
 					cand[s.rel(p)] = true
+					if notAncestor == nil {
+						committed[s.rel(p)] = true
+						newHead = h
+					}
 				}
 			}
 		}
@@ -163,7 +171,18 @@ func (s *Snapshot) Changes(skip map[string]bool) ([]Change, error) {
 			before = state{hash: headHash[p]}
 		}
 		after := nowHash[p]
-		if before.hash == after || before.hash == other || after == other {
+		if before.hash == other || after == other {
+			continue
+		}
+		if before.hash == after {
+			// continutul nu s-a schimbat in run, dar fisierul a intrat intr-un commit facut in run
+			// (ex. un task care doar face commit pe munca altuia): diff-ul din commit
+			if !committed[p] || len(out) == MaxFiles {
+				continue
+			}
+			if c, ok := s.commitChange(ctx, p, newHead); ok {
+				out = append(out, c)
+			}
 			continue
 		}
 		if len(out) == MaxFiles {
@@ -307,6 +326,34 @@ func (s *Snapshot) diff(ctx context.Context, tmp, p string, before state, after 
 		return nil, true
 	}
 	return parseHunks(out)
+}
+
+// commitChange: fisierul p intre HEAD-ul de la pornire si head (diff-ul pe care l-au adus commit-urile din run).
+// ok = false cand commit-urile nu schimba fisierul.
+func (s *Snapshot) commitChange(ctx context.Context, p, head string) (Change, bool) {
+	olds, err := s.headBlobs(ctx, []string{p})
+	if err != nil {
+		return Change{}, false
+	}
+	news, err := (&Snapshot{dir: s.dir, prefix: s.prefix, head: head}).headBlobs(ctx, []string{p})
+	if err != nil || olds[p] == news[p] {
+		return Change{}, false
+	}
+	c := Change{Path: p, Kind: "edit", Committed: true}
+	switch {
+	case olds[p] == "":
+		c.Kind = "create"
+	case news[p] == "":
+		c.Kind = "delete"
+	}
+	// pathspec-ul e relativ la folder (cwd-ul comenzii)
+	out, err := git(ctx, s.dir, nil, "diff", "--no-color", "--no-ext-diff", "--no-renames", "-U3", s.head, head, "--", p)
+	if err != nil {
+		c.Truncated = true
+		return c, true
+	}
+	c.Patch, c.Truncated = parseHunks(out)
+	return c, true
 }
 
 // blob: continutul unui blob (pentru fisierele curate la pornire); peste 1 MB eroare.

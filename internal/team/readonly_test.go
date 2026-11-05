@@ -40,15 +40,15 @@ func TestChatRunIsReadOnly(t *testing.T) {
 	f := setup(t)
 	f.rook.Tools = []string{"write", "shell", "git"}
 	f.st.UpdateAgent(f.rook)
-	f.st.AddCommandGrant(f.p.ID, f.rook.ID, nil, "make deploy") // grant de chat vechi: nu se mai aplica
 	run := chatRun(t, f, f.rook, "change the discount rule")
 	allow := allowOf(t, run)
 	for _, a := range allow {
-		if a == "Bash" || strings.HasPrefix(a, "Edit") || strings.HasPrefix(a, "Write") || a == "Bash(make deploy:*)" || a == "Bash(git commit:*)" {
+		if strings.HasPrefix(a, "Edit") || strings.HasPrefix(a, "Write") || a == "Bash(git commit:*)" {
 			t.Fatalf("%s in allow la un run de chat: %v", a, allow)
 		}
 	}
-	if !slices.Contains(allow, "mcp__team__*") || !slices.Contains(allow, "Bash(git log:*)") {
+	// shell-ul ramane in chat (verificari), prin regulile pentru comenzi
+	if !slices.Contains(allow, "mcp__team__*") || !slices.Contains(allow, "Bash") || !slices.Contains(allow, "Bash(git log:*)") {
 		t.Fatalf("%v", allow)
 	}
 	if !strings.Contains(argAfter(run.Args, "-p"), prompt.ReadOnlyTurn) {
@@ -79,10 +79,10 @@ func TestReadOnlyRunKeepsSession(t *testing.T) {
 	}
 }
 
-// refuzurile de scriere dintr-un run fara task sunt intentionate; WebFetch tot face cerere
+// refuzurile de scriere dintr-un run fara task sunt intentionate (Bash doar fara shell); WebFetch tot face cerere
 func TestChatRunWriteDenialsMakeNoRequest(t *testing.T) {
 	f := setup(t)
-	f.rook.Tools = []string{"write", "shell"}
+	f.rook.Tools = []string{"write"}
 	f.st.UpdateAgent(f.rook)
 	f.tm.work.Lock()
 	f.tm.recordDenials(activeRun{projectID: f.p.ID}, f.rook, []runner.Denial{
@@ -93,5 +93,29 @@ func TestChatRunWriteDenialsMakeNoRequest(t *testing.T) {
 	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
 	if len(reqs) != 1 || reqs[0].Tool != "WebFetch" {
 		t.Fatalf("%+v", reqs)
+	}
+}
+
+// cu shell, chat-ul ruleaza comenzi prin reguli: Ask face cerere de chat, iar aprobarea intra in run-ul de chat urmator
+func TestChatRunShellFollowsRules(t *testing.T) {
+	f := setup(t)
+	f.rook.Tools = []string{"shell"}
+	f.st.UpdateAgent(f.rook)
+	f.tm.work.Lock()
+	f.tm.recordDenials(activeRun{projectID: f.p.ID}, f.rook, []runner.Denial{
+		{Tool: "Bash", Detail: "git push origin main"}, {Tool: "Bash", Detail: "sudo ls"},
+	})
+	f.tm.work.Unlock()
+	reqs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(reqs) != 1 || reqs[0].Prefix != "git push" || reqs[0].TaskID != nil {
+		t.Fatalf("doar git push (Ask) face cerere de chat: %+v", reqs)
+	}
+	if err := f.tm.AllowCommandForTask(reqs[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	run := f.fs.last(t, f.rook)
+	if allow := allowOf(t, run); !slices.Contains(allow, "Bash") || !slices.Contains(allow, "Bash(git push:*)") {
+		t.Fatalf("run-ul de chat nu are shell-ul si grant-ul: %v", allow)
 	}
 }

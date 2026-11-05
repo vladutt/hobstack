@@ -14,7 +14,7 @@ func reviewSkipSetup(t *testing.T, approve bool) (*fixture, store.Agent, store.T
 	f := setup(t)
 	rev := f.agent(t, "Rev", &f.lead, nil)
 	wes := f.agent(t, "Wes", &f.lead, &rev)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "Wes", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Wes", "", "")
 	task := inProgress(t, f, f.wantStatus(t, 1, store.StatusQueued))
 	f.fs.setActivity("r1", 3)
 	c := f.workerCaller(wes, task.ID)
@@ -91,7 +91,7 @@ func TestReviewNotSkippedOnFirstReport(t *testing.T) {
 	f := setup(t)
 	rev := f.agent(t, "Rev", &f.lead, nil)
 	wes := f.agent(t, "Wes", &f.lead, &rev)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "Wes", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Wes", "", "")
 	task := inProgress(t, f, f.wantStatus(t, 1, store.StatusQueued))
 	f.fs.setActivity("r1", 0)
 	if got := reportIn(t, f, wes, task, "r1"); got.ReviewStage != store.StageReviewer {

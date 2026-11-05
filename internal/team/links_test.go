@@ -403,8 +403,9 @@ func TestRequestWorkStagedTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	tasks, _ := f.st.ListTasks(bp.ID)
-	if len(tasks) != 1 || tasks[0].StageID == nil || tasks[0].RequestID == nil {
-		t.Fatalf("task in prima etapa: %+v", tasks)
+	// etapele sunt optionale: cererea merge la radacina, pe drumul standard
+	if len(tasks) != 1 || tasks[0].StageID != nil || tasks[0].AssigneeID != broot.ID || tasks[0].RequestID == nil {
+		t.Fatalf("task la radacina, fara etapa: %+v", tasks)
 	}
 }
 

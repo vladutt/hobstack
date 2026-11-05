@@ -37,7 +37,7 @@ func TestValidateProposalErrors(t *testing.T) {
 		"there is already an agent":      func(p *Proposal) { p.Agents[1].Name = "ANA" },
 		"does not exist in the proposal": func(p *Proposal) { p.Agents[1].ReviewedBy = "Zed" },
 		"their own reviewer":             func(p *Proposal) { p.Agents[1].ReviewedBy = "Bob" },
-		"only the write and git tools":   func(p *Proposal) { p.Agents[1].Tools = []string{"shell"} },
+		"only the write, shell and git":  func(p *Proposal) { p.Agents[1].Tools = []string{"web"} },
 		"project name":                   func(p *Proposal) { p.Name = "  " },
 		`"You" is reserved for the user`: func(p *Proposal) { p.Agents[1].Name = "you" },
 		"at least one agent":             func(p *Proposal) { p.Agents = nil },
@@ -55,10 +55,16 @@ func TestValidateProposalErrors(t *testing.T) {
 			t.Errorf("%s: am %v", want, err)
 		}
 	}
-	// fara strictTools, shell e acceptat
+	// fara strictTools, web e acceptat
 	p := valid()
 	p.Agents[1].Tools = []string{"shell", "web"}
 	if err := ValidateProposal(p, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	// analistul poate propune shell (agentii care scriu cod isi ruleaza testele)
+	p = valid()
+	p.Agents[1].Tools = []string{"write", "shell"}
+	if err := ValidateProposal(p, true, nil); err != nil {
 		t.Fatal(err)
 	}
 }

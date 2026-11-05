@@ -80,7 +80,7 @@ func toLeadReview(t *testing.T, f *fixture, task store.Task) {
 
 func TestConvCreateFromMCP(t *testing.T) {
 	f := setup(t)
-	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "Use JWT", "Rook", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "Use JWT", "Rook", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	task := f.wantStatus(t, 1, store.StatusQueued)
@@ -90,14 +90,14 @@ func TestConvCreateFromMCP(t *testing.T) {
 	wantEvent(t, f, task.ID, "created", "Lead", "Created by Lead")
 
 	// fara descriere: doar titlul
-	f.tm.CreateTask(f.leadCaller(), "Logout", "", "Rook", "")
+	f.tm.CreateTask(f.leadCaller(), "Logout", "", "Rook", "", "")
 	t2 := f.wantStatus(t, 2, store.StatusQueued)
 	wantMsg(t, f, t2.ID, "created", "Lead", "Rook", "Logout")
 }
 
 func TestConvCreateFromBoard(t *testing.T) {
 	f := setup(t)
-	task, err := f.tm.UserCreateTask(f.p.ID, "A", "do it", f.rook.ID)
+	task, err := f.tm.UserCreateTask(f.p.ID, "A", "do it", f.rook.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,13 +107,13 @@ func TestConvCreateFromBoard(t *testing.T) {
 
 func TestConvCreateInStageQueue(t *testing.T) {
 	f, _, _ := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "d", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "d", "", "", "Dev")
 	t1 := f.wantStatus(t, 1, store.StatusQueued)
 	wantMsg(t, f, t1.ID, "created", "Lead", "", "A\n\nd")
-	f.tm.CreateTask(f.leadCaller(), "B", "", "Wes", "")
+	f.tm.CreateTask(f.leadCaller(), "B", "", "Wes", "", "Dev")
 	t2 := f.wantStatus(t, 2, store.StatusQueued)
 	wantMsg(t, f, t2.ID, "created", "Lead", "Wes", "B")
-	u, err := f.tm.UserCreateTask(f.p.ID, "C", "", 0)
+	u, err := f.tm.UserCreateTask(f.p.ID, "C", "", 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestConvReportToReviewerThenApproveReject(t *testing.T) {
 	rev := f.agent(t, "Rev", &f.lead, nil)
 	wes := f.agent(t, "Wes", &f.lead, &rev)
 	for _, title := range []string{"A", "B", "C"} {
-		f.tm.CreateTask(f.leadCaller(), title, "", "Wes", "")
+		f.tm.CreateTask(f.leadCaller(), title, "", "Wes", "", "")
 	}
 	for n := 1; n <= 3; n++ {
 		task := inProgress(t, f, f.wantStatus(t, n, store.StatusQueued))
@@ -157,7 +157,7 @@ func TestConvReportToReviewerThenApproveReject(t *testing.T) {
 
 func TestConvReportToLead(t *testing.T) {
 	f := setup(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "", "")
 	task := inProgress(t, f, f.wantStatus(t, 1, store.StatusQueued))
 	if _, err := f.tm.ReportDone(f.workerCaller(f.rook, task.ID), "", "the report"); err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestConvApproveUserTaskToYou(t *testing.T) {
 	f := setup(t)
 	rev := f.agent(t, "Rev", &f.lead, nil)
 	wes := f.agent(t, "Wes", &f.lead, &rev)
-	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", wes.ID)
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", wes.ID, 0)
 	task = inProgress(t, f, task)
 	f.tm.ReportDone(f.workerCaller(wes, task.ID), "", "gata")
 	rc := mcp.Caller{ProjectID: f.p.ID, AgentID: rev.ID, HasParent: true, IsReviewer: true}
@@ -324,7 +324,7 @@ func TestConvNudge(t *testing.T) {
 
 func TestConvStages(t *testing.T) {
 	f, _, _ := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev")
 	task := f.wantStatus(t, 1, store.StatusQueued)
 	mustReconcile(t, f)
 	rook1 := f.fs.last(t, f.rook)
@@ -346,7 +346,7 @@ func TestConvStages(t *testing.T) {
 
 func TestConvStageApproveLastToLead(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev")
 	task, _ := f.st.GetTaskByNumber(f.p.ID, 1)
 	task.StageID, task.AssigneeID, task.Status = &stages[1].ID, f.vera.ID, store.StatusInProgress
 	f.st.SaveTask(&task)
@@ -366,7 +366,7 @@ func TestConvStageApproveLastToLead(t *testing.T) {
 // un run pe etapa terminat fara raport: la lider
 func TestConvStageFinishedWithoutReport(t *testing.T) {
 	f, _, _ := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev")
 	task := f.wantStatus(t, 1, store.StatusQueued)
 	mustReconcile(t, f)
 	f.fs.finish(f.fs.last(t, f.rook).ID, runner.Outcome{Status: "done", Result: "partial"})

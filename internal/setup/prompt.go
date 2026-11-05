@@ -21,7 +21,7 @@ Rules:
 - Several folders mean one product with several parts (e.g. a client app and its landing page). Then fill folders with exactly the given paths, each with a short name (e.g. Client, Landing) and its own context (stack, build/test/run commands, conventions of that folder). Propose one root lead for the whole product and, under it, one sub-lead per folder with its workers; set each agent's folder. The shared context describes the product and how the parts connect (e.g. the API between them).
 - With one folder or none, you may leave folders out.
 - If a folder has a CLAUDE.md, read it first and base that folder's context on it (and the shared context, if there is a single folder).
-- Tools: you may propose only write (writes files) and git; the user adds shell or web themselves if they want.
+- Tools: you may propose only write (writes files), shell (runs commands: tests, builds, scripts) and git. Give write and shell to agents that write or test code, so they can run the tests and the build; leave shell off for agents that only plan, coordinate, write documents or review without running anything. The user adds web themselves if they want.
 - Write everything (names, context, prompts) in the language of the user's description; with no description, in English.
 - The shared context describes the actual project in the folder (what you read), not assumed technologies.
 - At the end, call propose_setup once with the whole proposal. If you get an error, fix it and call it again; otherwise stop.`
@@ -107,5 +107,5 @@ func chatTurn(current Proposal, message string) (string, error) {
 		"User: " + message + "\n\n" +
 		"If this changes the proposal, call propose_setup once with the WHOLE updated proposal, then reply in one or two sentences with what you changed. " +
 		"If it is only a question, answer it without calling propose_setup. " +
-		"Do not add the shell or web tools yourself; keep the tools the user already chose.", nil
+		"Do not add the web tool yourself; keep the tools the user already chose.", nil
 }

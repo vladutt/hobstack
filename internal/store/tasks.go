@@ -43,6 +43,8 @@ type Task struct {
 	StageID      *int64 `json:"stageId"`      // etapa curenta (coloana proprie); nil = fara etape sau dupa ultima
 	ByUser       bool   `json:"byUser"`       // creat de utilizator din board: la final decide el
 	Escalated    bool   `json:"escalated"`    // radacina a dat task-ului blocat inca o incercare (modul autonom)
+	// ViaStages: task-ul a trecut prin etape; send back il intoarce intr-o etapa. Un StageID pus il face true la salvare.
+	ViaStages bool `json:"viaStages"`
 
 	// NudgedAt: cand l-a impins ultima data detectorul de task-uri blocate;
 	// nil = neimpins de la ultima schimbare de stare.
@@ -66,7 +68,7 @@ type Task struct {
 // Ref e forma afisata a task-ului: T-3.
 func (t Task) Ref() string { return fmt.Sprintf("T-%d", t.Number) }
 
-const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at, escalated, recurring_id, auto_accept, request_id, thread_id, archived_from, archived_at, archived_root`
+const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at, escalated, recurring_id, auto_accept, request_id, thread_id, archived_from, archived_at, archived_root, via_stages`
 
 func scanTask(sc scanner) (Task, error) { return scanTaskWith(sc) }
 
@@ -79,7 +81,7 @@ func scanTaskWith(sc scanner, extra ...any) (Task, error) {
 		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated,
 		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser, &nudged, &t.Escalated,
 		&t.RecurringID, &t.AutoAccept, &t.RequestID, &t.ThreadID,
-		&t.ArchivedFrom, &archivedAt, &t.ArchivedRoot}
+		&t.ArchivedFrom, &archivedAt, &t.ArchivedRoot, &t.ViaStages}
 	err := sc.Scan(append(dest, extra...)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
@@ -113,9 +115,10 @@ func (s *Store) CreateTask(t *Task) error {
 	ts := now()
 	t.Status = StatusQueued
 	t.ReviewStage = StageNone
-	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, creator_id, parent_task_id, stage_id, by_user, recurring_id, auto_accept, request_id, thread_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status,
-		nullPtr(t.CreatorID), nullPtr(t.ParentTaskID), nullPtr(t.StageID), t.ByUser, nullPtr(t.RecurringID), t.AutoAccept, nullPtr(t.RequestID), nullPtr(t.ThreadID), ts, ts)
+	t.ViaStages = t.ViaStages || t.StageID != nil
+	res, err := tx.Exec(`INSERT INTO tasks (project_id, number, title, description, assignee_id, status, creator_id, parent_task_id, stage_id, by_user, recurring_id, auto_accept, request_id, thread_id, via_stages, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ProjectID, t.Number, t.Title, t.Description, t.AssigneeID, t.Status,
+		nullPtr(t.CreatorID), nullPtr(t.ParentTaskID), nullPtr(t.StageID), t.ByUser, nullPtr(t.RecurringID), t.AutoAccept, nullPtr(t.RequestID), nullPtr(t.ThreadID), t.ViaStages, ts, ts)
 	if err != nil {
 		return err
 	}
@@ -157,9 +160,10 @@ func (s *Store) ListTasks(projectID int64) ([]Task, error) {
 // schimbare de stare inseamna activitate, deci curata si nudged_at.
 func (s *Store) SaveTask(t *Task) error {
 	ts := now()
+	t.ViaStages = t.ViaStages || t.StageID != nil
 	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, review_stage = ?,
-		assignee_id = ?, stage_id = ?, escalated = ?, updated_at = ?, nudged_at = NULL
-		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), t.Escalated, ts, t.ID))
+		assignee_id = ?, stage_id = ?, escalated = ?, via_stages = ?, updated_at = ?, nudged_at = NULL
+		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), t.Escalated, t.ViaStages, ts, t.ID))
 	if err != nil {
 		return err
 	}

@@ -36,7 +36,7 @@ func hasEvent(t *testing.T, f *fixture, taskID int64, kind, actor, text string) 
 // userTaskInReview: task creat din board pentru who, raportat (in Review la lider).
 func userTaskInReview(t *testing.T, f *fixture, who store.Agent) store.Task {
 	t.Helper()
-	task, err := f.tm.UserCreateTask(f.p.ID, "A", "", who.ID)
+	task, err := f.tm.UserCreateTask(f.p.ID, "A", "", who.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestAutonomyReviewerApprovedUserTaskGoesToRoot(t *testing.T) {
 func TestAutonomyUserTaskOnRootStaysForUser(t *testing.T) {
 	f := setup(t)
 	autonomous(t, f)
-	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.lead.ID); err != nil {
+	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.lead.ID, 0); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)
@@ -145,7 +145,7 @@ func TestAutonomyUserTaskOnRootStaysForUser(t *testing.T) {
 
 	// radacina cu reviewer: dupa aprobare decide utilizatorul
 	solo := f.agent(t, "Solo", nil, &f.vera)
-	if _, err := f.tm.UserCreateTask(f.p.ID, "B", "", solo.ID); err != nil {
+	if _, err := f.tm.UserCreateTask(f.p.ID, "B", "", solo.ID, 0); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)
@@ -195,7 +195,7 @@ func TestAutonomyRootAssigneeAutoDone(t *testing.T) {
 func TestAutonomyRootRunFailedStaysForUser(t *testing.T) {
 	f := setup(t)
 	autonomous(t, f)
-	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.lead.ID); err != nil {
+	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.lead.ID, 0); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)

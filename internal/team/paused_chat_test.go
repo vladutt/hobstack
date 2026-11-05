@@ -72,7 +72,7 @@ func TestPausedChatCreatesQueuedTask(t *testing.T) {
 	}
 	mustReconcile(t, f)
 	run := f.fs.last(t, f.lead)
-	if _, err := f.tm.CreateTask(f.caller(t, run), "Import", "", "Rook", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.caller(t, run), "Import", "", "Rook", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)

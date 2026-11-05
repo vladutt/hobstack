@@ -124,11 +124,46 @@ func TestCommitInRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := byPath(cs)
-	if _, ok := m["a.txt"]; ok {
-		t.Error("a.txt only got committed in the run (same content): must not appear")
+	// a.txt doar a intrat in commit (acelasi continut): apare cu diff-ul din commit
+	if c, ok := m["a.txt"]; !ok || !c.Committed || c.Kind != "edit" || len(c.Patch) != 1 ||
+		strings.Join(c.Patch[0].Lines, "|") != "-a|+a2" {
+		t.Errorf("a.txt committed in the run: %+v", m["a.txt"])
 	}
-	if c, ok := m["b.txt"]; !ok || c.Kind != "edit" {
+	if c, ok := m["b.txt"]; !ok || c.Kind != "edit" || c.Committed {
 		t.Errorf("b.txt changed and committed in the run: %+v", cs)
+	}
+}
+
+// un fisier nou, deja creat la pornire, intra in commit; in subfolder caile raman relative
+func TestCommitInRunSubfolder(t *testing.T) {
+	dir := repo(t, map[string]string{"api/x.go": "x\n", "web/y.js": "y\n"})
+	write(t, dir, "api/n.go", "n\n")
+	write(t, dir, "web/y.js", "y2\n")
+	s, _ := Take(filepath.Join(dir, "api"))
+	run(t, dir, "add", "-A")
+	run(t, dir, "commit", "-q", "-m", "work")
+	cs, err := s.Changes(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 1 || cs[0].Path != "n.go" || cs[0].Kind != "create" || !cs[0].Committed {
+		t.Fatalf("want only n.go, created by the commit: %+v", cs)
+	}
+}
+
+// HEAD mutat inapoi (reset --soft) nu e un commit facut in run: fisierele cu acelasi continut nu apar
+func TestResetIsNotCommit(t *testing.T) {
+	dir := repo(t, map[string]string{"a.txt": "a\n"})
+	write(t, dir, "a.txt", "a2\n")
+	run(t, dir, "commit", "-q", "-am", "second")
+	s, _ := Take(dir)
+	run(t, dir, "reset", "-q", "--soft", "HEAD~1")
+	cs, err := s.Changes(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 0 {
+		t.Fatalf("reset: nothing changed on disk: %+v", cs)
 	}
 }
 

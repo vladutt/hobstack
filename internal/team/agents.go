@@ -168,7 +168,7 @@ func (t *Team) callerTask(taskID int64) *store.Task {
 func (t *Team) addedText(projectID int64, name string) string {
 	text := fmt.Sprintf("Agent %q added to your team. Give it work with create_task.", name)
 	if stages, err := t.st.ListStages(projectID); err == nil && len(stages) > 0 {
-		text = fmt.Sprintf("Agent %q added to your team. This project uses stages: it takes tasks only after the user adds it to a stage, so tell the user to add it to a stage (Columns).", name)
+		text = fmt.Sprintf("Agent %q added to your team. Give it work with create_task (without stage). It takes tasks from a board stage only after the user adds it to that stage (Columns).", name)
 	}
 	return text
 }

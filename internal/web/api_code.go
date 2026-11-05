@@ -26,7 +26,8 @@ type modifiedView struct {
 	Removed int       `json:"removed"`
 	Created bool      `json:"created"`
 	Edits   int       `json:"edits"`
-	Shell   bool      `json:"shell"` // macar o modificare gasita din git (facuta prin shell, nu cu Edit / Write)
+	Shell   bool      `json:"shell"`  // macar o modificare gasita din git (facuta prin shell, nu cu Edit / Write)
+	Commit  bool      `json:"commit"` // doar intrat intr-un commit facut pe task (continutul nu l-a schimbat task-ul)
 	Agent   string    `json:"agent"`
 	At      time.Time `json:"at"`
 }
@@ -114,6 +115,7 @@ func (s *Server) getTaskModified(w http.ResponseWriter, r *http.Request) {
 				}
 				v.Agent, v.At = c.AgentName, c.At
 				v.Shell = v.Shell || c.Tool == "Shell"
+				v.Commit = v.Commit || c.Tool == "Commit"
 			}
 			files = append(files, v)
 		}

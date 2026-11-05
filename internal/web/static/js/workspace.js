@@ -585,7 +585,7 @@ export async function workspaceView(root, projectId, route) {
     for (let i = 2; names.has(name.toLowerCase()); i++) name = `New agent ${i}`;
     const body = agentBody({
       name, role: "", model: "sonnet", background: "", instructions: "", doneDef: "",
-      tools: ["write"], responsibilities: "", parentId, reviewerId: null, detached,
+      tools: ["write", "shell"], responsibilities: "", parentId, reviewerId: null, detached,
       folderId: state.project.agents.find((x) => x.id === parentId)?.folderId ?? null, // ca seful lui
     });
     try {
@@ -736,15 +736,19 @@ export async function workspaceView(root, projectId, route) {
     teamBox.hidden = !agents.length;
   }
 
-  // newTaskFromTop: "+ Task" din bara de sus: board-ul cu formularul deschis
-  function newTaskFromTop() {
+  // newTaskFromTop: "+ Task" din bara de sus (sau "+ Add a task" dintr-o coloana): board-ul cu formularul
+  // deschis; stageId (din coloana unei etape) preselecteaza etapa la Assignee
+  function newTaskFromTop(stageId = null) {
+    if (typeof stageId !== "number") stageId = null; // din onclick vine evenimentul
     if (state.tab !== "tasks") {
-      window.addEventListener("hashchange", () => { if (boardPanel !== "task") toggleTaskForm(); }, { once: true });
+      window.addEventListener("hashchange", () => { if (boardPanel !== "task") toggleTaskForm(stageId); }, { once: true });
       location.hash = `#/p/${projectId}/tasks`;
       return;
     }
-    if (boardPanel !== "task") toggleTaskForm();
-    else editorSlot.querySelector("input")?.focus();
+    if (boardPanel !== "task") return toggleTaskForm(stageId);
+    const who = editorSlot.querySelector(".task-form select");
+    if (who && stageId) { who.value = "stage:" + stageId; who.dispatchEvent(new Event("change")); }
+    editorSlot.querySelector("input")?.focus();
   }
 
   function buildOpenBar(editors) {
@@ -778,7 +782,7 @@ export async function workspaceView(root, projectId, route) {
     canvas.render(state.project, state.selected);
   }
 
-  // renderBoard: coloanele implicite, sau etapele proiectului + "La lider" + "Gata"
+  // renderBoard: coloanele standard, cu etapele proiectului (coloanele proprii) intre In progress si Review
   function renderBoard() {
     // cat tragi un card sau e deschis meniul lui, board-ul nu se redeseneaza (cardul ar disparea de sub mouse)
     if (dragging || cardMenu) { boardStale = true; return; }
@@ -831,12 +835,11 @@ export async function workspaceView(root, projectId, route) {
       ...g.subs.map((s) => Date.parse(s.task.updatedAt) || 0));
     for (const g of groups) g.last = lastActivity(g);
     groups.sort((a, b) => b.last - a.last || b.root.number - a.root.number);
-    // coloana unui task, ca cheie: fara etape dupa status; cu etape etapa / "La lider" / "Gata" / "Fara etapa"
+    // coloana unui task, ca cheie: un task care asteapta / lucreaza / e blocat intr-o etapa sta in coloana
+    // etapei; restul dupa status (Review tine si task-urile trecute prin etape care asteapta decizia)
     const colKey = (t) => {
-      if (!stages.length) return "c" + COLUMNS.findIndex((c) => c.statuses.includes(t.status));
-      if (t.status === "done") return "done";
-      if (t.status === "review") return "lead";
-      return t.stageId ? "s" + t.stageId : "loose";
+      if (t.stageId && t.status !== "review" && t.status !== "done" && stages.some((s) => s.id === t.stageId)) return "s" + t.stageId;
+      return "c" + COLUMNS.findIndex((c) => c.statuses.includes(t.status));
     };
     for (const g of groups) g.key = colKey(g.root);
     const inCol = (key) => groups.filter((g) => g.key === key);
@@ -853,23 +856,19 @@ export async function workspaceView(root, projectId, route) {
       archived > 0 || boardPanel === "deleted" ? toggle("deleted", archived ? `Deleted (${archived})` : "Deleted", toggleDeleted) : null,
       toggle("recurring", "\u21bb Recurring", toggleRecurring), toggle("stages", "Columns", toggleStages),
     ].filter(Boolean));
-    if (!stages.length) {
-      board.className = "board";
-      // tintele de drop: Queued si Done; In progress si Review primesc task-uri doar prin munca agentilor
-      board.replaceChildren(...COLUMNS.map((c, i) => column(c.title, inCol("c" + i), byId, null,
-        { add: i === 0, page: i === COLUMNS.length - 1, target: i === 0 ? "queued" : i === COLUMNS.length - 1 ? "done" : null })));
-      boardHint.hidden = false;
-      return;
-    }
-    boardHint.hidden = true;
-    board.className = "board stages-board";
-    // task-uri fara etapa inca deschise (create inainte de coloane): altfel n-ar aparea nicaieri
-    const loose = inCol("loose");
+    board.className = "board" + (stages.length ? " stages-board" : "");
+    // tintele de drop: Queued, etapele si Done; In progress si Review primesc task-uri doar prin munca agentilor
+    const std = (i) => {
+      const c = COLUMNS[i];
+      const last = i === COLUMNS.length - 1;
+      return column(c.title, inCol("c" + i), byId, null,
+        { add: i === 0, page: last, target: i === 0 ? "queued" : last ? "done" : null });
+    };
     board.replaceChildren(
-      ...(loose.length ? [column("No stage", loose, byId, null, { target: null })] : []),
-      ...stages.map((s, i) => column(s.name, inCol("s" + s.id), byId, s, { add: i === 0, target: "stage:" + s.id })),
-      column("With lead", inCol("lead"), byId, null, { target: null }),
-      column("Done", inCol("done"), byId, null, { page: true, target: "done" }));
+      std(0), std(1),
+      ...stages.map((s) => column(s.name, inCol("s" + s.id), byId, s, { add: true, target: "stage:" + s.id })),
+      std(2), std(3));
+    boardHint.hidden = stages.length > 0;
   }
 
   // doneGroups: grupurile din Done, din grupurile complete (arbore + fir): raman doar membrii gata.
@@ -932,7 +931,7 @@ export async function workspaceView(root, projectId, route) {
           type: "button", class: "col-more",
           onclick: () => { state.doneShown = Infinity; renderBoard(); },
         }, `Show ${hidden} more`) : null,
-        opts.add ? el("button", { type: "button", class: "col-add", onclick: newTaskFromTop }, "+ Add a task") : null));
+        opts.add ? el("button", { type: "button", class: "col-add", onclick: () => newTaskFromTop(stage?.id || null) }, "+ Add a task") : null));
   }
 
   // taskGroups: grupurile board-ului. Intai arborii: radacinile (fara parinte, cu parinte lipsa
@@ -1302,15 +1301,27 @@ export async function workspaceView(root, projectId, route) {
     return p.agents.filter((a) => !a.detached && (!stage || stage.agentIds.includes(a.id)));
   }
 
-  function toggleTaskForm() {
+  // toggleTaskForm: formularul New task. Assignee: un agent (drumul standard) sau o etapa ("stage:<id>",
+  // o ia primul agent liber din etapa); stageId preselecteaza etapa.
+  function toggleTaskForm(stageId = null) {
     if (boardPanel === "task") return closePanel();
     const p = state.project;
-    const first = (p.stages || [])[0];
+    const stages = p.stages || [];
     const title = el("input", { type: "text", maxlength: 200, placeholder: "e.g. Login page", required: true });
     const description = el("textarea", { rows: 3, placeholder: "What needs to be done, acceptance criteria (optional)" });
-    const who = el("select", {},
-      first && el("option", { value: "" }, `First free agent in ${first.name}`),
-      assignable(first?.id).map((a) => el("option", { value: a.id }, a.name + (a.role ? " \u00b7 " + a.role : ""))));
+    const agentOptions = assignable(null).map((a) => el("option", { value: a.id }, a.name + (a.role ? " \u00b7 " + a.role : "")));
+    const who = el("select", { onchange: () => { whoHint.textContent = assignHint(); } },
+      stages.length ? el("optgroup", { label: "Agent" }, agentOptions) : agentOptions,
+      stages.length ? el("optgroup", { label: "Column (first free agent)" },
+        stages.map((s) => el("option", { value: "stage:" + s.id }, s.name + (s.agentIds.length ? "" : " \u00b7 no agents")))) : null);
+    if (stageId && stages.some((s) => s.id === stageId)) who.value = "stage:" + stageId;
+    const pickedStage = () => (who.value.startsWith("stage:") ? Number(who.value.slice(6)) : 0);
+    const end = p.autonomy ? "the root lead decides at the end (full autonomy)." : "you decide at the end.";
+    const assignHint = () => {
+      const st = stages.find((s) => s.id === pickedStage());
+      return (st ? `The task enters ${st.name} and moves through the next columns; ` : "The agent picks it up automatically; ") + end;
+    };
+    const whoHint = el("span", {}, assignHint());
     // fisierele pentru agent: alese cu butonul sau trase pe formular, trimise multipart la Add
     const files = [];
     const fileList = el("ul", { class: "tf-files" });
@@ -1324,8 +1335,7 @@ export async function workspaceView(root, projectId, route) {
       el("h2", {}, "New task"),
       field("Title", title), field("Description", description),
       el("div", { class: "field" }, el("label", { for: "tf-attach-btn" }, "Files"), attach, fileList),
-      field("Assignee", who, (first ? "The task enters the first stage; " : "The agent picks it up automatically; ") +
-        (p.autonomy ? "the root lead decides at the end (full autonomy)." : "you decide at the end.")),
+      field("Assignee", who, whoHint),
       el("div", { class: "actions" }, el("span", { class: "grow" }),
         el("button", { type: "button", class: "btn", onclick: closePanel }, "Cancel"), addBtn));
     setupDrop(form, addFiles);
@@ -1359,11 +1369,13 @@ export async function workspaceView(root, projectId, route) {
           fd.append("title", title.value.trim());
           fd.append("description", description.value.trim());
           fd.append("assigneeId", String(Number(who.value) || 0));
+          fd.append("stageId", String(pickedStage()));
           for (const f of files) fd.append("files", f);
           await upload(path, fd);
         } else {
           await api(path, { method: "POST", body: {
             title: title.value.trim(), description: description.value.trim(), assigneeId: Number(who.value) || 0,
+            stageId: pickedStage(),
           } });
         }
         closePanel();

@@ -70,11 +70,8 @@ func (t *Team) checkRecurring(projectID int64, in RecurringInput, checkWho bool)
 		id := in.AssigneeID
 		return &id, nil
 	}
-	var first *store.Stage
-	if len(stages) > 0 {
-		first = &stages[0]
-	}
-	if _, err := checkAssignee(agents, in.AssigneeID, first); err != nil {
+	// cu asignat, aparitiile merg pe drumul standard (si intr-un proiect cu etape)
+	if _, err := checkAssignee(agents, in.AssigneeID, nil); err != nil {
 		return nil, RecurringError(err.Error())
 	}
 	id := in.AssigneeID

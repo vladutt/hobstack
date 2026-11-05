@@ -83,7 +83,7 @@ func TestFullFlow(t *testing.T) {
 	lead1 := f.fs.last(t, f.lead)
 	lc := f.caller(t, lead1)
 	for _, x := range [][2]string{{"A", "Rook"}, {"B", "Vera"}, {"C", "rook"}} {
-		if _, err := f.tm.CreateTask(lc, x[0], "", x[1], ""); err != nil {
+		if _, err := f.tm.CreateTask(lc, x[0], "", x[1], "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -74,7 +74,7 @@ type RecurringChange struct {
 // rezultat cu isError, deci trebuie sa fie mesaje clare pentru el.
 type Backend interface {
 	Resolve(token string) (Caller, bool)
-	CreateTask(c Caller, title, description, assignee, continues string) (string, error)
+	CreateTask(c Caller, title, description, assignee, continues, stage string) (string, error)
 	StartTask(c Caller, title, description, continues string) (string, error)
 	ListTasks(c Caller, status string) (string, error)
 	AcceptTask(c Caller, task, note string) (string, error)
@@ -204,7 +204,7 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 	var err error
 	switch p.Name {
 	case "create_task":
-		text, err = s.backend.CreateTask(c, arg("title"), arg("description"), arg("assignee"), arg("continues"))
+		text, err = s.backend.CreateTask(c, arg("title"), arg("description"), arg("assignee"), arg("continues"), arg("stage"))
 	case "start_task":
 		text, err = s.backend.StartTask(c, arg("title"), arg("description"), arg("continues"))
 	case "list_tasks":

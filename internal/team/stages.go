@@ -44,6 +44,25 @@ func backStage(stages []store.Stage, cur *int64) store.Stage {
 	return stages[0]
 }
 
+// stageByName gaseste etapa dupa nume (fara diferente de litere mari / mici).
+func stageByName(stages []store.Stage, name string) (store.Stage, bool) {
+	for _, s := range stages {
+		if strings.EqualFold(s.Name, strings.TrimSpace(name)) {
+			return s, true
+		}
+	}
+	return store.Stage{}, false
+}
+
+// stageNames: numele etapelor, in ordine, pentru mesajele de eroare.
+func stageNames(stages []store.Stage) string {
+	names := make([]string, 0, len(stages))
+	for _, s := range stages {
+		names = append(names, s.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
 // placeholder alege asignatul "loc tinut" cand task-ul intra intr-o etapa:
 // primul agent al etapei, altfel fallback. Scheduler-ul il inlocuieste cu
 // primul agent liber inainte sa porneasca run-ul.
@@ -97,12 +116,12 @@ func checkAssignee(agents []store.Agent, agentID int64, stage *store.Stage) (sto
 }
 
 // UserCreateTask: task creat de utilizator din board; la final decide tot el
-// (ByUser). Cu etape intra in prima etapa (agentID optional, din acea etapa);
-// fara etape agentID e obligatoriu.
-func (t *Team) UserCreateTask(projectID int64, title, description string, agentID int64) (store.Task, error) {
+// (ByUser). stageID != 0 il pune in etapa aceea (agentID optional, din etapa);
+// altfel merge pe drumul standard, la agentID (obligatoriu), chiar daca proiectul are etape.
+func (t *Team) UserCreateTask(projectID int64, title, description string, agentID, stageID int64) (store.Task, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
-	return t.userCreateTask(projectID, title, description, agentID, taskOrigin{})
+	return t.userCreateTask(projectID, title, description, agentID, taskOrigin{stageID: stageID})
 }
 
 // taskOrigin: de unde vine un task creat pe drumul utilizatorului.
@@ -113,6 +132,7 @@ type taskOrigin struct {
 	request   *store.ProjectRequest
 	from, by  string
 	files     []StagedFile // fisierele utilizatorului (din staging), puse inainte de Kick
+	stageID   int64        // etapa in care intra task-ul; 0 = drumul standard (sau prima etapa fara asignat)
 }
 
 // userCreateTask e corpul lui UserCreateTask; se cheama cu t.work tinut.
@@ -141,13 +161,25 @@ func (t *Team) userCreateTask(projectID int64, title, description string, agentI
 	}
 	var assigned string // textul evenimentului "assigned" din istoric
 	var to string       // destinatarul brief-ului ("" = coada etapei)
-	if len(stages) > 0 {
-		first := stages[0]
-		task.StageID = &first.ID
-		task.AssigneeID = placeholder(first, agents[0].ID)
-		assigned = "Queued for stage " + first.Name
+	// etapa: aleasa explicit, sau prima etapa cand nu e ales niciun agent (sarcinile recurente
+	// fara asignat, posibile doar cu etape); altfel drumul standard, la agentul ales
+	var stage *store.Stage
+	switch {
+	case origin.stageID != 0:
+		i := stageIndex(stages, &origin.stageID)
+		if i < 0 {
+			return store.Task{}, AssignError("that column no longer exists")
+		}
+		stage = &stages[i]
+	case agentID == 0 && len(stages) > 0:
+		stage = &stages[0]
+	}
+	if stage != nil {
+		task.StageID = &stage.ID
+		task.AssigneeID = placeholder(*stage, agents[0].ID)
+		assigned = "Queued for stage " + stage.Name
 		if agentID != 0 {
-			a, err := checkAssignee(agents, agentID, &first)
+			a, err := checkAssignee(agents, agentID, stage)
 			if err != nil {
 				return store.Task{}, err
 			}
@@ -403,8 +435,8 @@ func (t *Team) decideAsUser(task store.Task, agents []store.Agent, accept bool, 
 	sent := taskNote{kind: "sent_back", actor: actorUser, text: "You sent it back" + instead + ": " + feedback,
 		to: agentName(agents, task.AssigneeID), body: feedback}
 	// decizia utilizatorului nu declanseaza niciodata acceptul automat: regulile de azi
-	if len(stages) == 0 {
-		// fara etape: inapoi la acelasi agent, cu feedback
+	if len(stages) == 0 || (target == nil && !task.ViaStages) {
+		// fara etape (sau task de pe drumul standard): inapoi la acelasi agent, cu feedback
 		if _, err := t.rejectTask(&task, feedback, agents, 0, sent, false); err != nil {
 			return err
 		}
@@ -454,7 +486,7 @@ func stagesOverview(stages []store.Stage, agents []store.Agent) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("Board stages (every task goes through them in order):")
+	b.WriteString("Board stages (optional: a task goes through them only if you create it with stage):")
 	for _, st := range stages {
 		kind := "work"
 		if st.Kind == store.KindCheck {
@@ -472,7 +504,9 @@ func stagesOverview(stages []store.Stage, agents []store.Agent) string {
 		}
 		fmt.Fprintf(&b, "\n- %s (%s): %s", st.Name, kind, who)
 	}
-	fmt.Fprintf(&b, "\nNew tasks enter %s; assignee is optional (the first free agent takes it). After the last stage you decide.", stages[0].Name)
+	b.WriteString("\nWithout stage, create_task gives the task to a worker on your direct team, as usual. " +
+		"With stage (e.g. stage: \"" + stages[0].Name + "\") it enters that stage, the first free agent there takes it (assignee optional) " +
+		"and it moves through the next stages; after the last stage you decide.")
 	return b.String()
 }
 

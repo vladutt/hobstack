@@ -286,7 +286,7 @@ func TestSoloRootAddsAndDelegates(t *testing.T) {
 		t.Fatal(err)
 	}
 	// acelasi Caller (flag-urile de la pornirea run-ului): create_task citeste echipa din DB
-	if _, err := f.tm.CreateTask(c, "Write tests", "", "Quinn", ""); err != nil {
+	if _, err := f.tm.CreateTask(c, "Write tests", "", "Quinn", "", ""); err != nil {
 		t.Fatalf("create_task pentru agentul nou: %v", err)
 	}
 }
@@ -299,7 +299,7 @@ func TestAddAgentWithStagesSaysSo(t *testing.T) {
 		t.Fatal(err)
 	}
 	text, err := f.tm.AddAgent(f.leadCaller(), quinn())
-	if err != nil || !strings.Contains(text, "add it to a stage") {
+	if err != nil || !strings.Contains(text, "adds it to that stage") {
 		t.Fatalf("%q %v", text, err)
 	}
 }
@@ -319,7 +319,7 @@ func TestApproveWithStagesSaysSo(t *testing.T) {
 	}
 	msgs, _ := f.st.ListMessages(f.lead.ID)
 	last := msgs[len(msgs)-1]
-	if !strings.Contains(last.Text, "The user approved your request.") || !strings.Contains(last.Text, "add it to a stage") || last.Kind != store.KindEvent {
+	if !strings.Contains(last.Text, "The user approved your request.") || !strings.Contains(last.Text, "adds it to that stage") || last.Kind != store.KindEvent {
 		t.Fatalf("nota: %+v", last)
 	}
 }

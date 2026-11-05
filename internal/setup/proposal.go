@@ -56,8 +56,9 @@ const (
 	maxFolders = 6
 )
 
-// safeTools: ce poate propune analistul singur; restul le bifeaza utilizatorul.
-var safeTools = []string{"write", "git"}
+// safeTools: ce poate propune analistul singur; restul (web, packages) le bifeaza utilizatorul.
+// shell e aici: fara el un agent care scrie cod nu-si poate rula testele sau build-ul.
+var safeTools = []string{"write", "shell", "git"}
 
 func tooLong(label, v string, max int) error {
 	if utf8.RuneCountInString(v) > max {
@@ -67,7 +68,7 @@ func tooLong(label, v string, max int) error {
 }
 
 // ValidateProposal verifica si normalizeaza propunerea pe loc. strictTools
-// limiteaza tool-urile la write si git (pentru propunerea venita de la AI).
+// limiteaza tool-urile la safeTools (pentru propunerea venita de la AI).
 // external: numele agentilor care exista deja in proiect (modul folder); nil
 // pentru un proiect nou.
 func ValidateProposal(p *Proposal, strictTools bool, external []string) error {
@@ -174,7 +175,7 @@ func ValidateProposal(p *Proposal, strictTools bool, external []string) error {
 			}
 			if !slices.Contains(allowed, t) {
 				if strictTools {
-					return ValidationError("you may propose only the write and git tools (" + a.Name + ": " + t + ")")
+					return ValidationError("you may propose only the write, shell and git tools (" + a.Name + ": " + t + ")")
 				}
 				return ValidationError("unknown tool: " + t)
 			}

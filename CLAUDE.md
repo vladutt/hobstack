@@ -127,12 +127,13 @@ tail, grep... verificat cu claude 2.1.295) si fara prefix pentru interpretoare/w
 `cd dir && git ...` e refuzat de claude fara Shell chiar cu Bash(cd:*). Instalarile (npm i, yarn/pnpm/bun add, pip3, cargo,
 gem, composer install, go install) sunt in refuzul fix fara tool-ul packages.
 Gata (chat doar de citire, spec in docs/superpowers/specs/2026-10-09-foreman-chat-read-only-design.md): un run fara task
-(chat, notificari, comentarii) primeste prompt.ReadOnlyTools (fara write/shell/packages, git doar citire: git-read) si linia
-prompt.ReadOnlyTurn; system prompt-ul ramane acelasi (sesiunea continua). Modificarile se fac pe task: tool-ul MCP
+(chat, notificari, comentarii) primeste prompt.ReadOnlyTools (fara write/packages, git doar citire: git-read; shell ramas pentru verificari, prin regulile
+pentru comenzi, cererile Ask sunt de chat si grant-urile de chat intra in run) si linia prompt.ReadOnlyTurn (comenzi doar
+care verifica: loguri, cozi, docker exec, teste); system prompt-ul ramane acelasi (sesiunea continua). Modificarile se fac pe task: tool-ul MCP
 start_task (doar in run-urile fara task) creeaza un task Queued pentru agent, fara etape, CreatorID gol, ByUser pentru
 cererile din chat, max 3 in lucru (Queued / In progress; evenimentul self_started); cu echipa oprita raspunsul spune
-ca task-ul porneste la Start team. Comentariile pe task cer modificarile printr-un task de continuare. Refuzurile Edit/Write/Bash din run-urile fara task nu fac
-cereri de acces. Verificat cu claude 2.1.295: Edit, redirectarea >, tee si git commit sunt refuzate, git log trece.
+ca task-ul porneste la Start team. Comentariile pe task cer modificarile printr-un task de continuare. Refuzurile Edit/Write (si Bash fara shell) din run-urile fara task nu fac
+cereri de acces. Verificat cu claude 2.1.295 (agent fara shell): Edit, redirectarea >, tee si git commit sunt refuzate, git log trece.
 Gata (cod colorat si fisierele modificate, spec in docs/superpowers/specs/2026-10-09-foreman-code-view-design.md):
 highlight.js 11.9.0 (build common ES, 36 de limbaje, static/vendor/highlight, BSD-3) prin static/js/highlight.js (languageFor,
 highlightInto, highlightLine; fara colorare peste 5000 linii / 500 KB) in markdown, diff-uri (changes.js: diffBlock) si
@@ -274,6 +275,20 @@ Gata (pasii pentru utilizator doar cand chiar trebuie): user_steps (report_done)
 poate doar un om (verificare vizuala, cont, dispozitiv); comenzile, testele si verificarile le ruleaza singur si le spune in
 raport (howLeftForUser, descrierea user_steps). Cu Full autonomy promptul adauga howAutoSteps, iar pasii (task_todos kind
 step) nu mai intra in "need you" (store.ListFillIns(pid, withSteps=!autonomy)); raman pe task, in Your steps.
+Gata (shell pentru agentii de cod): wizard-ul (setup.safeTools = write, shell, git) propune shell agentilor care scriu sau
+testeaza cod, ca sa-si ruleze testele si build-ul; web ramane doar la utilizator (si in chat-ul wizard-ului). Agentul nou de pe
+canvas porneste cu write + shell, ca formularul Agent nou.
+Gata (fisierele commit-uite pe task): gitsnap.Changes intoarce si fisierele doar intrate intr-un commit facut in run (deja
+modificate la pornire, acelasi continut; HEAD-ul nou descinde din cel vechi, deci nu reset/checkout inapoi), cu diff-ul din
+commit (Change.Committed, Tool "Commit" in task_changes); in UI eticheta "commit" (commitTag, modifiedView.commit).
+Gata (scrieri in afara folderului): un refuz Edit / Write / MultiEdit / NotebookEdit pe o cale absoluta din afara folderului
+agentului (team.writeOutside) nu mai face cerere de acces in Needs you (n-are ce aproba utilizatorul), ramane doar evenimentul
+denied pe task; howEdits spune ca fisierele temporare si scripturile de test stau tot in folderul agentului, nu in /tmp sau ~/.hobstack.
+Gata (coloanele proprii langa cele standard, spec in docs/superpowers/specs/2026-11-02-hobstack-stages-beside-columns-design.md):
+board-ul are mereu Queued | In progress | <etape> | Review | Done; etapele sunt opriri optionale (din board: Assignee
+"<etapa>: first free agent" sau "+ Add a task" pe coloana; liderul: create_task cu stage). tasks.via_stages (migrarea 033):
+Send back intoarce in etapa doar task-urile trecute prin etape; tras pe Queued, task-ul iese din etape.
+Gata (titlul tab-ului): "<Proiect> · <Sectiune> — HobStack" (app.js updateTitle).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

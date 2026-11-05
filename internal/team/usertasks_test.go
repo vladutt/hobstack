@@ -12,10 +12,10 @@ import (
 func TestUserTaskWithoutStages(t *testing.T) {
 	f := setup(t)
 	var ae AssignError
-	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", 0); !errors.As(err, &ae) {
+	if _, err := f.tm.UserCreateTask(f.p.ID, "A", "", 0, 0); !errors.As(err, &ae) {
 		t.Fatalf("fara etape agentul e obligatoriu: %v", err)
 	}
-	task, err := f.tm.UserCreateTask(f.p.ID, "A", "fa A", f.rook.ID)
+	task, err := f.tm.UserCreateTask(f.p.ID, "A", "fa A", f.rook.ID, 0)
 	if err != nil || !task.ByUser || task.AssigneeID != f.rook.ID || task.StageID != nil {
 		t.Fatalf("%+v %v", task, err)
 	}
@@ -41,7 +41,7 @@ func TestUserTaskWithoutStages(t *testing.T) {
 func TestUserTaskThroughReviewer(t *testing.T) {
 	f := setup(t)
 	wes := f.agent(t, "Wes", &f.lead, &f.vera) // Vera verifica munca lui Wes
-	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", wes.ID)
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", wes.ID, 0)
 	task.Status = store.StatusInProgress
 	f.st.SaveTask(&task)
 	if _, err := f.tm.ReportDone(f.workerCaller(wes, task.ID), "", "gata"); err != nil {
@@ -90,7 +90,7 @@ func TestAssignTask(t *testing.T) {
 
 func TestAssignTaskInStageNeedsStageAgent(t *testing.T) {
 	f, wes, _ := stagesFixture(t)
-	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0)
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0, 0)
 	var ae AssignError
 	if err := f.tm.AssignTask(task.ID, f.vera.ID); !errors.As(err, &ae) {
 		t.Fatalf("Vera nu e in Dev: %v", err)

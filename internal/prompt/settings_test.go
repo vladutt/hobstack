@@ -108,13 +108,13 @@ func TestSettingsGranted(t *testing.T) {
 
 func TestReadOnlyTools(t *testing.T) {
 	got := ReadOnlyTools([]string{"write", "shell", "packages", "git", "web"})
-	if !slices.Equal(got, []string{"git-read", "web"}) {
+	if !slices.Equal(got, []string{"shell", "git-read", "web"}) {
 		t.Fatalf("%v", got)
 	}
 	if got := ReadOnlyTools(nil); len(got) != 0 {
 		t.Fatalf("%v", got)
 	}
-	raw := Settings(ReadOnlyTools([]string{"write", "shell", "git"}), []string{"/w"}, nil, nil, nil)
+	raw := Settings(ReadOnlyTools([]string{"write", "git"}), []string{"/w"}, nil, nil, nil)
 	var cfg struct {
 		Permissions struct{ Allow, Deny []string } `json:"permissions"`
 	}

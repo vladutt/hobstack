@@ -29,7 +29,7 @@ func (t *Team) recordRequest(c mcp.Caller, task store.Task, leadName string) {
 	}
 }
 
-func (t *Team) CreateTask(c mcp.Caller, title, description, assignee, continues string) (string, error) {
+func (t *Team) CreateTask(c mcp.Caller, title, description, assignee, continues, stage string) (string, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
 
@@ -42,8 +42,16 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee, continues 
 	if err != nil {
 		return "", err
 	}
-	if len(stages) > 0 {
-		return t.createStageTask(c, agents, stages, title, description, assignee, continues)
+	// etapele sunt optionale: doar un stage cerut explicit pune task-ul intr-o etapa
+	if name := strings.TrimSpace(stage); name != "" {
+		st, ok := stageByName(stages, name)
+		if !ok {
+			if len(stages) == 0 {
+				return "", fmt.Errorf("this project has no stages; leave stage empty")
+			}
+			return "", fmt.Errorf("%q is not a stage of this board. Stages: %s", name, stageNames(stages))
+		}
+		return t.createStageTask(c, agents, st, title, description, assignee, continues)
 	}
 	children := store.Children(c.AgentID, agents)
 	if len(children) == 0 {
@@ -96,10 +104,10 @@ func (t *Team) CreateTask(c mcp.Caller, title, description, assignee, continues 
 	return reply, nil
 }
 
-// createStageTask: intr-un proiect cu etape task-ul intra in prima etapa;
+// createStageTask: task-ul intra in etapa first (aleasa de lider cu stage);
 // assignee e optional si trebuie sa fie din acea etapa. Poate crea orice lider
 // sau radacina (etapele decid cine lucreaza). Se apeleaza cu t.work blocat.
-func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []store.Stage, title, description, assignee, continues string) (string, error) {
+func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, first store.Stage, title, description, assignee, continues string) (string, error) {
 	lead, ok := store.FindAgent(agents, c.AgentID)
 	if !ok {
 		return "", errors.New("your agent no longer exists")
@@ -112,14 +120,13 @@ func (t *Team) createStageTask(c mcp.Caller, agents []store.Agent, stages []stor
 	if title == "" {
 		return "", errors.New("title is required")
 	}
-	first := stages[0]
 	who := placeholder(first, lead.ID)
 	assigned := "Queued for stage " + first.Name // fara asignat: il ia primul liber din etapa
 	to := ""                                     // in coada etapei: fara destinatar anume
 	if name := strings.TrimSpace(assignee); name != "" {
 		w, err := t.st.FindAgentByName(c.ProjectID, name)
 		if err != nil || !slices.Contains(first.AgentIDs, w.ID) {
-			return "", fmt.Errorf("%q is not in stage %s (the first stage); leave assignee empty so the first free agent takes it", name, first.Name)
+			return "", fmt.Errorf("%q is not in stage %s; leave assignee empty so the first free agent takes it", name, first.Name)
 		}
 		who = w.ID
 		assigned = "Assigned to " + w.Name
@@ -854,12 +861,13 @@ func (t *Team) SendBack(c mcp.Caller, ref, feedback string) (string, error) {
 	if !ok || !ok2 {
 		return "", errors.New("the agent no longer exists")
 	}
-	// proiect cu etape: inapoi in etapa in care era (sau in prima etapa)
+	// task trecut prin etape: inapoi in etapa in care era (sau in prima etapa);
+	// unul de pe drumul standard merge la asignat, chiar intr-un proiect cu etape
 	stages, err := t.st.ListStages(c.ProjectID)
 	if err != nil {
 		return "", err
 	}
-	if len(stages) > 0 {
+	if len(stages) > 0 && task.ViaStages {
 		target := stages[0]
 		if i := stageIndex(stages, task.StageID); i >= 0 {
 			target = stages[i]

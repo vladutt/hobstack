@@ -98,7 +98,8 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
-		AssigneeID  int64  `json:"assigneeId"` // 0 = primul liber (doar in proiectele cu etape)
+		AssigneeID  int64  `json:"assigneeId"` // 0 = primul liber din etapa (doar cu stageId)
+		StageID     int64  `json:"stageId"`    // etapa in care intra; 0 = drumul standard
 	}
 	var uploads []*multipart.FileHeader
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
@@ -114,6 +115,12 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 		if v := strings.TrimSpace(r.FormValue("assigneeId")); v != "" {
 			if in.AssigneeID, err = strconv.ParseInt(v, 10, 64); err != nil {
 				fail(w, badRequest("assigneeId must be a number"))
+				return
+			}
+		}
+		if v := strings.TrimSpace(r.FormValue("stageId")); v != "" {
+			if in.StageID, err = strconv.ParseInt(v, 10, 64); err != nil {
+				fail(w, badRequest("stageId must be a number"))
 				return
 			}
 		}
@@ -144,9 +151,9 @@ func (s *Server) createUserTask(w http.ResponseWriter, r *http.Request) {
 			fail(w, serr)
 			return
 		}
-		task, err = s.team.UserCreateTaskWithFiles(pid, title, strings.TrimSpace(in.Description), in.AssigneeID, staged)
+		task, err = s.team.UserCreateTaskWithFiles(pid, title, strings.TrimSpace(in.Description), in.AssigneeID, in.StageID, staged)
 	} else {
-		task, err = s.team.UserCreateTask(pid, title, strings.TrimSpace(in.Description), in.AssigneeID)
+		task, err = s.team.UserCreateTask(pid, title, strings.TrimSpace(in.Description), in.AssigneeID, in.StageID)
 	}
 	var ae team.AssignError
 	if errors.As(err, &ae) {

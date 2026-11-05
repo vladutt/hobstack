@@ -113,7 +113,10 @@ const howFiles = `When the task asks for a file as its result (a document, an im
 const howEdits = `Change files only with the Edit and Write tools, never through the shell: no cat, echo or printf ` +
 	`redirected into a file, no heredocs, no sed -i, no scripts (python, php, node) that rewrite files. HobStack records ` +
 	`Edit and Write changes on the task, so the user and the reviewer see the exact diff. Use the shell to run things ` +
-	`(tests, builds, linters, git) and let tools that generate files (formatters, code generators, installers) write them.`
+	`(tests, builds, linters, git) and let tools that generate files (formatters, code generators, installers) write them. ` +
+	`Write only inside your own folder (your working directory). Scratch files and throwaway test scripts go there too, ` +
+	`for example in a folder ignored by git, and you delete them when done; never in /tmp, your home folder or HobStack's ` +
+	`data folder: writes outside your folder are refused.`
 
 const howWorker = `Work only on the task you received and do not change anything outside it. ` +
 	`When you finish, call mcp__team__report_done with the requested summary. ` +
@@ -135,6 +138,8 @@ const howSolo = `You talk directly with the user and have no team. Answer their 
 // ReadOnlyTurn: linia din tura unui run fara task (chat, notificari, comentarii). E in tura, nu in system
 // prompt, ca sesiunea sa fie aceeasi pentru run-urile cu si fara task.
 const ReadOnlyTurn = `This conversation is read-only: you can read and analyze, but not change files or run commands that change anything. ` +
+	`If you have a shell, run commands that only check or inspect (logs, status, queues, queries, docker exec to look inside a container, tests) ` +
+	`and answer from what they show; do not edit files, migrate, write data, install, commit or restart anything from here. ` +
 	`When the user asks for a change, start a task (mcp__team__start_task for yourself, mcp__team__create_task for your team) ` +
 	`and stop: the work continues in the task. For analysis or questions, answer here; create a task only if the user asks for one. ` +
 	`If a comment on a finished task needs changes, start a follow-up task with continues set to that task.`

@@ -124,7 +124,7 @@ func TestStuckSkips(t *testing.T) {
 			return task, 6 * time.Minute
 		}},
 		{"decide utilizatorul", func(t *testing.T, f *fixture) (store.Task, time.Duration) {
-			task, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.rook.ID)
+			task, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.rook.ID, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

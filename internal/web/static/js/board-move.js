@@ -19,10 +19,12 @@ export function moveAction(t, target) {
     if (t.status === "review") return { ok: true, label: "Send back", needsReason: true };
     if (t.status === "blocked") return { ok: true, label: "Unblock" };
     if (t.status === "done") return { ok: true, label: "Reopen", needsReason: true };
+    // dintr-o etapa inapoi pe drumul standard, la asignatul de acum
+    if (t.status === "queued" && t.stageId) return { ok: true, label: "Move" };
     return { ok: false, why: `${ref} is already queued.` };
   }
   if (target.startsWith("stage:")) {
-    // board-ul cu etape nu are coloana Queued: etapa tine loc de "inapoi in coada"
+    // in etapa: o ia primul agent liber de acolo; din Review / Done = trimis inapoi / redeschis in etapa
     const id = Number(target.slice(6));
     if (t.status === "done") return { ok: true, label: "Reopen", needsReason: true };
     if (t.status === "review") return { ok: true, label: "Send back", needsReason: true };

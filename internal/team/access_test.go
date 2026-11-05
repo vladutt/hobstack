@@ -1,6 +1,7 @@
 package team
 
 import (
+	"path/filepath"
 	"testing"
 
 	"hobstack/internal/runner"
@@ -68,5 +69,29 @@ func TestDeniedRunWaitsForApproval(t *testing.T) {
 	f.wantStatus(t, task.Number, store.StatusInProgress)
 	if !f.hasMessage(f.rook.ID, "T-1 is waiting for your approval in Needs you.") {
 		t.Fatal("lipseste nota")
+	}
+}
+
+// scrierile in afara folderului agentului nu ajung in Needs you (n-are ce aproba), doar in istoric
+func TestDenialsWriteOutsideFolderMakeNoRequest(t *testing.T) {
+	f := setup(t)
+	task := runTaskWithDenials(t, f, []runner.Denial{
+		{Tool: "Write", Detail: "/tmp/vt-test/run.mjs"},
+		{Tool: "Edit", Detail: filepath.Join(filepath.Dir(f.p.Workdir), "other", "a.go")},
+		{Tool: "Write", Detail: filepath.Join(f.p.Workdir, "a.txt")},
+	})
+	rs, _ := f.st.ListOpenAccessRequests(f.p.ID)
+	if len(rs) != 1 || rs[0].Detail != filepath.Join(f.p.Workdir, "a.txt") {
+		t.Fatalf("doar scrierea din folder e cerere: %+v", rs)
+	}
+	evs, _ := f.st.ListTaskEvents(task.ID)
+	n := 0
+	for _, e := range evs {
+		if e.Kind == "denied" {
+			n++
+		}
+	}
+	if n != 3 {
+		t.Fatalf("toate refuzurile raman in istoric: %+v", evs)
 	}
 }

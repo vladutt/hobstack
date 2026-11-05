@@ -64,7 +64,7 @@ func eventKinds(t *testing.T, f *fixture, taskID int64) []string {
 // drumul complet fara etape: creat, pornit, raportat, trimis inapoi, acceptat
 func TestEventsLeadFlow(t *testing.T) {
 	f := setup(t)
-	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "", "Rook", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "", "Rook", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	task := f.wantStatus(t, 1, store.StatusQueued)
@@ -132,7 +132,7 @@ func TestEventsReviewer(t *testing.T) {
 	rev := f.agent(t, "Rev", &f.lead, nil)
 	wes := f.agent(t, "Wes", &f.lead, &rev)
 	for _, title := range []string{"A", "B"} {
-		if _, err := f.tm.CreateTask(f.leadCaller(), title, "", "Wes", ""); err != nil {
+		if _, err := f.tm.CreateTask(f.leadCaller(), title, "", "Wes", "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -178,7 +178,7 @@ func TestEventsOwnRootTaskAccepted(t *testing.T) {
 
 func TestEventsUserTaskAndAssign(t *testing.T) {
 	f := setup(t)
-	task, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.rook.ID)
+	task, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.rook.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,13 +206,13 @@ func TestEventsUserTaskAndAssign(t *testing.T) {
 
 func TestEventsStages(t *testing.T) {
 	f, _, _ := stagesFixture(t)
-	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev"); err != nil {
 		t.Fatal(err)
 	}
 	task := f.wantStatus(t, 1, store.StatusQueued)
 	wantEvent(t, f, task.ID, "created", "Lead", "Created by Lead")
 	wantEvent(t, f, task.ID, "assigned", "Lead", "Queued for stage Dev")
-	u, _ := f.tm.UserCreateTask(f.p.ID, "B", "", 0)
+	u, _ := f.tm.UserCreateTask(f.p.ID, "B", "", 0, 0)
 	wantEvent(t, f, u.ID, "created", "You", "Created by you")
 	wantEvent(t, f, u.ID, "assigned", "You", "Queued for stage Dev")
 
@@ -240,7 +240,7 @@ func TestEventsStages(t *testing.T) {
 
 func TestEventsStageApprove(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev")
 	task, _ := f.st.GetTaskByNumber(f.p.ID, 1)
 	task.StageID, task.AssigneeID, task.Status = &stages[1].ID, f.vera.ID, store.StatusInProgress
 	f.st.SaveTask(&task)
@@ -291,7 +291,7 @@ func TestEventsWaitingSubtasks(t *testing.T) {
 	parent := f.task(t, "Import", sub, store.StatusQueued)
 	mustReconcile(t, f)
 	sub1 := f.fs.last(t, sub)
-	if _, err := f.tm.CreateTask(f.caller(t, sub1), "Parser", "", "Wes", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.caller(t, sub1), "Parser", "", "Wes", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	f.fs.finish(sub1.ID, runner.Outcome{Status: "done"})

@@ -30,7 +30,7 @@ func TestCreateTaskContinues(t *testing.T) {
 	}
 
 	// fara continues: fara fir
-	if _, err := f.tm.CreateTask(lc, "Other", "", "Rook", ""); err != nil { // T-3
+	if _, err := f.tm.CreateTask(lc, "Other", "", "Rook", "", ""); err != nil { // T-3
 		t.Fatal(err)
 	}
 	if got := f.threadOf(t, 3); got != 0 {
@@ -39,7 +39,7 @@ func TestCreateTaskContinues(t *testing.T) {
 
 	// continues pe radacina, in toate formele acceptate
 	for i, ref := range []string{"T-1", " t-1 ", "1"} {
-		if _, err := f.tm.CreateTask(lc, "Fix", "", "Rook", ref); err != nil {
+		if _, err := f.tm.CreateTask(lc, "Fix", "", "Rook", ref, ""); err != nil {
 			t.Fatalf("%q: %v", ref, err)
 		}
 		if got := f.threadOf(t, 4+i); got != start.ID {
@@ -48,7 +48,7 @@ func TestCreateTaskContinues(t *testing.T) {
 	}
 
 	// continues pe un sub-task: firul e radacina arborelui lui
-	if _, err := f.tm.CreateTask(lc, "Fix part", "", "Vera", "T-2"); err != nil { // T-7
+	if _, err := f.tm.CreateTask(lc, "Fix part", "", "Vera", "T-2", ""); err != nil { // T-7
 		t.Fatal(err)
 	}
 	if got := f.threadOf(t, 7); got != start.ID {
@@ -56,7 +56,7 @@ func TestCreateTaskContinues(t *testing.T) {
 	}
 
 	// continues pe un follow-up (deja in fir): acelasi fir
-	if _, err := f.tm.CreateTask(lc, "Fix again", "", "Rook", "T-4"); err != nil { // T-8
+	if _, err := f.tm.CreateTask(lc, "Fix again", "", "Rook", "T-4", ""); err != nil { // T-8
 		t.Fatal(err)
 	}
 	if got := f.threadOf(t, 8); got != start.ID {
@@ -69,7 +69,7 @@ func TestCreateTaskContinues(t *testing.T) {
 	if err := f.st.CreateTask(&child); err != nil { // T-9
 		t.Fatal(err)
 	}
-	if _, err := f.tm.CreateTask(lc, "Fix deep", "", "Rook", "T-9"); err != nil { // T-10
+	if _, err := f.tm.CreateTask(lc, "Fix deep", "", "Rook", "T-9", ""); err != nil { // T-10
 		t.Fatal(err)
 	}
 	if got := f.threadOf(t, 10); got != start.ID {
@@ -92,7 +92,7 @@ func TestCreateTaskContinuesUnknown(t *testing.T) {
 		}
 	}
 	for _, ref := range []string{"T-5", " T-85 ", "abc"} {
-		_, err := f.tm.CreateTask(f.leadCaller(), "Fix", "", "Rook", ref)
+		_, err := f.tm.CreateTask(f.leadCaller(), "Fix", "", "Rook", ref, "")
 		want := `"` + strings.TrimSpace(ref) + `" is not a task of this project`
 		if err == nil || err.Error() != want {
 			t.Fatalf("%q: eroare %v, vreau %s", ref, err, want)
@@ -106,10 +106,10 @@ func TestCreateTaskContinuesUnknown(t *testing.T) {
 func TestCreateTaskContinuesInStages(t *testing.T) {
 	f, _, _ := stagesFixture(t)
 	lc := f.leadCaller()
-	if _, err := f.tm.CreateTask(lc, "Audit", "", "", ""); err != nil { // T-1
+	if _, err := f.tm.CreateTask(lc, "Audit", "", "", "", "Dev"); err != nil { // T-1
 		t.Fatal(err)
 	}
-	if _, err := f.tm.CreateTask(lc, "Fix", "", "", "T-1"); err != nil { // T-2
+	if _, err := f.tm.CreateTask(lc, "Fix", "", "", "T-1", "Dev"); err != nil { // T-2
 		t.Fatal(err)
 	}
 	first, _ := f.st.GetTaskByNumber(f.p.ID, 1)
@@ -119,7 +119,7 @@ func TestCreateTaskContinuesInStages(t *testing.T) {
 	if got := f.threadOf(t, 1); got != 0 {
 		t.Fatalf("task-ul care porneste firul nu are fir: %d", got)
 	}
-	if _, err := f.tm.CreateTask(lc, "Fix", "", "", "T-9"); err == nil || err.Error() != `"T-9" is not a task of this project` {
+	if _, err := f.tm.CreateTask(lc, "Fix", "", "", "T-9", "Dev"); err == nil || err.Error() != `"T-9" is not a task of this project` {
 		t.Fatalf("cu etape, task necunoscut: %v", err)
 	}
 }

@@ -2,6 +2,7 @@ package team
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,11 +28,11 @@ func TestStageCreateAndFirstFree(t *testing.T) {
 	f, wes, stages := stagesFixture(t)
 	lc := f.leadCaller()
 	for _, title := range []string{"A", "B"} {
-		if _, err := f.tm.CreateTask(lc, title, "", "", ""); err != nil {
+		if _, err := f.tm.CreateTask(lc, title, "", "", "", "Dev"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := f.tm.CreateTask(lc, "C", "", "Vera", ""); err == nil || !strings.Contains(err.Error(), "is not in stage Dev") {
+	if _, err := f.tm.CreateTask(lc, "C", "", "Vera", "", "Dev"); err == nil || !strings.Contains(err.Error(), "is not in stage Dev") {
 		t.Fatalf("assignee din alta etapa: %v", err)
 	}
 	mustReconcile(t, f)
@@ -54,13 +55,26 @@ func TestStageCreateAndFirstFree(t *testing.T) {
 
 func TestUserCreateTaskInStages(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	task, err := f.tm.UserCreateTask(f.p.ID, "Login", "cu parola", 0)
+	task, err := f.tm.UserCreateTask(f.p.ID, "Login", "cu parola", 0, 0)
 	if err != nil || !task.ByUser || task.CreatorID != nil || task.StageID == nil || *task.StageID != stages[0].ID {
 		t.Fatalf("%+v %v", task, err)
 	}
 	var ae AssignError
-	if _, err := f.tm.UserCreateTask(f.p.ID, "X", "", f.vera.ID); !errors.As(err, &ae) {
+	if _, err := f.tm.UserCreateTask(f.p.ID, "X", "", f.vera.ID, stages[0].ID); !errors.As(err, &ae) {
 		t.Fatalf("Vera nu e in prima etapa: %v", err)
+	}
+	// fara etapa aleasa, task-ul merge pe drumul standard, la agentul ales
+	std, err := f.tm.UserCreateTask(f.p.ID, "Y", "", f.vera.ID, 0)
+	if err != nil || std.StageID != nil || std.ViaStages || std.AssigneeID != f.vera.ID {
+		t.Fatalf("drum standard: %+v %v", std, err)
+	}
+	// o etapa anume (nu doar prima)
+	in2, err := f.tm.UserCreateTask(f.p.ID, "Z", "", 0, stages[1].ID)
+	if err != nil || in2.StageID == nil || *in2.StageID != stages[1].ID || !in2.ViaStages {
+		t.Fatalf("etapa a doua: %+v %v", in2, err)
+	}
+	if _, err := f.tm.UserCreateTask(f.p.ID, "W", "", 0, 99999); !errors.As(err, &ae) {
+		t.Fatalf("etapa inexistenta: %v", err)
 	}
 }
 
@@ -69,7 +83,7 @@ func TestStageWithoutAgentsWaits(t *testing.T) {
 	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Gol", Kind: store.KindWork}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Gol"); err != nil {
 		t.Fatal(err)
 	}
 	n := f.fs.count()
@@ -93,14 +107,14 @@ func TestRootWithoutChildrenCreatesInStages(t *testing.T) {
 	if !c.IsLead {
 		t.Fatal("radacina dintr-un proiect cu etape trebuia sa primeasca create_task")
 	}
-	if _, err := f.tm.CreateTask(c, "A", "", "", ""); err != nil {
+	if _, err := f.tm.CreateTask(c, "A", "", "", "", "Dev"); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestStageFullFlow(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "", "Rook", ""); err != nil {
+	if _, err := f.tm.CreateTask(f.leadCaller(), "Login", "", "Rook", "", "Dev"); err != nil {
 		t.Fatal(err)
 	}
 	mustReconcile(t, f)
@@ -155,7 +169,7 @@ func TestStageFullFlow(t *testing.T) {
 
 func TestStageRejectLimitBlocks(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev")
 	for i := 0; i < MaxSendBacks; i++ {
 		// il aducem direct in QA, in lucru la Vera
 		task, _ := f.st.GetTaskByNumber(f.p.ID, 1)
@@ -175,7 +189,7 @@ func TestStageRejectLimitBlocks(t *testing.T) {
 
 func TestUserTaskDecidedByUser(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0)
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0, 0)
 	// sarim direct la finalul etapelor
 	task.StageID, task.Status, task.ReviewStage = nil, store.StatusReview, store.StageLead
 	f.st.SaveTask(&task)
@@ -202,7 +216,7 @@ func TestUserTaskDecidedByUser(t *testing.T) {
 
 func TestStageRunWithoutReportGoesToLead(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "", "Dev")
 	mustReconcile(t, f)
 	rook1 := f.fs.last(t, f.rook)
 	f.fs.finish(rook1.ID, runner.Outcome{Status: "done", Result: "am uitat de raport"})
@@ -233,7 +247,7 @@ func mustAgents(t *testing.T, f *fixture) []store.Agent {
 // sa ia task-ul de la Vera.
 func TestStageOldRunEndDoesNotStealTask(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "Rook", "", "Dev")
 	mustReconcile(t, f)
 	rook1 := f.fs.last(t, f.rook)
 	if _, err := f.tm.ReportDone(f.caller(t, rook1), "", "gata"); err != nil {
@@ -269,7 +283,7 @@ func TestLeadTurnListsStages(t *testing.T) {
 // (altfel dispare de pe board si nu se mai poate debloca)
 func TestBlockedAfterFinalSendBackKeepsStage(t *testing.T) {
 	f, _, stages := stagesFixture(t)
-	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev")
 	task, _ := f.st.GetTaskByNumber(f.p.ID, 1)
 	task.StageID, task.Status, task.ReviewStage, task.SendBacks = nil, store.StatusReview, store.StageLead, MaxSendBacks-1
 	f.st.SaveTask(&task)
@@ -285,7 +299,7 @@ func TestBlockedAfterFinalSendBackKeepsStage(t *testing.T) {
 // Important din review: seful asignatului nu decide un task creat de utilizator
 func TestLeadCannotDecideUserTask(t *testing.T) {
 	f, _, _ := stagesFixture(t)
-	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0)
+	task, _ := f.tm.UserCreateTask(f.p.ID, "A", "", 0, 0)
 	task.StageID, task.Status, task.ReviewStage, task.AssigneeID = nil, store.StatusReview, store.StageLead, f.vera.ID
 	f.st.SaveTask(&task)
 	if _, err := f.tm.AcceptTask(f.leadCaller(), "T-1", ""); err == nil {
@@ -304,7 +318,7 @@ func TestDetachedStageAgentDoesNotWork(t *testing.T) {
 	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{solo.ID}}}); err != nil {
 		t.Fatal(err)
 	}
-	f.tm.CreateTask(f.leadCaller(), "A", "", "", "")
+	f.tm.CreateTask(f.leadCaller(), "A", "", "", "", "Dev")
 	n := f.fs.count()
 	mustReconcile(t, f)
 	f.wantStatus(t, 1, store.StatusQueued)
@@ -322,5 +336,83 @@ func TestUserDecidesWhenNoDecider(t *testing.T) {
 	f.st.SaveTask(&task)
 	if !f.tm.UserDecides(task, mustAgents(t, f), f.p.Autonomy) {
 		t.Fatal("fara creator si cu asignat radacina, decide utilizatorul")
+	}
+}
+
+// Etapele sunt optionale: fara stage, create_task merge pe drumul standard, si intr-un proiect cu etape.
+func TestCreateTaskWithoutStageInStagedProject(t *testing.T) {
+	f, _, stages := stagesFixture(t)
+	if _, err := f.tm.CreateTask(f.leadCaller(), "Std", "", "Vera", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	std := f.wantStatus(t, 1, store.StatusQueued)
+	if std.StageID != nil || std.ViaStages || std.AssigneeID != f.vera.ID {
+		t.Fatalf("drum standard: %+v", std)
+	}
+	// fara asignat si fara etapa: regula echipei directe
+	if _, err := f.tm.CreateTask(f.leadCaller(), "X", "", "", "", ""); err == nil {
+		t.Fatal("fara asignat si fara etapa trebuia refuzat")
+	}
+	if _, err := f.tm.CreateTask(f.leadCaller(), "X", "", "", "", "Nope"); err == nil || !strings.Contains(err.Error(), "Dev, QA") {
+		t.Fatalf("etapa necunoscuta: %v", err)
+	}
+	// etapa a doua, numele fara diferente de litere
+	if _, err := f.tm.CreateTask(f.leadCaller(), "Check", "", "", "", "qa"); err != nil {
+		t.Fatal(err)
+	}
+	qa := f.wantStatus(t, 2, store.StatusQueued)
+	if qa.StageID == nil || *qa.StageID != stages[1].ID || !qa.ViaStages {
+		t.Fatalf("in QA: %+v", qa)
+	}
+}
+
+// Un task de pe drumul standard trimis inapoi ramane la asignat, nu intra in prima etapa.
+func TestSendBackStandardTaskInStagedProject(t *testing.T) {
+	f, _, _ := stagesFixture(t)
+	task := f.task(t, "Std", f.vera, store.StatusReview)
+	if _, err := f.tm.SendBack(f.leadCaller(), task.Ref(), "mai mult"); err != nil {
+		t.Fatal(err)
+	}
+	got := f.wantStatus(t, task.Number, store.StatusQueued)
+	if got.StageID != nil || got.AssigneeID != f.vera.ID || got.Feedback != "mai mult" {
+		t.Fatalf("lider: %+v", got)
+	}
+	// la fel cand decide utilizatorul (drag pe Queued)
+	user, _ := f.tm.UserCreateTask(f.p.ID, "U", "", f.vera.ID, 0)
+	user.Status, user.ReviewStage = store.StatusReview, store.StageLead
+	if err := f.st.SaveTask(&user); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.MoveTask(user.ID, "queued", "refa"); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.wantStatus(t, user.Number, store.StatusQueued); got.StageID != nil || got.AssigneeID != f.vera.ID {
+		t.Fatalf("utilizator: %+v", got)
+	}
+}
+
+// Un task dintr-o etapa tras pe Queued iese din etape si ramane la asignat.
+func TestMoveStageTaskToQueued(t *testing.T) {
+	f, _, stages := stagesFixture(t)
+	task, err := f.tm.UserCreateTask(f.p.ID, "A", "", f.rook.ID, stages[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.MoveTask(task.ID, "queued", ""); err != nil {
+		t.Fatal(err)
+	}
+	got := f.wantStatus(t, task.Number, store.StatusQueued)
+	if got.StageID != nil || got.ViaStages || got.AssigneeID != f.rook.ID {
+		t.Fatalf("iesit din etape: %+v", got)
+	}
+	if err := f.tm.MoveTask(task.ID, "queued", ""); err == nil {
+		t.Fatal("deja in Queued")
+	}
+	// si inapoi intr-o etapa
+	if err := f.tm.MoveTask(task.ID, "stage:"+strconv.FormatInt(stages[1].ID, 10), ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.wantStatus(t, task.Number, store.StatusQueued); got.StageID == nil || *got.StageID != stages[1].ID || !got.ViaStages {
+		t.Fatalf("in QA: %+v", got)
 	}
 }

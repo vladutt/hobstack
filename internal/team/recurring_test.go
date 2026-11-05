@@ -132,17 +132,14 @@ func TestRunDueAssigneeDeleted(t *testing.T) {
 
 func TestRunDueErrorDoesNotStopOthers(t *testing.T) {
 	f := setup(t)
-	// cu etape, un agent care nu e in prima etapa da AssignError la creare
-	stages, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{f.rook.ID}}})
-	if err != nil {
+	// un agent detasat dupa creare da AssignError la rulare
+	wes := f.agent(t, "Wes", &f.lead, nil)
+	bad := f.recurring(t, RecurringInput{Title: "bad", AssigneeID: wes.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
+	wes.ParentID, wes.Detached = nil, true
+	if err := f.st.UpdateAgent(wes); err != nil {
 		t.Fatal(err)
 	}
-	bad := f.recurring(t, RecurringInput{Title: "bad", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
-	stages[0].AgentIDs = []int64{f.vera.ID} // Rook scos din etapa dupa creare (ID-ul etapei pastrat)
-	if _, err := f.st.SaveStages(f.p.ID, stages); err != nil {
-		t.Fatal(err)
-	}
-	good := f.recurring(t, RecurringInput{Title: "good", Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
+	good := f.recurring(t, RecurringInput{Title: "good", AssigneeID: f.rook.ID, Schedule: daily9, Enabled: true}, at("2026-10-05 08:00"))
 	if err := f.tm.RunDue(at("2026-10-05 09:00")); err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +291,7 @@ func TestUpdateRecurringDisableBrokenAssignee(t *testing.T) {
 	if _, err := f.tm.UpdateRecurring(r.ID, in); !errors.As(err, &re) {
 		t.Fatalf("pornire cu agent detasat: %v", err)
 	}
-	// scos din prima etapa
+	// scos din prima etapa: cu asignat, sarcina merge pe drumul standard, deci porneste
 	f = setup(t)
 	if _, err := f.st.SaveStages(f.p.ID, []store.Stage{{Name: "Dev", Kind: store.KindWork, AgentIDs: []int64{f.rook.ID, f.vera.ID}}}); err != nil {
 		t.Fatal(err)
@@ -308,8 +305,8 @@ func TestUpdateRecurringDisableBrokenAssignee(t *testing.T) {
 		t.Fatalf("oprire (scos din etapa): %+v %v", got, err)
 	}
 	in.Enabled = true
-	if _, err := f.tm.UpdateRecurring(r.ID, in); !errors.As(err, &re) {
-		t.Fatalf("pornire (scos din etapa): %v", err)
+	if got, err := f.tm.UpdateRecurring(r.ID, in); err != nil || !got.Enabled {
+		t.Fatalf("pornire (scos din etapa): %+v %v", got, err)
 	}
 	// agent din alt proiect nu trece nici oprit
 	if _, err := f.tm.UpdateRecurring(r.ID, RecurringInput{Title: "x", AssigneeID: 99999, Schedule: daily9}); err == nil {

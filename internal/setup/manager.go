@@ -577,7 +577,7 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 		}
 	}
 	if busy {
-		// in chat: HobStack pastreaza tool-urile alese de utilizator, dar nu adauga shell sau web
+		// in chat: HobStack pastreaza tool-urile alese de utilizator, dar nu adauga web
 		if err := ValidateProposal(&p, false, existing); err != nil {
 			return "", err
 		}
@@ -609,10 +609,10 @@ func (m *Manager) propose(id string, raw json.RawMessage) (string, error) {
 				allowed = chatTools[old]
 			}
 			for _, tool := range a.Tools {
-				if tool == "write" || tool == "git" || slices.Contains(allowed, tool) {
+				if slices.Contains(safeTools, tool) || slices.Contains(allowed, tool) {
 					continue
 				}
-				return "", ValidationError(fmt.Sprintf("you may not add the shell or web tools (%s: %s); the user adds them", a.Name, tool))
+				return "", ValidationError(fmt.Sprintf("you may not add the web tool (%s: %s); the user adds it", a.Name, tool))
 			}
 		}
 	} else if err := ValidateProposal(&p, true, existing); err != nil {

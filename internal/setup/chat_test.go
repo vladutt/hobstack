@@ -61,14 +61,14 @@ func TestChatResumesWithCurrentProposal(t *testing.T) {
 		t.Fatalf("busy: %v", err)
 	}
 
-	// HobStack propune: pastreaza shell la Bob (ok); adauga shell la Vera (refuzat)
+	// HobStack propune: pastreaza shell la Bob (ok); adauga web la Vera (refuzat)
 	b := m.Wrap(innerBackend{})
 	c, _ := b.Resolve(tokenOf(t, spec))
-	bad := `{"name":"Shop","goal":"g","context":"edited by the user","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Bob","role":"Dev","reportsTo":"Ana","tools":["write","shell"]},{"name":"Vera","role":"QA","reportsTo":"Ana","tools":["shell"]}]}`
-	if _, err := b.ProposeSetup(c, json.RawMessage(bad)); err == nil || !strings.Contains(err.Error(), "shell") {
-		t.Fatalf("shell nou: %v", err)
+	bad := `{"name":"Shop","goal":"g","context":"edited by the user","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Bob","role":"Dev","reportsTo":"Ana","tools":["write","shell"]},{"name":"Vera","role":"QA","reportsTo":"Ana","tools":["web"]}]}`
+	if _, err := b.ProposeSetup(c, json.RawMessage(bad)); err == nil || !strings.Contains(err.Error(), "web") {
+		t.Fatalf("web nou: %v", err)
 	}
-	good := strings.Replace(bad, `"tools":["shell"]}`, `"tools":["write"]}`, 1)
+	good := strings.Replace(bad, `"tools":["web"]}`, `"tools":["write","shell"]}`, 1)
 	if _, err := b.ProposeSetup(c, json.RawMessage(good)); err != nil {
 		t.Fatal(err)
 	}
@@ -235,25 +235,25 @@ func TestChatRefusesHiddenSession(t *testing.T) {
 	}
 }
 
-// redenumirea pastreaza tool-urile bifate de utilizator; un agent cu adevarat nou nu primeste shell
+// redenumirea pastreaza tool-urile bifate de utilizator; un agent cu adevarat nou nu primeste web
 func TestChatRenameKeepsTools(t *testing.T) {
 	m, f, s := readySession(t)
 	cur, _ := cloneProposal(*s.Proposal)
-	cur.Agents[1].Tools = []string{"write", "shell"}
+	cur.Agents[1].Tools = []string{"write", "web"}
 	if _, err := m.Chat(s.ID, "rename Bob to Rob", cur); err != nil {
 		t.Fatal(err)
 	}
 	spec := f.specs[len(f.specs)-1]
 	b := m.Wrap(innerBackend{})
 	c, _ := b.Resolve(tokenOf(t, spec))
-	rename := `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Rob","role":"Dev","reportsTo":"Ana","tools":["write","shell"]}]}`
+	rename := `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Rob","role":"Dev","reportsTo":"Ana","tools":["write","web"]}]}`
 	if _, err := b.ProposeSetup(c, json.RawMessage(rename)); err != nil {
 		t.Fatalf("redenumire: %v", err)
 	}
-	// Bob ramane (nu e redenumire), Vera e noua: shell refuzat
-	added := `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Rob","role":"Dev","reportsTo":"Ana","tools":["write","shell"]},{"name":"Vera","role":"QA","reportsTo":"Ana","tools":["shell"]}]}`
-	if _, err := b.ProposeSetup(c, json.RawMessage(added)); err == nil || !strings.Contains(err.Error(), "shell") {
-		t.Fatalf("agent nou cu shell: %v", err)
+	// Bob ramane (nu e redenumire), Vera e noua: web refuzat
+	added := `{"name":"Shop","goal":"g","context":"c","agents":[{"name":"Ana","role":"Lead","reportsTo":""},{"name":"Rob","role":"Dev","reportsTo":"Ana","tools":["write","web"]},{"name":"Vera","role":"QA","reportsTo":"Ana","tools":["web"]}]}`
+	if _, err := b.ProposeSetup(c, json.RawMessage(added)); err == nil || !strings.Contains(err.Error(), "web") {
+		t.Fatalf("agent nou cu web: %v", err)
 	}
 }
 

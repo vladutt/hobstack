@@ -37,10 +37,10 @@ var errNoFilesRoot = errors.New("files cannot be attached in this setup")
 // UserCreateTaskWithFiles e UserCreateTask cu fisierele utilizatorului: randurile lor exista
 // inainte de Kick, deci agentul nu poate porni pe task fara ele. La eroare nu ramane nimic
 // creat; fisierele din staging le sterge apelantul.
-func (t *Team) UserCreateTaskWithFiles(projectID int64, title, description string, agentID int64, files []StagedFile) (store.Task, error) {
+func (t *Team) UserCreateTaskWithFiles(projectID int64, title, description string, agentID, stageID int64, files []StagedFile) (store.Task, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
-	return t.userCreateTask(projectID, title, description, agentID, taskOrigin{files: files})
+	return t.userCreateTask(projectID, title, description, agentID, taskOrigin{files: files, stageID: stageID})
 }
 
 // AddUserFiles: utilizatorul pune fisiere pe un task existent. Dupa status:

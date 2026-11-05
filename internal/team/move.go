@@ -78,14 +78,36 @@ func (t *Team) moveToQueue(task store.Task, agents []store.Agent, reason string)
 			return ErrReasonRequired
 		}
 		return t.reopenTask(task, agents, nil, reason)
+	case store.StatusQueued:
+		if task.StageID != nil {
+			return t.leaveStages(task, agents, reason)
+		}
 	}
 	return MoveError(task.Ref() + " is already queued.")
 }
 
-// moveToStage: un task in asteptare / blocat trece in alta etapa (il ia primul liber de acolo);
-// unul Done se redeschide in etapa aceea (cu motiv). Board-ul cu etape nu are coloana Queued:
-// un task blocat tras pe etapa lui e deblocat, iar unul din Review e trimis inapoi in etapa
-// pe care a fost tras (cu motiv).
+// leaveStages: un task care asteapta intr-o etapa, tras pe Queued, iese din etape si ramane
+// la asignatul de acum, pe drumul standard (send back il intoarce la el, nu intr-o etapa).
+func (t *Team) leaveStages(task store.Task, agents []store.Agent, reason string) error {
+	task.StageID, task.ViaStages = nil, false
+	task.SendBacks, task.Escalated = 0, false
+	if reason != "" {
+		task.Feedback = reason
+	}
+	if err := t.st.SaveTask(&task); err != nil {
+		return err
+	}
+	name := agentName(agents, task.AssigneeID)
+	t.taskEvent(task, "assigned", actorUser, "You moved it to Queued, for "+name)
+	t.note(task.ProjectID, task.AssigneeID, fmt.Sprintf("%s assigned by the user: %s", task.Ref(), task.Title), true)
+	t.emit(task.ProjectID, "task", task)
+	t.Kick(task.ProjectID)
+	return nil
+}
+
+// moveToStage: un task in asteptare / blocat trece in etapa (il ia primul liber de acolo), si
+// unul de pe drumul standard; unul Done se redeschide in etapa aceea (cu motiv). Un task blocat
+// tras pe etapa lui e deblocat, iar unul din Review e trimis inapoi in etapa pe care a fost tras (cu motiv).
 func (t *Team) moveToStage(task store.Task, agents []store.Agent, stageID int64, reason string) error {
 	stages, err := t.st.ListStages(task.ProjectID)
 	if err != nil {
@@ -166,6 +188,8 @@ func (t *Team) reopenTask(task store.Task, agents []store.Agent, st *store.Stage
 	if st != nil {
 		task.StageID = &st.ID
 		task.AssigneeID = placeholder(*st, task.AssigneeID)
+	} else {
+		task.StageID, task.ViaStages = nil, false // redeschis pe Queued: drumul standard, la asignat
 	}
 	if err := t.st.SaveTask(&task); err != nil {
 		return err

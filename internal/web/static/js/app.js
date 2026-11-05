@@ -64,6 +64,7 @@ async function route() {
   const { r, m } = found;
   const inProject = hash.match(/^#\/p\/(\d+)/);
   if (inProject) touchRecent(Number(inProject[1])); // ordinea din switcher-ul de proiecte
+  updateTitle(hash);
   const key = r.key ? r.key(m) : null;
   if (key && current && current.key === key && current.update) {
     current.update(m);
@@ -105,9 +106,52 @@ window.addEventListener("keydown", (e) => {
   }
 }, true);
 window.addEventListener("hobstack:switch", toggleSwitcher);
-route();
+
+// Titlul tab-ului din browser: cu multe tab-uri deschise, numele proiectului vine primul
+// ("Probe · Stats — HobStack"), apoi sectiunea. Numele proiectelor stau intr-un cache mic;
+// la fiecare intrare pe proiect se recitesc (poate fi redenumit), dar titlul se pune imediat din cache.
+let appTitle = "HobStack";
+const projectNames = new Map(); // id -> nume
+let titleSeq = 0;
+
+function sectionOf(hash) {
+  if (/^#\/?$/.test(hash)) return "Projects";
+  if (hash.startsWith("#/setup")) return "Set up with AI";
+  if (hash.startsWith("#/library")) return "Library";
+  if (hash.startsWith("#/settings")) return "Settings";
+  if (hash === "#/new") return "New project";
+  const m = hash.match(/^#\/p\/\d+(\/.*)?$/);
+  if (!m) return "";
+  if (/^\/edit/.test(m[1] || "")) return "Edit";
+  if (/^\/agents\/new/.test(m[1] || "")) return "New agent";
+  const tab = parseWorkspaceRoute(m[1]).tab;
+  return tab.charAt(0).toUpperCase() + tab.slice(1);
+}
+
+function setTitle(parts) {
+  document.title = [parts.filter(Boolean).join(" · "), appTitle].filter(Boolean).join(" — ");
+}
+
+function updateTitle(hash) {
+  const my = ++titleSeq;
+  const section = sectionOf(hash);
+  const p = hash.match(/^#\/p\/(\d+)/);
+  if (!p) {
+    setTitle([section]);
+    return;
+  }
+  const id = Number(p[1]);
+  setTitle([projectNames.get(id), section]);
+  api(`/api/projects/${id}`).then((proj) => {
+    projectNames.set(id, proj.name);
+    if (my === titleSeq) setTitle([proj.name, section]); // doar daca suntem tot pe ruta asta
+  }).catch(() => {});
+}
 
 api("/api/info").then(({ name }) => {
-  const title = name.charAt(0).toUpperCase() + name.slice(1);
-  document.title = title;
+  appTitle = name.charAt(0).toUpperCase() + name.slice(1);
+  updateTitle(location.hash || "#/");
 }).catch(() => {});
+
+// prima desenare la final: route() foloseste starea titlului de mai sus (let-urile trebuie deja initializate)
+route();

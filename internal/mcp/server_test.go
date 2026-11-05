@@ -18,7 +18,7 @@ type fakeBackend struct {
 }
 
 func (f *fakeBackend) Resolve(tok string) (Caller, bool) { c, ok := f.callers[tok]; return c, ok }
-func (f *fakeBackend) CreateTask(c Caller, title, desc, assignee, continues string) (string, error) {
+func (f *fakeBackend) CreateTask(c Caller, title, desc, assignee, continues, stage string) (string, error) {
 	f.calls = append(f.calls, "create_task|"+title+"|"+desc+"|"+assignee+"|"+continues)
 	return "Creat T-1 pentru " + assignee, f.err
 }

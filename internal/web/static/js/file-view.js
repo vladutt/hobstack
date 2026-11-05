@@ -125,6 +125,7 @@ export async function openFileView({ taskId, subTaskId, path, files }) {
           el("span", { class: "fv-tree-name" }, name),
           f.taskId && f.taskId !== taskId && f.ref ? el("span", { class: "modified-ref" }, f.ref) : null,
           f.shell ? shellTag() : null,
+          f.commit ? commitTag() : null,
           f.added != null ? statBadge({ added: f.added, removed: f.removed, kind: f.created ? "create" : "edit" }) : null);
         rows.push([f, btn]);
         nodes.push(btn);
@@ -229,6 +230,11 @@ function splitHighlighted(code) {
   out.push(cur);
   if (out.length > 1 && out[out.length - 1] === "") out.pop(); // ultimul "\n" din fisier
   return out;
+}
+
+// commitTag: eticheta "commit" pe un fisier doar commit-uit pe task (modificarea era deja facuta, de alt task)
+export function commitTag() {
+  return el("span", { class: "shell-tag", title: "Committed on this task: the change itself was already in the folder when the run started (usually made by another task). The diff is what the commit added." }, "commit");
 }
 
 // shellTag: eticheta "shell" pe un fisier schimbat prin shell (gasit din git, nu din Edit / Write)

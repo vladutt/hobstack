@@ -169,16 +169,17 @@ func MCPConfig(url string, extra map[string]any) string {
 	return string(b)
 }
 
-// ReadOnlyTools: tool-urile unui run fara task (chat, notificari): fara write, shell si packages,
-// git doar pentru citire; web ramane. Modificarile se fac doar pe task.
+// ReadOnlyTools: tool-urile unui run fara task (chat, notificari): fara write si packages,
+// git doar pentru citire; web si shell raman (shell-ul trece prin regulile pentru comenzi, ca agentul
+// sa poata verifica ceva: loguri, docker exec, interogari). Modificarile se fac doar pe task.
 func ReadOnlyTools(tools []string) []string {
 	out := []string{}
 	for _, name := range tools {
 		switch name {
 		case "git":
 			out = append(out, "git-read")
-		case "web":
-			out = append(out, "web")
+		case "web", "shell":
+			out = append(out, name)
 		}
 	}
 	return out

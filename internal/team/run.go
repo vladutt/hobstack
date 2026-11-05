@@ -180,13 +180,12 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 	}
 
-	// grant-urile din "Needs you": ale task-ului run-ului (nu se consuma); un run fara task nu primeste nimic
-	var granted []string
-	if taskID != 0 {
-		if granted, err = t.st.CommandGrants(a.ID, taskID); err != nil {
-			log.Printf("agent %d: command grants: %v", a.ID, err)
-			granted = nil
-		}
+	// grant-urile din "Needs you": ale task-ului run-ului (nu se consuma); un run fara task primeste
+	// grant-urile de chat (task_id NULL, sterse la New chat)
+	granted, err := t.st.CommandGrants(a.ID, taskID)
+	if err != nil {
+		log.Printf("agent %d: command grants: %v", a.ID, err)
+		granted = nil
 	}
 	cmdDeny := prompt.DenyPrefixes(rules, granted)
 
@@ -284,7 +283,7 @@ func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
 }
 
 // shellChanges: o.Changes plus fisierele schimbate pe alte drumuri decat Edit / Write (gitsnap), cu
-// Tool "Shell". Fisierele deja inregistrate de Edit / Write raman doar cu diff-ul lor exact.
+// Tool "Shell" ("Commit" pentru cele doar intrate intr-un commit facut in run). Fisierele deja inregistrate de Edit / Write raman doar cu diff-ul lor exact.
 func (t *Team) shellChanges(agentID int64, o runner.Outcome) []runner.FileChange {
 	t.mu.Lock()
 	ar, ok := t.active[agentID]
@@ -310,7 +309,11 @@ func (t *Team) shellChanges(agentID int64, o runner.Outcome) []runner.FileChange
 		for _, h := range c.Patch {
 			hunks = append(hunks, runner.Hunk{OldStart: h.OldStart, OldLines: h.OldLines, NewStart: h.NewStart, NewLines: h.NewLines, Lines: h.Lines})
 		}
-		out = append(out, runner.FileChange{Tool: "Shell", Path: filepath.Join(dir, filepath.FromSlash(c.Path)), Kind: c.Kind, Patch: hunks, Truncated: c.Truncated})
+		tool := "Shell"
+		if c.Committed {
+			tool = "Commit" // doar intrat intr-un commit facut in run
+		}
+		out = append(out, runner.FileChange{Tool: tool, Path: filepath.Join(dir, filepath.FromSlash(c.Path)), Kind: c.Kind, Patch: hunks, Truncated: c.Truncated})
 	}
 	return out
 }
@@ -508,6 +511,12 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 	if err != nil {
 		log.Printf("agent %d: command grants: %v", a.ID, err)
 	}
+	home := ""
+	if folders, err := t.st.ListFolders(ar.projectID); err != nil {
+		log.Printf("agent %d: folders: %v", a.ID, err)
+	} else {
+		home = store.HomeFolder(a, folders).Path
+	}
 	seen := map[string]bool{}
 	recorded := false
 	for _, d := range denials {
@@ -515,8 +524,15 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 		if d.Tool == "Task" || prompt.AlwaysDeniedTool(d.Tool) {
 			continue
 		}
-		// run fara task: scrierea e taiata intentionat (agentul porneste un task), nu e o cerere de acces
-		if ar.taskID == 0 && slices.Contains([]string{"Edit", "Write", "NotebookEdit", "Bash"}, d.Tool) {
+		// run fara task: scrierea e taiata intentionat (agentul porneste un task), nu e o cerere de acces;
+		// Bash la fel, doar pentru agentii fara shell (cu shell, regulile Ask / Block decid mai jos, ca pe task)
+		if ar.taskID == 0 && (slices.Contains([]string{"Edit", "Write", "MultiEdit", "NotebookEdit"}, d.Tool) || d.Tool == "Bash" && !hasShell) {
+			continue
+		}
+		// scriere in afara folderului agentului: claude o refuza oricum si nu are ce sa aprobe
+		// utilizatorul (agentul scrie doar in folderul lui); ramane doar in istoricul task-ului
+		if writeOutside(d, home) {
+			t.denialEvent(task, a, d)
 			continue
 		}
 		// cererile pentru acest refuz; implicit cererea de tool (Enable Shell, WebFetch...)
@@ -579,6 +595,23 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 	if recorded {
 		t.emit(ar.projectID, "access", map[string]any{"agentId": a.ID})
 	}
+}
+
+// writeOutside: refuzul e o scriere (Edit / Write...) pe o cale absoluta din afara
+// folderului home. Detail e calea, poate scurtata cu "..."; prefixul folderului ramane.
+func writeOutside(d runner.Denial, home string) bool {
+	if home == "" || !slices.Contains([]string{"Edit", "Write", "MultiEdit", "NotebookEdit"}, d.Tool) {
+		return false
+	}
+	path := strings.TrimSuffix(d.Detail, "...")
+	if !filepath.IsAbs(path) {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(home), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // denialEvent trece refuzul in istoricul task-ului (daca refuzul a fost pe un task).

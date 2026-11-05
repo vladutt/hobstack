@@ -10,7 +10,7 @@ export function stagesEditor({ project, onSaved, onClose }) {
   const box = el("div", { class: "stages-editor section" },
     el("div", { class: "section-head" },
       el("h2", {}, "Columns (work stages)"),
-      el("span", { class: "hint" }, "A task moves through the stages in order; the first free agent in a stage picks it up. After the last one, the lead decides.")),
+      el("span", { class: "hint" }, "Your columns sit between In progress and Review. A task enters one only when you put it there (or a lead does); the first free agent in the column picks it up, it moves through the next columns, and after the last one the lead decides.")),
     rows,
     el("div", { class: "actions" },
       el("button", { type: "button", class: "btn", onclick: () => { list.push({ name: "", kind: "work", agentIds: [] }); draw(); } }, "+ Stage"),
@@ -38,7 +38,7 @@ export function stagesEditor({ project, onSaved, onClose }) {
             title: locked ? "has tasks" : "Delete stage", onclick: () => { list.splice(i, 1); draw(); } }, "×")),
         el("div", { class: "stage-agents" }, agents.length ? agents : el("span", { class: "hint" }, "The project has no agents.")));
     }));
-    if (!list.length) rows.append(el("p", { class: "hint" }, "No stages: the board uses the default columns (Queued, In progress, Review, Done)."));
+    if (!list.length) rows.append(el("p", { class: "hint" }, "No columns of your own: the board has only Queued, In progress, Review and Done."));
   }
 
   async function save() {

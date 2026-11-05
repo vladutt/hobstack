@@ -339,14 +339,7 @@ func (t *Team) startRequestedWork(r *store.ProjectRequest) (store.Task, error) {
 	if !ok {
 		return store.Task{}, ProjectRequestError(fmt.Sprintf("%s has no root agent to receive it", t.projectName(r.ToProject)))
 	}
-	stages, err := t.st.ListStages(r.ToProject)
-	if err != nil {
-		return store.Task{}, err
-	}
-	agentID := root.ID
-	if len(stages) > 0 {
-		agentID = 0 // intra in prima etapa, ca un task din board
-	}
+	agentID := root.ID // la radacina, pe drumul standard (si intr-un proiect cu etape)
 	from, by := t.projectName(r.FromProject), t.agentNameOf(r.FromAgent)
 	desc := strings.TrimSpace(r.Text + fmt.Sprintf("\n\nRequested by %s (%s) as %s.", from, by, r.Ref()))
 	task, err := t.userCreateTask(r.ToProject, r.Title, desc, agentID, taskOrigin{request: r, from: from, by: by})

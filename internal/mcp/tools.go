@@ -58,14 +58,17 @@ var leadTools = []Tool{
 	},
 }
 
-// createTaskInStages: create_task intr-un proiect cu etape (coloane proprii).
+// createTaskInStages: create_task intr-un proiect cu etape (coloane proprii). Etapele sunt optionale:
+// fara stage task-ul merge la un agent din echipa directa, ca fara etape.
 var createTaskInStages = Tool{
-	Name:        "create_task",
-	Description: "Creates a new task. It enters the first stage of the board and the first free agent in that stage takes it; after the last stage you decide (accept_task / send_back).",
+	Name: "create_task",
+	Description: "Creates a new task. Without stage it goes to a worker on your direct team (assignee required) and moves through Queued, In progress and Review as usual. " +
+		"With stage it enters that board stage: the first free agent in the stage takes it, it moves through the next stages, and after the last stage you decide (accept_task / send_back).",
 	InputSchema: schema([]string{"title"}, map[string]any{
 		"title":       str("Short, clear title"),
 		"description": str("What needs to be done, acceptance criteria, relevant files"),
-		"assignee":    str("Optional: an agent from the first stage to take it first; empty = the first free agent"),
+		"assignee":    str("The worker's name. Required without stage; with stage optional (an agent from that stage to take it first; empty = the first free agent)"),
+		"stage":       str("Optional: the board stage the task enters, by name, exactly as in the stages list"),
 		"continues":   str(continuesArg),
 	}),
 }
@@ -190,7 +193,7 @@ var proposeSetupTool = Tool{
 				"folder":           str("The agent's folder (a name from folders); empty = the first folder"),
 				"tools": map[string]any{
 					"type":  "array",
-					"items": map[string]any{"type": "string", "enum": []string{"write", "git"}},
+					"items": map[string]any{"type": "string", "enum": []string{"write", "shell", "git"}},
 				},
 			}),
 		},

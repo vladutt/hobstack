@@ -46,7 +46,7 @@ func TestUserCreateTaskWithFiles(t *testing.T) {
 	staging := filepath.Join(root, "staging")
 	files := stage(t, staging, "brief.txt", "colors.txt")
 
-	task, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "Use the brief.", f.rook.ID, files)
+	task, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "Use the brief.", f.rook.ID, 0, files)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestUserTaskWithoutFilesNoAddDir(t *testing.T) {
 	f := setup(t)
 	root := t.TempDir()
 	f.tm.SetFilesRoot(root)
-	task, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "", f.rook.ID, nil)
+	task, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "", f.rook.ID, 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestUserCreateTaskWithFilesFails(t *testing.T) {
 	f.tm.SetFilesRoot(root)
 	files := stage(t, filepath.Join(root, "staging"), "brief.txt")
 	var ae AssignError
-	if _, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "", 0, files); !errors.As(err, &ae) {
+	if _, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "", 0, 0, files); !errors.As(err, &ae) {
 		t.Fatalf("%v", err)
 	}
 	if tasks, _ := f.st.ListTasks(f.p.ID); len(tasks) != 0 {
@@ -107,7 +107,7 @@ func TestUserCreateTaskWithFilesFails(t *testing.T) {
 	}
 	// un rename imposibil anuleaza tot (task-ul abia creat se sterge)
 	bad := []StagedFile{{Dir: filepath.Join(root, "nope"), Stored: "x-a.txt", Name: "a.txt"}}
-	if _, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "", f.rook.ID, bad); err == nil {
+	if _, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "Logo", "", f.rook.ID, 0, bad); err == nil {
 		t.Fatal("rename-ul trebuia sa esueze")
 	}
 	if tasks, _ := f.st.ListTasks(f.p.ID); len(tasks) != 0 {
@@ -319,7 +319,7 @@ func TestUserFilesCap(t *testing.T) {
 	for i := range many {
 		many[i] = fmt.Sprintf("m%d.txt", i)
 	}
-	if _, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "B", "", f.rook.ID, stage(t, filepath.Join(root, "s4"), many...)); !errors.As(err, &tm) {
+	if _, err := f.tm.UserCreateTaskWithFiles(f.p.ID, "B", "", f.rook.ID, 0, stage(t, filepath.Join(root, "s4"), many...)); !errors.As(err, &tm) {
 		t.Fatalf("creare cu 51: %v", err)
 	}
 }
