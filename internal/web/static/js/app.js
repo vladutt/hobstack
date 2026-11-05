@@ -12,6 +12,7 @@ import { skillAddView } from "./skill-add.js";
 import { toggleSwitcher, touchRecent } from "./project-switcher.js";
 import { modKey } from "./code-explorer.js";
 import { initUpdates } from "./update.js";
+import { initClaudeSetup } from "./claude-setup.js";
 
 // Aplicatia se numea foreman: preferintele salvate ("foreman-drawer", "foreman-category"...) trec o data
 // pe cheile noi "hobstack-...", ca sa nu se piarda starea panourilor si filtrele.
@@ -156,6 +157,8 @@ api("/api/info").then(({ name }) => {
 
 // insigna de update din bara de sus (inainte de prima desenare, ca s-o puna topbar)
 initUpdates();
+// Claude Code lipsa sau nelogat: pagina de start peste aplicatie
+initClaudeSetup();
 
 // prima desenare la final: route() foloseste starea titlului de mai sus (let-urile trebuie deja initializate)
 route();

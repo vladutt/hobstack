@@ -156,10 +156,10 @@ func (r *Run) Status() string {
 
 // Manager tine evidenta run-urilor din procesul curent.
 type Manager struct {
-	claudeBin string
-	logDir    string
+	logDir string
 
-	mu     sync.Mutex
+	mu        sync.Mutex
+	claudeBin string // "" = Claude Code nu e instalat inca (SetClaude il pune dupa instalare)
 	runs   map[string]*Run
 	active map[string]string // Key -> id-ul run-ului activ
 }
@@ -213,8 +213,13 @@ func (m *Manager) Start(spec Spec, onDone func(Outcome)) (*Run, error) {
 		m.mu.Unlock()
 	}
 
+	bin := m.Claude()
+	if bin == "" {
+		release()
+		return nil, ErrNoClaude
+	}
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, m.claudeBin, spec.Args...)
+	cmd := exec.CommandContext(ctx, bin, spec.Args...)
 	cmd.Dir = spec.Dir
 	cmd.Env = procEnv(spec.Env)
 	setProcessGroup(cmd)
@@ -334,6 +339,23 @@ func (m *Manager) ActiveCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.active)
+}
+
+// ErrNoClaude: Claude Code nu e instalat (sau HobStack nu l-a gasit).
+var ErrNoClaude = errors.New("Claude Code (claude) is not installed; install it from HobStack's start page")
+
+// SetClaude schimba binarul claude (dupa instalarea din aplicatie).
+func (m *Manager) SetClaude(bin string) {
+	m.mu.Lock()
+	m.claudeBin = bin
+	m.mu.Unlock()
+}
+
+// Claude intoarce binarul claude folosit ("" = lipseste).
+func (m *Manager) Claude() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.claudeBin
 }
 
 // Shutdown opreste toate run-urile active (la Ctrl+C).

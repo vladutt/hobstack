@@ -23,6 +23,13 @@ func TestHoldDefersNewRuns(t *testing.T) {
 		t.Fatal("no run should be active")
 	}
 
+	// doua motive: dupa primul Hold(false) inca nu porneste nimic
+	f.tm.Hold(true)
+	f.tm.Hold(false)
+	if err := f.tm.Reconcile(f.p.ID); err != nil || f.fs.count() != 0 {
+		t.Fatalf("still held by one reason: %v, %d runs", err, f.fs.count())
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go f.tm.Run(ctx)

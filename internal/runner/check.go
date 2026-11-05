@@ -17,12 +17,16 @@ import (
 // cu ele, pluginurile instalate umflau contextul la ~130k tokeni ($0.13 pe verificare,
 // masurat cu claude 2.1.295); asa costa sub o zecime de cent.
 func (m *Manager) Check(ctx context.Context, env []string) error {
+	bin := m.Claude()
+	if bin == "" {
+		return ErrNoClaude
+	}
 	dir, err := os.MkdirTemp("", "hobstack-check-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
-	cmd := exec.CommandContext(ctx, m.claudeBin, "-p", "Reply with OK", "--model", "haiku",
+	cmd := exec.CommandContext(ctx, bin, "-p", "Reply with OK", "--model", "haiku",
 		"--output-format", "json", "--setting-sources", "", "--strict-mcp-config",
 		"--disable-slash-commands", "--tools", "")
 	cmd.Dir = dir
@@ -83,7 +87,11 @@ type AuthStatus struct {
 }
 
 func (m *Manager) AuthStatus(ctx context.Context) (AuthStatus, error) {
-	out, err := exec.CommandContext(ctx, m.claudeBin, "auth", "status", "--json").Output()
+	bin := m.Claude()
+	if bin == "" {
+		return AuthStatus{}, ErrNoClaude
+	}
+	out, err := exec.CommandContext(ctx, bin, "auth", "status", "--json").Output()
 	var st AuthStatus
 	// delogat: claude poate iesi cu cod nenul, dar tot scrie JSON-ul
 	if jerr := json.Unmarshal(out, &st); jerr != nil {

@@ -73,7 +73,7 @@ func (t *Team) Reconcile(projectID int64) error {
 
 	// Hold: proiectul ramane de reconciliat dupa reluare
 	t.mu.Lock()
-	if t.held {
+	if t.held > 0 {
 		t.pending[projectID] = true
 		t.mu.Unlock()
 		return nil

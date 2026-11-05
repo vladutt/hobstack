@@ -298,6 +298,11 @@ sha256 din checksums.txt, binarul in <exe>.new, proba `version`, vechiul -> .pre
 copie VACUUM INTO in ~/.hobstack/backups (ultimele 3), restart prin selfupdate.Reexec cu --no-open. UI (update.js): modala la
 intrare cu versiunea si notele (Later / Skip this version), insigna din bara de sus (ui.setTopbarExtra), Settings > Version;
 /api/update*.
+Gata (Claude Code din aplicatie, spec in docs/superpowers/specs/2026-11-05-hobstack-claude-setup-design.md): HobStack porneste
+si fara claude (claudecli.Find: PATH, ~/.local/bin, npm global...; team.Hold e contor, impartit cu update-ul; runner.SetClaude
+dupa instalare, runner.ErrNoClaude cat lipseste). Pagina de start claude-setup.js: Install (installerul oficial, output live),
+Add to PATH (Windows: PATH-ul de utilizator; macOS/Linux: ~/.zshrc / ~/.bash_profile), Log in (terminal cu claude auth login);
+/api/claude*. Fara comanda (dublu-clic) binarul face start; la eroare intr-o consola proprie (Windows) asteapta Enter.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

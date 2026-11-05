@@ -62,7 +62,7 @@ type Team struct {
 	active  map[int64]activeRun // agentID -> run-ul lui activ
 	tokens  map[string]mcp.Caller
 	pending map[int64]bool // proiecte care trebuie reconciliate
-	held    bool           // update-ul asteapta sa termine agentii: nu pornesc run-uri noi (Hold)
+	held    int            // cate motive opresc run-urile noi (Hold): update-ul, Claude Code lipsa
 	wake    chan struct{}
 }
 
@@ -178,12 +178,18 @@ func (t *Team) Kick(projectID int64) {
 }
 
 // Hold opreste (on) sau reia pornirea run-urilor noi in toate proiectele; run-urile care merg isi
-// termina treaba. Il foloseste update-ul cat asteapta agentii. La reluare proiectele amanate se reconciliaza.
+// termina treaba. Fiecare Hold(true) are perechea lui Hold(false) (update-ul cat asteapta agentii, Claude Code
+// lipsa pana la instalare); run-urile pornesc iar dupa ultima reluare, cand proiectele amanate se reconciliaza.
 func (t *Team) Hold(on bool) {
 	t.mu.Lock()
-	t.held = on
+	if on {
+		t.held++
+	} else if t.held > 0 {
+		t.held--
+	}
+	free := t.held == 0
 	t.mu.Unlock()
-	if !on {
+	if !on && free {
 		select {
 		case t.wake <- struct{}{}:
 		default:

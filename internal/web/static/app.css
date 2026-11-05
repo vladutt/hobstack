@@ -1720,3 +1720,19 @@ pre.upd-error, pre.upd-note { font: 12px/1.5 var(--mono); background: var(--deep
 .upd-notes { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--col); }
 .upd-notes .md > :first-child { margin-top: 0; }
 .upd-notes .md > :last-child { margin-bottom: 0; }
+
+/* pagina de start pentru Claude Code (claude-setup.js), peste orice altceva */
+.cs-overlay { z-index: 90; background: rgba(8, 10, 13, .8); }
+.cs-box { max-width: 640px; gap: 14px; }
+.cs-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.cs-step { display: flex; gap: 12px; min-width: 0; }
+.cs-num { flex: none; width: 26px; height: 26px; border-radius: 999px; display: grid; place-items: center; font: 700 12.5px var(--sans);
+  background: var(--card); color: var(--soft); }
+.cs-step.done .cs-num { background: var(--teal-bg); color: var(--teal); }
+.cs-body { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.cs-body h3 { margin: 2px 0 0; font-size: 15px; font-weight: 650; }
+.cs-body p { margin: 0; overflow-wrap: anywhere; }
+.cs-cmd { display: block; font: 12px/1.5 var(--mono); background: var(--deep); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; color: var(--soft); }
+.cs-log { margin: 0; font: 11.5px/1.5 var(--mono); background: var(--deep); border-radius: 8px; padding: 8px 10px; max-height: 220px; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; color: var(--soft); }
+.cs-foot { justify-content: flex-end; }

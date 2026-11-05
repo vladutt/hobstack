@@ -16,8 +16,8 @@ Download the archive for your system from [Releases](https://github.com/vladutt/
 
 On Windows, unzip it and double-click `hobstack.exe` (or run it from a terminal): the console window shows the log and
 the browser opens by itself; closing the window stops HobStack. If Windows SmartScreen warns about an unknown app,
-choose "More info" > "Run anyway". HobStack needs Claude Code (`claude`) installed and logged in; if it cannot start,
-the window stays open with the reason.
+choose "More info" > "Run anyway". HobStack needs Claude Code (`claude`): if it is missing or not logged in, the start page
+installs it with the official installer, can add it to your PATH and opens the login.
 
 On macOS a file downloaded with the browser is quarantined; allow it once with
 `xattr -d com.apple.quarantine hobstack`. `checksums.txt` has the sha256 of every archive.

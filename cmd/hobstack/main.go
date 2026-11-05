@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"hobstack/internal/claudecli"
 	"hobstack/internal/config"
 	"hobstack/internal/draft"
 	"hobstack/internal/events"
@@ -109,9 +110,10 @@ func start(args []string) error {
 	if err := paths.Ensure(); err != nil {
 		return fmt.Errorf("cannot create %s: %w", paths.Root, err)
 	}
-	claudeBin, err := findClaude(home)
-	if err != nil {
-		return err
+	// Claude Code: daca lipseste, HobStack porneste totusi (pagina de start il instaleaza) si nu porneste run-uri
+	claudeBin := claudecli.Find(home)
+	if claudeBin == "" {
+		log.Printf("claude: not found; HobStack starts without it (install it from the start page)")
 	}
 	st, err := store.Open(paths.DB)
 	if err != nil {
@@ -142,6 +144,9 @@ func start(args []string) error {
 	hub := events.NewHub()
 	mgr := runner.NewManager(claudeBin, paths.Logs)
 	tm := team.New(st, mgr, hub, url)
+	if claudeBin == "" {
+		tm.Hold(true) // pana il instaleaza utilizatorul (web.SetClaude elibereaza)
+	}
 	tm.SetFilesRoot(paths.Projects)
 	lib := library.New(filepath.Join(paths.Root, "library"), st)
 	tm.SetLibrary(lib)
@@ -161,6 +166,7 @@ func start(args []string) error {
 	webSrv := web.New(st, tm, mgr, hub, mcp.NewServer(dm.Wrap(sm.Wrap(tm))),
 		web.Dirs{Projects: paths.Projects, Workspaces: paths.Workspaces}, picker.Pick, picker.Available())
 	webSrv.SetSetup(sm)
+	webSrv.SetClaude(ctx, home, claudeBin == "")
 	webSrv.SetDraft(dm)
 	webSrv.SetLibrary(lib)
 	// catalogul local al registrului MCP: cautarea din Add MCP server nu mai depinde de registru.
@@ -206,7 +212,9 @@ func start(args []string) error {
 
 	log.Printf("%s %s running at %s", config.AppName, config.Version, url)
 	log.Printf("data: %s", paths.Root)
-	log.Printf("claude: %s", claudeBin)
+	if claudeBin != "" {
+		log.Printf("claude: %s", claudeBin)
+	}
 	if !*noOpen {
 		openBrowser(url)
 	}
@@ -306,24 +314,6 @@ func backfillTokens(st *store.Store, logs string) {
 			return
 		}
 	}
-}
-
-// findClaude cauta claude in PATH, apoi unde il pune installer-ul nativ (~/.local/bin): pornit cu dublu-clic,
-// PATH-ul poate fi altul decat in terminal.
-func findClaude(home string) (string, error) {
-	if p, err := exec.LookPath("claude"); err == nil {
-		return p, nil
-	}
-	name := "claude"
-	if runtime.GOOS == "windows" {
-		name = "claude.exe"
-	}
-	p := filepath.Join(home, ".local", "bin", name)
-	if info, err := os.Stat(p); err == nil && !info.IsDir() {
-		return p, nil
-	}
-	return "", errors.New("'claude' (Claude Code) was not found in PATH or in " + filepath.Dir(p) +
-		". Install it from https://claude.com/claude-code, log in with `claude`, then start HobStack again")
 }
 
 func openBrowser(url string) {
