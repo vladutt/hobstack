@@ -1743,3 +1743,15 @@ pre.upd-error, pre.upd-note { font: 12px/1.5 var(--mono); background: var(--deep
 .app-settings code { font: 12px var(--mono); color: var(--soft); }
 .app-stopped { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; }
 .app-stopped .logo { width: 48px; height: 48px; font-size: 24px; border-radius: 13px; }
+
+/* butonul Copy pe blocurile de cod (md.js codeBlock) */
+.code-wrap { position: relative; min-width: 0; }
+.copy-code { position: absolute; top: 6px; right: 6px; height: 24px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--line-2);
+  background: var(--card); color: var(--soft); font: 600 11.5px var(--sans); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.code-wrap:hover .copy-code, .copy-code:focus-visible, .copy-code.done { opacity: 1; }
+.copy-code:hover { color: var(--text); border-color: var(--muted); }
+.copy-code.done { color: var(--teal); border-color: var(--teal-line); }
+@media (hover: none) { .copy-code { opacity: 1; } }
+.copy-buffer { position: fixed; left: -9999px; top: 0; }
+.event a.event-task { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.event a.event-task:hover { color: var(--text); }

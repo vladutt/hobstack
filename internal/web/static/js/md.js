@@ -106,7 +106,7 @@ export function renderMarkdown(text, stats) {
         // codul se coloreaza dupa eticheta (```php, ```ts); fara eticheta, ghicit
         const code = el("code", {});
         highlightInto(code, body.join("\n"), tag ? (languageFor("x." + tag) || tag) : null);
-        root.append(el("pre", { class: "md-pre" }, code));
+        root.append(codeBlock(el("pre", { class: "md-pre" }, code), body.join("\n")));
         continue;
       }
       root.append(el("pre", { class: "md-pre diff" }, body.map(diffLine)));
@@ -180,6 +180,29 @@ function fileLabel(code, s) {
     onclick: () => s.open(), onkeydown: (e) => { if (e.key === "Enter") s.open(); } }, el("code", {}, code), statBadge(s));
 }
 
+// codeBlock: blocul de cod cu butonul Copy (copiaza textul brut, nu cel colorat).
+export function codeBlock(pre, raw) {
+  const btn = el("button", { type: "button", class: "copy-code", "aria-label": "Copy code" }, "Copy");
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(raw);
+    } catch {
+      // fara Clipboard API (context nesigur): selectie + execCommand
+      const ta = el("textarea", { class: "copy-buffer", readonly: true });
+      ta.value = raw;
+      document.body.append(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    btn.textContent = "Copied";
+    btn.classList.add("done");
+    setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("done"); }, 1500);
+  });
+  return el("div", { class: "code-wrap" }, pre, btn);
+}
+
 // userText: textul unui mesaj al utilizatorului. Ramane text simplu (nu markdown), doar blocurile ```
 // devin cod colorat, ca un fragment lipit sa se citeasca.
 export function userText(text) {
@@ -196,8 +219,9 @@ export function userText(text) {
     }
     const tag = tags[i - 1] || "";
     const code = el("code", {});
-    highlightInto(code, part.replace(/^\n|\n$/g, ""), tag ? (languageFor("x." + tag) || tag) : null);
-    frag.append(el("pre", { class: "md-pre" }, code));
+    const raw = part.replace(/^\n|\n$/g, "");
+    highlightInto(code, raw, tag ? (languageFor("x." + tag) || tag) : null);
+    frag.append(codeBlock(el("pre", { class: "md-pre" }, code), raw));
   });
   return frag;
 }

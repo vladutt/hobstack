@@ -1713,8 +1713,30 @@ export async function workspaceView(root, projectId, route) {
     scrollDown();
   }
 
+  // eventNode: notificarile echipei (aprobari, rapoarte, trimiteri inapoi) intra in chat doar ca un rand scurt;
+  // raportul intreg e pe task (Conversation). T-N din rand deschide task-ul.
+  function eventNode(m) {
+    const text = m.text || "";
+    let head = text;
+    const long = text.length > 160 || text.includes("\n");
+    if (long) {
+      const i = text.indexOf(": ");
+      head = i > 0 && i <= 200 ? text.slice(0, i) : text.split("\n")[0].slice(0, 140).trimEnd() + "…";
+    }
+    const parts = [];
+    let last = 0;
+    for (const mt of head.matchAll(/\bT-(\d+)\b/g)) {
+      parts.push(head.slice(last, mt.index));
+      const t = (state.project.tasks || []).find((x) => x.number === Number(mt[1]));
+      parts.push(t ? el("a", { class: "event-task", href: `#/p/${projectId}/tasks/${t.id}` }, mt[0]) : mt[0]);
+      last = mt.index + mt[0].length;
+    }
+    parts.push(head.slice(last));
+    return el("div", { class: "event", "data-id": m.id, title: long ? "The full text is on the task" : null }, parts);
+  }
+
   function messageNode(m) {
-    if (m.kind === "event") return el("div", { class: "event", "data-id": m.id }, m.text);
+    if (m.kind === "event") return eventNode(m);
     const mine = m.author === "user";
     return el("div", { class: "msg" + (mine ? " me" : ""), "data-id": m.id },
       el("span", { class: "msg-meta" }, `${mine ? "You" : m.author} · ${clock(m.createdAt)}`),

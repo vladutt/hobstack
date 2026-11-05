@@ -321,6 +321,9 @@ pornirea unei versiuni de release, <exe>.prev se sterge (selfupdate.CleanupPrevi
 Gata (fisierele proprii, spec in docs/superpowers/specs/2026-11-05-hobstack-own-files-design.md): un agent sterge fara
 sa intrebe ce a creat el (task_changes kind create, in folderul lui, necommis in git): tool-ul MCP delete_files si, pentru
 un `rm` simplu oprit de Ask pe fisiere doar ale lui, HobStack sterge in locul lui fara card (team/own_files.go).
+Gata (chat curat): notificarile echipei (KindEvent: aprobari, rapoarte, trimiteri inapoi) apar in chat doar ca un rand
+scurt (pana la primul ": ", max 200; workspace.js eventNode), cu T-N clicabil spre task; textul intreg ramane in
+Conversation pe task. Blocurile de cod din markdown si din mesajele utilizatorului au butonul Copy (md.js codeBlock).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
