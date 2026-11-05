@@ -8,28 +8,29 @@ that created the task. You can talk to any agent. Everything is visible live on 
 
 ## Install
 
-Download the archive for your system from [Releases](https://github.com/vladutt/hobstack/releases/latest)
-(`hobstack_<version>_darwin_arm64.tar.gz` for Apple Silicon Macs, `darwin_amd64` for Intel Macs,
-`linux_amd64` / `linux_arm64`, `windows_amd64.zip`), unpack it and run:
+From [Releases](https://github.com/vladutt/hobstack/releases/latest):
 
-    ./hobstack start      # or just ./hobstack
+- **Windows:** `HobStack-Setup-<version>.exe`. Installs for your user (no admin) in the folder you pick, with a desktop
+  and Start menu shortcut and an uninstaller (Add/Remove Programs). If SmartScreen warns about an unknown app, choose
+  "More info" > "Run anyway".
+- **macOS:** `HobStack-<version>.dmg` (Apple Silicon and Intel). Drag HobStack to Applications. The app is not signed by
+  an Apple developer, so the first time right-click it > Open (or System Settings > Privacy & Security > Open Anyway).
+- **Linux:** unpack `hobstack_<version>_linux_amd64.tar.gz` (or `arm64`) and run `./hobstack install`: it asks for
+  the folder (default `~/.local/share/hobstack`), adds HobStack to the applications menu and the desktop, and
+  `hobstack` to `~/.local/bin`. `hobstack uninstall` removes it.
 
-On Windows the easiest is `HobStack-Setup-<version>.exe`: it installs for your user (no admin), lets you pick the
-folder, adds a desktop and Start menu shortcut and an uninstaller. HobStack then keeps its data (database, logs,
-project files, backups) in a `data` folder next to `hobstack.exe`; data from an earlier HobStack in `~/.hobstack`
-moves there the first time it starts. Without the installer, unzip the archive and double-click `hobstack.exe`: the browser opens and HobStack keeps running in the background,
-without a window (the log is in `~/.hobstack/hobstack.log`). Its H icon sits next to the clock: click it to open HobStack,
-right-click for Open / Quit. Starting it again opens the running one; you can also quit from Settings > App. It starts by itself when you log in (Windows, macOS, Linux);
-turn that off in Settings > App. If Windows SmartScreen warns about an unknown app,
-choose "More info" > "Run anyway". HobStack needs Claude Code (`claude`): if it is missing or not logged in, the start page
-installs it with the official installer, can add it to your PATH and opens the login.
+HobStack runs in the background, without a terminal. Its H sits next to the clock (Windows notification area, macOS menu
+bar, Linux tray with StatusNotifierItem: KDE, XFCE, Cinnamon, GNOME with the AppIndicator extension): click it for
+Open HobStack / Quit HobStack. It starts when you log in (turn that off in Settings > App) and starting it again opens
+the running one. Installed on Windows or Linux, it keeps its data (database, logs, project files, backups) in a `data`
+folder next to `hobstack`; on macOS in `~/.hobstack`. Data from an earlier HobStack in `~/.hobstack` moves there once.
 
-On macOS a file downloaded with the browser is quarantined; allow it once with
-`xattr -d com.apple.quarantine hobstack`. `checksums.txt` has the sha256 of every archive.
+You also need Claude Code (`claude`); if it is missing or not logged in, HobStack's start page installs it, can add it to
+your PATH and opens the login. The plain archives (`.tar.gz`, `.zip`) work too: unpack and run `hobstack`.
 
-HobStack checks GitHub for a new release every hour. When there is one, it shows the version and its notes
-when you open it; "Update and restart" downloads it, verifies it, waits for running agents to finish,
-backs up the database to `~/.hobstack/backups` and restarts. The previous binary stays next to it as `hobstack.prev`.
+HobStack checks GitHub for a new release every hour. When there is one, it shows the version and its notes when you
+open it; "Update and restart" downloads it, verifies it, waits for running agents to finish, backs up the database
+and restarts. The previous version is removed once the new one is running.
 
 ## Running from source
 

@@ -45,6 +45,8 @@ const usage = `%[1]s - local Claude Code agent teams
 Usage:
   %[1]s start [--port 7777] [--no-open]
   %[1]s quit [--force]
+  %[1]s install [--dir <folder>] [-y]    (Linux; Windows and macOS have installers)
+  %[1]s uninstall [--delete-data]
   %[1]s version
 `
 
@@ -61,9 +63,24 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "start":
-		err = start(os.Args[2:])
+		if menuBarAvailable() {
+			// macOS: bucla Cocoa pe firul principal, HobStack intr-o goroutine; la final bucla se opreste
+			done := make(chan error, 1)
+			go func() {
+				done <- start(os.Args[2:])
+				stopMenuBar()
+			}()
+			runMenuBar()
+			err = <-done
+		} else {
+			err = start(os.Args[2:])
+		}
 	case "quit":
 		os.Exit(quit(os.Args[2:]))
+	case "install":
+		os.Exit(install(os.Args[2:]))
+	case "uninstall":
+		os.Exit(uninstall(os.Args[2:]))
 	case "version", "--version", "-v":
 		// update-ul ruleaza si el comanda asta pe binarul descarcat, ca proba ca porneste pe masina asta
 		fmt.Println(config.Version)
@@ -226,6 +243,7 @@ func start(args []string) error {
 	if err != nil {
 		return err
 	}
+	loginShellPath() // pornit din Finder / la login: PATH-ul utilizatorului, pentru agenti
 	paths, movedFrom, err := prepareData(home)
 	if err != nil {
 		return err
@@ -337,6 +355,14 @@ func start(args []string) error {
 		})
 		webSrv.SetUpdater(upd, ctx)
 		go checkUpdates(ctx, upd)
+		// versiunea asta a pornit: binarul de dinaintea update-ului (.prev) nu mai trebuie, ramane doar cea curenta.
+		// Doar la versiunile de release: build-urile locale isi pastreaza .prev-ul facut de mana.
+		if releaseVersion.MatchString(config.Version) {
+			go func() {
+				time.Sleep(30 * time.Second)
+				selfupdate.CleanupPrevious(exe)
+			}()
+		}
 		// Settings > App: pornirea la login si Quit (HobStack ruleaza si fara terminal)
 		logFile := filepath.Join(paths.Root, config.AppName+".log")
 		webSrv.SetApp(exe, home, paths.Root, logFile, stop)

@@ -1,4 +1,7 @@
-# La push-ul unui tag v* (de ex. v1.0.0): teste, arhivele pentru macOS / Linux / Windows si release-ul pe GitHub.
+# La push-ul unui tag v* (de ex. v1.0.0): teste, apoi release-ul pe GitHub cu:
+#   - macOS (runner macOS, cu cgo pentru bara de meniu): tar.gz arm64 / amd64 si HobStack-<v>.dmg (app universal)
+#   - Linux si Windows (runner Linux): tar.gz, zip si installerul HobStack-Setup-<v>.exe (NSIS)
+#   - checksums.txt pentru tot (update-ul din aplicatie il verifica)
 # Notele release-ului: mesajul tag-ului adnotat (git tag -a v1.1.0 -m "..."), altfel commit-urile de la tag-ul precedent.
 name: release
 
@@ -10,8 +13,25 @@ permissions:
   contents: write
 
 jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./cmd/... ./internal/selfupdate/...
+      - run: scripts/build-mac.sh "${GITHUB_REF_NAME}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: |
+            dist/*.tar.gz
+            dist/*.dmg
+
   release:
     runs-on: ubuntu-latest
+    needs: mac
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,6 +47,12 @@ jobs:
       - run: scripts/build-release.sh "${GITHUB_REF_NAME}"
         env:
           REQUIRE_INSTALLER: "1"
+          SKIP_CHECKSUMS: "1"
+      - uses: actions/download-artifact@v4
+        with:
+          name: mac
+          path: dist
+      - run: scripts/checksums.sh
       - name: Release notes
         run: |
           tag="${GITHUB_REF_NAME}"
@@ -45,4 +71,4 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/*.tar.gz dist/*.zip dist/HobStack-Setup-*.exe dist/checksums.txt --title "HobStack ${GITHUB_REF_NAME}" --notes-file notes.md
+        run: gh release create "${GITHUB_REF_NAME}" dist/*.tar.gz dist/*.zip dist/*.dmg dist/HobStack-Setup-*.exe dist/checksums.txt --title "HobStack ${GITHUB_REF_NAME}" --notes-file notes.md

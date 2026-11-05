@@ -297,3 +297,16 @@ func TestCancelWhileWaiting(t *testing.T) {
 		t.Fatalf("the previous binary was replaced: %q", got)
 	}
 }
+
+func TestCleanupPrevious(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "hobstack")
+	os.WriteFile(exe, []byte("now"), 0o755)
+	os.WriteFile(exe+".prev", []byte("before"), 0o755)
+	CleanupPrevious(exe)
+	if _, err := os.Stat(exe + ".prev"); !os.IsNotExist(err) {
+		t.Fatal(".prev is still there")
+	}
+	if b, _ := os.ReadFile(exe); string(b) != "now" {
+		t.Fatal("the current binary changed")
+	}
+}

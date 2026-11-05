@@ -407,6 +407,7 @@ func (u *Updater) install(ctx context.Context, rel release, target string) error
 		os.Remove(next)
 		return fmt.Errorf("replacing the binary failed: %w", err)
 	}
+	afterSwap(u.exe, target) // macOS: Info.plist si semnatura HobStack.app
 	u.mu.Lock()
 	u.installed = target
 	u.mu.Unlock()
@@ -607,4 +608,21 @@ func parse(v string) (core [3]int, pre string, ok bool) {
 		core[i] = n
 	}
 	return core, pre, true
+}
+
+// CleanupPrevious sterge binarul de dinaintea ultimului update (<exe>.prev) si un .new ramas, dupa ce versiunea
+// noua a pornit: ramane doar versiunea curenta. Pe Windows procesul vechi poate tine inca fisierul cateva
+// secunde dupa restart, deci se mai incearca o data.
+func CleanupPrevious(exe string) {
+	for _, p := range []string{exe + ".prev", exe + ".new"} {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if err := os.Remove(p); err != nil {
+			time.Sleep(10 * time.Second)
+			if err := os.Remove(p); err != nil {
+				log.Printf("update: cannot remove %s: %v", p, err)
+			}
+		}
+	}
 }

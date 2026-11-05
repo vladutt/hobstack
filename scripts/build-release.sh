@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Construieste arhivele unui release in dist/: hobstack_<versiune>_<os>_<arch>.tar.gz (.zip pe Windows),
-# installerul Windows HobStack-Setup-<versiune>.exe (cu makensis) si checksums.txt (sha256). Il ruleaza GitHub Actions la push-ul unui tag v*; merge si local.
+# Construieste un release in dist/: hobstack_<versiune>_<os>_<arch>.tar.gz pentru Linux (.zip pe Windows),
+# installerul Windows HobStack-Setup-<versiune>.exe (cu makensis) si checksums.txt (sha256). Versiunea de macOS
+# (tar.gz-urile darwin si HobStack-<versiune>.dmg) cere un Mac: scripts/build-mac.sh, chemat de aici pe macOS.
+# In GitHub Actions macOS se face pe un runner separat (SKIP_MAC=1 si SKIP_CHECKSUMS=1 aici, checksums.txt la final).
 #   scripts/build-release.sh 1.0.0
 set -euo pipefail
 version="${1:?usage: scripts/build-release.sh <version, e.g. 1.0.0>}"
 version="${version#v}"
 cd "$(dirname "$0")/.."
 rm -rf dist && mkdir -p dist
-targets="darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64"
+targets="linux/amd64 linux/arm64 windows/amd64"
 for t in $targets; do
   os="${t%/*}"; arch="${t#*/}"
   name="hobstack_${version}_${os}_${arch}"
@@ -34,7 +36,7 @@ for t in $targets; do
   fi
   rm -rf "$dir"
 done
-cd dist
-files=$(ls hobstack_* HobStack-Setup-* 2>/dev/null)
-if command -v sha256sum >/dev/null; then sha256sum $files > checksums.txt; else shasum -a 256 $files > checksums.txt; fi
-cat checksums.txt
+if [ "$(uname)" = Darwin ] && [ "${SKIP_MAC:-}" != 1 ]; then
+  scripts/build-mac.sh "$version"
+fi
+[ "${SKIP_CHECKSUMS:-}" = 1 ] || scripts/checksums.sh

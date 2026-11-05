@@ -59,3 +59,32 @@ cu terminalul deschis ca sa mearga".
   (autostart.SetInstalledVersion). Uninstall: opreste HobStack, sterge cheia Run, scurtaturile si fisierele; datele
   doar daca raspunzi Da (implicit Nu).
 - `hobstack quit [--force]`: POST /api/app/quit, asteapta pana se elibereaza portul (30 s); 0 / 2 / 1.
+
+## macOS: HobStack.app si bara de meniu (cerut: "si pe mac ... install in aplicatii si ... in bara de sus langa ceas")
+
+- cmd/hobstack/menubar_darwin.go (darwin && cgo): NSStatusItem cu imagine template (menubar.png, 36 px pentru 18 pt),
+  meniul Open HobStack / Quit HobStack (NSAlert cu agenti care lucreaza), NSApplicationActivationPolicyAccessory (fara
+  Dock). init() blocheaza goroutine-ul main pe firul principal; pentru `start`, main ruleaza start() intr-o goroutine si
+  [NSApp run] pe firul principal pana la stopMenuBar (dupa care face restart-ul / iesirea). Codul Objective-C e in
+  preambul; //export-urile in menubar_exports_darwin.go. Fara cgo (CGO_ENABLED=0) nu e bara (tray_other.go).
+- scripts/build-mac.sh (doar pe macOS): tar.gz arm64 / amd64 (cgo, MACOSX_DEPLOYMENT_TARGET=11.0, semnate ad-hoc) si
+  HobStack-<v>.dmg cu HobStack.app universal (lipo; installer/macos/Info.plist cu LSUIElement; assets/hobstack.icns),
+  semnat ad-hoc (codesign --deep -s -), cu link catre Applications. Nesemnat de Apple: prima deschidere cere Open.
+- Update-ul inlocuieste binarul din Contents/MacOS, apoi selfupdate.afterSwap pune versiunea in Info.plist si
+  semneaza din nou bundle-ul ad-hoc. Datele raman in ~/.hobstack.
+- Pornit din Finder sau la login PATH-ul e minim: loginShellPath ia PATH-ul din `$SHELL -ilc` (doar cand TERM lipseste).
+- release.yml: job `mac` pe macos-latest (build-mac.sh, artefact), job `release` pe Linux (teste, Linux / Windows,
+  installerul NSIS, artefactul mac, scripts/checksums.sh, gh release).
+
+## Linux: tray si `hobstack install`
+
+- cmd/hobstack/tray_linux.go: fyne.io/systray (StatusNotifierItem prin DBus, Go pur; singura dependenta noua, cu
+  godbus). Fara DISPLAY / WAYLAND_DISPLAY nu porneste. Clic = Open; Quit cu agenti: al doilea clic in 10 s.
+- `hobstack install [--dir] [-y]`: copiaza binarul (implicit ~/.local/share/hobstack), hobstack.portable (datele in
+  <folder>/data), hobstack.png, ~/.local/share/applications/hobstack.desktop, iconita pe Desktop (gio trusted),
+  ~/.local/bin/hobstack; opreste instanta care ruleaza si porneste cea instalata. `hobstack uninstall [--delete-data]`.
+
+## Doar ultima versiune (cerut: "sa nu ramana si .prev de la versiunea din primul update")
+
+- La 30 s dupa ce o versiune de release a pornit, selfupdate.CleanupPrevious sterge <exe>.prev (si un .new ramas):
+  .prev exista doar cat porneste versiunea noua. Copiile bazei de date raman (ultimele 3).

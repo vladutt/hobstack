@@ -312,6 +312,12 @@ marcajul autostart-chosen din folderul datelor pastreaza alegerea) si Quit in Se
 Installer Windows: installer/hobstack.nsi (NSIS, fara admin, folder la alegere, scurtaturi Desktop / Start menu, uninstaller),
 construit in scripts/build-release.sh; hobstack.portable langa exe = datele in <folder>/data (config.InstallDir, o mutare
 din ~/.hobstack prin config.MoveToInstall); `hobstack quit [--force]` opreste instanta care ruleaza.
+Gata (macOS si Linux ca pe Windows, spec in docs/superpowers/specs/2026-11-05-hobstack-background-design.md): macOS:
+bara de meniu (cmd/hobstack/menubar_darwin.go, cgo + Cocoa; start intr-o goroutine, [NSApp run] pe firul principal),
+HobStack.app universal in HobStack-<v>.dmg (scripts/build-mac.sh, job `mac` pe macos-latest; afterSwap re-semneaza
+bundle-ul dupa update), PATH din shell-ul de login cand e pornit fara terminal. Linux: tray prin fyne.io/systray
+(StatusNotifierItem) si `hobstack install` / `uninstall` (meniu, Desktop, ~/.local/bin, datele langa exe). Dupa
+pornirea unei versiuni de release, <exe>.prev se sterge (selfupdate.CleanupPrevious).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

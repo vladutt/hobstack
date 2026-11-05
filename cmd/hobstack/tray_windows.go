@@ -277,3 +277,10 @@ func wndProc(hwnd, message, wparam, lparam uintptr) uintptr {
 	r, _, _ := pDefWindowProc.Call(hwnd, message, wparam, lparam)
 	return r
 }
+
+// Pe Windows iconita are firul ei (startTray); main nu ruleaza o bucla separata.
+func menuBarAvailable() bool { return false }
+
+func runMenuBar() {}
+
+func stopMenuBar() {}
