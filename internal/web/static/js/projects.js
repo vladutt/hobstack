@@ -297,7 +297,7 @@ export async function projectFormView(root, id) {
               el("span", { class: "grow" }, el("strong", {}, "Full autonomy"),
                 el("span", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."))),
             !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
-          id && linksSection(id, p.links || []),
+          id && linksSection(id, p.links || [], category.input),
           id && projectCommands(id),
           id && libraryInstalls(id)))));
   name.focus();
@@ -333,18 +333,27 @@ export async function projectFormView(root, id) {
 
 // linksSection: proiectele legate (agentii lor isi pot pune intrebari si cere munca).
 // Legaturile se salveaza imediat, nu odata cu formularul.
-function linksSection(projectId, initial) {
+// categoryField: campul Category din formular; cu o categorie, lista arata doar proiectele din ea (legaturile
+// existente raman, oricare ar fi categoria lor).
+function linksSection(projectId, initial, categoryField) {
   let links = initial;
   const list = el("div", { class: "link-rows" });
   const select = el("select", {});
   const addBtn = el("button", { type: "button", class: "btn small", onclick: add }, "Link");
 
+  let all = null;
   async function refresh() {
-    let all = [];
-    try { all = await api("/api/projects"); } catch (err) { toast(err.message); }
+    try { all = await api("/api/projects"); } catch (err) { all = all || []; toast(err.message); }
+    draw();
+  }
+
+  function draw() {
+    const cat = (categoryField?.value || "").trim().toLowerCase();
     const linked = new Set(links.map((l) => l.projectId));
-    const free = all.filter((p) => p.id !== projectId && !linked.has(p.id));
-    select.replaceChildren(el("option", { value: "" }, free.length ? "Link a project..." : "No other projects"),
+    const free = all.filter((p) => p.id !== projectId && !linked.has(p.id) &&
+      (!cat || (p.category || "").trim().toLowerCase() === cat));
+    const none = cat ? `No other projects in ${categoryField.value.trim()}` : "No other projects";
+    select.replaceChildren(el("option", { value: "" }, free.length ? "Link a project..." : none),
       ...free.map((p) => el("option", { value: p.id }, p.name)));
     select.disabled = addBtn.disabled = !free.length;
     list.replaceChildren(...(links.length ? links.map(row) : [el("p", { class: "hint" }, "No linked projects.")]));
@@ -374,6 +383,8 @@ function linksSection(projectId, initial) {
     } catch (err) { toast(err.message); }
   }
 
+  // categoria se schimba in formular (scrisa sau aleasa din lista): lista se reface
+  for (const ev of ["input", "change"]) categoryField?.addEventListener(ev, () => { if (all) draw(); });
   refresh();
   return el("section", { class: "section" },
     el("h2", {}, "Linked projects", el("span", { class: "hint" }, " \u00b7 agents can ask each other")),

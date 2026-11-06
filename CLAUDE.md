@@ -204,7 +204,8 @@ Gata (categorii de proiecte): projects.category (migrarea 027, text liber, max 4
 existente). Pe Proiecte: filtre All / <categorie> / Uncategorized (alegerea in localStorage "hobstack-category") si
 gruparea tabelului pe categorii; cautarea cauta si in categorie. Campul Category (category.js, categoryInput) are lista
 categoriilor existente cu numarul de proiecte, deschisa la focus, plus "Create "X""; e in formularul de proiect si la pasul 3
-din wizard (POST /api/projects/setup primeste category). Eticheta categoriei pe rand (vizibila cand filtrezi sau cauti; click
+din wizard (POST /api/projects/setup primeste category). Cu o categorie, lista "Link a project" din formularul proiectului arata doar proiectele din
+aceeasi categorie (legaturile existente raman; se reface cand schimbi campul). Eticheta categoriei pe rand (vizibila cand filtrezi sau cauti; click
 = filtru) si in header-ul proiectului (click = Proiecte filtrate).
 Gata (decizii usor de dat, spec in docs/superpowers/specs/2026-10-09-foreman-easy-decisions-design.md): report_done primeste
 decisions (max 5 intrebari cu 2-5 optiuni, multi) si user_steps (max 10, in task_todos cu kind step); task_decisions (migrarea

@@ -68,6 +68,7 @@ export function categoryInput(value, categories, onChange) {
     input.value = it.value;
     close();
     onChange?.(it.value);
+    input.dispatchEvent(new Event("change")); // ca la scris: cine asculta campul afla de alegere
   }
 
   input.addEventListener("focus", open);
