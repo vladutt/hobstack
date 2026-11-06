@@ -403,8 +403,10 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .composer { border-top: 1px solid var(--line); padding: 14px 20px 16px; display: grid; position: relative; gap: 8px; }
 .composer form { display: flex; gap: 8px; align-items: flex-end; background: var(--col); border: 1px solid var(--line-2); border-radius: 12px; padding: 6px; }
 .composer form:focus-within { border-color: var(--amber); }
-.composer textarea { min-height: 40px; height: 44px; max-height: min(45vh, 360px); border: 0; background: transparent; padding: 10px 8px; box-shadow: none !important; resize: none; }
+.composer textarea { min-height: 40px; height: 40px; max-height: min(45vh, 360px); border: 0; background: transparent; padding: 10px 8px; box-shadow: none !important; resize: none; }
 .composer .btn { height: 36px; }
+/* agrafa si Send pe mijlocul randului de text (ultimul rand cand campul creste): 40px camp, 36px butoane */
+.composer form > .btn, .composer form > .clip { margin-bottom: 2px; }
 .composer .hint:empty { display: none; }
 .empty { color: var(--muted); text-align: center; margin: auto; padding: 20px; }
 .chat-question { border-top: 1px solid var(--line); padding: 12px 20px 0; max-height: 45%; overflow-y: auto; flex-shrink: 0; }
