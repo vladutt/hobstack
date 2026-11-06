@@ -14,10 +14,14 @@ cu terminalul deschis ca sa mearga".
 
 ## Fara terminal
 
-- Windows: binarul ramane aplicatie de consola, dar cand consola e doar a lui (dublu-clic, pornire la login;
-  GetConsoleProcessList == 1) o ascunde (ShowWindow SW_HIDE) si scrie log-ul in ~/.hobstack/hobstack.log (peste
-  10 MB -> .1). Nu -H=windowsgui: fara consola, fiecare git / claude / powershell pornit de agenti si-ar deschide
-  fereastra lui; asa o mostenesc pe cea ascunsa. Erorile de pornire apar intr-un MessageBox.
+- Windows: release-ul e construit cu -H windowsgui (fara consola). Varianta veche (aplicatie de consola ascunsa cu
+  ShowWindow SW_HIDE) nu merge pe Windows 11: consola implicita e Windows Terminal, care doar se minimiza si, inchis,
+  oprea HobStack. Ca git / claude / powershell pornite de agenti sa nu-si deschida ferestre, la start HobStack isi ia o
+  consola fara fereastra: porneste cmd.exe cu CREATE_NO_WINDOW, AttachConsole(pid) si opreste cmd-ul; copiii mostenesc
+  consola. version / quit / install din terminal: AttachConsole(ATTACH_PARENT_PROCESS) cand stdout nu e deja
+  redirectat (cmd nu asteapta un exe GUI, deci textul apare dupa prompt). Un go build simplu ramane de consola (ascunsa
+  doar cu consola doar a lui, ca inainte). Log-ul in <date>/hobstack.log (peste 10 MB -> .1), erorile de pornire in
+  MessageBox.
 - Pornit a doua oara (port ocupat de un HobStack: /api/info raspunde cu numele): deschide browserul pe instanta
   care ruleaza si iese cu 0.
 - macOS: dublu-clic in Finder tot deschide Terminal (ar trebui un .app); pornirea la login nu.

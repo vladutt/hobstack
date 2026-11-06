@@ -304,8 +304,9 @@ dupa instalare, runner.ErrNoClaude cat lipseste). Pagina de start claude-setup.j
 Add to PATH (Windows: PATH-ul de utilizator; macOS/Linux: ~/.zshrc / ~/.bash_profile), Log in (terminal cu claude auth login);
 /api/claude*. Fara comanda (dublu-clic) binarul face start; la eroare intr-o consola proprie (Windows) asteapta Enter.
 Gata (iconita, fara terminal, pornire la login, spec in docs/superpowers/specs/2026-11-05-hobstack-background-design.md):
-assets/hobstack.ico + cmd/hobstack/rsrc_windows_amd64.syso (scripts/winres, doar stdlib), favicon.png. Pe Windows, cu consola
-doar a lui, HobStack o ascunde si scrie in ~/.hobstack/hobstack.log (erorile in MessageBox); pornit a doua oara deschide instanta
+assets/hobstack.ico + cmd/hobstack/rsrc_windows_amd64.syso (scripts/winres, doar stdlib), favicon.png. Pe Windows release-ul e
+exe GUI (-H windowsgui, fara fereastra; consola fara fereastra prin cmd.exe CREATE_NO_WINDOW + AttachConsole, mostenita
+de comenzile agentilor) si scrie in hobstack.log (erorile in MessageBox); pornit a doua oara deschide instanta
 care ruleaza; iconita langa ceas (cmd/hobstack/tray_windows.go, Shell_NotifyIconW: clic = Open, meniu Open / Quit).
 internal/autostart (Run key / LaunchAgent app.hobstack / XDG autostart; pornita implicit o data de o versiune de release,
 marcajul autostart-chosen din folderul datelor pastreaza alegerea) si Quit in Settings > App (/api/app*).

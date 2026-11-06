@@ -56,10 +56,8 @@ func main() {
 		os.Args = append([]string{os.Args[0], "start"}, os.Args[1:]...)
 	}
 	// pe Windows, pornit cu dublu-clic sau la login: fara fereastra de consola; log-ul merge in fisier
-	background = os.Args[1] == "start" && ownConsole()
-	if background {
-		hideConsole() // log-ul trece in fisier in start, dupa ce se stie folderul datelor
-	}
+	// log-ul trece in fisier in start, dupa ce se stie folderul datelor
+	background = setupConsole(os.Args[1] == "start")
 	var err error
 	switch os.Args[1] {
 	case "start":
@@ -108,7 +106,7 @@ func main() {
 	}
 }
 
-// background: pornit fara terminal (Windows, consola doar a lui): log-ul in fisier, erorile in MessageBox.
+// background: pornit fara terminal (Windows: exe-ul GUI sau consola doar a lui): log-ul in fisier, erorile in MessageBox.
 var background bool
 
 // logToFile trimite log-ul (si stdout / stderr) in <date>/hobstack.log; peste 10 MB il muta in .1.

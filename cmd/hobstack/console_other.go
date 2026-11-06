@@ -2,9 +2,7 @@
 
 package main
 
-// ownConsole: doar pe Windows o fereastra de consola e creata pentru HobStack (dublu-clic, pornire la login).
-func ownConsole() bool { return false }
-
-func hideConsole() {}
+// setupConsole: doar pe Windows HobStack porneste fara fereastra de consola (dublu-clic, pornire la login).
+func setupConsole(bool) bool { return false }
 
 func messageBox(string) {}

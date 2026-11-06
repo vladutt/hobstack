@@ -17,8 +17,10 @@ for t in $targets; do
   mkdir -p "$dir"
   bin="hobstack"; [ "$os" = windows ] && bin="hobstack.exe"
   echo "building $name"
+  # Windows: aplicatie GUI (-H windowsgui), fara fereastra de consola; vezi cmd/hobstack/console_windows.go
+  gui=""; [ "$os" = windows ] && gui="-H windowsgui"
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
-    -ldflags "-s -w -X hobstack/internal/config.Version=${version}" -o "$dir/$bin" ./cmd/hobstack
+    -ldflags "-s -w $gui -X hobstack/internal/config.Version=${version}" -o "$dir/$bin" ./cmd/hobstack
   cp README.md LICENSE "$dir/"
   if [ "$os" = windows ]; then
     (cd "$dir" && zip -q -r "../$name.zip" .)
