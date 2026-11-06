@@ -6,6 +6,7 @@ package autostart
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Args: argumentele cu care porneste HobStack la login.
@@ -21,6 +22,11 @@ const choiceFile = "autostart-chosen"
 // Default activeaza pornirea la login o singura data, daca nimeni n-a ales inca. enabled spune daca a activat-o acum.
 func Default(root, home, exe, logFile string) (enabled bool, err error) {
 	if Chosen(root) {
+		// pornirea ramane cum a ales-o utilizatorul, dar trebuie sa duca la exe-ul de acum (de ex. pornit intai de pe
+		// Desktop, apoi instalat cu installerul: intrarea arata inca spre exe-ul vechi)
+		if Enabled(home, exe) && !strings.Contains(command(home), exe) {
+			return false, Enable(home, exe, logFile)
+		}
 		return false, nil
 	}
 	if !Enabled(home, exe) {

@@ -72,6 +72,12 @@ func Enable(home, exe, logFile string) error {
 	return os.WriteFile(p, []byte(plist), 0o644)
 }
 
+// command: continutul LaunchAgent-ului (calea exe-ului e in ProgramArguments).
+func command(home string) string {
+	b, _ := os.ReadFile(plistPath(home))
+	return string(b)
+}
+
 func Disable(home, _ string) error {
 	err := os.Remove(plistPath(home))
 	if os.IsNotExist(err) {

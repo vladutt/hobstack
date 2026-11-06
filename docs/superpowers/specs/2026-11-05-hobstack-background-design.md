@@ -92,3 +92,10 @@ cu terminalul deschis ca sa mearga".
 
 - La 30 s dupa ce o versiune de release a pornit, selfupdate.CleanupPrevious sterge <exe>.prev (si un .new ramas):
   .prev exista doar cat porneste versiunea noua. Copiile bazei de date raman (ultimele 3).
+
+## Pornirea la login urmeaza exe-ul
+
+Cu alegerea deja facuta (autostart-chosen) si pornirea activa, Default verifica la fiecare pornire a unei versiuni
+de release ca intrarea (Run / LaunchAgent / .desktop) contine calea exe-ului curent si o rescrie altfel. Caz real:
+HobStack pornit intai de pe Desktop (v1.0.3), apoi instalat cu installerul: Run arata inca spre exe-ul de pe Desktop.
+Oprita de utilizator, ramane oprita.

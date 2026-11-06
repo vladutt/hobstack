@@ -309,7 +309,7 @@ exe GUI (-H windowsgui, fara fereastra; consola fara fereastra prin cmd.exe CREA
 de comenzile agentilor) si scrie in hobstack.log (erorile in MessageBox); pornit a doua oara deschide instanta
 care ruleaza; iconita langa ceas (cmd/hobstack/tray_windows.go, Shell_NotifyIconW: clic = Open, meniu Open / Quit).
 internal/autostart (Run key / LaunchAgent app.hobstack / XDG autostart; pornita implicit o data de o versiune de release,
-marcajul autostart-chosen din folderul datelor pastreaza alegerea) si Quit in Settings > App (/api/app*).
+marcajul autostart-chosen din folderul datelor pastreaza alegerea; pornita, intrarea e mutata la fiecare pornire pe exe-ul curent) si Quit in Settings > App (/api/app*).
 Installer Windows: installer/hobstack.nsi (NSIS, fara admin, folder la alegere, scurtaturi Desktop / Start menu, uninstaller),
 construit in scripts/build-release.sh; hobstack.portable langa exe = datele in <folder>/data (config.InstallDir, o mutare
 din ~/.hobstack prin config.MoveToInstall); `hobstack quit [--force]` opreste instanta care ruleaza.

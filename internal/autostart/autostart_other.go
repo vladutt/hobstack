@@ -37,6 +37,12 @@ func Enable(home, exe, _ string) error {
 	return os.WriteFile(p, []byte(desktop), 0o644)
 }
 
+// command: fisierul .desktop (calea exe-ului e in Exec).
+func command(home string) string {
+	b, _ := os.ReadFile(desktopPath(home))
+	return string(b)
+}
+
 func Disable(home, _ string) error {
 	err := os.Remove(desktopPath(home))
 	if os.IsNotExist(err) {

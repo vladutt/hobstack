@@ -36,6 +36,20 @@ func Enable(_, exe, _ string) error {
 	return nil
 }
 
+// command: comanda din Run ("" daca lipseste).
+func command(string) string {
+	out, err := reg("query", runKey, "/v", Label)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if _, v, ok := strings.Cut(line, "REG_SZ"); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
 // Disable sterge valoarea din Run (fara eroare daca nu exista).
 func Disable(_, _ string) error {
 	if !Enabled("", "") {

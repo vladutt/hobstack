@@ -49,3 +49,24 @@ func TestDefaultOnlyOnce(t *testing.T) {
 		t.Fatalf("after the user turned it off: %v %v", on, err)
 	}
 }
+
+func TestDefaultFollowsTheExe(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	if _, err := Default(root, home, "/Desktop/hobstack", "/x/log"); err != nil {
+		t.Fatal(err)
+	}
+	// instalat apoi in alt folder: pornirea la login trece pe exe-ul nou
+	if _, err := Default(root, home, "/Programs/HobStack/hobstack", "/x/log"); err != nil {
+		t.Fatal(err)
+	}
+	if c := command(home); !strings.Contains(c, "/Programs/HobStack/hobstack") || strings.Contains(c, "/Desktop/") {
+		t.Fatalf("still the old exe: %s", c)
+	}
+	// oprita de utilizator: ramane oprita
+	Disable(home, "")
+	Default(root, home, "/Other/hobstack", "/x/log")
+	if Enabled(home, "") {
+		t.Fatal("turned back on")
+	}
+}
