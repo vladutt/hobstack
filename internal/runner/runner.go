@@ -80,6 +80,7 @@ type Run struct {
 	done    bool
 	status  string
 	stopped bool
+	reaped  bool // oprit de HobStack dupa rezultat (claude nu iesea singur)
 	log     *os.File
 	cancel  context.CancelFunc
 
@@ -269,19 +270,48 @@ func (m *Manager) Start(spec Spec, onDone func(Outcome)) (*Run, error) {
 	return run, nil
 }
 
+// AfterResultGrace: cat asteptam iesirea lui claude dupa evenimentul "result". In -p, claude nu iese cat timp
+// are o comanda pornita in fundal (de ex. un server de dev); run-ul ar ramane "working" la nesfarsit, iar mesajele
+// noi ar sta in coada. Dupa grace oprim procesul (variabila, pentru teste).
+var AfterResultGrace = 10 * time.Second
+
 func (m *Manager) pump(run *Run, cmd *exec.Cmd, stdout, stderr io.Reader, onDone func(Outcome)) {
 	var tr tracker // folosit doar de goroutine-ul de stdout, citit dupa wg.Wait
 	var wg sync.WaitGroup
 	wg.Add(2)
+
+	resulted := make(chan struct{}) // inchis la primul "result"
+	exited := make(chan struct{})   // inchis dupa cmd.Wait
+	go func() {
+		select {
+		case <-resulted:
+		case <-exited:
+			return
+		}
+		select {
+		case <-exited:
+		case <-time.After(AfterResultGrace):
+			run.mu.Lock()
+			run.reaped = true
+			run.mu.Unlock()
+			run.publish(mustJSON(map[string]any{"type": "app_stderr", "text": "claude did not exit after its result (a background command is still running); HobStack ended the run"}))
+			endAfterResult(cmd)
+		}
+	}()
 
 	go func() {
 		defer wg.Done()
 		sc := bufio.NewScanner(stdout)
 		// o linie stream-json poate depasi 64KB (ex. un fisier citit intreg)
 		sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+		sawResult := false
 		for sc.Scan() {
 			line := append([]byte(nil), sc.Bytes()...)
 			tr.observe(line)
+			if tr.hasResult && !sawResult {
+				sawResult = true
+				close(resulted)
+			}
 			run.activity.Store(int64(len(tr.changes) + len(tr.commands)))
 			run.publish(line)
 		}
@@ -297,9 +327,13 @@ func (m *Manager) pump(run *Run, cmd *exec.Cmd, stdout, stderr io.Reader, onDone
 
 	wg.Wait()
 	waitErr := cmd.Wait()
+	close(exited)
 
 	run.mu.Lock()
 	stopped := run.stopped
+	if run.reaped && !stopped {
+		waitErr = nil // rezultatul era deja venit: run-ul s-a terminat normal
+	}
 	run.mu.Unlock()
 
 	out := tr.outcome(run.ID, waitErr, stopped)

@@ -17,6 +17,12 @@ budget)
 notlogged)
   echo '{"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login","total_cost_usd":0,"session_id":"s"}'
   ;;
+lingers)
+  # rezultatul vine, dar procesul nu iese (ca claude -p cu un server pornit in fundal)
+  echo '{"type":"system","subtype":"init","session_id":"sess-l"}'
+  echo '{"type":"result","subtype":"success","is_error":false,"result":"server started","total_cost_usd":0.1,"session_id":"sess-l"}'
+  sleep 60
+  ;;
 crash)
   echo "boom" >&2
   exit 3

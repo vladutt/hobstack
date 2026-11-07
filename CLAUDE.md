@@ -20,6 +20,8 @@ Autorul e senior PHP/Laravel, incepator in Go: cod simplu, idiomatic, comentat u
 - Live output prin SSE (nu websockets). UI: HTML + JS vanilla, embedded cu `embed`.
 - Fara Docker la runtime; Docker doar pentru dev daca e nevoie.
 - Un singur run activ per agent. Stop omoara tot process group-ul.
+- In -p, claude nu iese dupa "result" cat are o comanda in fundal (server de dev): runner-ul il opreste (SIGKILL pe
+  grupul lui, comanda din fundal are grupul ei si ramane) dupa runner.AfterResultGrace (10 s); run-ul ramane done.
 - Asculta doar pe localhost, fara autentificare.
 - Preferinta: dependente minime. SQLite prin modernc.org/sqlite (pure Go, fara CGO).
 

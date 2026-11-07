@@ -132,3 +132,16 @@ func joinLines(lines [][]byte) []byte {
 	}
 	return out
 }
+
+func TestRunEndsAfterResultWhenClaudeLingers(t *testing.T) {
+	t.Setenv("FAKE_MODE", "lingers")
+	old := AfterResultGrace
+	AfterResultGrace = 300 * time.Millisecond
+	t.Cleanup(func() { AfterResultGrace = old })
+	m := fakeManager(t)
+	_, done := start(t, m, Spec{ID: "rl", Key: "agent-l", Dir: t.TempDir(), Args: []string{"-p", "x"}, Prompt: "x"})
+	o := wait(t, done)
+	if o.Status != "done" || o.Error != "" || o.Result != "server started" || o.SessionID != "sess-l" {
+		t.Fatalf("outcome = %+v", o)
+	}
+}
