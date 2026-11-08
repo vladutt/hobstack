@@ -349,6 +349,10 @@ Caile din mesajele de chat (paths.js: in text si `cod`, nu in blocurile ```) dev
 /api/projects/{id}/paths le verifica (absolute doar in folderele proiectului si fisierele lui; relative la folderul agentului,
 apoi la celelalte; un nume / o coada care se potriveste unui singur fisier din lista; :linie ignorat), clic = POST /reveal
 (fisierul selectat in Finder / Explorer, un folder se deschide).
+Gata (agentii cer servere MCP, spec in docs/superpowers/specs/2026-11-08-hobstack-agent-mcp-install-design.md): tool-ul MCP
+install_mcp (toti agentii) face o cerere (mcp_requests, migrarea 036; max 5 deschise, un nume din Library = activarea lui);
+o aproba MEREU utilizatorul in Needs you, si cu Full autonomy (comanda exacta, cheile optionale, Install / Decline; Install =
+web.createMCP, acelasi drum ca Library > MCP > Add server, doar in proiectul cererii); agentul afla printr-o nota in coada.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

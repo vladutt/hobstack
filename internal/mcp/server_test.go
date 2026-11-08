@@ -62,6 +62,10 @@ func (f *fakeBackend) AttachFiles(c Caller, task string, paths []string) (string
 	f.calls = append(f.calls, "attach|"+task+"|"+strings.Join(paths, ";"))
 	return "Attached 2 files.", f.err
 }
+func (f *fakeBackend) RequestMCP(c Caller, in MCPRequestInput) (string, error) {
+	return "requested " + in.Name, nil
+}
+
 func (f *fakeBackend) AttachToChat(c Caller, paths []string, note string) (string, error) {
 	return "attached to chat", nil
 }
@@ -296,19 +300,19 @@ func TestToolsListByRole(t *testing.T) {
 		}
 		return out
 	}
-	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,start_task,ask_user,attach_files" {
+	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("lead: %s", got)
 	}
-	if got := strings.Join(names("worker"), ","); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files" {
+	if got := strings.Join(names("worker"), ","); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("worker: %s", got)
 	}
-	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,tick_left_for_user,comment_task,start_task,ask_user,attach_files" {
+	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("sublead: %s", got)
 	}
-	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,start_task,ask_user,attach_files" {
+	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("reviewer: %s", got)
 	}
-	if got := strings.Join(names("solo"), ","); got != "start_task,ask_user,attach_files" {
+	if got := strings.Join(names("solo"), ","); got != "start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("solo: %s", got)
 	}
 }
@@ -443,10 +447,10 @@ func TestStageTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("stagework"); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files" {
+	if got := names("stagework"); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("work: %s", got)
 	}
-	if got := names("stagecheck"); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,ask_user,attach_files" {
+	if got := names("stagecheck"); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("check: %s", got)
 	}
 }
@@ -524,11 +528,11 @@ func TestAddAgentTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files" {
+	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("leadadd: %s", got)
 	}
 	// radacina fara echipa: create_task + list_tasks ca sa-i dea de lucru agentului nou, fara accept/send_back
-	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files" {
+	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("rootsolo: %s", got)
 	}
 	for _, token := range []string{"worker", "sublead", "setup"} {
@@ -569,10 +573,10 @@ func TestLinkedProjectTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,start_task,ask_user,attach_files" {
+	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("linkedworker: %s", got)
 	}
-	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,list_linked_projects,ask_project,reply_to_project,request_project_work,start_task,ask_user,attach_files" {
+	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,list_linked_projects,ask_project,reply_to_project,request_project_work,start_task,ask_user,attach_files,install_mcp" {
 		t.Fatalf("linkedlead: %s", got)
 	}
 	// radacina intr-un run pe un task venit din alt proiect: report_done chiar fara sef

@@ -209,6 +209,23 @@ var tickLeftTool = Tool{
 	}),
 }
 
+var installMCPTool = Tool{
+	Name: "install_mcp",
+	Description: "Asks the user to install an MCP server in this project, so the project's agents get its tools " +
+		"(for example a browser, a database or an API). Only the user can install it: the request appears in their " +
+		"Needs you list with the exact command, and you are told when it is installed or declined. Its tools are " +
+		"available from your next run. Prefer servers from the official MCP registry and their documented command.",
+	InputSchema: schema([]string{"name", "description", "reason"}, map[string]any{
+		"name":        str("Short name: lowercase letters, digits and dashes, e.g. playwright"),
+		"description": str("What the server does, in one line (max 300 characters)"),
+		"command":     str("Local server: the program to start, e.g. npx (leave empty for a remote server)"),
+		"args":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Local server: its arguments, e.g. [\"-y\", \"@playwright/mcp@latest\"]"},
+		"url":         str("Remote server: its http(s) address (leave empty for a local server)"),
+		"secrets":     map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Names of the keys it needs, e.g. [\"GITHUB_TOKEN\"]; the user fills in the values (a remote server can only have AUTH_TOKEN)"},
+		"reason":      str("Why you need it, for the user (max 300 characters)"),
+	}),
+}
+
 var attachFilesTool = Tool{
 	Name: "attach_files",
 	Description: "Shows the user files you made, so they can open and check them: screenshots, images, SVGs, PDFs, " +
@@ -467,7 +484,7 @@ func toolsFor(c Caller) []Tool {
 	if c.TaskID == 0 {
 		out = append(out, startTaskTool)
 	}
-	out = append(out, askUserTool, attachFilesTool)
+	out = append(out, askUserTool, attachFilesTool, installMCPTool)
 	return out
 }
 

@@ -209,6 +209,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/project-requests/{id}/dismiss", s.dismissProjectRequest)
 	mux.HandleFunc("POST /api/agent-requests/{id}/approve", s.approveAgentRequest)
 	mux.HandleFunc("POST /api/agent-requests/{id}/dismiss", s.dismissAgentRequest)
+	mux.HandleFunc("POST /api/mcp-requests/{id}/install", s.installMCPRequest)
+	mux.HandleFunc("POST /api/mcp-requests/{id}/decline", s.declineMCPRequest)
 	mux.HandleFunc("POST /api/tasks/{id}/assign", s.assignTask)
 	mux.HandleFunc("POST /api/tasks/{id}/accept", s.acceptTask)
 	mux.HandleFunc("POST /api/tasks/{id}/move", s.moveTask)

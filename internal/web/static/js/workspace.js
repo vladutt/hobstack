@@ -3,6 +3,7 @@ import { api, upload } from "./api.js";
 import { openButtons } from "./open-file.js";
 import { openImage, closeImage } from "./image-viewer.js";
 import { pathLinker } from "./paths.js";
+import { mcpRequestBox } from "./mcp-requests.js";
 import { el, avatar, toast, clock, kindOf, agentBody, field, topbar } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
@@ -143,11 +144,13 @@ export async function workspaceView(root, projectId, route) {
   const fillList = el("div", { class: "needs-fill" });
   const accessList = el("div", { class: "needs-access" });
   const agentReqList = el("div", { class: "needs-agent-requests" });
+  const mcpReqList = el("div", { class: "needs-mcp-requests" });
+  let mcpReqKey = null;
   const workReqList = el("div", { class: "needs-work-requests" });
   const libraryList = el("div", { class: "needs-library" });
   const accountList = el("div", { class: "needs-account" });
   const needsBox = el("section", { class: "needs-you", "aria-live": "polite", hidden: true },
-    needsTitle, accountList, questionsBox, fillList, stuckList, accessList, agentReqList, workReqList, libraryList);
+    needsTitle, accountList, questionsBox, fillList, stuckList, accessList, agentReqList, mcpReqList, workReqList, libraryList);
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
   const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
@@ -455,7 +458,8 @@ export async function workspaceView(root, projectId, route) {
     const workReqs = state.project.workRequests || [];
     const fills = state.project.fillIns || [];
     const proposals = state.project.libraryProposals || [];
-    const total = proposals.length + questions.length + fills.length + stuck.length + access.length + agentReqs.length + workReqs.length + (state.project.accountError ? 1 : 0);
+    const mcpReqs = state.project.mcpRequests || [];
+    const total = mcpReqs.length + proposals.length + questions.length + fills.length + stuck.length + access.length + agentReqs.length + workReqs.length + (state.project.accountError ? 1 : 0);
     needsTitle.replaceChildren(el("span", {}, "Needs you"), el("span", { class: "col-count" }, total));
     needsChip.textContent = `${total} ${total === 1 ? "needs" : "need"} you`;
     needsChip.hidden = !total || state.tab === "tasks";
@@ -484,6 +488,11 @@ export async function workspaceView(root, projectId, route) {
     if (rKey !== agentReqKey) {
       agentReqKey = rKey;
       agentReqList.replaceChildren(...agentReqs.map(agentReqNode));
+    }
+    const mKey = mcpReqs.map((r) => r.id).join(",");
+    if (mKey !== mcpReqKey) {
+      mcpReqKey = mKey;
+      mcpReqList.replaceChildren(...mcpReqs.map((r) => mcpRequestBox(r, { agent: state.project.agents.find((a) => a.id === r.agentId), onDone: reload })));
     }
     const wKey = workReqs.map((r) => r.id).join(",");
     if (wKey !== workReqKey) {

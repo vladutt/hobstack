@@ -190,6 +190,8 @@ type projectCard struct {
 	AgentRequests int `json:"agentRequests"`
 	// WorkRequests: cereri de lucru de la proiecte legate, in asteptarea aprobarii
 	WorkRequests int `json:"workRequests"`
+	// MCPRequests: cereri install_mcp deschise (le aproba utilizatorul)
+	MCPRequests int `json:"mcpRequests"`
 	// LibraryProposals: elemente propuse de agenti din proiect, in asteptarea deciziei (intra in "N need you")
 	LibraryProposals int `json:"libraryProposals"`
 	// CostUSD / Tokens: totalul run-urilor agentilor proiectului (coloana "Total cost")
@@ -243,6 +245,8 @@ type projectDetail struct {
 	Access []accessView `json:"access"`
 	// AgentRequests: cererile add_agent deschise (mereu non-nil)
 	AgentRequests []agentRequestView `json:"agentRequests"`
+	// MCPRequests: cererile install_mcp deschise (mereu non-nil)
+	MCPRequests []mcpRequestView `json:"mcpRequests"`
 	// Recurring: sarcinile recurente ale proiectului (mereu non-nil)
 	Recurring []recurringView `json:"recurring"`
 	// Links: proiectele legate (mereu non-nil)
@@ -274,6 +278,9 @@ func (s *Server) card(p store.Project) (projectCard, []store.Agent, []store.Task
 		return projectCard{}, nil, nil, nil, err
 	}
 	if c.AccessRequests, err = s.st.CountOpenAccessRequests(p.ID); err != nil {
+		return projectCard{}, nil, nil, nil, err
+	}
+	if c.MCPRequests, err = s.st.CountOpenMCPRequests(p.ID); err != nil {
 		return projectCard{}, nil, nil, nil, err
 	}
 	if c.AgentRequests, err = s.st.CountOpenAgentRequests(p.ID); err != nil {
@@ -387,6 +394,11 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	mcpReqs, err := s.mcpRequestViews(p.ID, agents, tasks)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	agentReqs, err := s.agentRequestViews(p.ID, agents, tasks)
 	if err != nil {
 		fail(w, err)
@@ -451,7 +463,7 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	if c.fills == nil {
 		c.fills = []store.FillIn{}
 	}
-	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, Recurring: recurring, Links: links, WorkRequests: workReqs, FillIns: c.fills, LibraryProposals: proposals, Archived: archived}
+	d := projectDetail{projectCard: c, Agents: []agentView{}, Tasks: views, Stages: stages, UserDecides: []int64{}, UserCanDecide: []int64{}, Questions: questions, Stuck: stuck, Access: access, AgentRequests: agentReqs, MCPRequests: mcpReqs, Recurring: recurring, Links: links, WorkRequests: workReqs, FillIns: c.fills, LibraryProposals: proposals, Archived: archived}
 	for _, t := range tasks {
 		if s.team.UserDecides(t, agents, p.Autonomy) {
 			d.UserDecides = append(d.UserDecides, t.ID)

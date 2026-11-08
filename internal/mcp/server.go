@@ -39,6 +39,12 @@ type LibraryInput struct {
 	Files, Args, Needs, Secrets                  []string
 }
 
+// MCPRequestInput sunt argumentele lui install_mcp: un server local (command + args) sau remote (url).
+type MCPRequestInput struct {
+	Name, Description, Command, URL, Reason string
+	Args, Secrets                           []string
+}
+
 // AddAgentInput sunt argumentele lui add_agent. ToolsSet spune daca agentul a
 // trimis "tools" (chiar gol); fara el, backend-ul alege tool-urile implicite.
 type AddAgentInput struct {
@@ -87,6 +93,7 @@ type Backend interface {
 	TickLeftForUser(c Caller, task string, items []int) (string, error)
 	DeleteFiles(c Caller, paths []string) (string, error)
 	AttachToChat(c Caller, paths []string, note string) (string, error)
+	RequestMCP(c Caller, in MCPRequestInput) (string, error)
 	CommentTask(c Caller, task, text string) (string, error)
 	ReviewApprove(c Caller, task, note string) (string, error)
 	ReviewReject(c Caller, task, feedback string) (string, error)
@@ -267,6 +274,10 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 				text += " " + extra
 			}
 		}
+	case "install_mcp":
+		text, err = s.backend.RequestMCP(c, MCPRequestInput{Name: arg("name"), Description: arg("description"),
+			Command: arg("command"), URL: arg("url"), Reason: arg("reason"),
+			Args: argList(p.Arguments, "args"), Secrets: argList(p.Arguments, "secrets")})
 	case "attach_files":
 		paths := argList(p.Arguments, "paths")
 		switch {

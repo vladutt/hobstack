@@ -141,7 +141,7 @@ function setupCard(s, refresh) {
 // cereri de agenti noi, cereri de lucru, de completat, propuneri pentru Library, contul Claude cazut
 export function needsCount(p) {
   return (p.openQuestions || 0) + (p.stuckTasks || 0) + (p.accessRequests || 0) + (p.agentRequests || 0) + (p.workRequests || 0)
-    + (p.fillIns || 0) + (p.libraryProposals || 0) + (p.accountError ? 1 : 0);
+    + (p.fillIns || 0) + (p.libraryProposals || 0) + (p.mcpRequests || 0) + (p.accountError ? 1 : 0);
 }
 
 // projectRow: un rand din tabelul de proiecte; click oriunde pe rand deschide proiectul.

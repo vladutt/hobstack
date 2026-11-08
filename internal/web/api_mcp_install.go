@@ -219,63 +219,97 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	cur, ferr := s.createMCP(in)
+	if ferr != nil {
+		ferr.write(w)
+		return
+	}
+	// elementul e nou: instalat cel mult in proiectul cerut acum (fara o interogare in plus)
+	installs := 0
+	if in.ProjectID != 0 {
+		installs = 1
+	}
+	view, err := s.itemViewOf(cur, installs)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, view)
+}
+
+// mcpFail: de ce nu s-a putut instala (raspunsul HTTP, comun pentru Library si cererile agentilor)
+type mcpFail struct {
+	err        error // eroare obisnuita (fail)
+	libErr     error // eroare de publicare (libraryErr)
+	status     int   // altfel: cod + mesaj
+	msg        string
+	testFailed bool // proba n-a raspuns la tools/list (422): UI-ul ofera "Install without test"
+}
+
+func (f *mcpFail) write(w http.ResponseWriter) {
+	switch {
+	case f.testFailed:
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": f.msg, "testFailed": true})
+	case f.libErr != nil:
+		libraryErr(w, f.libErr)
+	case f.err != nil:
+		fail(w, f.err)
+	default:
+		writeErr(w, f.status, f.msg)
+	}
+}
+
+// createMCP: validare -> nume liber -> proba (doar local, fara skipTest) -> element publicat facut de "You" ->
+// optional instalat in proiect. Proba picata = testFailed si nimic creat. Comanda a fost confirmata de utilizator.
+func (s *Server) createMCP(in mcpInstall) (store.LibraryItem, *mcpFail) {
+	bad := func(msg string) (store.LibraryItem, *mcpFail) {
+		return store.LibraryItem{}, &mcpFail{err: badRequest(msg)}
+	}
 	// un argument ascuns din configurarile Claude nu e valoarea reala: nu se instaleaza niciodata
 	if hasMarker(in, mcpregistry.Hidden) {
-		fail(w, badRequest("this server has a credential in its command, arguments or URL; move it to env in your Claude config, then install"))
-		return
+		return bad("this server has a credential in its command, arguments or URL; move it to env in your Claude config, then install")
 	}
 	// ${DIR} e folderul fisierelor unei propuneri de agent; un server instalat de aici nu are fisiere
 	if hasMarker(in, "${DIR}") {
-		fail(w, badRequest("${DIR} only works for items with files; use the full path"))
-		return
+		return bad("${DIR} only works for items with files; use the full path")
 	}
 	switch in.Kind {
 	case "local":
 		if strings.TrimSpace(in.URL) != "" {
-			fail(w, badRequest("a local server has a command, not a url"))
-			return
+			return bad("a local server has a command, not a url")
 		}
 	case "remote":
 		if strings.TrimSpace(in.Command) != "" || len(in.Args) > 0 {
-			fail(w, badRequest("a remote server has a url, not a command"))
-			return
+			return bad("a remote server has a url, not a command")
 		}
 	default:
-		fail(w, badRequest("kind: local or remote"))
-		return
+		return bad("kind: local or remote")
 	}
 	// aceeasi validare ca POST /api/library: comanda si argumentele vin din browser, nu ne bazam pe ele
 	v, err := library.ValidateInput(mcp.LibraryInput{Kind: store.KindMCP, Name: in.Name, Description: in.Description,
 		Command: in.Command, URL: in.URL, Args: in.Args, Secrets: in.Secrets}, true)
 	if err != nil {
-		fail(w, badRequest(err.Error()))
-		return
+		return bad(err.Error())
 	}
 	if (in.Kind == "remote") != (v.URL != "") {
-		fail(w, badRequest("an mcp needs command (local) or url (remote)"))
-		return
+		return bad("an mcp needs command (local) or url (remote)")
 	}
 	if len(in.SecretValues) > 0 && in.ProjectID == 0 {
-		fail(w, badRequest("secretValues need projectId: secret values are kept per project"))
-		return
+		return bad("secretValues need projectId: secret values are kept per project")
 	}
 	if err := checkSecretValues(v.Secrets, in.SecretValues, nil); err != nil {
-		fail(w, err)
-		return
+		return store.LibraryItem{}, &mcpFail{err: err}
 	}
 	if in.ProjectID != 0 {
 		if _, err := s.st.GetProject(in.ProjectID); err != nil {
-			fail(w, err)
-			return
+			return store.LibraryItem{}, &mcpFail{err: err}
 		}
 	}
-	conflict := func() { writeErr(w, http.StatusConflict, s.lib.NameTakenMsg(v.Kind, v.Name)) }
+	conflict := &mcpFail{status: http.StatusConflict, msg: s.lib.NameTakenMsg(v.Kind, v.Name)}
 	if _, err := s.st.FindLibraryItem(v.Kind, v.Name); err == nil {
-		conflict()
-		return
+		return store.LibraryItem{}, conflict
 	} else if !errors.Is(err, store.ErrNotFound) {
-		fail(w, err)
-		return
+		return store.LibraryItem{}, &mcpFail{err: err}
 	}
 
 	// proba, inainte de a crea ceva, cu valorile secretelor date acum (elementul e nou, deci in proiect nu are altele).
@@ -298,17 +332,14 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 			if r := []rune(msg); len(r) > 300 {
 				msg = string(r[:300]) + "..."
 			}
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-				"error": "The server did not answer tools/list: " + msg, "testFailed": true})
-			return
+			return store.LibraryItem{}, &mcpFail{testFailed: true, msg: "The server did not answer tools/list: " + msg}
 		}
 		tools = names
 	}
 
 	staging, err := s.lib.NewStaging()
 	if err != nil {
-		fail(w, err)
-		return
+		return store.LibraryItem{}, &mcpFail{err: err}
 	}
 	defer os.RemoveAll(staging) // dupa AdoptStaged nu mai exista
 
@@ -317,11 +348,9 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 		// ascuns (declined) cat se pregateste; PublishSkipTest il face published (proba s-a facut mai sus)
 		Status: store.ItemDeclined}
 	if err := s.st.AddLibraryItem(&it); errors.Is(err, store.ErrConflict) {
-		conflict()
-		return
+		return store.LibraryItem{}, conflict
 	} else if err != nil {
-		fail(w, err)
-		return
+		return store.LibraryItem{}, &mcpFail{err: err}
 	}
 	// undo sterge tot ce a facut Install: randurile (versiunile si instalarile cad prin cascade), propunerea si
 	// folderul versiunii (items/<id>, mutat acolo de publicare)
@@ -332,41 +361,27 @@ func (s *Server) installMCP(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := s.lib.AdoptStaged(staging, it.ID); err != nil {
 		undo()
-		fail(w, err)
-		return
+		return store.LibraryItem{}, &mcpFail{err: err}
 	}
 	ver, err := s.lib.PublishSkipTest(it.ID, "")
 	if err != nil {
 		undo()
-		libraryErr(w, err)
-		return
+		return store.LibraryItem{}, &mcpFail{libErr: err}
 	}
 	if in.ProjectID != 0 {
 		// acelasi drum ca PUT /api/projects/{id}/library/{item} cu installed=true: versiunea curenta, activat,
 		// plus secretele, intr-o tranzactie. La eroare elementul dispare de tot (altfel reincercarea ar da 409).
 		if err := s.installInProject(in.ProjectID, it.ID, ver.ID, in.SecretValues); err != nil {
 			undo()
-			fail(w, err)
-			return
+			return store.LibraryItem{}, &mcpFail{err: err}
 		}
 		s.hub.Publish(in.ProjectID, "project", map[string]int64{"id": in.ProjectID})
 	}
 	cur, err := s.st.GetLibraryItem(it.ID)
 	if err != nil {
-		fail(w, err)
-		return
+		return store.LibraryItem{}, &mcpFail{err: err}
 	}
-	// elementul e nou: instalat cel mult in proiectul cerut acum (fara o interogare in plus)
-	installs := 0
-	if in.ProjectID != 0 {
-		installs = 1
-	}
-	view, err := s.itemViewOf(cur, installs)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, view)
+	return cur, nil
 }
 
 // installWithSecrets: instalarea in proiect + secretele, intr-o tranzactie. Variabila exista ca testele sa poata

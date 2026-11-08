@@ -1809,3 +1809,9 @@ input.task-search:focus { border-color: var(--amber); outline: none; }
 /* caile din chat care exista in proiect: clic = Show in Finder / Explorer (paths.js) */
 .path-link { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; }
 .path-link:hover, .path-link:focus-visible { text-decoration-style: solid; text-decoration-color: var(--amber); color: var(--text); outline: none; }
+
+/* cererea install_mcp a unui agent, in Needs you (mcp-requests.js) */
+.mcp-request-cmd { display: grid; gap: 4px; margin: 6px 0; }
+.mcp-request-cmd code { display: block; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); overflow-wrap: anywhere; font-size: 12px; }
+.mcp-request-secrets { display: grid; gap: 8px; margin: 6px 0; }
+.mcp-request-secrets .field { display: grid; gap: 4px; }
