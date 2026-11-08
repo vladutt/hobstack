@@ -495,6 +495,11 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .msg.me .attachments { justify-content: flex-end; }
 .attachments img { display: block; max-width: 180px; max-height: 180px; border-radius: 8px; border: 1px solid var(--line); }
 .attachments .file-link { font-size: 12px; color: var(--amber); overflow-wrap: anywhere; }
+.attachment { display: grid; gap: 3px; justify-items: start; }
+.msg.me .attachment { justify-items: end; }
+.attachment-actions { display: flex; gap: 10px; font-size: 11px; }
+.attachment-actions .link-btn { color: var(--muted); }
+.attachment-actions .link-btn:hover { color: var(--text); }
 
 .toast { position: fixed; bottom: 20px; right: 20px; background: #3a2422; color: #f6d9d5; border: 1px solid #5c302c; padding: 11px 15px; border-radius: 11px; max-width: 420px; z-index: 80; box-shadow: 0 10px 30px rgba(0,0,0,.4); } /* peste modale si peste explorer-ul de cod (70) */
 .toast.ok { background: #173129; color: #cdeee4; border-color: #2a5a4d; }
@@ -1322,6 +1327,7 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 /* Files: fisierele predate pe task (report_done files) */
 .tfiles-list { list-style: none; margin: 0; padding: 0; }
 .tfiles-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.tfiles-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .tfiles-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; flex: 1 1 180px; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .tfiles-main:hover .tfiles-name { text-decoration: underline; }
 .tfiles-main:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 3px; }

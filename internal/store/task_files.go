@@ -19,6 +19,7 @@ type TaskFile struct {
 	Size      int64     `json:"size"`
 	Mime      string    `json:"mime"`
 	CreatedAt time.Time `json:"createdAt"`
+	Source    string    `json:"-"` // calea originala, absoluta (doar fisierele agentilor); "" = doar copia
 }
 
 // UserFileAuthor: agent_name pentru fisierele puse de utilizator pe task (agent_id ramane NULL).
@@ -36,13 +37,13 @@ const ErrReservedName = `"You" is reserved for the user; choose another name`
 // Un agent sters are tot agent_id NULL, dar numele lui ramane in agent_name.
 func (f TaskFile) FromUser() bool { return f.AgentID == nil && f.AgentName == UserFileAuthor }
 
-const taskFileCols = `id, task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at`
+const taskFileCols = `id, task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at, source`
 
 func scanTaskFile(row interface{ Scan(...any) error }) (TaskFile, error) {
 	var f TaskFile
 	var agent sql.NullInt64
 	var at string
-	err := row.Scan(&f.ID, &f.TaskID, &f.ProjectID, &agent, &f.AgentName, &f.Path, &f.Name, &f.Stored, &f.Size, &f.Mime, &at)
+	err := row.Scan(&f.ID, &f.TaskID, &f.ProjectID, &agent, &f.AgentName, &f.Path, &f.Name, &f.Stored, &f.Size, &f.Mime, &at, &f.Source)
 	if agent.Valid {
 		id := agent.Int64
 		f.AgentID = &id
@@ -57,9 +58,9 @@ func (s *Store) AddTaskFile(f *TaskFile) error {
 	if f.AgentID != nil {
 		agent = sql.NullInt64{Int64: *f.AgentID, Valid: true}
 	}
-	res, err := s.db.Exec(`INSERT INTO task_files (task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		f.TaskID, f.ProjectID, agent, f.AgentName, f.Path, f.Name, f.Stored, f.Size, f.Mime, ts)
+	res, err := s.db.Exec(`INSERT INTO task_files (task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		f.TaskID, f.ProjectID, agent, f.AgentName, f.Path, f.Name, f.Stored, f.Size, f.Mime, ts, f.Source)
 	if err != nil {
 		return err
 	}
@@ -81,9 +82,9 @@ func (s *Store) AddTaskFiles(files []*TaskFile) error {
 		if f.AgentID != nil {
 			agent = sql.NullInt64{Int64: *f.AgentID, Valid: true}
 		}
-		res, err := tx.Exec(`INSERT INTO task_files (task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			f.TaskID, f.ProjectID, agent, f.AgentName, f.Path, f.Name, f.Stored, f.Size, f.Mime, ts)
+		res, err := tx.Exec(`INSERT INTO task_files (task_id, project_id, agent_id, agent_name, path, name, stored, size, mime, created_at, source)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			f.TaskID, f.ProjectID, agent, f.AgentName, f.Path, f.Name, f.Stored, f.Size, f.Mime, ts, f.Source)
 		if err != nil {
 			return err
 		}

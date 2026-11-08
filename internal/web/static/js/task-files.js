@@ -1,6 +1,7 @@
 import { el, toast } from "./ui.js";
 import { renderMarkdown } from "./md.js";
 import { highlightInto, languageFor } from "./highlight.js";
+import { openButtons } from "./open-file.js";
 
 // Cat text se arata in preview (restul se descarca).
 const PREVIEW_BYTES = 1 << 20;
@@ -16,11 +17,13 @@ function ext(name) {
 }
 
 // kindOfFile: cum se arata fisierul in preview ("image" | "pdf" | "markdown" | "text" | "none").
-// HTML si SVG nu se arata niciodata (scrise de agenti, ar rula pe originea aplicatiei).
+// HTML nu se arata niciodata (scris de agenti, ar rula pe originea aplicatiei); SVG doar ca <img>, unde
+// script-urile lui nu ruleaza.
 export function kindOfFile(f) {
   const base = (f.mime || "").split(";")[0].trim();
   const e = ext(f.name);
-  if (e === "html" || e === "htm" || e === "svg" || base === "text/html" || base === "image/svg+xml") return "none";
+  if (e === "svg" || base === "image/svg+xml") return "image";
+  if (e === "html" || e === "htm" || base === "text/html") return "none";
   if (IMAGE_MIME.has(base)) return "image";
   if (base === "application/pdf") return "pdf";
   if (e === "md" || e === "markdown") return "markdown";
@@ -162,7 +165,8 @@ export function taskFilesView({ onUpload = null, canUpload = () => true, limit =
       el("span", { class: "tfiles-meta" }, `${size(g.size)} · ${g.agentName} · ${ago(g.createdAt)}${g.ref ? " · " + g.ref : ""}`),
       n ? el("button", { type: "button", class: "link-btn tfiles-meta", "aria-expanded": String(open.has(g.path)), onclick: () => toggle(g.path) },
         `${n} earlier ${n === 1 ? "version" : "versions"}`) : null,
-      el("a", { class: "btn ghost small", href: url(g.id, true), download: g.name }, "Download"),
+      el("span", { class: "tfiles-actions" }, ...openButtons(`/api/task-files/${g.id}`, g.name),
+        el("a", { class: "btn ghost small", href: url(g.id, true), download: g.name }, "Download")),
       open.has(g.path) ? el("ul", { class: "tfiles-versions" }, g.versions.map((v) => el("li", {},
         el("button", { type: "button", class: "link-btn", onclick: () => preview(v.id) }, ago(v.createdAt)),
         el("span", { class: "tfiles-meta" }, ` ${size(v.size)} · ${v.agentName}${v.ref ? " · " + v.ref : ""} · `),
@@ -177,6 +181,7 @@ export function taskFilesView({ onUpload = null, canUpload = () => true, limit =
     const head = el("div", { class: "tfiles-preview-head" }, back,
       el("span", { class: "tfiles-name" }, f.name), el("span", { class: "tfiles-dir" }, f.path),
       el("span", { class: "grow" }),
+      ...openButtons(`/api/task-files/${id}`, f.name),
       el("a", { class: "btn ghost small", href: url(id, true), download: f.name }, "Download"));
     const body = el("div", { class: "tfiles-preview-body" }, el("p", { class: "hint" }, "Loading..."));
     root.replaceChildren(head, body);

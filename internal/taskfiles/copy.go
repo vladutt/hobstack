@@ -28,6 +28,7 @@ type Copied struct {
 	Stored string // numele copiei in destDir
 	Mime   string
 	Size   int64
+	Source string // calea originala, absoluta (pentru "Show in Finder")
 }
 
 var (
@@ -117,7 +118,7 @@ func Copy(roots []string, home, raw, destDir string) (Copied, error) {
 		os.Remove(filepath.Join(destDir, stored))
 		return Copied{}, err
 	}
-	return Copied{Path: display, Name: name, Stored: stored, Mime: detectMime(name, head), Size: size}, nil
+	return Copied{Path: display, Name: name, Stored: stored, Mime: detectMime(name, head), Size: size, Source: abs}, nil
 }
 
 // Save scrie un fisier urcat de utilizator in destDir, cu prefix aleator (ca la Copy).

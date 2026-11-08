@@ -26,9 +26,10 @@ type Attachment struct {
 	Mime      string    `json:"mime"`
 	Size      int64     `json:"size"`
 	CreatedAt time.Time `json:"createdAt"`
+	Source    string    `json:"-"` // calea originala, absoluta (fisierele atasate de agenti); "" = doar copia
 }
 
-const attachmentCols = `id, project_id, message_id, kind, name, stored, mime, size, created_at`
+const attachmentCols = `id, project_id, message_id, kind, name, stored, mime, size, created_at, source`
 
 // CleanFileName pastreaza doar numele fisierului (fara foldere) si inlocuieste
 // caracterele periculoase cu "_". Merge si pe cai de Windows. Numele e taiat la
@@ -75,7 +76,7 @@ func scanAttachment(sc scanner) (Attachment, error) {
 	var a Attachment
 	var msg sql.NullInt64
 	var created string
-	if err := sc.Scan(&a.ID, &a.ProjectID, &msg, &a.Kind, &a.Name, &a.Stored, &a.Mime, &a.Size, &created); err != nil {
+	if err := sc.Scan(&a.ID, &a.ProjectID, &msg, &a.Kind, &a.Name, &a.Stored, &a.Mime, &a.Size, &created, &a.Source); err != nil {
 		return Attachment{}, err
 	}
 	a.MessageID = msg.Int64
@@ -89,8 +90,8 @@ func (s *Store) AddAttachment(a *Attachment) error {
 	if a.MessageID != 0 {
 		msg = a.MessageID
 	}
-	res, err := s.db.Exec(`INSERT INTO attachments (project_id, message_id, kind, name, stored, size, mime, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, a.ProjectID, msg, a.Kind, a.Name, a.Stored, a.Size, a.Mime, ts)
+	res, err := s.db.Exec(`INSERT INTO attachments (project_id, message_id, kind, name, stored, size, mime, created_at, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, a.ProjectID, msg, a.Kind, a.Name, a.Stored, a.Size, a.Mime, ts, a.Source)
 	if err != nil {
 		return err
 	}

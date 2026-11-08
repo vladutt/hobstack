@@ -86,6 +86,7 @@ type Backend interface {
 	AttachFiles(c Caller, task string, paths []string) (string, error)
 	TickLeftForUser(c Caller, task string, items []int) (string, error)
 	DeleteFiles(c Caller, paths []string) (string, error)
+	AttachToChat(c Caller, paths []string, note string) (string, error)
 	CommentTask(c Caller, task, text string) (string, error)
 	ReviewApprove(c Caller, task, note string) (string, error)
 	ReviewReject(c Caller, task, feedback string) (string, error)
@@ -265,6 +266,18 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 			} else {
 				text += " " + extra
 			}
+		}
+	case "attach_files":
+		paths := argList(p.Arguments, "paths")
+		switch {
+		case len(paths) == 0:
+			err = errors.New("paths: the files to attach, e.g. [\"screenshots/home.png\"]")
+		case len(paths) > 20:
+			err = errors.New("at most 20 files at a time")
+		case c.TaskID != 0:
+			text, err = s.backend.AttachFiles(c, "", paths)
+		default:
+			text, err = s.backend.AttachToChat(c, paths, arg("note"))
 		}
 	case "delete_files":
 		text, err = s.backend.DeleteFiles(c, argList(p.Arguments, "paths"))

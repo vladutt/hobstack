@@ -334,6 +334,11 @@ task-uri doar done, refuza cu OpenTasksError (T-N) altfel; ListAgents ii ascunde
 devin Blocked. Board fara filtrele All tasks / Mine / foldere; clic pe agent in Team = sertarul pe Chat.
 Cautare pe board (workspace.js taskSearch): titlu fara diacritice / litere mari sau numar (T-215, 215), Esc goleste; cu
 cautare, Done arata toate potrivirile (fara "Show N more").
+Gata (fisierele vizuale, spec in docs/superpowers/specs/2026-11-08-hobstack-visual-files-design.md): la finalul unui run pe
+task, imaginile / SVG-urile / PDF-urile create in run se ataseaza singure (team.attachVisuals, max 10 x 10 MB); tool-ul MCP
+attach_files (toti agentii; pe task = task_files, in chat = mesaj al agentului cu atasamente); fara dubluri pentru un fisier
+neschimbat; regula howVisuals. task_files.source / attachments.source (migrarea 035); Open / Show in Finder (Explorer) pe
+fisierele din Files si din chat (POST .../open|reveal, originalul cat exista, altfel copia; Open doar tipuri sigure); SVG cu preview ca <img>.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

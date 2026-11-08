@@ -109,6 +109,13 @@ const howFiles = `When the task asks for a file as its result (a document, an im
 	`(or in the project files folder, with its absolute path) and list its path in files when you call report_done, ` +
 	`so the user can open it from the task. Do this on every run of a recurring task too.`
 
+// howVisuals: ce se poate vedea (capturi, imagini, SVG, PDF, exporturi) ajunge la utilizator prin attach_files.
+const howVisuals = `When you build or check something the user can look at (a screenshot from a test or a browser, an ` +
+	`image, an SVG, a PDF, an export, a generated page), call attach_files with those files so the user can open and ` +
+	`check them: on a task they go to the task's Files, in a chat they appear in your message. Save screenshots and ` +
+	`exports in your folder, not in /tmp. On a task, images, SVGs and PDFs you create are also attached automatically ` +
+	`when your run ends.`
+
 // howEdits: modificarile prin Edit / Write se vad pe task cu diff exact; cele prin shell doar prin plasa din git (gitsnap).
 const howEdits = `Change files only with the Edit and Write tools, never through the shell: no cat, echo or printf ` +
 	`redirected into a file, no heredocs, no sed -i, no scripts (python, php, node) that rewrite files. HobStack records ` +
@@ -254,7 +261,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if slices.Contains(a.Tools, "write") {
 		how = append(how, howEdits)
 	}
-	how = append(how, howDenied)
+	how = append(how, howVisuals, howDenied)
 	if len(l.BlockedCommands) > 0 {
 		how = append(how, "These commands are blocked in this project; do not try them: "+strings.Join(l.BlockedCommands, ", ")+".")
 	}

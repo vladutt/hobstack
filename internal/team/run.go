@@ -257,6 +257,7 @@ func (t *Team) finish(agentID int64, hash string, o runner.Outcome) {
 		t.lib.RemoveMCPConfig(o.RunID) // fisierul cu secrete nu mai trebuie
 	}
 	o.Changes = t.shellChanges(agentID, o) // git, inainte de lock: poate dura
+	t.attachVisuals(agentID, o)            // copiaza fisiere, tot inainte de lock
 	t.work.Lock()
 	defer t.work.Unlock()
 

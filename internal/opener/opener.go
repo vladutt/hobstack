@@ -129,6 +129,18 @@ func (o *Opener) OpenFile(path string) error {
 	return start(name, args...)
 }
 
+// Reveal deschide folderul fisierului in Finder / Explorer, cu fisierul selectat (pe Linux doar folderul).
+func (o *Opener) Reveal(path string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return start("open", "-R", path)
+	case "windows":
+		return start("explorer", "/select,"+path)
+	default:
+		return start("xdg-open", filepath.Dir(path))
+	}
+}
+
 // OpenInEditor deschide folderul in editorul cu id-ul dat, daca e instalat.
 func (o *Opener) OpenInEditor(id, dir string) error {
 	for _, e := range o.editors {

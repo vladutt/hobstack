@@ -17,6 +17,7 @@ type Opener interface {
 	OpenFolder(dir string) error
 	OpenFile(path string) error
 	OpenInEditor(id, dir string) error
+	Reveal(path string) error
 }
 
 // SetOpener activeaza butoanele "Deschide". Fara el, ruta intoarce 501.

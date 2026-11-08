@@ -209,6 +209,19 @@ var tickLeftTool = Tool{
 	}),
 }
 
+var attachFilesTool = Tool{
+	Name: "attach_files",
+	Description: "Shows the user files you made, so they can open and check them: screenshots, images, SVGs, PDFs, " +
+		"exports, generated pages. On a task they go to the task's Files; in a chat they appear in your message. " +
+		"Use it whenever you build or check something visual (for example after a screenshot from a test). " +
+		"Images, SVGs and PDFs you create on a task are also attached automatically when your run ends.",
+	InputSchema: schema([]string{"paths"}, map[string]any{
+		"paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+			"description": "Up to 20 files, relative to your folder (or absolute inside the project folders), e.g. [\"test-results/checkout.png\"]"},
+		"note": str("Optional, chat only: a short line shown with the files, e.g. \"The checkout page on mobile\""),
+	}),
+}
+
 var deleteFilesTool = Tool{
 	Name: "delete_files",
 	Description: "Deletes files or folders that you created yourself (for example scratch files, a temporary folder, " +
@@ -454,7 +467,7 @@ func toolsFor(c Caller) []Tool {
 	if c.TaskID == 0 {
 		out = append(out, startTaskTool)
 	}
-	out = append(out, askUserTool)
+	out = append(out, askUserTool, attachFilesTool)
 	return out
 }
 

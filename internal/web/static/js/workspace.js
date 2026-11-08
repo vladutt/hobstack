@@ -1,5 +1,6 @@
 import { workRequestBox } from "./project-requests.js";
 import { api, upload } from "./api.js";
+import { openButtons } from "./open-file.js";
 import { el, avatar, toast, clock, kindOf, agentBody, field, topbar } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
@@ -1858,13 +1859,14 @@ export async function workspaceView(root, projectId, route) {
         }, "\u00d7"))));
   }
 
+  // attachmentNode: o imagine (miniatura) sau un link, plus Open / Show in Finder (fisierul e pe masina asta)
   function attachmentNode(a) {
     const url = `/api/files/${a.id}`;
-    if (a.mime && a.mime.startsWith("image/")) {
-      return el("a", { href: url, target: "_blank", rel: "noopener" },
-        el("img", { src: url, alt: a.name, loading: "lazy" }));
-    }
-    return el("a", { class: "file-link", href: url, target: "_blank", rel: "noopener" }, a.name);
+    const item = a.mime && a.mime.startsWith("image/")
+      ? el("a", { href: url, target: "_blank", rel: "noopener", title: a.name }, el("img", { src: url, alt: a.name, loading: "lazy" }))
+      : el("a", { class: "file-link", href: url, target: "_blank", rel: "noopener" }, a.name);
+    return el("div", { class: "attachment" }, item,
+      el("div", { class: "attachment-actions" }, ...openButtons(url, a.name, "link-btn")));
   }
 
   // ---------- fisiere de proiect ----------

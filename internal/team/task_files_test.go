@@ -96,6 +96,10 @@ func TestAttachFiles(t *testing.T) {
 		return taskfiles.Copy(roots, home, raw, dest)
 	}
 	t.Cleanup(func() { copyTaskFile = taskfiles.Copy })
+	// o versiune noua (acelasi fisier neschimbat nu se mai copiaza)
+	if err := os.WriteFile(filepath.Join(home, "report.md"), []byte("# R2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := f.tm.AttachFiles(c, "", []string{"report.md"}); err != nil {
 		t.Fatal(err)
 	}
