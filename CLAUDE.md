@@ -159,6 +159,10 @@ git ls-files --deleted scazut); un submodul / fisier special vine cu notRegular 
 Cautare in fisier in explorer (Cmd/Ctrl+F sau Find): "N of M", Enter / Shift+Enter, Aa, max 2000 rezultate; potrivirile
 se marcheaza cu <mark> in nodurile de text deja colorate (wrapRange), Cmd/Ctrl+Enter selecteaza linia rezultatului (Copy
 reference / Ask); se reia la schimbarea fisierului, Esc inchide doar cautarea.
+Preview in explorer: imaginile (png, jpg, gif, webp, avif, bmp, ico) si SVG-urile se vad direct (SVG cu butonul Code), paginile
+HTML doar la butonul Preview, intr-un iframe izolat. GET /api/projects/{id}/raw/{folder}/{path...} (calea in URL, ca pagina sa-si
+gaseasca CSS-ul / JS-ul / pozele relative; doar fisiere din lista folderului, os.OpenRoot, max 50 MB, CSP sandbox fara
+allow-same-origin: origine opaca, nu atinge API-ul HobStack).
 Gata (switcher de proiecte): Cmd/Ctrl+K pe orice pagina (sau butonul ⌘K de langa logo) deschide project-switcher.js:
 fara text, proiectele deschise recent primele (localStorage "hobstack-recent-projects", max 20, actualizat in app.js la intrarea
 pe #/p/<id>), apoi favoritele, cel curent ultimul; cu text, numele incepe / contine, apoi categoria. Enter pastreaza tab-ul

@@ -282,3 +282,28 @@ func TestCodeFileSubmodule(t *testing.T) {
 		t.Fatalf("%d %s", code, raw)
 	}
 }
+
+// fisierul ca atare pentru preview: tipul dupa extensie, sandbox, doar din lista folderului
+func TestCodeRaw(t *testing.T) {
+	e := setup(t)
+	p, api, _ := twoFolders(t, e)
+	writeFiles(t, api, "site/index.html", "site/logo.svg", "node_modules/x/a.png")
+	fid := itoa(p.Folders[0].ID)
+	res, err := http.Get(e.ts.URL + "/api/projects/" + itoa(p.ID) + "/raw/" + fid + "/site/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 || res.Header.Get("Content-Type") != "text/html; charset=utf-8" ||
+		res.Header.Get("Content-Security-Policy") != "sandbox allow-scripts allow-forms allow-popups allow-modals" {
+		t.Fatalf("html: %d %v", res.StatusCode, res.Header)
+	}
+	if code, _ := e.do(t, "GET", "/api/projects/"+itoa(p.ID)+"/raw/"+fid+"/site/logo.svg", nil); code != 200 {
+		t.Fatalf("svg: %d", code)
+	}
+	for _, bad := range []string{"/node_modules/x/a.png", "/../etc/passwd", "/site/nope.png"} {
+		if code, _ := e.do(t, "GET", "/api/projects/"+itoa(p.ID)+"/raw/"+fid+bad, nil); code == 200 {
+			t.Fatalf("%s: served", bad)
+		}
+	}
+}

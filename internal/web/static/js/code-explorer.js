@@ -35,6 +35,16 @@ function absPath(folder, rel) {
 // - onAsk(agentId, text): deschide chat-ul agentului cu textul la inceputul campului
 // - onClose(): dupa inchidere
 // Intoarce { close() }.
+// previewKind: cum se poate vedea fisierul pe langa cod ("image" | "svg" | "html" | null)
+const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico"]);
+export function previewKind(path) {
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  if (IMAGE_EXT.has(ext)) return "image";
+  if (ext === "svg") return "svg";
+  if (ext === "html" || ext === "htm") return "html";
+  return null;
+}
+
 export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, onClose }) {
   const storeKey = `hobstack-code-${projectId}`;
   let saved = {};
@@ -93,6 +103,9 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     el("button", { type: "button", class: "btn small", "aria-label": "Close search", onclick: () => closeFind() }, "×"));
   const findBtn = el("button", { type: "button", class: "btn small", hidden: true, title: "Find in file (" + (isMac ? "⌘F" : "Ctrl+F") + ")",
     "aria-label": "Find in file", onclick: () => openFind() }, "Find");
+  // Preview / Code: imaginile si SVG-urile se vad direct, paginile HTML doar la buton
+  let mode = "code";      // "code" | "preview" pentru fisierul deschis
+  const viewBtn = el("button", { type: "button", class: "btn small", hidden: true, onclick: () => toggleView() }, "Preview");
   const codeBox = el("div", { class: "cx-code" }, el("p", { class: "hint cx-empty" }, `Pick a file on the left or search with ${shortcutLabel}.`));
   const bar = el("div", { class: "cx-bar", hidden: true });
   const closeBtn = el("button", { type: "button", class: "modal-close", "aria-label": "Close", onclick: () => close() }, "×");
@@ -100,7 +113,7 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
     el("div", { class: "cx-top" }, el("div", { class: "cx-search-wrap" }, search, resultsBox), closeBtn),
     el("div", { class: "cx-main" }, tree,
       el("div", { class: "cx-view" },
-        el("div", { class: "fv-head cx-head" }, pathBox, findBar, el("span", { class: "fv-actions" }, findBtn, copyBtn, moreBtn), menuBox),
+        el("div", { class: "fv-head cx-head" }, pathBox, findBar, el("span", { class: "fv-actions" }, viewBtn, findBtn, copyBtn, moreBtn), menuBox),
         codeBox, bar)));
   const overlay = el("div", { class: "modal-overlay cx-overlay", onclick: (e) => { if (e.target === overlay) close(); } }, box);
   const before = document.activeElement;
@@ -241,6 +254,23 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
       el("span", { class: "change-name" }, c.path.slice(cut)));
     copyBtn.hidden = moreBtn.hidden = false;
     setHasCode(false);
+    const kind = previewKind(c.path);
+    mode = kind === "image" || kind === "svg" ? "preview" : "code";
+    viewBtn.hidden = kind !== "svg" && kind !== "html";
+    await showView(c);
+  }
+
+  // showView: fisierul curent ca preview (imagine / pagina) sau ca cod
+  async function showView(c) {
+    viewBtn.textContent = mode === "preview" ? "Code" : "Preview";
+    if (mode === "preview") {
+      ++seq; // un raspuns de cod mai vechi nu mai suprascrie preview-ul
+      setHasCode(false);
+      bar.hidden = true;
+      if (!findBar.hidden) closeFind();
+      codeBox.replaceChildren(previewNode(c));
+      return;
+    }
     codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, "Loading..."));
     const my = ++seq;
     try {
@@ -263,6 +293,31 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
         codeBox.replaceChildren(el("p", { class: "hint cx-empty" }, err.message));
       }
     }
+  }
+
+  function toggleView() {
+    if (!current || viewBtn.hidden) return;
+    mode = mode === "preview" ? "code" : "preview";
+    showView(current);
+  }
+
+  // rawUrl: fisierul ca atare; calea in URL, ca o pagina HTML sa-si incarce CSS-ul si pozele relative
+  function rawUrl(c) {
+    return `/api/projects/${projectId}/raw/${c.folder}/${c.path.split("/").map(encodeURIComponent).join("/")}`;
+  }
+
+  function previewNode(c) {
+    const name = c.path.slice(c.path.lastIndexOf("/") + 1);
+    if (previewKind(c.path) === "html") {
+      // origine opaca (sandbox fara allow-same-origin, si in CSP-ul raspunsului): pagina nu atinge HobStack
+      return el("div", { class: "cx-preview cx-preview-page" },
+        el("iframe", { src: rawUrl(c), title: name, sandbox: "allow-scripts allow-forms allow-popups allow-modals" }));
+    }
+    const img = el("img", { src: `${rawUrl(c)}?v=${Date.now()}`, alt: name });
+    const info = el("span", { class: "hint cx-preview-info" });
+    img.addEventListener("load", () => { info.textContent = `${img.naturalWidth} × ${img.naturalHeight}`; });
+    img.addEventListener("error", () => { info.textContent = "This image can't be shown."; });
+    return el("div", { class: "cx-preview cx-preview-img" }, img, info);
   }
 
   // ---------- selectia de linii ----------
