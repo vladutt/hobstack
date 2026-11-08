@@ -345,6 +345,10 @@ neschimbat; regula howVisuals. task_files.source / attachments.source (migrarea 
 fisierele din Files si din chat (POST .../open|reveal, originalul cat exista, altfel copia; Open doar tipuri sigure); SVG cu preview ca <img>.
 Pozele din chat se deschid intr-o modala (image-viewer.js: sagetile trec intre pozele din chat, Esc / clic pe fundal inchide,
 Open / Show in Finder / Download), nu in alt tab.
+Caile din mesajele de chat (paths.js: in text si `cod`, nu in blocurile ```) devin link daca exista in proiect: POST
+/api/projects/{id}/paths le verifica (absolute doar in folderele proiectului si fisierele lui; relative la folderul agentului,
+apoi la celelalte; un nume / o coada care se potriveste unui singur fisier din lista; :linie ignorat), clic = POST /reveal
+(fisierul selectat in Finder / Explorer, un folder se deschide).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

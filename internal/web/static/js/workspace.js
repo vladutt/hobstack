@@ -2,6 +2,7 @@ import { workRequestBox } from "./project-requests.js";
 import { api, upload } from "./api.js";
 import { openButtons } from "./open-file.js";
 import { openImage, closeImage } from "./image-viewer.js";
+import { pathLinker } from "./paths.js";
 import { el, avatar, toast, clock, kindOf, agentBody, field, topbar } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
@@ -249,6 +250,8 @@ export async function workspaceView(root, projectId, route) {
   let chatShareKey = null;
   let chatQuestionKey = null; // id-ul intrebarii desenate ultima data in chat
   const threadHint = el("div", { class: "thread-hint" });
+  // caile din chat devin link (Show in Finder); raspunsurile serverului se tin minte per chat
+  const paths = pathLinker(projectId, () => state.selected);
   const quick = el("div", { class: "quick-actions" }); // Ask for status, Give a task, Open T-<nr>
   const chatBox = el("div", { class: "chat" }, threadHint, thread, chatShare, chatQuestion, el("div", { class: "composer" }, chips, composer, quick, note));
   // @ in mesaj: fisierele de cod ale proiectului (caile relative la folderul agentului selectat)
@@ -1671,6 +1674,7 @@ export async function workspaceView(root, projectId, route) {
     if (gone() || id !== state.selected) return; // s-a schimbat selectia intre timp
     stopLive();
     state.seen = new Set();
+    paths.reset(); // alt agent sau chat reincarcat: fisierele se pot fi schimbat
     thread.replaceChildren();
     if (data.earlier > 0) {
       thread.append(el("button", {
@@ -1704,12 +1708,15 @@ export async function workspaceView(root, projectId, route) {
     else if (state.delivered.has(m.id)) m = { ...m, delivered: true };
     if (state.seen.has(m.id)) {
       // acelasi mesaj, stare noua (ex. livrat): il redesenam pe loc
-      thread.querySelector(`[data-id="${m.id}"]`)?.replaceWith(messageNode(m));
+      const fresh = messageNode(m);
+      if (m.kind !== "event") paths.link(fresh);
+      thread.querySelector(`[data-id="${m.id}"]`)?.replaceWith(fresh);
       return;
     }
     state.seen.add(m.id);
     thread.querySelector(".empty")?.remove();
     const node = messageNode(m);
+    if (m.kind !== "event") paths.link(node); // caile din mesaj: clic = Show in Finder
     const live = thread.querySelector(".live");
     if (live) thread.insertBefore(node, live); // blocul live ramane ultimul
     else thread.append(node);

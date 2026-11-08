@@ -218,6 +218,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/projects/{id}/code-files", s.codeFiles)
 	mux.HandleFunc("GET /api/projects/{id}/tree", s.getProjectTree)
 	mux.HandleFunc("GET /api/projects/{id}/code-file", s.getCodeFile)
+	mux.HandleFunc("POST /api/projects/{id}/paths", s.checkPaths)
+	mux.HandleFunc("POST /api/projects/{id}/reveal", s.revealPath)
 	mux.HandleFunc("GET /api/projects/{id}/raw/{folder}/{path...}", s.getCodeRaw)
 	mux.HandleFunc("POST /api/tasks/{id}/unblock", s.unblockTask)
 	mux.HandleFunc("POST /api/tasks/{id}/nudge", s.nudgeTask)
