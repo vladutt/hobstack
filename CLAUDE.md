@@ -339,6 +339,8 @@ task, imaginile / SVG-urile / PDF-urile create in run se ataseaza singure (team.
 attach_files (toti agentii; pe task = task_files, in chat = mesaj al agentului cu atasamente); fara dubluri pentru un fisier
 neschimbat; regula howVisuals. task_files.source / attachments.source (migrarea 035); Open / Show in Finder (Explorer) pe
 fisierele din Files si din chat (POST .../open|reveal, originalul cat exista, altfel copia; Open doar tipuri sigure); SVG cu preview ca <img>.
+Pozele din chat se deschid intr-o modala (image-viewer.js: sagetile trec intre pozele din chat, Esc / clic pe fundal inchide,
+Open / Show in Finder / Download), nu in alt tab.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

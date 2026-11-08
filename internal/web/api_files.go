@@ -195,7 +195,7 @@ func (s *Server) serveFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	serveStored(w, r, f, a.Name, a.Mime, a.CreatedAt, false)
+	serveStored(w, r, f, a.Name, a.Mime, a.CreatedAt, r.URL.Query().Get("download") == "1")
 }
 
 // serveStored trimite un fisier salvat de noi (urcat de utilizator sau predat de un agent).

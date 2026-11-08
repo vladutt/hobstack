@@ -1,6 +1,7 @@
 import { workRequestBox } from "./project-requests.js";
 import { api, upload } from "./api.js";
 import { openButtons } from "./open-file.js";
+import { openImage, closeImage } from "./image-viewer.js";
 import { el, avatar, toast, clock, kindOf, agentBody, field, topbar } from "./ui.js";
 import { teamCanvas } from "./canvas.js";
 import { agentEditor, editableKey } from "./agent.js";
@@ -1862,11 +1863,20 @@ export async function workspaceView(root, projectId, route) {
   // attachmentNode: o imagine (miniatura) sau un link, plus Open / Show in Finder (fisierul e pe masina asta)
   function attachmentNode(a) {
     const url = `/api/files/${a.id}`;
+    // o poza se deschide intr-o modala (cu sagetile intre pozele din chat), nu in alt tab
     const item = a.mime && a.mime.startsWith("image/")
-      ? el("a", { href: url, target: "_blank", rel: "noopener", title: a.name }, el("img", { src: url, alt: a.name, loading: "lazy" }))
+      ? el("a", { href: url, title: a.name, onclick: (e) => { e.preventDefault(); showImage(a.id); } },
+        el("img", { src: url, alt: a.name, loading: "lazy", "data-file": a.id, "data-name": a.name }))
       : el("a", { class: "file-link", href: url, target: "_blank", rel: "noopener" }, a.name);
     return el("div", { class: "attachment" }, item,
       el("div", { class: "attachment-actions" }, ...openButtons(url, a.name, "link-btn")));
+  }
+
+  // showImage: modala cu pozele din chat-ul deschis, pornind de la cea apasata
+  function showImage(id) {
+    const list = [...thread.querySelectorAll("img[data-file]")].map((img) => ({
+      src: `/api/files/${img.dataset.file}`, name: img.dataset.name, base: `/api/files/${img.dataset.file}`, id: img.dataset.file }));
+    openImage(list, Math.max(0, list.findIndex((x) => x.id === String(id))));
   }
 
   // ---------- fisiere de proiect ----------
@@ -2047,6 +2057,7 @@ export async function workspaceView(root, projectId, route) {
   if (gone()) {
     stopLive();
     modal?.destroy();
+    closeImage();
     runHistory?.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
