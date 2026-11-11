@@ -186,6 +186,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/brainstorm/{id}/files", s.uploadTopicFiles)
 	mux.HandleFunc("GET /api/brainstorm/{id}/files/{fid}", s.serveTopicFile)
 	mux.HandleFunc("DELETE /api/brainstorm/{id}/files/{fid}", s.deleteTopicFile)
+	mux.HandleFunc("POST /api/brainstorm/{id}/combine", s.combineCards)
 	mux.HandleFunc("POST /api/brainstorm/cards/{id}/{action}", s.cardAction)
 	mux.HandleFunc("POST /api/brainstorm/{id}/save", s.saveBrainstorm)
 	mux.HandleFunc("POST /api/brainstorm/{id}/send", s.sendBrainstorm)

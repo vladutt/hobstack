@@ -207,3 +207,125 @@ func TestBrainstormCardConflicts(t *testing.T) {
 		t.Fatalf("pick pe waiting: %d", code)
 	}
 }
+
+// doneIdeas face doua idei terminate in subiect (a, b) si le intoarce.
+func (e *env) doneIdeas(t *testing.T, tp store.BrainstormTopic) (int64, int64) {
+	t.Helper()
+	_, cards, err := e.tm.NewRound(tp.ID, "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range cards[:2] {
+		if err := e.st.FinishCard(c.ID, store.CardIdea, []string{"Alpha", "Beta"}[i], "t", "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return cards[0].ID, cards[1].ID
+}
+
+func TestCombineEndpoint(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	a := e.addWorker(t, p.ID, "Ana")
+	b := e.addWorker(t, p.ID, "Bob")
+	out := e.addWorker(t, p.ID, "Out")
+	tp := e.makeTopic(t, p.ID, "C", a.ID, b.ID)
+	other := e.makeTopic(t, p.ID, "D", a.ID, b.ID)
+	ia, ib := e.doneIdeas(t, tp)
+	url := "/api/brainstorm/" + itoa(tp.ID) + "/combine"
+	code, raw := e.do(t, "POST", url, map[string]any{"a": ia, "b": ib, "agentId": a.ID})
+	if code != http.StatusCreated {
+		t.Fatalf("combine: %d %s", code, raw)
+	}
+	var c store.BrainstormCard
+	json.Unmarshal(raw, &c)
+	if c.SourceA == nil || *c.SourceA != ia || c.SourceB == nil || *c.SourceB != ib {
+		t.Fatalf("surse: %s", raw)
+	}
+	// o intrebare nu se combina
+	_, cards, _ := e.tm.NewRound(tp.ID, "more")
+	if err := e.st.FinishCard(cards[0].ID, store.CardQuestion, "Q?", "t", "", []string{"x", "y"}); err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := e.do(t, "POST", url, map[string]any{"a": ia, "b": cards[0].ID, "agentId": a.ID}); code != http.StatusConflict {
+		t.Fatalf("intrebare: %d", code)
+	}
+	if code, _ := e.do(t, "POST", url, map[string]any{"a": ia, "b": ib, "agentId": out.ID}); code != http.StatusBadRequest {
+		t.Fatalf("neparticipant: %d", code)
+	}
+	// subiectul din URL difera de al cardurilor
+	if code, _ := e.do(t, "POST", "/api/brainstorm/"+itoa(other.ID)+"/combine", map[string]any{"a": ia, "b": ib, "agentId": a.ID}); code != http.StatusConflict {
+		t.Fatalf("alt subiect: %d", code)
+	}
+}
+
+func TestEditEndpoint(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	a := e.addWorker(t, p.ID, "Ana")
+	b := e.addWorker(t, p.ID, "Bob")
+	tp := e.makeTopic(t, p.ID, "E", a.ID, b.ID)
+	ia, ib := e.doneIdeas(t, tp)
+	comb, err := e.tm.Combine(tp.ID, ia, ib, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.st.FinishCard(comb.ID, store.CardIdea, "Both", "t", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	body := map[string]string{"title": "Better", "text": "new text"}
+	if code, raw := e.do(t, "POST", "/api/brainstorm/cards/"+itoa(comb.ID)+"/edit", body); code != http.StatusNoContent {
+		t.Fatalf("edit: %d %s", code, raw)
+	}
+	if got, _ := e.st.GetCard(comb.ID); got.Title != "Better" || !got.Edited {
+		t.Fatalf("dupa edit: %+v", got)
+	}
+	if code, _ := e.do(t, "POST", "/api/brainstorm/cards/"+itoa(ia)+"/edit", body); code != http.StatusConflict {
+		t.Fatalf("edit pe card normal: %d", code)
+	}
+}
+
+func TestTopicCombinedShape(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	a := e.addWorker(t, p.ID, "Ana")
+	b := e.addWorker(t, p.ID, "Bob")
+	tp := e.makeTopic(t, p.ID, "S", a.ID, b.ID)
+	ia, ib := e.doneIdeas(t, tp)
+	comb, err := e.tm.Combine(tp.ID, ia, ib, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, raw := e.do(t, "GET", "/api/brainstorm/"+itoa(tp.ID), nil)
+	if code != http.StatusOK {
+		t.Fatalf("get: %d %s", code, raw)
+	}
+	type cv struct {
+		ID           int64  `json:"id"`
+		MergedInto   *int64 `json:"mergedInto"`
+		CombinedFrom []struct {
+			ID    int64  `json:"id"`
+			Title string `json:"title"`
+		} `json:"combinedFrom"`
+	}
+	var got struct {
+		Rounds []struct{ Cards, Combined []cv } `json:"rounds"`
+	}
+	json.Unmarshal(raw, &got)
+	if len(got.Rounds) != 1 {
+		t.Fatalf("runde: %s", raw)
+	}
+	r := got.Rounds[0]
+	if len(r.Cards) != 2 || len(r.Combined) != 1 || r.Combined[0].ID != comb.ID {
+		t.Fatalf("forma: %s", raw)
+	}
+	for _, c := range r.Cards {
+		if c.MergedInto == nil || *c.MergedInto != comb.ID {
+			t.Fatalf("mergedInto: %s", raw)
+		}
+	}
+	cf := r.Combined[0].CombinedFrom
+	if len(cf) != 2 || cf[0].Title != "Alpha" || cf[1].Title != "Beta" || cf[0].ID != ia {
+		t.Fatalf("combinedFrom: %s", raw)
+	}
+}

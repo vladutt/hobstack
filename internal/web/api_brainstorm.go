@@ -217,11 +217,22 @@ type cardView struct {
 	store.BrainstormCard
 	AgentName string `json:"agentName"`
 	Busy      string `json:"busy"` // T-N cand cardul asteapta si agentul lucreaza la un task
+	// MergedInto: id-ul ideii combinate in care a intrat cardul (lipseste daca nu e combinat)
+	MergedInto *int64 `json:"mergedInto,omitempty"`
+	// CombinedFrom: sursele unei idei combinate, in ordinea A, B
+	CombinedFrom []combinedSource `json:"combinedFrom"`
+}
+
+type combinedSource struct {
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
 }
 
 type roundView struct {
 	store.BrainstormRound
 	Cards []cardView `json:"cards"`
+	// Combined: ideile combinate din runda, separate de cardurile normale
+	Combined []cardView `json:"combined"`
 }
 
 func (s *Server) getTopic(w http.ResponseWriter, r *http.Request) {
@@ -261,15 +272,31 @@ func (s *Server) getTopic(w http.ResponseWriter, r *http.Request) {
 	views := make([]roundView, len(rounds))
 	at := map[int64]int{}
 	for i, rd := range rounds {
-		views[i] = roundView{BrainstormRound: rd, Cards: []cardView{}}
+		views[i] = roundView{BrainstormRound: rd, Cards: []cardView{}, Combined: []cardView{}}
 		at[rd.ID] = i
+	}
+	merged := store.MergedSources(cards)
+	titles := map[int64]string{}
+	for _, c := range cards {
+		titles[c.ID] = c.Title
 	}
 	for _, c := range cards {
 		i, ok := at[c.RoundID]
 		if !ok {
 			continue
 		}
-		v := cardView{BrainstormCard: c}
+		v := cardView{BrainstormCard: c, CombinedFrom: []combinedSource{}}
+		if m, ok := merged[c.ID]; ok {
+			v.MergedInto = &m
+		}
+		for _, src := range []*int64{c.SourceA, c.SourceB} {
+			if src == nil {
+				continue
+			}
+			if title, ok := titles[*src]; ok { // sursa lipsa din subiect: se sare
+				v.CombinedFrom = append(v.CombinedFrom, combinedSource{ID: *src, Title: title})
+			}
+		}
 		if a, ok := byID[c.AgentID]; ok {
 			v.AgentName = a.Name
 			if c.Status == store.CardWaiting {
@@ -280,7 +307,11 @@ func (s *Server) getTopic(w http.ResponseWriter, r *http.Request) {
 		} else if ag, err := s.st.GetAgent(c.AgentID); err == nil {
 			v.AgentName = ag.Name // agent sters: numele ramane pe card
 		}
-		views[i].Cards = append(views[i].Cards, v)
+		if c.Combined() {
+			views[i].Combined = append(views[i].Combined, v)
+		} else {
+			views[i].Cards = append(views[i].Cards, v)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"topic": t, "files": files, "rounds": views})
 }
@@ -399,6 +430,29 @@ func (s *Server) newRound(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"round": round, "cards": cards})
 }
 
+// combineCards: un participant combina doua idei terminate ale subiectului intr-un card nou.
+func (s *Server) combineCards(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.topicOf(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		A       int64 `json:"a"`
+		B       int64 `json:"b"`
+		AgentID int64 `json:"agentId"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, err)
+		return
+	}
+	card, err := s.team.Combine(t.ID, in.A, in.B, in.AgentID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, card)
+}
+
 // topicFileOf: fisierul din cale, doar daca apartine subiectului din cale.
 func (s *Server) topicFileOf(w http.ResponseWriter, r *http.Request) (store.BrainstormTopic, store.BrainstormFile, bool) {
 	t, ok := s.topicOf(w, r)
@@ -483,6 +537,14 @@ func (s *Server) cardAction(w http.ResponseWriter, r *http.Request) {
 		err = s.team.StopCard(id)
 	case "retry":
 		err = s.team.RetryCard(id)
+	case "edit":
+		var in struct {
+			Title string `json:"title"`
+			Text  string `json:"text"`
+		}
+		if err = decode(r, &in); err == nil {
+			err = s.team.EditCombined(id, in.Title, in.Text)
+		}
 	default:
 		http.NotFound(w, r)
 		return
