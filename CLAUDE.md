@@ -375,9 +375,10 @@ rounds (mesajul utilizatorului), cards (un card per agent per runda, status wait
 Fiecare participant raspunde la un mesaj cu un card: idee, wild sau intrebare cu 2-5 optiuni + Other (max 2 intrebari per agent pe runda), prin
 tool-ul MCP brainstorm_reply (singurul tool al run-ului; daca nu-l cheama, textul final devine idee, primul rand fiind titlul). Run-urile sunt
 doar citire, cu sesiune Claude separata per (subiect, agent) in brainstorm_sessions (stearsa la schimbarea contului). Reconcile porneste un card
-doar cand agentul e liber (fara task Queued nestopat, fara note); merge si cu echipa oprita (Stop team), ca chat-ul; "Run now" trece inaintea cozii. Stop = card Stopped
-cu Retry; agentii scosi sau stersi -> Skipped; Recover pune cardurile running inapoi in waiting. Atasamentele subiectului stau in
-projects/<pid>/brainstorm/<topic>/ (--add-dir). Iesiri: Pick; Save to Files (brainstorm-<slug>.md in Files, suprascris); Send to lead (mesaj de chat
+doar cand agentul e liber (fara task Queued nestopat, fara note; pe pauza notele altor agenti nu-l blocheaza) si nu pe subiectele arhivate;
+merge si cu echipa oprita (Stop team nu opreste run-urile de brainstorming), ca chat-ul; contul picat = card Failed + pauza; "Run now" trece inaintea cozii. Stop = card Stopped
+cu Retry; agentii scosi sau stersi -> Skipped (un agent cu carduri se sterge doar ca istoric, deleted = 1); Recover pune cardurile running inapoi in waiting. Atasamentele subiectului stau in
+projects/<pid>/brainstorm/<topic>/ (--add-dir). Iesiri: Pick; Save to Files (brainstorm-<tid>-<slug>.md in Files, suprascris prin fisier temporar + rename); Send to lead (mesaj de chat
 al utilizatorului catre un lider, cu linkul "Topic: #/p/<pid>/brainstorm/<tid>"). Intrebarile nu apar in Needs you, doar ca insigna pe tab. API:
 /api/projects/{id}/brainstorm, /api/brainstorm/{tid}..., /api/brainstorm/cards/{id}/{action}; eveniment SSE "brainstorm" {topicId} (0 = mai multe subiecte).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):

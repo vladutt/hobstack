@@ -208,6 +208,8 @@ func (s *Server) patchTopic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.publishTopic(t.ProjectID, t.ID)
+	// participantii scosi: cardurile lor in asteptare devin skipped la reconcilierea de acum
+	s.team.Kick(t.ProjectID)
 	writeJSON(w, http.StatusOK, t)
 }
 
@@ -511,7 +513,7 @@ func (s *Server) saveBrainstorm(w http.ResponseWriter, r *http.Request) {
 	a, err := s.st.FindProjectFile(t.ProjectID, name)
 	switch {
 	case err == nil:
-		if err := os.WriteFile(filepath.Join(dir, a.Stored), data, 0o644); err != nil {
+		if err := replaceFile(filepath.Join(dir, a.Stored), data); err != nil {
 			fail(w, err)
 			return
 		}
@@ -523,7 +525,7 @@ func (s *Server) saveBrainstorm(w http.ResponseWriter, r *http.Request) {
 		a = store.Attachment{ProjectID: t.ProjectID, Kind: store.KindProjectFile, Name: name, Stored: store.StoredName(name),
 			Mime: "text/markdown; charset=utf-8", Size: int64(len(data))}
 		path := filepath.Join(dir, a.Stored)
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if err := replaceFile(path, data); err != nil {
 			fail(w, err)
 			return
 		}
@@ -538,6 +540,30 @@ func (s *Server) saveBrainstorm(w http.ResponseWriter, r *http.Request) {
 	}
 	s.hub.Publish(t.ProjectID, "files", map[string]int64{"id": t.ProjectID})
 	writeJSON(w, http.StatusOK, map[string]string{"name": name})
+}
+
+// replaceFile scrie data intr-un fisier temporar din acelasi folder si il muta peste path:
+// cine citeste fisierul (preview, agent) vede versiunea veche sau pe cea noua, niciodata una pe jumatate.
+func replaceFile(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), ".save-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o644) // CreateTemp face 0600
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		os.Remove(tmp)
+	}
+	return err
 }
 
 func (s *Server) sendBrainstorm(w http.ResponseWriter, r *http.Request) {

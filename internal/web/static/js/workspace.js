@@ -2116,6 +2116,7 @@ export async function workspaceView(root, projectId, route) {
     modal?.destroy();
     closeImage();
     runHistory?.destroy();
+    brainstorm.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
@@ -2156,6 +2157,7 @@ export async function workspaceView(root, projectId, route) {
     editor?.destroy();
     modal?.destroy();
     runHistory?.destroy();
+    brainstorm.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);

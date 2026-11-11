@@ -33,4 +33,13 @@ func TestBrainstormTurn(t *testing.T) {
 	if !strings.Contains(got, "different idea") {
 		t.Error("lipseste 'different idea'")
 	}
+	// ideile nebune sunt marcate, cele obisnuite nu
+	c.Picked = append(c.Picked, BrainstormIdea{Author: "Rook", Kind: "wild", Title: "Pay by voice"})
+	got = BrainstormTurn(c)
+	if !strings.Contains(got, "- Pay by voice (wild) (Rook)") {
+		t.Errorf("ideea nebuna nu e marcata:\n%s", got)
+	}
+	if strings.Contains(got, "One-tap pay (wild)") {
+		t.Error("o idee obisnuita marcata wild")
+	}
 }

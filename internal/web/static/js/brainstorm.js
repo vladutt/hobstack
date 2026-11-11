@@ -20,12 +20,17 @@ export function brainstormView(projectId, { agents, onBadge }) {
     pending: [],     // fisierele alese pentru urmatoarea runda
     others: new Map(), // cardId -> textul din campul "Other" (ramane la redesenare)
     busy: new Set(),   // butoane apasate: cardId:actiune, ca sa nu trimitem de doua ori
+    sending: false,    // runda se trimite: Send ramane dezactivat si daca un eveniment redeseneaza
     loaded: false,
   };
   const agentsNow = () => (typeof agents === "function" ? agents() : agents) || [];
   const agentBy = (id) => agentsNow().find((a) => a.id === id);
   const face = (name, id, size) => avatar(name, kindOf(agentBy(id)), size);
   const topicHref = (id) => `#/p/${projectId}/brainstorm/${id}`;
+  // meniul "Send to lead" deschis acum (se inchide la clic in afara, ca celelalte meniuri)
+  let sendMenu = null;
+  const closeMenus = (e) => { if (sendMenu && !sendMenu.contains(e.target)) sendMenu.open = false; };
+  document.addEventListener("pointerdown", closeMenus);
 
   const list = el("nav", { class: "bs-topics", "aria-label": "Topics" });
   const head = el("div", { class: "bs-head" });
@@ -38,6 +43,14 @@ export function brainstormView(projectId, { agents, onBadge }) {
   const picker = el("input", { type: "file", multiple: true, hidden: true });
   const chips = el("div", { class: "chips bs-pending" });
   const sendBtn = el("button", { type: "submit", class: "btn primary" }, "Send");
+  // syncSend: Send cere text (serverul refuza o runda doar cu fisiere), nu merge pe un subiect
+  // arhivat si nici cat se trimite runda
+  const syncSend = () => {
+    const archived = !!st.data?.topic.archived;
+    const noText = !input.value.trim();
+    sendBtn.disabled = archived || st.sending || noText;
+    sendBtn.title = !archived && noText && st.pending.length ? "Write a message to send with the files" : "";
+  };
   const composerForm = el("form", { onsubmit: sendRound },
     el("button", { type: "button", class: "clip", "aria-label": "Attach files", title: "Attach files", onclick: () => picker.click() }, "\u{1F4CE}"),
     picker, input, sendBtn);
@@ -47,7 +60,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
     input.style.height = "auto";
     input.style.height = input.scrollHeight + "px";
   };
-  input.addEventListener("input", grow);
+  input.addEventListener("input", () => { grow(); syncSend(); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -153,13 +166,15 @@ export function brainstormView(projectId, { agents, onBadge }) {
     archivedNote.hidden = !t.archived;
     archivedNote.replaceChildren("This topic is archived. ",
       el("button", { type: "button", class: "link-btn", onclick: () => patchTopic({ archived: false }) }, "Unarchive"), " to continue.");
-    input.disabled = sendBtn.disabled = t.archived;
+    input.disabled = t.archived;
+    syncSend();
     if (scroll === "bottom" || nearBottom) thread.scrollTop = thread.scrollHeight;
     else thread.scrollTop = top;
   }
 
   function renderHead() {
     const { topic: t, files } = st.data;
+    sendMenu = null;
     const leads = agentsNow().filter((a) => a.isRoot || a.isLead);
     const anyPicked = st.data.rounds.some((r) => r.cards.some((c) => c.picked));
     const filePicker = el("input", { type: "file", multiple: true, hidden: true });
@@ -196,7 +211,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
             },
           }, "Send"),
           anyPicked ? null : el("span", { class: "hint" }, "Pick at least one idea first.")));
-      send = menu;
+      send = sendMenu = menu;
     }
     fill(head,
       el("div", { class: "bs-head-top" },
@@ -317,7 +332,8 @@ export function brainstormView(projectId, { agents, onBadge }) {
 
   // intrebarea unui agent: optiunile ca butoane, "Other" deschide un camp; dupa raspuns se vede raspunsul
   function questionBody(c) {
-    const out = [renderMarkdown(c.text)];
+    const out = [c.title ? el("h3", { class: "bs-card-title" }, c.title) : null];
+    if (c.text && c.text !== c.title) out.push(renderMarkdown(c.text));
     if (c.answer) {
       out.push(el("p", { class: "bs-answer" }, el("span", {}, "You answered: "), c.answer));
       return out;
@@ -372,6 +388,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
     renderPending();
   }
   function renderPending() {
+    syncSend(); // hint-ul de pe Send depinde de fisiere
     chips.replaceChildren(...st.pending.map((f, i) => el("span", { class: "chip" }, fileThumb(f), f.name,
       el("button", {
         type: "button", "aria-label": `Remove ${f.name}`,
@@ -383,8 +400,13 @@ export function brainstormView(projectId, { agents, onBadge }) {
     e.preventDefault();
     const t = st.data?.topic;
     const text = input.value.trim();
-    if (!t || sendBtn.disabled || (!text && !st.pending.length)) return;
-    sendBtn.disabled = true;
+    if (!t || st.sending || t.archived) return;
+    if (!text) {
+      if (st.pending.length) toast("Write a message to send with the files.");
+      return;
+    }
+    st.sending = true;
+    syncSend();
     const fd = new FormData();
     fd.append("text", text);
     for (const f of st.pending) fd.append("files", f, f.name);
@@ -395,13 +417,15 @@ export function brainstormView(projectId, { agents, onBadge }) {
       st.pending.forEach(releaseThumb);
       st.pending = [];
       renderPending();
+      st.sending = false;
       await loadTopic();
       thread.scrollTop = thread.scrollHeight;
       loadList();
     } catch (err) {
       toast(err.message);
     }
-    sendBtn.disabled = !!st.data?.topic.archived;
+    st.sending = false;
+    syncSend();
   }
 
   // ---------- fisierele subiectului ----------
@@ -527,6 +551,11 @@ export function brainstormView(projectId, { agents, onBadge }) {
         full = false;
         if (all) reloadAll(); else loadList();
       }, 120);
+    },
+    // destroy: la iesirea din proiect (workspace cleanup)
+    destroy() {
+      clearTimeout(timer);
+      document.removeEventListener("pointerdown", closeMenus);
     },
   };
 }

@@ -153,7 +153,7 @@ func TestBrainstormSaveOverwrites(t *testing.T) {
 		return out.Name
 	}
 	name := save()
-	if name != "brainstorm-big-plan.md" {
+	if name != "brainstorm-"+itoa(tp.ID)+"-big-plan.md" {
 		t.Fatalf("nume: %q", name)
 	}
 	if err := e.st.FinishCard(cards[0].ID, store.CardIdea, "Golden Idea", "text", "", nil); err != nil {
@@ -176,6 +176,13 @@ func TestBrainstormSaveOverwrites(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("fisiere: %d", n)
+	}
+	// scrierea prin fisier temporar + rename nu lasa urme
+	entries, _ := os.ReadDir(config.ProjectFilesDir(e.dirs.Projects, p.ID))
+	for _, en := range entries {
+		if strings.HasPrefix(en.Name(), ".save-") {
+			t.Fatalf("fisier temporar ramas: %s", en.Name())
+		}
 	}
 }
 

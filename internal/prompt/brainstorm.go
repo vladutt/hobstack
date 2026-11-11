@@ -95,6 +95,9 @@ func BrainstormTurn(c BrainstormContext) string {
 
 func writeIdea(b *strings.Builder, i BrainstormIdea, withAuthor bool) {
 	head := i.Title
+	if i.Kind == "wild" { // ideile nebune se vad ca atare
+		head += " (wild)"
+	}
 	if withAuthor && i.Author != "" {
 		head += " (" + i.Author + ")"
 	}
