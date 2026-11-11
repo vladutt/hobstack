@@ -102,7 +102,7 @@ func (t *Team) brainstormTurn(p store.Project, a store.Agent, agents []store.Age
 				c.Own = append(c.Own, idea)
 			}
 			// un frate idea/wild al aceluiasi agent in aceeasi runda: cardul cere alta idee
-			if mine && x.RoundID == card.RoundID && x.ID != card.ID {
+			if mine && x.RoundID == card.RoundID && x.ID != card.ID && !x.Combined() {
 				c.Another = true
 			}
 		case store.CardQuestion:

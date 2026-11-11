@@ -884,3 +884,25 @@ func TestContextShowsCombinedFrom(t *testing.T) {
 		t.Fatalf("mesaj: %v %q", err, m.Text)
 	}
 }
+
+// O idee combinata terminata nu conteaza ca "alta idee" pentru cardul normal al aceluiasi agent in runda.
+func TestCombinedCardNotAnotherIdea(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	a, b := twoIdeas(t, f, tp)
+	c, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.FinishCard(c.ID, store.CardIdea, "Both", "Mixed.", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	normal := store.BrainstormCard{TopicID: tp.ID, RoundID: c.RoundID, AgentID: f.rook.ID}
+	if err := f.st.AddCard(&normal); err != nil {
+		t.Fatal(err)
+	}
+	run := startCard(t, f, f.rook, normal)
+	if turn := argValue(run.Args, "-p"); strings.Contains(turn, "Give a different idea") {
+		t.Fatalf("tura cere alta idee: %q", turn)
+	}
+}
