@@ -300,7 +300,7 @@ Gata (versiuni si update din aplicatie, spec in docs/superpowers/specs/2026-11-0
 taguri vX.Y.Z (prima v1.0.0), config.Version prin -ldflags (go build simplu = "dev"; scripts/build.sh pune git describe),
 `hobstack version`. La push-ul unui tag, .github/workflows/release.yml ruleaza testele si scripts/build-release.sh (arhive
 hobstack_<ver>_<os>_<arch>.tar.gz/.zip + checksums.txt) si publica release-ul (notele = mesajul tag-ului adnotat). Pachetul
-internal/selfupdate: releases/latest de pe GitHub (config.UpdateRepo) la pornire + din ora in ora, Newer pe semver; Update:
+internal/selfupdate: lista de release-uri de pe GitHub (config.UpdateRepo, /releases?per_page=30, versiunea cea mai mare fara draft / pre-release; nu /releases/latest, care e cel publicat ultimul) la pornire + din ora in ora, Newer pe semver; Update:
 sha256 din checksums.txt, binarul in <exe>.new, proba `version`, vechiul -> .prev, team.Hold pana nu mai ruleaza niciun run,
 copie VACUUM INTO in ~/.hobstack/backups (ultimele 3), restart prin selfupdate.Reexec cu --no-open. UI (update.js): modala la
 intrare cu versiunea si notele (Later / Skip this version), insigna din bara de sus (ui.setTopbarExtra), Settings > Version;

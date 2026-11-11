@@ -101,6 +101,8 @@ type release struct {
 	URL       string    `json:"html_url"`
 	Published time.Time `json:"published_at"`
 	Assets    []asset   `json:"assets"`
+	Draft     bool      `json:"draft"`
+	Pre       bool      `json:"prerelease"`
 }
 
 // Updater tine starea update-ului. Metodele sunt sigure din mai multe goroutine.
@@ -227,8 +229,11 @@ func (u *Updater) describe(rel *release) {
 	s.CanUpdate = true
 }
 
+// latest intoarce release-ul cu versiunea cea mai mare (nil = niciunul). Nu folosim /releases/latest:
+// GitHub marcheaza "Latest" release-ul publicat ultimul, nu versiunea cea mai mare (doua tag-uri urcate
+// deodata se pot publica in orice ordine). Lista vine cu cele mai noi primele; 30 ajung.
 func (u *Updater) latest(ctx context.Context) (*release, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", u.opt.API+"/repos/"+u.opt.Repo+"/releases/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u.opt.API+"/repos/"+u.opt.Repo+"/releases?per_page=30", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -246,11 +251,25 @@ func (u *Updater) latest(ctx context.Context) (*release, error) {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
 		return nil, fmt.Errorf("GitHub answered %s: %s", resp.Status, strings.TrimSpace(string(msg)))
 	}
-	var rel release
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&rel); err != nil {
-		return nil, fmt.Errorf("reading the release: %w", err)
+	var list []release
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&list); err != nil {
+		return nil, fmt.Errorf("reading the releases: %w", err)
 	}
-	return &rel, nil
+	var best *release
+	for i := range list {
+		r := &list[i]
+		// draft-urile si pre-release-urile nu se propun; nici tag-urile care nu sunt versiuni simple
+		if r.Draft || r.Pre {
+			continue
+		}
+		if _, pre, ok := parse(r.Tag); !ok || pre != "" {
+			continue
+		}
+		if best == nil || Newer(r.Tag, best.Tag) {
+			best = r
+		}
+	}
+	return best, nil
 }
 
 // archiveName: numele arhivei pentru platforma curenta (scripts/build-release.sh).

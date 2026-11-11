@@ -48,11 +48,13 @@ func TestNewer(t *testing.T) {
 	}
 }
 
-// fakeGitHub serveste /repos/o/r/releases/latest cu arhiva platformei curente; binarul din arhiva e un
-// script care raspunde la "version" cu versiunea data (bin).
+// fakeGitHub serveste /repos/o/r/releases (lista, ca GitHub: cele publicate mai recent primele) cu arhiva
+// platformei curente; binarul din arhiva e un script care raspunde la "version" cu versiunea data (bin).
 type fakeGitHub struct {
-	srv       *httptest.Server
-	version   string
+	srv     *httptest.Server
+	version string
+	// others: alte release-uri, puse in lista inaintea celui cu version (publicate dupa el)
+	others    []map[string]any
 	bin       []byte
 	badSum    bool
 	noRelease bool
@@ -90,12 +92,13 @@ func (g *fakeGitHub) archive() []byte {
 func (g *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 	name := archiveName(g.version)
 	switch r.URL.Path {
-	case "/repos/o/r/releases/latest":
+	case "/repos/o/r/releases":
 		if g.noRelease {
-			http.NotFound(w, r)
+			w.Write([]byte("[]"))
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{
+		list := append([]map[string]any{}, g.others...)
+		list = append(list, map[string]any{
 			"tag_name": "v" + g.version, "name": "HobStack v" + g.version, "body": "- faster board",
 			"html_url": "https://github.com/o/r/releases/tag/v" + g.version, "published_at": time.Now().Format(time.RFC3339),
 			"assets": []map[string]any{
@@ -103,6 +106,7 @@ func (g *fakeGitHub) serve(w http.ResponseWriter, r *http.Request) {
 				{"name": "checksums.txt", "browser_download_url": g.srv.URL + "/dl/checksums.txt"},
 			},
 		})
+		json.NewEncoder(w).Encode(list)
 	case "/dl/checksums.txt":
 		sum := sha256.Sum256(g.archive())
 		h := hex.EncodeToString(sum[:])
@@ -192,6 +196,25 @@ func TestCheckFindsNewRelease(t *testing.T) {
 	u3.Check(context.Background())
 	if s := u3.Status(); !s.Dev || s.Available || !s.CanUpdate {
 		t.Fatalf("dev build: %+v", s)
+	}
+}
+
+// GitHub marcheaza "Latest" release-ul publicat ultimul, nu versiunea cea mai mare (1.0.9 publicat dupa
+// 1.0.10): update-ul alege versiunea cea mai mare din lista, fara draft-uri si pre-release-uri.
+func TestCheckPicksHighestVersion(t *testing.T) {
+	g := newFakeGitHub(t, "1.0.10")
+	g.others = []map[string]any{
+		{"tag_name": "v2.0.0-rc1", "name": "rc", "prerelease": true},
+		{"tag_name": "v3.0.0", "name": "draft", "draft": true},
+		{"tag_name": "nightly", "name": "not a version"},
+		{"tag_name": "v1.0.9", "name": "HobStack v1.0.9"},
+	}
+	u, _ := newUpdater(t, g, "1.0.8", &fake{})
+	if err := u.Check(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if s := u.Status(); s.Latest != "1.0.10" || !s.Available || !s.CanUpdate {
+		t.Fatalf("status: %+v", s)
 	}
 }
 
