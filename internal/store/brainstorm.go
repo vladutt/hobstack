@@ -54,6 +54,9 @@ type BrainstormCard struct {
 	Picked    bool      `json:"picked"`
 	Priority  bool      `json:"priority"`
 	FollowsID *int64    `json:"followsId"`
+	SourceA   *int64    `json:"sourceA"` // card combinat: cele doua idei sursa (nil la cardurile normale)
+	SourceB   *int64    `json:"sourceB"`
+	Edited    bool      `json:"edited"` // textul unui card combinat a fost schimbat de utilizator
 	RunID     string    `json:"runId"`
 	Error     string    `json:"error"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -71,13 +74,16 @@ type BrainstormFile struct {
 }
 
 const brainstormCardCols = `id, topic_id, round_id, agent_id, status, kind, title, text, basis, options, answer, picked, priority,
-	follows_id, run_id, error, created_at, updated_at`
+	follows_id, source_a, source_b, edited, run_id, error, created_at, updated_at`
+
+// Combined spune daca cardul e o combinatie a doua idei.
+func (c BrainstormCard) Combined() bool { return c.SourceA != nil }
 
 func scanCard(sc scanner) (BrainstormCard, error) {
 	var c BrainstormCard
 	var opts, created, updated string
 	err := sc.Scan(&c.ID, &c.TopicID, &c.RoundID, &c.AgentID, &c.Status, &c.Kind, &c.Title, &c.Text, &c.Basis, &opts, &c.Answer,
-		&c.Picked, &c.Priority, &c.FollowsID, &c.RunID, &c.Error, &created, &updated)
+		&c.Picked, &c.Priority, &c.FollowsID, &c.SourceA, &c.SourceB, &c.Edited, &c.RunID, &c.Error, &created, &updated)
 	if err != nil {
 		return BrainstormCard{}, notFound(err)
 	}
@@ -275,9 +281,9 @@ func (s *Store) AddCard(c *BrainstormCard) error {
 	}
 	ts := now()
 	res, err := s.db.Exec(`INSERT INTO brainstorm_cards (topic_id, round_id, agent_id, status, kind, title, text, basis, options, answer,
-		picked, priority, follows_id, run_id, error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		picked, priority, follows_id, source_a, source_b, edited, run_id, error, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.TopicID, c.RoundID, c.AgentID, c.Status, c.Kind, c.Title, c.Text, c.Basis, jsonList(c.Options), c.Answer,
-		c.Picked, c.Priority, nullPtr(c.FollowsID), c.RunID, c.Error, ts, ts)
+		c.Picked, c.Priority, nullPtr(c.FollowsID), nullPtr(c.SourceA), nullPtr(c.SourceB), c.Edited, c.RunID, c.Error, ts, ts)
 	if err != nil {
 		return err
 	}
@@ -363,6 +369,35 @@ func (s *Store) FinishCard(id int64, kind, title, text, basis string, options []
 		return ErrNotFound
 	}
 	return err
+}
+
+// EditCard schimba titlul si textul unui card combinat gata (done); altfel ErrConflict.
+func (s *Store) EditCard(id int64, title, text string) error {
+	res, err := s.db.Exec(`UPDATE brainstorm_cards SET title = ?, text = ?, edited = 1, updated_at = ?
+		WHERE id = ? AND status = 'done' AND source_a IS NOT NULL`, title, text, now(), id)
+	if mustAffect(res, err) == ErrNotFound {
+		if _, gerr := s.GetCard(id); gerr == nil {
+			return ErrConflict
+		}
+		return ErrNotFound
+	}
+	return err
+}
+
+// MergedSources: id-ul sursei -> id-ul celui mai nou card combinat (done / waiting / running) care o foloseste.
+func MergedSources(cards []BrainstormCard) map[int64]int64 {
+	m := map[int64]int64{}
+	for _, c := range cards {
+		if !c.Combined() || (c.Status != CardDone && c.Status != CardWaiting && c.Status != CardRunning) {
+			continue
+		}
+		for _, src := range []*int64{c.SourceA, c.SourceB} {
+			if src != nil && c.ID > m[*src] {
+				m[*src] = c.ID
+			}
+		}
+	}
+	return m
 }
 
 // AnswerCard salveaza raspunsul la o intrebare; doar un card question done fara raspuns.

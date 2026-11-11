@@ -233,3 +233,99 @@ func TestBrainstormAnswerWithFollowUp(t *testing.T) {
 		t.Fatalf("al doilea raspuns: %v", err)
 	}
 }
+
+// combCard adauga un card (normal sau combinat) cu statusul dat.
+func combCard(t *testing.T, s *Store, tp BrainstormTopic, roundID, agent int64, status string, a, b *int64) BrainstormCard {
+	t.Helper()
+	c := BrainstormCard{TopicID: tp.ID, RoundID: roundID, AgentID: agent, Status: status, Kind: "idea", Title: "t", Text: "x", SourceA: a, SourceB: b}
+	if err := s.AddCard(&c); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestAddCardWithSources(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	tp := newTopic(t, s, p.ID, "Ideas", lead.ID)
+	r := BrainstormRound{TopicID: tp.ID, Text: "r"}
+	if _, err := s.AddRound(&r, nil); err != nil {
+		t.Fatal(err)
+	}
+	a := combCard(t, s, tp, r.ID, lead.ID, CardDone, nil, nil)
+	b := combCard(t, s, tp, r.ID, lead.ID, CardDone, nil, nil)
+	c := combCard(t, s, tp, r.ID, lead.ID, CardWaiting, &a.ID, &b.ID)
+	got, err := s.GetCard(c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SourceA == nil || *got.SourceA != a.ID || got.SourceB == nil || *got.SourceB != b.ID || !got.Combined() {
+		t.Fatalf("combinat: %+v", got)
+	}
+	plain, _ := s.GetCard(a.ID)
+	if plain.SourceA != nil || plain.SourceB != nil || plain.Combined() || plain.Edited {
+		t.Fatalf("normal: %+v", plain)
+	}
+}
+
+func TestEditCard(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	tp := newTopic(t, s, p.ID, "Ideas", lead.ID)
+	r := BrainstormRound{TopicID: tp.ID, Text: "r"}
+	if _, err := s.AddRound(&r, nil); err != nil {
+		t.Fatal(err)
+	}
+	a := combCard(t, s, tp, r.ID, lead.ID, CardDone, nil, nil)
+	b := combCard(t, s, tp, r.ID, lead.ID, CardDone, nil, nil)
+	done := combCard(t, s, tp, r.ID, lead.ID, CardDone, &a.ID, &b.ID)
+	waiting := combCard(t, s, tp, r.ID, lead.ID, CardWaiting, &a.ID, &b.ID)
+	if err := s.EditCard(done.ID, "New", "Body"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetCard(done.ID)
+	if got.Title != "New" || got.Text != "Body" || !got.Edited {
+		t.Fatalf("editat: %+v", got)
+	}
+	if err := s.EditCard(waiting.ID, "x", "y"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("waiting: %v", err)
+	}
+	if err := s.EditCard(a.ID, "x", "y"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("normal: %v", err)
+	}
+}
+
+func TestMergedSources(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	tp := newTopic(t, s, p.ID, "Ideas", lead.ID)
+	r := BrainstormRound{TopicID: tp.ID, Text: "r"}
+	if _, err := s.AddRound(&r, nil); err != nil {
+		t.Fatal(err)
+	}
+	a := combCard(t, s, tp, r.ID, lead.ID, CardDone, nil, nil)
+	b := combCard(t, s, tp, r.ID, lead.ID, CardDone, nil, nil)
+	x := combCard(t, s, tp, r.ID, lead.ID, CardDone, nil, nil)
+	c := combCard(t, s, tp, r.ID, lead.ID, CardDone, &a.ID, &b.ID)
+	d := combCard(t, s, tp, r.ID, lead.ID, CardFailed, &a.ID, &b.ID)
+	e := combCard(t, s, tp, r.ID, lead.ID, CardWaiting, &c.ID, &x.ID)
+	cards := []BrainstormCard{a, b, x, c, d, e}
+	got := MergedSources(cards)
+	want := map[int64]int64{a.ID: c.ID, b.ID: c.ID, c.ID: e.ID, x.ID: e.ID}
+	if len(got) != len(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("got %v want %v", got, want)
+		}
+	}
+	cards[3].Status = CardFailed
+	got = MergedSources(cards)
+	if _, ok := got[a.ID]; ok {
+		t.Fatalf("a nu mai e folosit: %v", got)
+	}
+	if _, ok := got[b.ID]; ok {
+		t.Fatalf("b nu mai e folosit: %v", got)
+	}
+}
