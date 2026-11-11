@@ -21,6 +21,9 @@ export function brainstormView(projectId, { agents, onBadge }) {
     pending: [],     // fisierele alese pentru urmatoarea runda
     busy: new Set(),   // butoane apasate: cardId:actiune, ca sa nu trimitem de doua ori
     sending: false,    // runda se trimite: Send ramane dezactivat si daca un eveniment redeseneaza
+    selected: new Set(), // ideile bifate pentru Combine (id-uri, in ordinea bifarii)
+    combineWith: null,   // agentul ales in bara Combine (null = autorul primei bife)
+    combining: false,    // Combine se trimite
     loaded: false,
   };
   const agentsNow = () => (typeof agents === "function" ? agents() : agents) || [];
@@ -55,7 +58,9 @@ export function brainstormView(projectId, { agents, onBadge }) {
     el("button", { type: "button", class: "clip", "aria-label": "Attach files", title: "Attach files", onclick: () => picker.click() }, "\u{1F4CE}"),
     picker, input, sendBtn);
   const archivedNote = el("div", { class: "bs-archived-note", hidden: true });
-  const composer = el("div", { class: "composer bs-composer" }, archivedNote, chips, composerForm);
+  // bara Combine: apare deasupra campului de scris cand e bifata cel putin o idee
+  const combineBar = el("div", { class: "bs-combine", hidden: true, role: "region", "aria-label": "Combine ideas" });
+  const composer = el("div", { class: "composer bs-composer" }, combineBar, archivedNote, chips, composerForm);
   const grow = () => {
     input.style.height = "auto";
     input.style.height = input.scrollHeight + "px";
@@ -100,6 +105,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
       const data = await api(`/api/brainstorm/${t.id}`);
       if (current()?.id !== t.id) return; // s-a schimbat subiectul intre timp
       const same = st.data?.topic.id === t.id;
+      if (!same) clearSelection(); // bifele tin doar de subiectul deschis
       st.data = data;
       render(same ? "keep" : "bottom");
     } catch (err) {
@@ -154,6 +160,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
     if (!st.data) {
       head.replaceChildren();
       picked.hidden = true;
+      renderCombine(); // fara subiect bara dispare
       thread.replaceChildren(el("p", { class: "muted" }, st.loaded ? "Loading…" : ""));
       return;
     }
@@ -161,7 +168,9 @@ export function brainstormView(projectId, { agents, onBadge }) {
     const top = thread.scrollTop;
     renderHead();
     renderPicked();
+    pruneSelection();
     renderThread();
+    renderCombine();
     const byId = new Map(allCards().map((c) => [c.id, c]));
     syncIdea((id) => byId.get(id)); // modala deschisa: cardul proaspat
     const t = st.data.topic;
@@ -268,7 +277,80 @@ export function brainstormView(projectId, { agents, onBadge }) {
       el("div", { class: "bs-ask" },
         el("div", { class: "bs-bubble" }, userText(r.text || "")),
         el("span", { class: "bs-time" }, clock(r.createdAt))),
-      el("div", { class: "bs-cards" }, r.cards.map((c) => card(c, r.cards))))));
+      el("div", { class: "bs-cards" }, r.cards.map((c) => card(c, r.cards))),
+      r.combined?.length ? el("div", { class: "bs-combined" },
+        el("div", { class: "bs-combined-label" }, "Combined"),
+        el("div", { class: "bs-cards" }, r.combined.map((c) => card(c, r.combined)))) : null)));
+  }
+
+  // ---------- selectia si bara Combine ----------
+  // selectable: se pot combina doar ideile terminate (idee / wild, si cele combinate), nu pe un subiect arhivat
+  const selectable = (c) => c.status === "done" && (c.kind === "idea" || c.kind === "wild") && !st.data?.topic.archived;
+
+  function clearSelection() {
+    st.selected.clear();
+    st.combineWith = null;
+  }
+
+  // pruneSelection: scoate bifele ideilor care nu mai exista sau nu se mai pot combina (dupa reincarcare)
+  function pruneSelection() {
+    const ok = new Set(allCards().filter(selectable).map((c) => c.id));
+    for (const id of st.selected) if (!ok.has(id)) st.selected.delete(id);
+    if (!st.selected.size) st.combineWith = null;
+  }
+
+  // toggleSelect: bifa de pe tile; schimba doar tile-ul si bara (fara redesenare, focusul ramane pe bifa)
+  function toggleSelect(c, on, tile) {
+    if (on) st.selected.add(c.id); else st.selected.delete(c.id);
+    if (!st.selected.size) st.combineWith = null;
+    tile.classList.toggle("sel", on);
+    renderCombine();
+  }
+
+  // renderCombine: "<N> selected · Combine with <agent> · Clear · Combine"; Combine doar cu exact doua bifate
+  function renderCombine() {
+    const n = st.selected.size;
+    combineBar.hidden = !n || !st.data;
+    if (combineBar.hidden) { combineBar.replaceChildren(); return; }
+    const byId = new Map(allCards().map((c) => [c.id, c]));
+    const people = st.data.topic.participants.map(agentBy).filter(Boolean);
+    const first = byId.get([...st.selected][0]);
+    const def = people.find((a) => a.id === st.combineWith) || people.find((a) => a.id === first?.agentId) || people[0];
+    const who = el("select", {
+      class: "select-small", "aria-label": "Agent who combines the ideas",
+      onchange: () => { st.combineWith = Number(who.value); },
+    }, people.map((a) => el("option", { value: a.id }, a.name)));
+    if (def) who.value = String(def.id);
+    const ready = n === 2 && !!def && !st.combining;
+    combineBar.replaceChildren(
+      el("span", { class: "bs-combine-count" }, `${n} selected`),
+      el("span", { class: "bs-combine-sep", "aria-hidden": "true" }, "·"),
+      el("label", { class: "bs-combine-who" }, el("span", {}, "Combine with"), who),
+      el("span", { class: "bs-combine-actions" },
+        el("button", { type: "button", class: "btn small ghost", onclick: () => { clearSelection(); render(); } }, "Clear"),
+        el("button", {
+          type: "button", class: "btn small primary", disabled: !ready || null,
+          title: n !== 2 ? "Select two ideas" : !def ? "Add a participant to this topic first" : null,
+          onclick: combine,
+        }, "Combine")));
+  }
+
+  async function combine() {
+    const t = st.data?.topic;
+    const [a, b] = [...st.selected];
+    if (!t || st.selected.size !== 2 || st.combining) return;
+    const agentId = Number(combineBar.querySelector("select")?.value) || 0; // alegerea din bara (sau implicitul ei)
+    st.combining = true;
+    renderCombine();
+    try {
+      await api(`/api/brainstorm/${t.id}/combine`, { method: "POST", body: { a, b, agentId } });
+      clearSelection();
+    } catch (err) {
+      toast(err.message);
+    }
+    st.combining = false;
+    await loadTopic();
+    renderCombine(); // si daca reincarcarea a esuat
   }
 
   // ---------- tile-urile ----------
@@ -308,6 +390,8 @@ export function brainstormView(projectId, { agents, onBadge }) {
     if (c.picked) cls.push("picked");
     if (open) cls.push("open");
     if (!done) cls.push("dim");
+    const canSelect = selectable(c);
+    if (canSelect && st.selected.has(c.id)) cls.push("sel");
     const role = agentBy(c.agentId)?.role;
     const stop = (e) => e.stopPropagation(); // butoanele de pe tile nu deschid modala
 
@@ -315,7 +399,6 @@ export function brainstormView(projectId, { agents, onBadge }) {
     let text = null;
     if (done && c.kind !== "question") text = plainText(c.text);
     else if (question && c.text && c.text !== c.title) text = plainText(c.text);
-    else if (!done && c.combinedFrom?.length) text = "Combining " + c.combinedFrom.map((s) => s.title || "Idea").join(" + ");
     const title = done ? (c.title || (c.kind === "question" ? "Question" : "Idea")) : (c.title || null);
 
     let foot;
@@ -343,6 +426,21 @@ export function brainstormView(projectId, { agents, onBadge }) {
         c.followsId ? el("span", { class: "bs-follow", title: "Follows an earlier card" }, "↳") : null,
       ];
     }
+    // "Combined from: A + B": titlurile duc la tile-urile surselor
+    let from = null;
+    if (c.combinedFrom?.length) {
+      const links = [];
+      c.combinedFrom.forEach((s, k) => {
+        if (k) links.push(" + ");
+        links.push(el("button", { type: "button", class: "link-btn", onclick: (e) => { e.stopPropagation(); jump(s.id); } }, s.title || "Idea"));
+      });
+      from = el("p", { class: "bs-from" }, el("span", {}, "Combined from: "), links);
+    }
+    const check = canSelect ? el("label", { class: "bs-check", title: "Select to combine" },
+      el("input", {
+        type: "checkbox", checked: st.selected.has(c.id) || null, "aria-label": `Select ${c.title || "idea"} to combine`,
+        onchange: (e) => toggleSelect(c, e.target.checked, e.target.closest(".bs-tile")),
+      })) : null;
     return el("article", {
       class: cls.join(" "), id: `bs-card-${c.id}`, style: `--c:${tone(c)}`,
       tabindex: "0", "aria-label": `${c.agentName || "Agent"}: ${c.title || stateText(c) || "idea"}`,
@@ -350,8 +448,10 @@ export function brainstormView(projectId, { agents, onBadge }) {
       onkeydown: (e) => { if (e.key === "Enter" && e.target === e.currentTarget) { e.preventDefault(); openIdea(c, siblings); } },
     },
     el("div", { class: "bs-who" }, face(c.agentName, c.agentId, 20),
-      el("span", { class: "bs-agent" }, c.agentName || "Agent", role ? el("span", { class: "bs-role" }, ` · ${role}`) : null)),
+      el("span", { class: "bs-agent" }, c.agentName || "Agent", role ? el("span", { class: "bs-role" }, ` · ${role}`) : null),
+      check),
     title ? el("h3", { class: "bs-tile-title", title }, title) : null,
+    from,
     text ? el("p", { class: "bs-tile-text" }, text) : null,
     el("div", { class: "bs-tile-foot" }, foot));
   }

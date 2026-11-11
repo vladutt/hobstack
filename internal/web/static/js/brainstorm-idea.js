@@ -6,19 +6,29 @@ import { renderMarkdown } from "./md.js";
 // isCombined: cardul e o idee combinata (are surse)
 export const isCombined = (c) => c.sourceA != null;
 
-// plainText: textul simplu dintr-un markdown, pentru extrasul de pe tile (fara #, *, ```, linkuri)
+// plainText: textul simplu dintr-un markdown, pentru extrasul de pe tile (fara #, *, ```, linkuri).
+// Randurile se lipesc cu un spatiu, punctele de lista consecutive cu " · ", ca sa nu se amestece cuvintele.
 export function plainText(md) {
-  return String(md || "")
+  const text = String(md || "")
     .replace(/\r\n?/g, "\n")
     .replace(/^\s*```.*$/gm, "")               // gardurile blocurilor de cod (continutul ramane)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")   // imagini
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")    // linkuri: doar textul
-    .replace(/^\s{0,3}#{1,6}\s+(.*?)[\s:.]*$/gm, "$1:") // titluri: "## Plan" -> "Plan:"
-    .replace(/^\s*>\s?/gm, "")                  // citate
-    .replace(/^\s*([-*+]|\d+[.)])\s+/gm, "")    // marcajele listelor
-    .replace(/(\*\*|__|\*|_|~~|`)/g, "")        // accent, cod inline
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+(.*?)[ \t:.]*$/gm, "$1:") // titluri: "## Plan" -> "Plan:"
+    .replace(/^[ \t]*>[ \t]?/gm, "")            // citate
+    .replace(/^[ \t]*([-*+]|\d+[.)])[ \t]+/gm, "\u0001") // marcajele listelor -> semn (pentru " · ")
+    .replace(/(\*\*|__|\*|_|~~|`)/g, "");       // accent, cod inline
+  let out = "";
+  let prevItem = false;
+  for (const raw of text.split("\n")) {
+    const item = raw.startsWith("\u0001");
+    const line = raw.replace(/\u0001/g, "").replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (out) out += item && prevItem ? " · " : " ";
+    out += line;
+    prevItem = item;
+  }
+  return out;
 }
 
 // ideaTags: etichetele unui card terminat (Picked, Wild, Merged, Combined, Edited); onJump(id) duce la alt card

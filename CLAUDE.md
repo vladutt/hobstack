@@ -381,6 +381,16 @@ cu Retry; agentii scosi sau stersi -> Skipped (un agent cu carduri se sterge doa
 projects/<pid>/brainstorm/<topic>/ (--add-dir). Iesiri: Pick; Save to Files (brainstorm-<tid>-<slug>.md in Files, suprascris prin fisier temporar + rename); Send to lead (mesaj de chat
 al utilizatorului catre un lider, cu linkul "Topic: #/p/<pid>/brainstorm/<tid>"). Intrebarile nu apar in Needs you, doar ca insigna pe tab. API:
 /api/projects/{id}/brainstorm, /api/brainstorm/{tid}..., /api/brainstorm/cards/{id}/{action}; eveniment SSE "brainstorm" {topicId} (0 = mai multe subiecte).
+Gata (Brainstorm: combinare si tile-uri, spec in docs/superpowers/specs/2026-11-12-hobstack-brainstorm-combine-design.md):
+ideile unei runde sunt tile-uri egale (4 / 2 / 1 pe rand, culoarea agentului sus, extras simplu din markdown); clic = modala
+ideii (static/js/brainstorm-idea.js: text complet, Pick, Another idea, sagetile intre tile-urile randului, Esc). Doua idei
+terminate (idee / wild, si cele combinate) se bifeaza si se combina din bara de jos ("N selected · Combine with <agent> ·
+Clear · Combine", activ doar cu exact 2; implicit autorul primei bife): POST /api/brainstorm/{tid}/combine -> team.Combine
+creeaza un card waiting cu sursele (migrarea 039: brainstorm_cards.source_a / source_b / edited), in runda celei mai noi surse;
+run-ul (prompt.BrainstormCombineTurn) e fara sesiune si fara intrebari (brainstorm_reply doar idea / wild). Cardul apare in
+randul "Combined" de sub runda, cu "Combined from: A + B" (link: deruleaza la sursa); sursele au eticheta "Merged" (store.MergedSources
+la citire, doar cat exista un combinat terminat sau in lucru). Edit in modala pe ideea combinata (team.EditCombined, POST
+cards/{id}/edit) pastreaza textul utilizatorului si pune "Edited"; nu porneste niciun run.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
