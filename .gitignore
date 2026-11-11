@@ -12,3 +12,6 @@ foreman.exe
 /hobstack-*
 hobstack.exe
 /dist
+
+# scratch al skill-urilor superpowers (schite, ledger)
+/.superpowers/
