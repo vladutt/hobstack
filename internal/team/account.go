@@ -23,6 +23,9 @@ func (t *Team) authFailed(ar activeRun, a store.Agent, msg string) error {
 	if err := t.st.SetPaused(ar.projectID, true); err != nil {
 		return err
 	}
+	t.mu.Lock()
+	t.cardHold[ar.projectID] = t.now()
+	t.mu.Unlock()
 	if ar.taskID != 0 {
 		task, err := t.st.GetTask(ar.taskID)
 		if err != nil {

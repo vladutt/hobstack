@@ -64,8 +64,11 @@ type Team struct {
 	active  map[int64]activeRun // agentID -> run-ul lui activ
 	tokens  map[string]mcp.Caller
 	pending map[int64]bool // proiecte care trebuie reconciliate
-	held    int            // cate motive opresc run-urile noi (Hold): update-ul, Claude Code lipsa
-	wake    chan struct{}
+	// cardHold: proiect -> momentul ultimei erori de cont. Pana la Start team pornesc doar cardurile
+	// de brainstorming atinse de utilizator dupa el (celelalte ar cadea la fel, fiecare cu nota lui).
+	cardHold map[int64]time.Time
+	held     int // cate motive opresc run-urile noi (Hold): update-ul, Claude Code lipsa
+	wake     chan struct{}
 }
 
 type activeRun struct {
@@ -136,15 +139,16 @@ func (t *Team) requestOf(agentID int64, runID string) (store.Message, bool) {
 
 func New(st *store.Store, runs Starter, hub *events.Hub, baseURL string) *Team {
 	return &Team{
-		st:      st,
-		runs:    runs,
-		hub:     hub,
-		baseURL: baseURL,
-		now:     time.Now,
-		active:  map[int64]activeRun{},
-		tokens:  map[string]mcp.Caller{},
-		pending: map[int64]bool{},
-		wake:    make(chan struct{}, 1),
+		st:       st,
+		runs:     runs,
+		hub:      hub,
+		baseURL:  baseURL,
+		now:      time.Now,
+		active:   map[int64]activeRun{},
+		tokens:   map[string]mcp.Caller{},
+		pending:  map[int64]bool{},
+		cardHold: map[int64]time.Time{},
+		wake:     make(chan struct{}, 1),
 	}
 }
 

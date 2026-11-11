@@ -214,6 +214,64 @@ func TestBrainstormAuthFailedNoLoop(t *testing.T) {
 	}
 }
 
+// Dupa o eroare de cont, cardurile care asteptau nu pornesc singure (fiecare ar cadea la fel):
+// pornesc doar cele atinse de utilizator dupa eroare (Retry, Run now, mesaj nou), iar Start team le elibereaza pe toate.
+func TestBrainstormAuthFailureHoldsWaitingCards(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	rookCard := roundFor(t, f, tp, f.rook)
+	run := startCard(t, f, f.rook, rookCard)
+	veraCard := roundFor(t, f, tp, f.vera)
+	f.fs.finish(run.ID, runner.Outcome{Status: store.RunFailed, Error: "Invalid API key · Please run /login"})
+
+	n := f.fs.count()
+	mustReconcile(t, f)
+	if f.fs.count() != n {
+		t.Fatal("un card care astepta a pornit dupa eroarea de cont")
+	}
+
+	// Retry pe cardul lui Rook: doar el porneste, al Verei asteapta in continuare
+	if err := f.tm.RetryCard(rookCard.ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	if f.fs.count() != n+1 || !cardRunOf(t, f, f.fs.last(t, f.rook), rookCard.ID) {
+		t.Fatalf("Retry nu a pornit cardul lui Rook (runs %d -> %d)", n, f.fs.count())
+	}
+	if got := cardOf(t, f, veraCard.ID); got.Status != store.CardWaiting {
+		t.Fatalf("cardul Verei: %s", got.Status)
+	}
+
+	// Run now pe cardul Verei il porneste
+	if err := f.tm.RunNow(veraCard.ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	if !cardRunOf(t, f, f.fs.last(t, f.vera), veraCard.ID) {
+		t.Fatal("Run now nu a pornit cardul Verei")
+	}
+}
+
+// Start team elibereaza cardurile tinute dupa eroarea de cont.
+func TestBrainstormResumeReleasesHeldCards(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	run := startCard(t, f, f.rook, roundFor(t, f, tp, f.rook))
+	veraCard := roundFor(t, f, tp, f.vera)
+	f.fs.finish(run.ID, runner.Outcome{Status: store.RunFailed, Error: "Invalid API key · Please run /login"})
+	mustReconcile(t, f)
+	if got := cardOf(t, f, veraCard.ID); got.Status != store.CardWaiting {
+		t.Fatalf("cardul Verei: %s", got.Status)
+	}
+	if err := f.tm.Resume(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	if !cardRunOf(t, f, f.fs.last(t, f.vera), veraCard.ID) {
+		t.Fatal("dupa Start team cardul Verei nu a pornit")
+	}
+}
+
 // Fix: Stop team nu opreste brainstorming-ul (merge pe pauza, ca chat-ul).
 func TestBrainstormSurvivesStopTeam(t *testing.T) {
 	f := setup(t)

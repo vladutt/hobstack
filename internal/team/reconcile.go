@@ -175,8 +175,11 @@ func (t *Team) Reconcile(projectID int64) error {
 	// cardRun porneste urmatorul card de brainstorming al agentului, daca are unul
 	// (priorityOnly: doar cardurile "Run now"). Un run care nu porneste lasa cardul
 	// Failed (brainstormRun), fara pauza pe proiect: nu e munca echipei.
+	t.mu.Lock()
+	held := t.cardHold[p.ID] // zero = fara eroare de cont
+	t.mu.Unlock()
 	cardRun := func(a store.Agent, priorityOnly bool) error {
-		card, ok, err := t.st.NextCard(a.ID, priorityOnly)
+		card, ok, err := t.st.NextCardAfter(a.ID, priorityOnly, held)
 		if err != nil || !ok {
 			return err
 		}
@@ -511,6 +514,10 @@ func (t *Team) Resume(projectID int64) error {
 	if err == nil {
 		err = t.wakeForDecisions(projectID)
 	}
+	// Start team: contul e (probabil) reparat, cardurile tinute dupa eroare pot porni
+	t.mu.Lock()
+	delete(t.cardHold, projectID)
+	t.mu.Unlock()
 	t.work.Unlock()
 	if err != nil {
 		return err

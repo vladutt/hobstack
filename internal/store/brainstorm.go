@@ -321,17 +321,29 @@ func (s *Store) TopicCards(topicID int64) ([]BrainstormCard, error) {
 // NextCard intoarce cardul waiting al agentului: intai cele cu prioritate, apoi cel mai vechi.
 // Cu priorityOnly doar cele cu prioritate. Subiectele arhivate se sar.
 func (s *Store) NextCard(agentID int64, priorityOnly bool) (BrainstormCard, bool, error) {
+	return s.NextCardAfter(agentID, priorityOnly, time.Time{})
+}
+
+// NextCardAfter: ca NextCard, dar doar cardurile atinse (create, reluate, Run now) dupa momentul dat;
+// zero = toate. Dupa o eroare de cont pornesc doar cardurile pe care utilizatorul le-a cerut din nou.
+// Filtrul e in Go: datele sunt text RFC3339Nano, care nu se compara corect ca text.
+func (s *Store) NextCardAfter(agentID int64, priorityOnly bool, after time.Time) (BrainstormCard, bool, error) {
 	// cardurile subiectelor arhivate raman in asteptare, nu pornesc
 	q := `WHERE agent_id = ? AND status = 'waiting'
 		AND topic_id NOT IN (SELECT id FROM brainstorm_topics WHERE archived = 1)`
 	if priorityOnly {
 		q += ` AND priority = 1`
 	}
-	cards, err := s.cardsWhere(q+` ORDER BY priority DESC, id LIMIT 1`, agentID)
-	if err != nil || len(cards) == 0 {
+	cards, err := s.cardsWhere(q+` ORDER BY priority DESC, id`, agentID)
+	if err != nil {
 		return BrainstormCard{}, false, err
 	}
-	return cards[0], true, nil
+	for _, c := range cards {
+		if after.IsZero() || c.UpdatedAt.After(after) {
+			return c, true, nil
+		}
+	}
+	return BrainstormCard{}, false, nil
 }
 
 // SetCardState schimba starea cardului (cu run-ul si eroarea care o insotesc).
@@ -407,7 +419,8 @@ func (s *Store) SetCardPicked(id int64, picked bool) error {
 }
 
 func (s *Store) SetCardPriority(id int64, on bool) error {
-	return mustAffect(s.db.Exec(`UPDATE brainstorm_cards SET priority = ? WHERE id = ?`, on, id))
+	// updated_at: Run now e o cerere a utilizatorului (vezi NextCardAfter)
+	return mustAffect(s.db.Exec(`UPDATE brainstorm_cards SET priority = ?, updated_at = ? WHERE id = ?`, on, now(), id))
 }
 
 // QuestionsAsked numara intrebarile puse de agent in runda (si cele fara raspuns).
