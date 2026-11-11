@@ -157,8 +157,8 @@ function paint() {
 
   if (cur.editing) {
     const ed = cur.editing;
-    const title = el("input", { type: "text", class: "bs-idea-edit-title", maxlength: 200, value: ed.title, "aria-label": "Title" });
-    const text = el("textarea", { class: "bs-idea-edit-text", rows: 12, value: ed.text, "aria-label": "Text" });
+    const title = el("input", { type: "text", class: "bs-idea-edit-title", maxlength: 120, value: ed.title, "aria-label": "Title" });
+    const text = el("textarea", { class: "bs-idea-edit-text", rows: 12, maxlength: 4000, value: ed.text, "aria-label": "Text" });
     title.addEventListener("input", () => { ed.title = title.value; });
     text.addEventListener("input", () => { ed.text = text.value; });
     const save = el("button", { type: "button", class: "btn primary small" }, "Save");

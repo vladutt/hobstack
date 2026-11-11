@@ -1926,9 +1926,12 @@ input.task-search:focus { border-color: var(--amber); outline: none; }
 .bs-tag.wild { color: var(--purple); background: rgba(199, 155, 242, .15); }
 .bs-tag.question { color: var(--teal); background: var(--teal-bg); }
 .bs-tag.combined { color: var(--blue); background: rgba(140, 158, 255, .14); }
+/* Merged: eticheta clicabila spre ideea combinata, ca un link */
+.bs-tag.merged { color: var(--blue); background: rgba(140, 158, 255, .14); }
 .bs-tag.edited { color: var(--soft); background: var(--line-2); }
 button.bs-tag { cursor: pointer; }
 button.bs-tag:hover { color: var(--text); }
+button.bs-tag.merged:hover { color: var(--blue); text-decoration: underline; }
 .bs-follow { color: var(--muted); font-size: 13px; }
 .bs-state { margin: 0; color: var(--muted); font-size: 12.5px; display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
 .bs-state.running { color: var(--teal); }
