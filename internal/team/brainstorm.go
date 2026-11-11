@@ -432,6 +432,8 @@ func (t *Team) sendToLeadLocked(topicID, leadID int64) (store.Message, int64, er
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "From the brainstorm %q: turn these picked ideas into tasks.", topic.Name)
+	// legatura spre subiect (ruta din UI), ca utilizatorul sa ajunga inapoi din chat
+	fmt.Fprintf(&b, "\nTopic: #/p/%d/brainstorm/%d", topic.ProjectID, topic.ID)
 	for i, c := range ideas {
 		fmt.Fprintf(&b, "\n\n%d. %s (by %s)\n%s", i+1, c.Title, t.authorOf(c.AgentID), c.Text)
 	}

@@ -2,6 +2,7 @@ package team
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -409,6 +410,9 @@ func TestBrainstormSendToLead(t *testing.T) {
 		!strings.Contains(m.Text, "Rollback netcode") || !strings.Contains(m.Text, "Lockstep replays") {
 		t.Fatalf("mesaj: %+v", m)
 	}
+	if link := fmt.Sprintf("\nTopic: #/p/%d/brainstorm/%d\n", f.p.ID, tp.ID); !strings.Contains(m.Text, link) {
+		t.Fatalf("lipseste legatura spre subiect: %q", m.Text)
+	}
 	if !f.hasMessage(f.lead.ID, "Rollback netcode") {
 		t.Fatal("mesajul nu e in chat-ul liderului")
 	}
@@ -512,5 +516,19 @@ func TestBrainstormSessionErrorStillFinishes(t *testing.T) {
 	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone, Result: "Use rollback netcode", SessionID: "bs-1"})
 	if got := cardOf(t, f, card.ID); got.Status != store.CardDone {
 		t.Fatalf("card: %s", got.Status)
+	}
+}
+
+// StopCard cu un id invalid nu opreste munca altcuiva (run-urile fara card au cardID 0).
+func TestBrainstormStopCardInvalidID(t *testing.T) {
+	f := setup(t)
+	f.task(t, "Build page", f.rook, store.StatusQueued)
+	mustReconcile(t, f)
+	f.fs.last(t, f.rook)
+	if err := f.tm.StopCard(0); err == nil {
+		t.Fatal("StopCard(0) a mers")
+	}
+	if len(f.fs.stopped) != 0 {
+		t.Fatalf("run oprit: %v", f.fs.stopped)
 	}
 }
