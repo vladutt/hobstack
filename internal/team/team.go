@@ -78,6 +78,8 @@ type activeRun struct {
 	questions []int64           // intrebarile din alte proiecte livrate run-ului: nu poate intreba la randul lui (anti-bucla), iar la final se inchid
 	snap      *gitsnap.Snapshot // starea git a folderului la pornire (run pe task care poate scrie); nil = fara repo
 	userStop  bool              // utilizatorul a apasat Stop pe agent / task: task-ul ramane oprit in coada
+	cardID    int64             // != 0 = run de brainstorming pentru acest card
+	topicID   int64             // subiectul cardului (sesiunea Claude e per subiect si agent)
 }
 
 // setRequest retine mesajul utilizatorului care a pornit run-ul activ al agentului.

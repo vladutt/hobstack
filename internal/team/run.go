@@ -19,9 +19,22 @@ import (
 	"hobstack/internal/store"
 )
 
+// runOpts: ce fel de run porneste startRunOpts.
+type runOpts struct {
+	TaskID int64                 // 0 = run fara task (chat, notificari)
+	Turn   string                // tura (mesajul -p)
+	Card   *store.BrainstormCard // != nil = run de brainstorming pentru card (fara task)
+}
+
 // startRun porneste un run pentru agent. taskID = 0 inseamna run fara task
 // (lead sau mesaj direct). Se apeleaza cu t.work blocat.
 func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, taskID int64, turn string) error {
+	return t.startRunOpts(p, a, agents, runOpts{TaskID: taskID, Turn: turn})
+}
+
+// startRunOpts e startRun cu toate optiunile. Se apeleaza cu t.work blocat.
+func (t *Team) startRunOpts(p store.Project, a store.Agent, agents []store.Agent, o runOpts) error {
+	taskID, turn, card := o.TaskID, o.Turn, o.Card
 	home := store.HomeFolder(a, p.Folders)
 	if info, err := os.Stat(home.Path); err != nil || !info.IsDir() {
 		return fmt.Errorf("the folder %s (%s) does not exist", home.Name, home.Path)
@@ -77,6 +90,14 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 		}
 		extraArgs = append(extraArgs, "--add-dir", dir)
 	}
+	// brainstorming: atasamentele subiectelor stau in folderul de date al proiectului
+	if card != nil && t.filesRoot != "" {
+		dir := config.ProjectBrainstormDir(t.filesRoot, p.ID)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		extraArgs = append(extraArgs, "--add-dir", dir)
+	}
 
 	// Library: pluginul proiectului (skill-uri, scripturi) si serverele MCP instalate.
 	// Liniile merg in tura, nu in system prompt: hash-ul sesiunii nu se schimba.
@@ -100,7 +121,10 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	runTools := a.Tools
 	if taskID == 0 {
 		runTools = prompt.ReadOnlyTools(a.Tools)
-		turn += "\n\n" + prompt.ReadOnlyTurn
+		// brainstorming-ul nu porneste task-uri: tura lui spune deja ce are voie
+		if card == nil {
+			turn += "\n\n" + prompt.ReadOnlyTurn
+		}
 	}
 
 	linkedProjects, err := t.st.LinkedProjects(p.ID)
@@ -121,10 +145,19 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	system := prompt.System(p, a, pl)
 	// Claude tine sesiunile pe cwd, deci un alt folder de lucru inseamna alta sesiune.
 	hash := prompt.Hash(home.Path + "\n" + system)
+	sessionID, sessionHash := a.SessionID, a.PromptHash
+	if card != nil {
+		// brainstorming: sesiune separata de chat, una per (subiect, agent); hash-ul difera de al chat-ului
+		hash = prompt.Hash(home.Path + "\n" + system + "\nbrainstorm")
+		var err error
+		if sessionID, sessionHash, err = t.st.BrainstormSession(card.TopicID, a.ID); err != nil {
+			return err
+		}
+	}
 	// Claude retine system prompt-ul de la inceputul sesiunii. Daca s-a schimbat
 	// (agent sau proiect editat), --resume l-ar ignora, deci pornim sesiune noua.
-	resume := a.SessionID != "" && a.PromptHash == hash
-	if a.SessionID != "" && !resume {
+	resume := sessionID != "" && sessionHash == hash
+	if sessionID != "" && !resume && card == nil { // brainstorming-ul nu scrie in chat
 		t.note(p.ID, a.ID, "The instructions or the working folder changed; starting a new session.", true)
 	}
 
@@ -132,6 +165,15 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	token := newToken()
 	if err := t.st.CreateRun(&store.Run{ID: runID, AgentID: a.ID, TaskID: taskID}); err != nil {
 		return err
+	}
+	var cardID, topicID int64
+	if card != nil {
+		cardID, topicID = card.ID, card.TopicID
+		// cardul e running pe acest run inainte ca agentul sa poata chema brainstorm_reply
+		if err := t.st.SetCardState(card.ID, store.CardRunning, runID, ""); err != nil {
+			t.st.FinishRun(runID, store.RunFailed, 0, err.Error())
+			return err
+		}
 	}
 
 	roles := store.RolesOf(a, agents)
@@ -160,10 +202,16 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 	}
 	// intr-un proiect cu etape, radacinile creeaza task-uri chiar fara copii
 	isLead := roles.IsLead || (len(stages) > 0 && roles.IsRoot)
-	t.mu.Lock()
-	t.tokens[token] = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
+	caller := mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, TaskID: taskID,
 		IsLead: isLead, HasParent: a.ParentID != nil, IsReviewer: roles.IsReviewer, StageKind: stageKind, HasStages: len(stages) > 0, CanAddAgents: isLead || roles.IsRoot, HasLinks: hasLinks, IsRoot: roles.IsRoot, FromRequest: fromRequest, CanWrite: slices.Contains(runTools, "write")}
-	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token, accountID: accountID, snap: snap}
+	if card != nil {
+		// brainstorming: doar brainstorm_reply, fara rolurile din echipa
+		caller = mcp.Caller{ProjectID: p.ID, AgentID: a.ID, RunID: runID, BrainstormCardID: card.ID}
+	}
+	t.mu.Lock()
+	t.tokens[token] = caller
+	t.active[a.ID] = activeRun{runID: runID, projectID: p.ID, taskID: taskID, token: token, accountID: accountID, snap: snap,
+		cardID: cardID, topicID: topicID}
 	t.mu.Unlock()
 
 	// URL-ul MCP in linie; cu servere din Library (secrete in env/headers) config-ul merge intr-un
@@ -191,6 +239,7 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 
 	runAgent := a // permisiunile run-ului; system prompt-ul de mai sus vine din tool-urile intregi
 	runAgent.Tools = runTools
+	runAgent.SessionID = sessionID // args pune --resume cu ea (la brainstorming, sesiunea subiectului)
 	spec := runner.Spec{
 		ID:     runID,
 		Key:    fmt.Sprintf("agent-%d", a.ID),
@@ -209,7 +258,10 @@ func (t *Team) startRun(p store.Project, a store.Agent, agents []store.Agent, ta
 			t.lib.RemoveMCPConfig(runID)
 		}
 		t.st.FinishRun(runID, store.RunFailed, 0, err.Error())
-		return err
+		return err // la brainstorming, brainstormRun trece cardul pe failed
+	}
+	if card != nil {
+		t.emit(p.ID, "brainstorm", map[string]int64{"topicId": card.TopicID})
 	}
 	t.emit(p.ID, "agent", map[string]int64{"id": a.ID})
 	return nil
@@ -350,6 +402,9 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	}
 	if err := t.st.SetRunTokens(o.RunID, tokens); err != nil {
 		return err
+	}
+	if ar.cardID != 0 {
+		return t.finishCard(ar, agentID, hash, o)
 	}
 	if o.SessionID != "" {
 		if err := t.st.SetSession(agentID, o.SessionID, hash); err != nil {
