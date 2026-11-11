@@ -8,6 +8,8 @@ import (
 // BrainstormIdea e o idee (a unui agent) pusa in tura de brainstorming.
 type BrainstormIdea struct {
 	Author, Kind, Title, Text, Basis string
+	// CombinedFrom e "A + B" (titlurile surselor) pentru o idee nascuta din combinare.
+	CombinedFrom string
 }
 
 // BrainstormQA e o intrebare a unui agent cu raspunsul utilizatorului.
@@ -30,28 +32,7 @@ type BrainstormContext struct {
 // BrainstormTurn scrie tura unui agent intr-o sesiune de brainstorming.
 func BrainstormTurn(c BrainstormContext) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "This is a brainstorming session on the topic: %s\n", c.Topic)
-	b.WriteString("It is not work: do not modify any files and do not start tasks. You may read the code and the documents.\n")
-	if d := strings.TrimSpace(c.Description); d != "" {
-		fmt.Fprintf(&b, "\nTopic description:\n%s\n", d)
-	}
-	if len(c.Files) > 0 {
-		b.WriteString("\nAttachments (read them, including images):")
-		for i, f := range c.Files {
-			if i == maxFiles {
-				fmt.Fprintf(&b, "\n- ... and %d more files", len(c.Files)-maxFiles)
-				break
-			}
-			fmt.Fprintf(&b, "\n- %s (%s)", f.Path, f.Name)
-		}
-		b.WriteString("\n")
-	}
-	if len(c.Picked) > 0 {
-		b.WriteString("\nIdeas the user picked:\n")
-		for _, i := range c.Picked {
-			writeIdea(&b, i, true)
-		}
-	}
+	writeBrainstormBase(&b, c.Topic, c.Description, c.Files, c.Picked)
 	if len(c.Unpicked) > 0 {
 		b.WriteString("\nAlready proposed, not picked: do not repeat them:\n")
 		for _, t := range c.Unpicked {
@@ -93,10 +74,64 @@ func BrainstormTurn(c BrainstormContext) string {
 	return b.String()
 }
 
+// writeBrainstormBase scrie blocurile comune: subiectul, descrierea, atasamentele si ideile alese.
+func writeBrainstormBase(b *strings.Builder, topic, description string, files []FileRef, picked []BrainstormIdea) {
+	fmt.Fprintf(b, "This is a brainstorming session on the topic: %s\n", topic)
+	b.WriteString("It is not work: do not modify any files and do not start tasks. You may read the code and the documents.\n")
+	if d := strings.TrimSpace(description); d != "" {
+		fmt.Fprintf(b, "\nTopic description:\n%s\n", d)
+	}
+	if len(files) > 0 {
+		b.WriteString("\nAttachments (read them, including images):")
+		for i, f := range files {
+			if i == maxFiles {
+				fmt.Fprintf(b, "\n- ... and %d more files", len(files)-maxFiles)
+				break
+			}
+			fmt.Fprintf(b, "\n- %s (%s)", f.Path, f.Name)
+		}
+		b.WriteString("\n")
+	}
+	if len(picked) > 0 {
+		b.WriteString("\nIdeas the user picked:\n")
+		for _, i := range picked {
+			writeIdea(b, i, true)
+		}
+	}
+}
+
+// BrainstormCombine e tura de combinare a doua idei intr-una singura.
+type BrainstormCombine struct {
+	Topic, Description string
+	Files              []FileRef
+	Picked             []BrainstormIdea
+	A, B               BrainstormIdea
+}
+
+// BrainstormCombineTurn scrie tura prin care un agent combina doua idei.
+func BrainstormCombineTurn(c BrainstormCombine) string {
+	var b strings.Builder
+	writeBrainstormBase(&b, c.Topic, c.Description, c.Files, c.Picked)
+	b.WriteString("\nCombine these two ideas into one:\n")
+	writeIdea(&b, c.A, true)
+	writeIdea(&b, c.B, true)
+	b.WriteString("\nRules:\n")
+	b.WriteString("- Write one coherent idea that keeps the best of both and resolves where they conflict; it is not the two texts one after the other.\n")
+	b.WriteString("- Say briefly in the text what you left out and why.\n")
+	b.WriteString("- Say in basis what you rely on.\n")
+	b.WriteString("- Use kind wild only if the combined idea is truly bold.\n")
+	b.WriteString("- Do not ask questions.\n")
+	b.WriteString("- Reply with exactly one brainstorm_reply call.")
+	return b.String()
+}
+
 func writeIdea(b *strings.Builder, i BrainstormIdea, withAuthor bool) {
 	head := i.Title
 	if i.Kind == "wild" { // ideile nebune se vad ca atare
 		head += " (wild)"
+	}
+	if i.CombinedFrom != "" {
+		head += " (combined from " + i.CombinedFrom + ")"
 	}
 	if withAuthor && i.Author != "" {
 		head += " (" + i.Author + ")"

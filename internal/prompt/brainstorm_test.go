@@ -43,3 +43,31 @@ func TestBrainstormTurn(t *testing.T) {
 		t.Error("o idee obisnuita marcata wild")
 	}
 }
+
+func TestCombineTurn(t *testing.T) {
+	got := BrainstormCombineTurn(BrainstormCombine{
+		Topic: "Launch plan", Description: "How we launch",
+		A: BrainstormIdea{Author: "Ana", Title: "Host", Text: "Self host it", Basis: "docs/a.md"},
+		B: BrainstormIdea{Author: "Dan", Title: "Async", Text: "Queue everything", Basis: "worker.go"},
+	})
+	for _, w := range []string{"Launch plan", "How we launch", "Host", "(Ana)", "Self host it", "Basis: docs/a.md",
+		"Async", "(Dan)", "Queue everything", "Basis: worker.go", "one coherent idea", "what you left out",
+		"Do not ask questions", "exactly one brainstorm_reply call"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("lipseste %q in:\n%s", w, got)
+		}
+	}
+	for _, w := range []string{"Current message from the user", "different idea"} {
+		if strings.Contains(got, w) {
+			t.Errorf("nu trebuie sa contina %q", w)
+		}
+	}
+}
+
+func TestWriteIdeaCombinedFrom(t *testing.T) {
+	got := BrainstormTurn(BrainstormContext{Topic: "T", Picked: []BrainstormIdea{
+		{Author: "Dan", Title: "Title", CombinedFrom: "Host + Async"}}})
+	if !strings.Contains(got, "- Title (combined from Host + Async) (Dan)") {
+		t.Errorf("eticheta lipseste:\n%s", got)
+	}
+}
