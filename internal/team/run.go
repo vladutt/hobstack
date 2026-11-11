@@ -150,7 +150,10 @@ func (t *Team) startRunOpts(p store.Project, a store.Agent, agents []store.Agent
 		// brainstorming: sesiune separata de chat, una per (subiect, agent); hash-ul difera de al chat-ului
 		hash = prompt.Hash(home.Path + "\n" + system + "\nbrainstorm")
 		var err error
-		if sessionID, sessionHash, err = t.st.BrainstormSession(card.TopicID, a.ID); err != nil {
+		if card.Combined() {
+			// combinarea porneste mereu fara sesiune (sessionID gol = fara --resume)
+			sessionID, sessionHash = "", ""
+		} else if sessionID, sessionHash, err = t.st.BrainstormSession(card.TopicID, a.ID); err != nil {
 			return err
 		}
 	}

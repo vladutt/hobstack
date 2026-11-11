@@ -64,6 +64,9 @@ func (t *Team) brainstormTurn(p store.Project, a store.Agent, agents []store.Age
 	for _, ag := range agents {
 		names[ag.ID] = ag.Name
 	}
+	if card.Combined() {
+		return t.combineTurn(topic, files, cards, names, card), nil
+	}
 	c := prompt.BrainstormContext{Topic: topic.Name, Description: topic.Description, QuestionsLeft: maxQuestions - asked}
 	for _, r := range rounds {
 		if r.ID == card.RoundID {
@@ -87,7 +90,8 @@ func (t *Team) brainstormTurn(p store.Project, a store.Agent, agents []store.Age
 		earlier := x.RoundID < card.RoundID
 		switch x.Kind {
 		case store.CardIdea, store.CardWild:
-			idea := prompt.BrainstormIdea{Author: names[x.AgentID], Kind: x.Kind, Title: x.Title, Text: x.Text, Basis: x.Basis}
+			idea := prompt.BrainstormIdea{Author: names[x.AgentID], Kind: x.Kind, Title: x.Title, Text: x.Text, Basis: x.Basis,
+				CombinedFrom: combinedFrom(cards, x)}
 			switch {
 			case x.Picked: // ideile alese le vede toata lumea, complet
 				c.Picked = append(c.Picked, idea)
@@ -119,6 +123,56 @@ func (t *Team) brainstormTurn(p store.Project, a store.Agent, agents []store.Age
 	return prompt.BrainstormTurn(c), nil
 }
 
+// combinedFrom: "A + B" (titlurile surselor) pentru o idee combinata, altfel gol.
+func combinedFrom(cards []store.BrainstormCard, c store.BrainstormCard) string {
+	if !c.Combined() {
+		return ""
+	}
+	title := func(id *int64) string {
+		for _, x := range cards {
+			if x.ID == *id {
+				return x.Title
+			}
+		}
+		return "?"
+	}
+	return title(c.SourceA) + " + " + title(c.SourceB)
+}
+
+// combineTurn scrie tura de combinare: ideile alese (fara cele doua surse) si sursele cu autori.
+func (t *Team) combineTurn(topic store.BrainstormTopic, files []store.BrainstormFile, cards []store.BrainstormCard,
+	names map[int64]string, card store.BrainstormCard) string {
+	author := func(id int64) string {
+		if n, ok := names[id]; ok {
+			return n
+		}
+		return t.authorOf(id) // agent sters
+	}
+	idea := func(x store.BrainstormCard) prompt.BrainstormIdea {
+		return prompt.BrainstormIdea{Author: author(x.AgentID), Kind: x.Kind, Title: x.Title, Text: x.Text, Basis: x.Basis,
+			CombinedFrom: combinedFrom(cards, x)}
+	}
+	c := prompt.BrainstormCombine{Topic: topic.Name, Description: topic.Description}
+	dir := ""
+	if t.filesRoot != "" {
+		dir = filepath.Join(config.ProjectBrainstormDir(t.filesRoot, topic.ProjectID), strconv.FormatInt(topic.ID, 10))
+	}
+	for _, f := range files {
+		c.Files = append(c.Files, prompt.FileRef{Name: f.Name, Path: filepath.Join(dir, f.Stored)})
+	}
+	for _, x := range cards {
+		switch {
+		case x.ID == *card.SourceA:
+			c.A = idea(x)
+		case x.ID == *card.SourceB:
+			c.B = idea(x)
+		case isIdea(x) && x.Picked:
+			c.Picked = append(c.Picked, idea(x))
+		}
+	}
+	return prompt.BrainstormCombineTurn(c)
+}
+
 // BrainstormReply e tool-ul brainstorm_reply: raspunsul agentului devine cardul run-ului.
 func (t *Team) BrainstormReply(c mcp.Caller, in mcp.BrainstormReplyInput) (string, error) {
 	if c.BrainstormCardID == 0 {
@@ -145,6 +199,9 @@ func (t *Team) BrainstormReply(c mcp.Caller, in mcp.BrainstormReplyInput) (strin
 		return "", errors.New("text is required: 1-4000 characters")
 	case utf8.RuneCountInString(basis) > 500:
 		return "", errors.New("basis is too long: at most 500 characters")
+	}
+	if kind == store.CardQuestion && card.Combined() {
+		return "", errors.New("Do not ask questions; combine the two ideas.")
 	}
 	var options []string
 	if kind == store.CardQuestion {
@@ -185,15 +242,16 @@ func (t *Team) finishCard(ar activeRun, agentID int64, hash string, o runner.Out
 	defer t.emit(ar.projectID, "brainstorm", map[string]int64{"topicId": ar.topicID})
 	// o sesiune nesalvata doar porneste una noua data viitoare; cardul trebuie totusi inchis,
 	// altfel ramane running fara niciun run in spate
-	if o.SessionID != "" {
-		if err := t.st.SetBrainstormSession(ar.topicID, agentID, o.SessionID, hash); err != nil {
-			log.Printf("brainstorm card %d: saving session: %v", ar.cardID, err)
-		}
-	}
 	card, err := t.st.GetCard(ar.cardID)
 	if err != nil {
 		log.Printf("brainstorm card %d: %v", ar.cardID, err)
 		return nil // emit-ul de mai sus tot pleaca: UI-ul reciteste subiectul
+	}
+	// combinarea porneste fara sesiune si nu o salveaza: sesiunea subiectului ramane a ideilor
+	if o.SessionID != "" && !card.Combined() {
+		if err := t.st.SetBrainstormSession(ar.topicID, agentID, o.SessionID, hash); err != nil {
+			log.Printf("brainstorm card %d: saving session: %v", ar.cardID, err)
+		}
 	}
 	if card.Status == store.CardDone {
 		return nil // a raspuns cu brainstorm_reply
@@ -339,8 +397,81 @@ func (t *Team) AnotherIdea(cardID int64) error {
 		if !isIdea(card) {
 			return CardStateError("Another idea works only on an idea.")
 		}
+		if card.Combined() {
+			return CardStateError("Another idea does not work on a combined idea.")
+		}
 		next := store.BrainstormCard{TopicID: card.TopicID, RoundID: card.RoundID, AgentID: card.AgentID}
 		return t.st.AddCard(&next)
+	})
+}
+
+// Combine pune un card nou (waiting) in care agentul ales combina doua idei terminate ale subiectului.
+func (t *Team) Combine(topicID, aID, bID, agentID int64) (store.BrainstormCard, error) {
+	t.work.Lock()
+	card, projectID, err := t.combineLocked(topicID, aID, bID, agentID)
+	t.work.Unlock()
+	if err != nil {
+		return store.BrainstormCard{}, err
+	}
+	t.emit(projectID, "brainstorm", map[string]int64{"topicId": topicID})
+	t.Kick(projectID)
+	return card, nil
+}
+
+func (t *Team) combineLocked(topicID, aID, bID, agentID int64) (store.BrainstormCard, int64, error) {
+	topic, err := t.st.GetTopic(topicID)
+	if err != nil {
+		return store.BrainstormCard{}, 0, err
+	}
+	if topic.Archived {
+		return store.BrainstormCard{}, 0, CardStateError("The topic is archived.")
+	}
+	if aID == bID {
+		return store.BrainstormCard{}, 0, CardStateError("Pick two different ideas to combine.")
+	}
+	var src [2]store.BrainstormCard
+	for i, id := range []int64{aID, bID} {
+		c, err := t.st.GetCard(id)
+		if err != nil {
+			return store.BrainstormCard{}, 0, err
+		}
+		if c.TopicID != topicID || !isIdea(c) {
+			return store.BrainstormCard{}, 0, CardStateError("Only finished ideas of this topic can be combined.")
+		}
+		src[i] = c
+	}
+	agents, err := t.st.ListAgents(topic.ProjectID)
+	if err != nil {
+		return store.BrainstormCard{}, 0, err
+	}
+	if _, ok := store.FindAgent(agents, agentID); !ok || !slices.Contains(topic.Participants, agentID) {
+		return store.BrainstormCard{}, 0, BrainstormError("The agent is not a participant of this topic.")
+	}
+	card := store.BrainstormCard{TopicID: topicID, RoundID: max(src[0].RoundID, src[1].RoundID), AgentID: agentID,
+		SourceA: &src[0].ID, SourceB: &src[1].ID}
+	if err := t.st.AddCard(&card); err != nil {
+		return store.BrainstormCard{}, 0, err
+	}
+	return card, topic.ProjectID, nil
+}
+
+// EditCombined schimba titlul si textul unei idei combinate terminate (editare de utilizator).
+func (t *Team) EditCombined(cardID int64, title, text string) error {
+	title, text = strings.TrimSpace(title), strings.TrimSpace(text)
+	if title == "" || utf8.RuneCountInString(title) > 120 {
+		return BrainstormError("The title must have 1-120 characters.")
+	}
+	if text == "" || utf8.RuneCountInString(text) > 4000 {
+		return BrainstormError("The text must have 1-4000 characters.")
+	}
+	return t.cardAction(cardID, false, func(card store.BrainstormCard) error {
+		if err := t.st.EditCard(card.ID, title, text); err != nil {
+			if errors.Is(err, store.ErrConflict) {
+				return CardStateError("Only a finished combined idea can be edited.")
+			}
+			return err
+		}
+		return nil
 	})
 }
 
@@ -437,8 +568,15 @@ func (t *Team) sendToLeadLocked(topicID, leadID int64) (store.Message, int64, er
 	fmt.Fprintf(&b, "From the brainstorm %q: turn these picked ideas into tasks.", topic.Name)
 	// legatura spre subiect (ruta din UI), ca utilizatorul sa ajunga inapoi din chat
 	fmt.Fprintf(&b, "\nTopic: #/p/%d/brainstorm/%d", topic.ProjectID, topic.ID)
+	all, err := t.st.TopicCards(topic.ID)
+	if err != nil {
+		return store.Message{}, 0, err
+	}
 	for i, c := range ideas {
 		fmt.Fprintf(&b, "\n\n%d. %s (by %s)\n%s", i+1, c.Title, t.authorOf(c.AgentID), c.Text)
+		if from := combinedFrom(all, c); from != "" {
+			fmt.Fprintf(&b, "\nCombined from: %s", from)
+		}
 	}
 	m, err := t.addUserMessage(lead, b.String(), nil, false, false)
 	return m, topic.ProjectID, err
@@ -475,6 +613,9 @@ func (t *Team) BrainstormMarkdown(topicID int64) (string, []byte, error) {
 			wild = " (wild)"
 		}
 		fmt.Fprintf(&b, "\n### %s%s\n\n*By %s*\n\n%s\n", c.Title, wild, t.authorOf(c.AgentID), c.Text)
+		if from := combinedFrom(cards, c); from != "" {
+			fmt.Fprintf(&b, "\nCombined from: %s\n", from)
+		}
 		if c.Basis != "" {
 			fmt.Fprintf(&b, "\nBased on: %s\n", c.Basis)
 		}

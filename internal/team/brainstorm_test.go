@@ -667,3 +667,220 @@ func TestBrainstormStopCardInvalidID(t *testing.T) {
 		t.Fatalf("run oprit: %v", f.fs.stopped)
 	}
 }
+
+// doneIdea adauga o idee terminata (nealeasa) intr-o runda data.
+func doneIdea(t *testing.T, f *fixture, tp store.BrainstormTopic, roundID int64, a store.Agent, title string) store.BrainstormCard {
+	t.Helper()
+	c := store.BrainstormCard{TopicID: tp.ID, RoundID: roundID, AgentID: a.ID, Status: store.CardDone,
+		Kind: store.CardIdea, Title: title, Text: title + " in detail.", Basis: "net/sync.go"}
+	if err := f.st.AddCard(&c); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// twoIdeas: doua idei done din runde diferite (a doua runda e mai noua).
+func twoIdeas(t *testing.T, f *fixture, tp store.BrainstormTopic) (a, b store.BrainstormCard) {
+	t.Helper()
+	r1 := roundFor(t, f, tp, f.rook)
+	r2 := roundFor(t, f, tp, f.rook)
+	return doneIdea(t, f, tp, r1.RoundID, f.rook, "Rollback netcode"), doneIdea(t, f, tp, r2.RoundID, f.vera, "Lockstep replays")
+}
+
+func TestCombineCreatesWaitingCard(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	a, b := twoIdeas(t, f, tp)
+	c, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cardOf(t, f, c.ID)
+	if got.Status != store.CardWaiting || got.AgentID != f.rook.ID || got.RoundID != b.RoundID ||
+		got.SourceA == nil || *got.SourceA != a.ID || got.SourceB == nil || *got.SourceB != b.ID {
+		t.Fatalf("card: %+v", got)
+	}
+}
+
+func TestCombineRejects(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	a, b := twoIdeas(t, f, tp)
+	waiting := roundFor(t, f, tp, f.rook)
+	q := store.BrainstormCard{TopicID: tp.ID, RoundID: a.RoundID, AgentID: f.rook.ID, Status: store.CardDone,
+		Kind: store.CardQuestion, Title: "Q?", Options: []string{"a", "b"}}
+	if err := f.st.AddCard(&q); err != nil {
+		t.Fatal(err)
+	}
+	other := store.BrainstormTopic{ProjectID: f.p.ID, Name: "Other topic", Participants: []int64{f.rook.ID}}
+	if err := f.st.CreateTopic(&other); err != nil {
+		t.Fatal(err)
+	}
+	oc := doneIdea(t, f, other, roundFor(t, f, other, f.rook).RoundID, f.rook, "Elsewhere")
+	for name, ids := range map[string][2]int64{
+		"same":       {a.ID, a.ID},
+		"question":   {a.ID, q.ID},
+		"waiting":    {a.ID, waiting.ID},
+		"othertopic": {a.ID, oc.ID},
+	} {
+		var cse CardStateError
+		if _, err := f.tm.Combine(tp.ID, ids[0], ids[1], f.rook.ID); !errors.As(err, &cse) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	// agent care nu e participant
+	var be BrainstormError
+	if _, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.lead.ID); !errors.As(err, &be) {
+		t.Fatalf("non-participant: %v", err)
+	}
+	// subiect arhivat
+	tp.Archived = true
+	if err := f.st.UpdateTopic(tp); err != nil {
+		t.Fatal(err)
+	}
+	var cse CardStateError
+	if _, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID); !errors.As(err, &cse) {
+		t.Fatalf("archived: %v", err)
+	}
+}
+
+func TestCombineRunNoSession(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	card := roundFor(t, f, tp, f.rook)
+	run := startCard(t, f, f.rook, card)
+	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone, Result: "Use rollback netcode", SessionID: "S"})
+	a := cardOf(t, f, card.ID)
+	b := doneIdea(t, f, tp, card.RoundID, f.vera, "Lockstep replays")
+
+	c, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = startCard(t, f, f.rook, c)
+	if hasFlag(run.Args, "--resume") {
+		t.Fatalf("combinarea reia sesiunea: %v", run.Args)
+	}
+	turn := argValue(run.Args, "-p")
+	if !strings.Contains(turn, "Combine these two ideas") || !strings.Contains(turn, "Lockstep replays") {
+		t.Fatalf("tura: %q", turn)
+	}
+	f.fs.finish(run.ID, runner.Outcome{Status: store.RunDone, Result: "Merged", SessionID: "OTHER"})
+	if sid, _, _ := f.st.BrainstormSession(tp.ID, f.rook.ID); sid != "S" {
+		t.Fatalf("sesiunea s-a schimbat: %q", sid)
+	}
+	if got := cardOf(t, f, c.ID); got.Status != store.CardDone {
+		t.Fatalf("card: %+v", got)
+	}
+}
+
+func TestCombineReplyNoQuestion(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	a, b := twoIdeas(t, f, tp)
+	card, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cl := f.caller(t, startCard(t, f, f.rook, card))
+	_, err = f.tm.BrainstormReply(cl, mcp.BrainstormReplyInput{Kind: store.CardQuestion, Title: "Q?", Text: "Which?", Options: []string{"a", "b"}})
+	if err == nil || err.Error() != "Do not ask questions; combine the two ideas." {
+		t.Fatalf("intrebare: %v", err)
+	}
+	if got := cardOf(t, f, card.ID); got.Status != store.CardRunning {
+		t.Fatalf("card: %s", got.Status)
+	}
+	if _, err := f.tm.BrainstormReply(cl, mcp.BrainstormReplyInput{Kind: store.CardIdea, Title: "Both", Text: "Mixed."}); err != nil {
+		t.Fatal(err)
+	}
+	if got := cardOf(t, f, card.ID); got.Status != store.CardDone {
+		t.Fatalf("card: %s", got.Status)
+	}
+}
+
+func TestAnotherIdeaOnCombined(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	a, b := twoIdeas(t, f, tp)
+	c, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.FinishCard(c.ID, store.CardIdea, "Both", "Mixed.", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	var cse CardStateError
+	if err := f.tm.AnotherIdea(c.ID); !errors.As(err, &cse) {
+		t.Fatalf("AnotherIdea: %v", err)
+	}
+}
+
+func TestEditCombined(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	a, b := twoIdeas(t, f, tp)
+	c, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cse CardStateError
+	if err := f.tm.EditCombined(c.ID, "New", "Text"); !errors.As(err, &cse) {
+		t.Fatalf("card in asteptare: %v", err)
+	}
+	if err := f.st.FinishCard(c.ID, store.CardIdea, "Both", "Mixed.", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.EditCombined(c.ID, "  New title ", " New text "); err != nil {
+		t.Fatal(err)
+	}
+	if got := cardOf(t, f, c.ID); got.Title != "New title" || got.Text != "New text" || !got.Edited {
+		t.Fatalf("card: %+v", got)
+	}
+	var be BrainstormError
+	for name, in := range map[string][2]string{
+		"title empty": {" ", "x"}, "title long": {strings.Repeat("a", 121), "x"},
+		"text empty": {"x", " "}, "text long": {"x", strings.Repeat("a", 4001)},
+	} {
+		if err := f.tm.EditCombined(c.ID, in[0], in[1]); !errors.As(err, &be) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	if err := f.tm.EditCombined(a.ID, "x", "y"); !errors.As(err, &cse) {
+		t.Fatalf("card normal: %v", err)
+	}
+}
+
+func TestContextShowsCombinedFrom(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook, f.vera)
+	a, b := twoIdeas(t, f, tp)
+	c, err := f.tm.Combine(tp.ID, a.ID, b.ID, f.rook.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.st.FinishCard(c.ID, store.CardIdea, "Both", "Mixed.", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.PickCard(c.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	const from = "Rollback netcode + Lockstep replays"
+	// tura normala urmatoare
+	r := store.BrainstormRound{TopicID: tp.ID, Text: "More?"}
+	cards, err := f.st.AddRound(&r, []int64{f.vera.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := startCard(t, f, f.vera, cards[0])
+	if !strings.Contains(argValue(run.Args, "-p"), "(combined from "+from+")") {
+		t.Fatalf("tura: %q", argValue(run.Args, "-p"))
+	}
+	_, body, err := f.tm.BrainstormMarkdown(tp.ID)
+	if err != nil || !strings.Contains(string(body), "Combined from: "+from) {
+		t.Fatalf("markdown: %v\n%s", err, body)
+	}
+	m, err := f.tm.SendToLead(tp.ID, f.lead.ID)
+	if err != nil || !strings.Contains(m.Text, "Combined from: "+from) {
+		t.Fatalf("mesaj: %v %q", err, m.Text)
+	}
+}
