@@ -18,6 +18,7 @@ import { saveCategory } from "./category.js";
 import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
+import { brainstormView } from "./brainstorm.js";
 import { renderMarkdown, userText, collapsible } from "./md.js";
 import { attachMentions } from "./mentions.js";
 import { openCodeExplorer, shortcutLabel, modKey } from "./code-explorer.js";
@@ -66,10 +67,12 @@ const TABS = [
   { id: "tasks", label: "Tasks" },
   { id: "team", label: "Team" },
   { id: "files", label: "Files" },
+  { id: "brainstorm", label: "Brainstorm" },
   { id: "stats", label: "Stats" },
 ];
 
-// parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId, taskId, recurringId }.
+// parseWorkspaceRoute: restul hash-ului dupa #/p/3 -> { tab, agentId, taskId, recurringId, topicId }.
+// #/p/3/brainstorm/4 deschide subiectul 4 din Brainstorm.
 // Link-urile vechi #/p/3/agent/7 duc in tab-ul Echipa, cu agentul 7 selectat.
 // #/p/3/tasks/12 deschide modala task-ului 12 peste board.
 export function parseWorkspaceRoute(rest) {
@@ -78,7 +81,7 @@ export function parseWorkspaceRoute(rest) {
   const legacy = { "task-uri": "tasks", "echipa": "team", "fisiere": "files" };
   if (parts[0] in legacy) parts[0] = legacy[parts[0]];
   if (parts[0] === "agent") {
-    return { tab: "team", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null, taskId: null, recurringId: null };
+    return { tab: "team", agentId: /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null, taskId: null, recurringId: null, topicId: null };
   }
   const tab = TABS.some((t) => t.id === parts[0]) ? parts[0] : TABS[0].id;
   const num = /^\d+$/.test(parts[1] || "") ? Number(parts[1]) : null;
@@ -86,7 +89,8 @@ export function parseWorkspaceRoute(rest) {
   const taskId = tab === "tasks" ? num : null;
   // #/p/3/tasks/recurring/5 deschide Run history al sarcinii recurente 5 peste board
   const recurringId = tab === "tasks" && parts[1] === "recurring" && /^\d+$/.test(parts[2] || "") ? Number(parts[2]) : null;
-  return { tab, agentId, taskId, recurringId };
+  const topicId = tab === "brainstorm" ? num : null;
+  return { tab, agentId, taskId, recurringId, topicId };
 }
 
 export async function workspaceView(root, projectId, route) {
@@ -277,6 +281,12 @@ export async function workspaceView(root, projectId, route) {
     agentKind: (id) => kindOf(state.project.agents.find((a) => a.id === id)),
     agentRole: (id) => state.project.agents.find((a) => a.id === id)?.role || "",
   });
+  // tab-ul Brainstorm: lista de subiecte se incarca de la inceput (insigna cu intrebarile deschise)
+  let bsBadge = 0;
+  const brainstorm = brainstormView(projectId, {
+    agents: () => state.project.agents,
+    onBadge: (n) => { if (n !== bsBadge) { bsBadge = n; renderTabs(); } },
+  });
   const bodies = {
     "team": el("div", { class: "tab-body team-body" }, canvas.el),
     "tasks": el("section", { class: "tab-body tasks-body" },
@@ -285,6 +295,7 @@ export async function workspaceView(root, projectId, route) {
       el("div", { class: "board-row" }, needsBox, board),
       boardHint),
     "files": el("div", { class: "tab-body files-body" }, filesSection),
+    "brainstorm": brainstorm.el,
     "stats": stats.el,
   };
   const ws = el("div", { class: "ws" },
@@ -540,7 +551,8 @@ export async function workspaceView(root, projectId, route) {
     tabsNav.replaceChildren(...TABS.map((t) => el("a", {
       class: "tab", href: `#/p/${projectId}/${t.id}`,
       "aria-current": t.id === state.tab ? "page" : null,
-    }, t.label)));
+    }, t.label, t.id === "brainstorm" && bsBadge
+      ? el("span", { class: "tab-badge", title: `${bsBadge} open ${bsBadge === 1 ? "question" : "questions"}` }, bsBadge) : null)));
     for (const [id, body] of Object.entries(bodies)) body.hidden = id !== state.tab;
     const panel = state.panel;
     panelTabs.replaceChildren(...[["details", "Details"], ["chat", "Chat"]].map(([id, label]) =>
@@ -676,6 +688,7 @@ export async function workspaceView(root, projectId, route) {
     if (keep) { state.drawer = true; applyDrawer(); }
     renderTabs();
     if (enteringStats) stats.load();
+    if (r.tab === "brainstorm") brainstorm.open(r.topicId);
     syncHash();
     if (!chatBox.hidden) scrollDown(true);
   }
@@ -2119,6 +2132,8 @@ export async function workspaceView(root, projectId, route) {
     try { ev = JSON.parse(msg.data); } catch { return; }
     if (ev.type === "message" && ev.data.agentId === state.selected) addMessage(ev.data);
     if (ev.type === "files") loadFiles();
+    // Brainstorm: subiectul deschis se reincarca, la celelalte doar lista (insigna); nu atinge restul paginii
+    if (ev.type === "brainstorm") { brainstorm.refresh(ev.data?.topicId || 0); return; }
     // Run history: doar la schimbarile de task (o rulare noua, un status, fisiere atasate), nu la fiecare mesaj
     if (ev.type === "task") runHistory?.refresh();
     scheduleReload();
@@ -2130,6 +2145,7 @@ export async function workspaceView(root, projectId, route) {
     hadError = false;
     await reload();
     loadFiles();
+    brainstorm.refresh(0);
     await loadThread();
     syncLive();
   };
@@ -2154,6 +2170,8 @@ export async function workspaceView(root, projectId, route) {
     clearInterval(agesTimer);
   };
   if (state.tab === "stats") stats.load(); // pagina deschisa direct pe #/p/3/stats
+  if (state.tab === "brainstorm") brainstorm.open(route.topicId); // sau direct pe #/p/3/brainstorm/4
+  else brainstorm.refresh(0); // doar pentru insigna
   return { cleanup, update };
 }
 
