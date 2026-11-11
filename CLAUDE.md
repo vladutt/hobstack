@@ -375,7 +375,7 @@ rounds (mesajul utilizatorului), cards (un card per agent per runda, status wait
 Fiecare participant raspunde la un mesaj cu un card: idee, wild sau intrebare cu 2-5 optiuni + Other (max 2 intrebari per agent pe runda), prin
 tool-ul MCP brainstorm_reply (singurul tool al run-ului; daca nu-l cheama, textul final devine idee, primul rand fiind titlul). Run-urile sunt
 doar citire, cu sesiune Claude separata per (subiect, agent) in brainstorm_sessions (stearsa la schimbarea contului). Reconcile porneste un card
-doar cand agentul e liber (fara task Queued nestopat, fara note) si proiectul nu e pe pauza; "Run now" trece inaintea cozii. Stop = card Stopped
+doar cand agentul e liber (fara task Queued nestopat, fara note); merge si cu echipa oprita (Stop team), ca chat-ul; "Run now" trece inaintea cozii. Stop = card Stopped
 cu Retry; agentii scosi sau stersi -> Skipped; Recover pune cardurile running inapoi in waiting. Atasamentele subiectului stau in
 projects/<pid>/brainstorm/<topic>/ (--add-dir). Iesiri: Pick; Save to Files (brainstorm-<slug>.md in Files, suprascris); Send to lead (mesaj de chat
 al utilizatorului catre un lider, cu linkul "Topic: #/p/<pid>/brainstorm/<tid>"). Intrebarile nu apar in Needs you, doar ca insigna pe tab. API:
