@@ -144,3 +144,92 @@ func TestBrainstormSessionsResetOnAccount(t *testing.T) {
 		t.Fatalf("sid = %q", sid)
 	}
 }
+
+// Fix: un agent fara task-uri dar cu carduri de brainstorming ramane ca istoric (deleted = 1):
+// ideile alese nu dispar, cardurile in asteptare devin skipped.
+func TestBrainstormDeleteAgentKeepsCards(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	w := newWorker(t, s, p.ID, "Rook")
+	tp := newTopic(t, s, p.ID, "Ideas", lead.ID, w.ID)
+	r := BrainstormRound{TopicID: tp.ID, Text: "x"}
+	cards, _ := s.AddRound(&r, []int64{w.ID})
+	picked := BrainstormCard{TopicID: tp.ID, RoundID: r.ID, AgentID: w.ID, Status: CardDone, Kind: CardIdea, Title: "Rollback", Picked: true}
+	if err := s.AddCard(&picked); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteAgent(w.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetCard(picked.ID); err != nil || !got.Picked {
+		t.Fatalf("ideea aleasa: %+v %v", got, err)
+	}
+	if a, err := s.GetAgent(w.ID); err != nil || !a.Deleted {
+		t.Fatalf("agent: %+v %v", a, err)
+	}
+	if _, err := s.SkipOrphanCards(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetCard(cards[0].ID); got.Status != CardSkipped {
+		t.Fatalf("cardul in asteptare: %s", got.Status)
+	}
+}
+
+// Fix: NextCard nu intoarce cardurile subiectelor arhivate.
+func TestBrainstormNextCardSkipsArchived(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	tp := newTopic(t, s, p.ID, "Ideas", lead.ID)
+	r := BrainstormRound{TopicID: tp.ID, Text: "x"}
+	cards, _ := s.AddRound(&r, tp.Participants)
+	if err := s.SetCardPriority(cards[0].ID, true); err != nil {
+		t.Fatal(err)
+	}
+	tp.Archived = true
+	if err := s.UpdateTopic(tp); err != nil {
+		t.Fatal(err)
+	}
+	for _, prio := range []bool{false, true} {
+		if c, ok, err := s.NextCard(lead.ID, prio); err != nil || ok {
+			t.Fatalf("priority=%v: %+v %v %v", prio, c, ok, err)
+		}
+	}
+}
+
+// Fix: raspunsul si cardul care urmeaza se salveaza impreuna; la eroare nu ramane niciunul.
+func TestBrainstormAnswerWithFollowUp(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	tp := newTopic(t, s, p.ID, "Ideas", lead.ID)
+	r := BrainstormRound{TopicID: tp.ID, Text: "x"}
+	cards, _ := s.AddRound(&r, tp.Participants)
+	q := cards[0]
+	if err := s.FinishCard(q.ID, CardQuestion, "Which?", "A or B?", "", []string{"A", "B"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER no_cards BEFORE INSERT ON brainstorm_cards BEGIN SELECT RAISE(ABORT, 'disk full'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AnswerCardWithFollowUp(q.ID, "A"); err == nil {
+		t.Fatal("fara eroare cu insert-ul blocat")
+	}
+	if got, _ := s.GetCard(q.ID); got.Answer != "" {
+		t.Fatalf("raspunsul a ramas fara cardul urmator: %q", got.Answer)
+	}
+	if _, err := s.db.Exec(`DROP TRIGGER no_cards`); err != nil {
+		t.Fatal(err)
+	}
+	next, err := s.AnswerCardWithFollowUp(q.ID, "A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Status != CardWaiting || next.FollowsID == nil || *next.FollowsID != q.ID || next.AgentID != lead.ID || next.RoundID != r.ID {
+		t.Fatalf("cardul urmator: %+v", next)
+	}
+	if got, _ := s.GetCard(q.ID); got.Answer != "A" {
+		t.Fatalf("raspuns: %q", got.Answer)
+	}
+	if _, err := s.AnswerCardWithFollowUp(q.ID, "B"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("al doilea raspuns: %v", err)
+	}
+}

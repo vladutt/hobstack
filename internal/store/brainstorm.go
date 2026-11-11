@@ -319,9 +319,11 @@ func (s *Store) TopicCards(topicID int64) ([]BrainstormCard, error) {
 }
 
 // NextCard intoarce cardul waiting al agentului: intai cele cu prioritate, apoi cel mai vechi.
-// Cu priorityOnly doar cele cu prioritate.
+// Cu priorityOnly doar cele cu prioritate. Subiectele arhivate se sar.
 func (s *Store) NextCard(agentID int64, priorityOnly bool) (BrainstormCard, bool, error) {
-	q := `WHERE agent_id = ? AND status = 'waiting'`
+	// cardurile subiectelor arhivate raman in asteptare, nu pornesc
+	q := `WHERE agent_id = ? AND status = 'waiting'
+		AND topic_id NOT IN (SELECT id FROM brainstorm_topics WHERE archived = 1)`
 	if priorityOnly {
 		q += ` AND priority = 1`
 	}
@@ -362,6 +364,42 @@ func (s *Store) AnswerCard(id int64, answer string) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+// AnswerCardWithFollowUp salveaza raspunsul la intrebare si pune, in aceeasi tranzactie, un card
+// waiting pentru acelasi agent si runda (FollowsID = intrebarea). ErrConflict ca la AnswerCard.
+func (s *Store) AnswerCardWithFollowUp(id int64, answer string) (BrainstormCard, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return BrainstormCard{}, err
+	}
+	defer tx.Rollback()
+	ts := now()
+	res, err := tx.Exec(`UPDATE brainstorm_cards SET answer = ?, updated_at = ?
+		WHERE id = ? AND kind = 'question' AND status = 'done' AND answer = ''`, answer, ts, id)
+	if err := mustAffect(res, err); err != nil {
+		if err == ErrNotFound {
+			if _, gerr := scanCard(tx.QueryRow(`SELECT `+brainstormCardCols+` FROM brainstorm_cards WHERE id = ?`, id)); gerr == nil {
+				return BrainstormCard{}, ErrConflict
+			}
+		}
+		return BrainstormCard{}, err
+	}
+	q, err := scanCard(tx.QueryRow(`SELECT `+brainstormCardCols+` FROM brainstorm_cards WHERE id = ?`, id))
+	if err != nil {
+		return BrainstormCard{}, err
+	}
+	res, err = tx.Exec(`INSERT INTO brainstorm_cards (topic_id, round_id, agent_id, status, follows_id, created_at, updated_at)
+		VALUES (?, ?, ?, 'waiting', ?, ?, ?)`, q.TopicID, q.RoundID, q.AgentID, q.ID, ts, ts)
+	if err != nil {
+		return BrainstormCard{}, err
+	}
+	next := BrainstormCard{TopicID: q.TopicID, RoundID: q.RoundID, AgentID: q.AgentID, Status: CardWaiting, FollowsID: &q.ID,
+		Options: []string{}, CreatedAt: parseTime(ts), UpdatedAt: parseTime(ts)}
+	if next.ID, err = res.LastInsertId(); err != nil {
+		return BrainstormCard{}, err
+	}
+	return next, tx.Commit()
 }
 
 func (s *Store) SetCardPicked(id int64, picked bool) error {

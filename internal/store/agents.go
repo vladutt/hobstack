@@ -288,13 +288,18 @@ func (s *Store) DeleteAgent(id int64) error {
 	if _, err := tx.Exec(`UPDATE agents SET reviewer_id = NULL WHERE reviewer_id = ?`, id); err != nil {
 		return err
 	}
-	if tasks == 0 {
+	// cardurile de brainstorming sunt istoric ca task-urile (ON DELETE CASCADE le-ar sterge, cu ideile alese)
+	var cards int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM brainstorm_cards WHERE agent_id = ?`, id).Scan(&cards); err != nil {
+		return err
+	}
+	if tasks == 0 && cards == 0 {
 		if err := mustAffect(tx.Exec(`DELETE FROM agents WHERE id = ?`, id)); err != nil {
 			return err
 		}
 		return tx.Commit()
 	}
-	// task-uri terminate: agentul ramane doar pentru istoric, numele se elibereaza (indexul unic pe nume);
+	// task-uri terminate sau carduri: agentul ramane doar pentru istoric, numele se elibereaza (indexul unic pe nume);
 	// sarcinile recurente raman fara asignat, ca la stergerea randului (ON DELETE SET NULL)
 	if _, err := tx.Exec(`UPDATE recurring_tasks SET assignee_id = NULL WHERE assignee_id = ?`, id); err != nil {
 		return err
