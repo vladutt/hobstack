@@ -62,7 +62,7 @@ func (t *Team) StopCard(cardID int64) error {
 	if t.stopRun(func(_ int64, ar activeRun) bool { return ar.cardID == cardID }) {
 		return nil
 	}
-	return t.cardAction(cardID, func(card store.BrainstormCard) error {
+	return t.cardAction(cardID, false, func(card store.BrainstormCard) error {
 		if card.Status != store.CardWaiting {
 			return CardStateError("This card is not waiting or running.")
 		}

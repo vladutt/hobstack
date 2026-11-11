@@ -202,8 +202,9 @@ func (t *Team) finishCard(ar activeRun, agentID int64, hash string, o runner.Out
 	case o.Status == store.RunStopped:
 		return t.st.SetCardState(card.ID, store.CardStopped, o.RunID, "")
 	case o.Status == store.RunFailed && runner.IsAuthError(o.Error):
-		// contul a cazut: cardul asteapta, proiectul intra pe pauza ca la orice run
-		if err := t.st.SetCardState(card.ID, store.CardWaiting, "", ""); err != nil {
+		// contul a cazut: cardul e Failed (cu Retry), proiectul intra pe pauza ca la orice run.
+		// Nu waiting: pe pauza brainstorming-ul merge, cardul ar reporni la nesfarsit cu contul picat
+		if err := t.st.SetCardState(card.ID, store.CardFailed, o.RunID, o.Error); err != nil {
 			return err
 		}
 		a, err := t.st.GetAgent(agentID)
@@ -283,19 +284,21 @@ func (t *Team) NewRound(topicID int64, text string) (store.BrainstormRound, []st
 
 // cardAction e drumul comun al actiunilor pe un card: sub t.work citeste cardul si aplica fn,
 // apoi anunta UI-ul si trezeste proiectul (un card nou sau reluat poate porni).
-func (t *Team) cardAction(cardID int64, fn func(card store.BrainstormCard) error) error {
+// Cu active, actiunea e refuzata pe un subiect arhivat (pune sau reia carduri care n-ar porni).
+func (t *Team) cardAction(cardID int64, active bool, fn func(card store.BrainstormCard) error) error {
 	t.work.Lock()
 	card, err := t.st.GetCard(cardID)
+	var topic store.BrainstormTopic
+	if err == nil {
+		topic, err = t.st.GetTopic(card.TopicID)
+	}
+	if err == nil && active && topic.Archived {
+		err = CardStateError("The topic is archived.")
+	}
 	if err == nil {
 		err = fn(card)
 	}
-	projectID := int64(0)
-	if err == nil {
-		var topic store.BrainstormTopic
-		if topic, err = t.st.GetTopic(card.TopicID); err == nil {
-			projectID = topic.ProjectID
-		}
-	}
+	projectID := topic.ProjectID
 	t.work.Unlock()
 	if err != nil {
 		return err
@@ -318,21 +321,21 @@ func (t *Team) AnswerCardQuestion(cardID int64, answer string) error {
 	if answer == "" || utf8.RuneCountInString(answer) > 4000 {
 		return BrainstormError("The answer must have 1-4000 characters.")
 	}
-	return t.cardAction(cardID, func(card store.BrainstormCard) error {
-		if err := t.st.AnswerCard(card.ID, answer); err != nil {
+	return t.cardAction(cardID, false, func(card store.BrainstormCard) error {
+		// raspunsul si cardul nou intr-o tranzactie: fara raspuns salvat si agent care nu mai vine
+		if _, err := t.st.AnswerCardWithFollowUp(card.ID, answer); err != nil {
 			if errors.Is(err, store.ErrConflict) {
 				return CardStateError("This card is not an open question.")
 			}
 			return err
 		}
-		next := store.BrainstormCard{TopicID: card.TopicID, RoundID: card.RoundID, AgentID: card.AgentID, FollowsID: &card.ID}
-		return t.st.AddCard(&next)
+		return nil
 	})
 }
 
 // AnotherIdea cere agentului inca o idee pe acelasi mesaj (card nou in aceeasi runda).
 func (t *Team) AnotherIdea(cardID int64) error {
-	return t.cardAction(cardID, func(card store.BrainstormCard) error {
+	return t.cardAction(cardID, true, func(card store.BrainstormCard) error {
 		if !isIdea(card) {
 			return CardStateError("Another idea works only on an idea.")
 		}
@@ -343,7 +346,7 @@ func (t *Team) AnotherIdea(cardID int64) error {
 
 // RunNow: cardul porneste inaintea urmatorului task din coada al agentului (dupa run-ul in curs).
 func (t *Team) RunNow(cardID int64) error {
-	return t.cardAction(cardID, func(card store.BrainstormCard) error {
+	return t.cardAction(cardID, true, func(card store.BrainstormCard) error {
 		if card.Status != store.CardWaiting {
 			return CardStateError("Run now works only on a waiting card.")
 		}
@@ -353,7 +356,7 @@ func (t *Team) RunNow(cardID int64) error {
 
 // RetryCard pune inapoi in asteptare un card oprit sau esuat.
 func (t *Team) RetryCard(cardID int64) error {
-	return t.cardAction(cardID, func(card store.BrainstormCard) error {
+	return t.cardAction(cardID, true, func(card store.BrainstormCard) error {
 		if card.Status != store.CardStopped && card.Status != store.CardFailed {
 			return CardStateError("Retry works only on a stopped or failed card.")
 		}
@@ -363,7 +366,7 @@ func (t *Team) RetryCard(cardID int64) error {
 
 // PickCard fixeaza (sau scoate) ideea in zona Picked a subiectului.
 func (t *Team) PickCard(cardID int64, picked bool) error {
-	return t.cardAction(cardID, func(card store.BrainstormCard) error {
+	return t.cardAction(cardID, false, func(card store.BrainstormCard) error {
 		if !isIdea(card) {
 			return CardStateError("Only ideas can be picked.")
 		}
@@ -442,7 +445,8 @@ func (t *Team) sendToLeadLocked(topicID, leadID int64) (store.Message, int64, er
 }
 
 // BrainstormMarkdown scrie rezumatul subiectului pentru Files: descrierea, ideile alese si
-// intrebarile cu raspuns. Numele e fix per subiect, ca o salvare noua sa-l suprascrie.
+// intrebarile cu raspuns. Numele e fix per subiect (cu id-ul, ca doua subiecte cu acelasi
+// slug sa nu se suprascrie), ca o salvare noua sa-l inlocuiasca.
 func (t *Team) BrainstormMarkdown(topicID int64) (string, []byte, error) {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -493,7 +497,7 @@ func (t *Team) BrainstormMarkdown(topicID int64) (string, []byte, error) {
 		}
 		fmt.Fprintf(&b, "\n**%s** (%s)\n\nAnswer: %s\n", q, t.authorOf(c.AgentID), c.Answer)
 	}
-	return "brainstorm-" + topicSlug(topic.Name) + ".md", []byte(b.String()), nil
+	return fmt.Sprintf("brainstorm-%d-%s.md", topic.ID, topicSlug(topic.Name)), []byte(b.String()), nil
 }
 
 // topicSlug face din numele subiectului un nume de fisier: litere mici, cifre si "-".

@@ -2,6 +2,7 @@ package team
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -193,17 +194,93 @@ func TestBrainstormFailedRun(t *testing.T) {
 	}
 }
 
-func TestBrainstormAuthFailedWaits(t *testing.T) {
+// Fix: un card cu contul picat devine Failed (cu Retry); pe pauza nu se reia la nesfarsit.
+func TestBrainstormAuthFailedNoLoop(t *testing.T) {
 	f := setup(t)
 	tp := topicWith(t, f, f.rook)
 	card := roundFor(t, f, tp, f.rook)
 	run := startCard(t, f, f.rook, card)
 	f.fs.finish(run.ID, runner.Outcome{Status: store.RunFailed, Error: "Invalid API key · Please run /login"})
-	if got := cardOf(t, f, card.ID); got.Status != store.CardWaiting {
+	if got := cardOf(t, f, card.ID); got.Status != store.CardFailed || !strings.Contains(got.Error, "Invalid API key") {
 		t.Fatalf("card: %+v", got)
 	}
 	if p, _ := f.st.GetProject(f.p.ID); !p.Paused {
 		t.Fatal("proiectul nu e pe pauza")
+	}
+	n := f.fs.count()
+	mustReconcile(t, f)
+	if f.fs.count() != n {
+		t.Fatal("cardul a pornit din nou dupa eroarea de cont")
+	}
+}
+
+// Fix: Stop team nu opreste brainstorming-ul (merge pe pauza, ca chat-ul).
+func TestBrainstormSurvivesStopTeam(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook)
+	card := roundFor(t, f, tp, f.rook)
+	mustReconcile(t, f)
+	if !cardRunOf(t, f, f.fs.last(t, f.rook), card.ID) {
+		t.Fatal("cardul nu a pornit")
+	}
+	if err := f.tm.Stop(f.p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.fs.stopped) != 0 {
+		t.Fatalf("run oprit: %v", f.fs.stopped)
+	}
+	if got := cardOf(t, f, card.ID); got.Status != store.CardRunning {
+		t.Fatalf("card: %s", got.Status)
+	}
+}
+
+// Fix: pe pauza, o nota nelivrata de la alt agent nu blocheaza cardurile.
+func TestBrainstormPausedWithAgentNote(t *testing.T) {
+	f := setup(t)
+	if err := f.st.SetPaused(f.p.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.tm.note(f.p.ID, f.rook.ID, "Vera finished T-1.", false); err != nil {
+		t.Fatal(err)
+	}
+	tp := topicWith(t, f, f.rook)
+	card := roundFor(t, f, tp, f.rook)
+	mustReconcile(t, f)
+	if got := cardOf(t, f, card.ID); got.Status != store.CardRunning {
+		t.Fatalf("card: %s", got.Status)
+	}
+}
+
+// Fix: pe un subiect arhivat cardurile nu pornesc si actiunile care pun carduri noi sunt refuzate.
+func TestBrainstormArchivedTopic(t *testing.T) {
+	f := setup(t)
+	tp := topicWith(t, f, f.rook)
+	card := roundFor(t, f, tp, f.rook)
+	idea := pickedIdea(t, f, card, f.rook, store.CardIdea, "Rollback netcode")
+	failed := store.BrainstormCard{TopicID: tp.ID, RoundID: card.RoundID, AgentID: f.rook.ID, Status: store.CardFailed}
+	if err := f.st.AddCard(&failed); err != nil {
+		t.Fatal(err)
+	}
+	tp.Archived = true
+	if err := f.st.UpdateTopic(tp); err != nil {
+		t.Fatal(err)
+	}
+	mustReconcile(t, f)
+	if got := cardOf(t, f, card.ID); got.Status != store.CardWaiting {
+		t.Fatalf("card: %s", got.Status)
+	}
+	if _, ok := f.fs.lastOK(f.rook); ok {
+		t.Fatal("run pe un subiect arhivat")
+	}
+	for name, fn := range map[string]func() error{
+		"Another idea": func() error { return f.tm.AnotherIdea(idea.ID) },
+		"Run now":      func() error { return f.tm.RunNow(card.ID) },
+		"Retry":        func() error { return f.tm.RetryCard(failed.ID) },
+	} {
+		var cse CardStateError
+		if err := fn(); !errors.As(err, &cse) || !strings.Contains(err.Error(), "archived") {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
 }
 
@@ -449,7 +526,7 @@ func TestBrainstormMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if name != "brainstorm-netcode.md" {
+	if want := fmt.Sprintf("brainstorm-%d-netcode.md", tp.ID); name != want {
 		t.Fatalf("nume: %q", name)
 	}
 	for _, want := range []string{"# Netcode", "How do we sync players?", "Lockstep replays", "Rook", "wild", "net/sync.go", "PvP or co-op?", "Co-op"} {

@@ -207,16 +207,11 @@ func (t *Team) Reconcile(projectID int64) error {
 				return err
 			}
 		}
-		// brainstorming pentru agentii ramasi liberi si fara note (task-urile din coada nu ruleaza pe pauza)
+		// brainstorming pentru agentii ramasi liberi (task-urile din coada nu ruleaza pe pauza).
+		// Notele altor agenti nu se livreaza pe pauza: nu blocheaza cardurile; cei cu note
+		// de la utilizator au pornit deja in bucla de mai sus
 		for _, a := range agents {
 			if t.isActive(a.ID) {
-				continue
-			}
-			pending, err := t.st.HasUndelivered(a.ID)
-			if err != nil {
-				return err
-			}
-			if pending {
 				continue
 			}
 			if err := cardRun(a, false); err != nil {
@@ -477,7 +472,7 @@ func (t *Team) startFailed(p store.Project, notify, a store.Agent, cause error) 
 }
 
 // Stop opreste echipa: pauza, procesele active sunt oprite (in afara de conversatiile
-// pornite de un mesaj al utilizatorului), task-urile in lucru revin in Queued.
+// pornite de un mesaj al utilizatorului si de brainstorming), task-urile in lucru revin in Queued.
 // Procesele se opresc asincron; finish vine dupa.
 func (t *Team) Stop(projectID int64) error {
 	t.work.Lock()
@@ -489,8 +484,9 @@ func (t *Team) Stop(projectID int64) error {
 	t.mu.Lock()
 	var ids []string
 	for _, ar := range t.active {
-		// o conversatie pornita de utilizator (request) se termina; Stop opreste munca din board
-		if ar.projectID == projectID && ar.request == nil {
+		// o conversatie pornita de utilizator (request) se termina, iar brainstorming-ul (cardID)
+		// merge si pe pauza; Stop opreste munca din board
+		if ar.projectID == projectID && ar.request == nil && ar.cardID == 0 {
 			ids = append(ids, ar.runID)
 		}
 	}
