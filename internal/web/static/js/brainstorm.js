@@ -2,9 +2,10 @@
 // deschis. Fiecare mesaj al utilizatorului e o runda; sub el, cate un card per agent participant
 // (idee, idee "wild" sau o intrebare inapoi). Ideile alese stau fixate sus.
 import { api, upload } from "./api.js";
-import { el, avatar, kindOf, toast, clock } from "./ui.js";
-import { renderMarkdown, userText } from "./md.js";
+import { el, avatar, kindOf, toneOf, toast, clock } from "./ui.js";
+import { userText } from "./md.js";
 import { onPasteFiles, fileThumb, releaseThumb } from "./paste.js";
+import { openIdea as openIdeaModal, syncIdea, closeIdea, plainText, ideaTags, stateText } from "./brainstorm-idea.js";
 
 // brainstormView(projectId, { agents, onBadge })
 //   agents: () => agentii proiectului (lista curenta din workspace)
@@ -18,7 +19,6 @@ export function brainstormView(projectId, { agents, onBadge }) {
     data: null,      // GET /api/brainstorm/{tid}: { topic, files, rounds }
     mode: "thread",  // "thread", "new" (formularul de subiect nou) sau "edit"
     pending: [],     // fisierele alese pentru urmatoarea runda
-    others: new Map(), // cardId -> textul din campul "Other" (ramane la redesenare)
     busy: new Set(),   // butoane apasate: cardId:actiune, ca sa nu trimitem de doua ori
     sending: false,    // runda se trimite: Send ramane dezactivat si daca un eveniment redeseneaza
     loaded: false,
@@ -162,6 +162,8 @@ export function brainstormView(projectId, { agents, onBadge }) {
     renderHead();
     renderPicked();
     renderThread();
+    const byId = new Map(allCards().map((c) => [c.id, c]));
+    syncIdea((id) => byId.get(id)); // modala deschisa: cardul proaspat
     const t = st.data.topic;
     archivedNote.hidden = !t.archived;
     archivedNote.replaceChildren("This topic is archived. ",
@@ -176,7 +178,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
     const { topic: t, files } = st.data;
     sendMenu = null;
     const leads = agentsNow().filter((a) => a.isRoot || a.isLead);
-    const anyPicked = st.data.rounds.some((r) => r.cards.some((c) => c.picked));
+    const anyPicked = allCards().some((c) => c.picked);
     const filePicker = el("input", { type: "file", multiple: true, hidden: true });
     filePicker.addEventListener("change", () => { uploadFiles(filePicker.files); filePicker.value = ""; });
     const fileRow = el("div", { class: "bs-files" },
@@ -240,20 +242,19 @@ export function brainstormView(projectId, { agents, onBadge }) {
       fileRow);
   }
 
-  // Picked: ideile alese, fixate sus; clic pe titlu duce la card
+  // Picked: ideile alese, fixate sus ca tile-uri mici (titlu + autor); clic = modala
   function renderPicked() {
-    const cards = st.data.rounds.flatMap((r) => r.cards.filter((c) => c.picked));
+    const cards = allCards().filter((c) => c.picked);
     picked.hidden = !cards.length;
     picked.replaceChildren(
       el("div", { class: "bs-picked-label" }, `Picked (${cards.length})`),
-      el("div", { class: "bs-picked-list" }, cards.map((c) => el("div", { class: "bs-pin" + (c.kind === "wild" ? " wild" : "") },
-        face(c.agentName, c.agentId, 18),
-        el("button", {
-          type: "button", class: "bs-pin-title", title: "Show the card",
-          onclick: () => document.getElementById(`bs-card-${c.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }),
-        }, c.title || "Idea"),
-        c.kind === "wild" ? el("span", { class: "bs-wild-tag" }, "wild") : null,
-        el("button", { type: "button", class: "bs-pin-x", "aria-label": "Unpick", title: "Unpick", onclick: () => cardAction(c, "unpick") }, "×")))));
+      el("div", { class: "bs-picked-list" }, cards.map((c) => el("div", {
+        class: "bs-pin" + (c.kind === "wild" ? " wild" : ""), style: `--c:${tone(c)}`,
+      },
+      el("button", { type: "button", class: "bs-pin-open", title: "Open the idea", onclick: () => openIdea(c, cards) },
+        el("span", { class: "bs-pin-title" }, c.title || "Idea"),
+        el("span", { class: "bs-pin-who" }, face(c.agentName, c.agentId, 16), c.agentName || "Agent")),
+      el("button", { type: "button", class: "bs-pin-x", "aria-label": "Unpick", title: "Unpick", onclick: () => cardAction(c, "unpick") }, "×")))));
   }
 
   function renderThread() {
@@ -267,104 +268,112 @@ export function brainstormView(projectId, { agents, onBadge }) {
       el("div", { class: "bs-ask" },
         el("div", { class: "bs-bubble" }, userText(r.text || "")),
         el("span", { class: "bs-time" }, clock(r.createdAt))),
-      el("div", { class: "bs-cards" }, r.cards.map(card)))));
+      el("div", { class: "bs-cards" }, r.cards.map((c) => card(c, r.cards))))));
   }
 
-  // ---------- cardurile ----------
-  function card(c) {
-    const wild = c.status === "done" && c.kind === "wild";
-    const question = c.status === "done" && c.kind === "question";
-    const cls = ["bs-card", `s-${c.status}`];
-    if (c.status === "done") cls.push(`k-${c.kind}`);
+  // ---------- tile-urile ----------
+  // allCards: toate cardurile subiectului (si cele combinate), in ordinea rundelor
+  const allCards = () => (st.data?.rounds || []).flatMap((r) => [...r.cards, ...(r.combined || [])]);
+  const tone = (c) => toneOf(c.agentName, kindOf(agentBy(c.agentId)))[0];
+
+  // jump: deruleaza la tile-ul unui card si il evidentiaza 1.5 s
+  function jump(id) {
+    const node = document.getElementById(`bs-card-${id}`);
+    if (!node) return;
+    node.scrollIntoView({ block: "center", behavior: "smooth" });
+    node.classList.remove("flash");
+    void node.offsetWidth; // reporneste animatia daca era deja evidentiat
+    node.classList.add("flash");
+    setTimeout(() => node.classList.remove("flash"), 1500);
+  }
+
+  const ideaCtx = {
+    face: (c, size) => face(c.agentName, c.agentId, size),
+    role: (c) => agentBy(c.agentId)?.role || "",
+    busy: (c, action) => st.busy.has(`${c.id}:${action}`),
+    act: (c, action, body) => cardAction(c, action, body),
+    edit: editCard,
+    jump,
+  };
+  // openIdea(c, siblings): modala ideii; siblings = tile-urile din acelasi rand (sagetile)
+  const openIdea = (c, siblings, opts) => openIdeaModal(c, siblings, ideaCtx, opts);
+
+  // card(c, siblings): tile-ul unui card (idee, wild, intrebare, combinat sau in asteptare); clic = modala
+  function card(c, siblings) {
+    const done = c.status === "done";
+    const question = done && c.kind === "question";
+    const open = question && !c.answer;
+    const cls = ["bs-tile", `s-${c.status}`];
+    if (done) cls.push(`k-${c.kind}`);
     if (c.picked) cls.push("picked");
-    if (question && !c.answer) cls.push("open");
-    const tags = [];
-    if (wild) tags.push(el("span", { class: "bs-wild-tag" }, "wild"));
-    if (question) tags.push(el("span", { class: "bs-q-tag" }, "question"));
-    if (c.picked) tags.push(el("span", { class: "bs-picked-tag" }, "picked"));
-    if (c.followsId) tags.push(el("span", { class: "bs-follow", title: "Follows an earlier card" }, "↳"));
-    return el("article", { class: cls.join(" "), id: `bs-card-${c.id}` },
-      el("div", { class: "bs-card-head" }, face(c.agentName, c.agentId, 22),
-        el("span", { class: "bs-agent" }, c.agentName || "Agent"), el("span", { class: "grow" }), tags),
-      cardBody(c));
+    if (open) cls.push("open");
+    if (!done) cls.push("dim");
+    const role = agentBy(c.agentId)?.role;
+    const stop = (e) => e.stopPropagation(); // butoanele de pe tile nu deschid modala
+
+    // textul: extrasul ideii, raspunsul la intrebare sau starea
+    let text = null;
+    if (done && c.kind !== "question") text = plainText(c.text);
+    else if (question && c.text && c.text !== c.title) text = plainText(c.text);
+    else if (!done && c.combinedFrom?.length) text = "Combining " + c.combinedFrom.map((s) => s.title || "Idea").join(" + ");
+    const title = done ? (c.title || (c.kind === "question" ? "Question" : "Idea")) : (c.title || null);
+
+    let foot;
+    if (!done) {
+      foot = [
+        el("span", { class: "bs-state " + c.status },
+          c.status === "running" ? el("span", { class: "typing-dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")) : null,
+          stateText(c)),
+        el("span", { class: "grow" }),
+        c.status === "waiting" && !c.priority ? btn(c, "run-now", "Run now") : null,
+        c.status === "waiting" || c.status === "running" ? btn(c, "stop", "Stop", "btn small ghost") : null,
+        c.status === "stopped" || c.status === "failed" ? btn(c, "retry", "Retry") : null,
+      ];
+    } else if (open) {
+      foot = el("div", { class: "bs-options", onclick: stop },
+        c.options.map((o) => el("button", {
+          type: "button", class: "btn small", disabled: st.busy.has(`${c.id}:answer`) || null,
+          onclick: () => cardAction(c, "answer", { answer: o }),
+        }, o)),
+        el("button", { type: "button", class: "btn small ghost", onclick: () => openIdea(c, siblings, { other: true }) }, "Other…"));
+    } else {
+      foot = [
+        question && c.answer ? el("span", { class: "bs-you", title: c.answer }, el("b", {}, "You: "), c.answer) : null,
+        ...ideaTags(c, jump),
+        c.followsId ? el("span", { class: "bs-follow", title: "Follows an earlier card" }, "↳") : null,
+      ];
+    }
+    return el("article", {
+      class: cls.join(" "), id: `bs-card-${c.id}`, style: `--c:${tone(c)}`,
+      tabindex: "0", "aria-label": `${c.agentName || "Agent"}: ${c.title || stateText(c) || "idea"}`,
+      onclick: (e) => { if (!e.target.closest("button, a, input, textarea, label")) openIdea(c, siblings); },
+      onkeydown: (e) => { if (e.key === "Enter" && e.target === e.currentTarget) { e.preventDefault(); openIdea(c, siblings); } },
+    },
+    el("div", { class: "bs-who" }, face(c.agentName, c.agentId, 20),
+      el("span", { class: "bs-agent" }, c.agentName || "Agent", role ? el("span", { class: "bs-role" }, ` · ${role}`) : null)),
+    title ? el("h3", { class: "bs-tile-title", title }, title) : null,
+    text ? el("p", { class: "bs-tile-text" }, text) : null,
+    el("div", { class: "bs-tile-foot" }, foot));
   }
 
   function btn(c, action, label, cls = "btn small") {
     const key = `${c.id}:${action}`;
     return el("button", {
       type: "button", class: cls, disabled: st.busy.has(key) || null,
-      onclick: () => cardAction(c, action),
+      onclick: (e) => { e.stopPropagation(); cardAction(c, action); },
     }, label);
   }
 
-  function cardBody(c) {
-    switch (c.status) {
-      case "waiting":
-        return [
-          el("p", { class: "bs-state" }, c.busy ? `Waiting, busy on ${c.busy}` : "Waiting",
-            c.priority ? el("span", { class: "bs-next" }, " · runs next") : null),
-          el("div", { class: "bs-actions" }, c.priority ? null : btn(c, "run-now", "Run now"), btn(c, "stop", "Stop", "btn small ghost")),
-        ];
-      case "running":
-        return [
-          el("p", { class: "bs-state running" }, el("span", { class: "typing-dots", "aria-hidden": "true" }, el("i"), el("i"), el("i")), "Thinking…"),
-          el("div", { class: "bs-actions" }, btn(c, "stop", "Stop", "btn small ghost")),
-        ];
-      case "stopped":
-      case "failed":
-        return [
-          el("p", { class: "bs-state " + c.status }, c.error || (c.status === "stopped" ? "Stopped." : "Failed.")),
-          el("div", { class: "bs-actions" }, btn(c, "retry", "Retry")),
-        ];
-      case "skipped":
-        return el("p", { class: "bs-state" }, c.error || "Skipped.");
+  // editCard: Save din modala pe o idee combinata; intoarce true daca a mers
+  async function editCard(c, title, text) {
+    try {
+      await api(`/api/brainstorm/cards/${c.id}/edit`, { method: "POST", body: { title, text } });
+    } catch (err) {
+      toast(err.message);
+      return false;
     }
-    if (c.kind === "question") return questionBody(c);
-    return [
-      c.title ? el("h3", { class: "bs-card-title" }, c.title) : null,
-      renderMarkdown(c.text),
-      c.basis ? el("p", { class: "bs-basis" }, el("span", {}, "Based on: "), c.basis) : null,
-      el("div", { class: "bs-actions" },
-        c.picked ? btn(c, "unpick", "Unpick", "btn small active") : btn(c, "pick", "Pick", "btn small"),
-        btn(c, "another", "Another idea", "btn small ghost")),
-    ];
-  }
-
-  // intrebarea unui agent: optiunile ca butoane, "Other" deschide un camp; dupa raspuns se vede raspunsul
-  function questionBody(c) {
-    const out = [c.title ? el("h3", { class: "bs-card-title" }, c.title) : null];
-    if (c.text && c.text !== c.title) out.push(renderMarkdown(c.text));
-    if (c.answer) {
-      out.push(el("p", { class: "bs-answer" }, el("span", {}, "You answered: "), c.answer));
-      return out;
-    }
-    const other = st.others.get(c.id);
-    const answer = (text) => {
-      text = String(text || "").trim();
-      if (!text) return;
-      cardAction(c, "answer", { answer: text });
-    };
-    const opts = el("div", { class: "bs-options" },
-      c.options.map((o) => el("button", { type: "button", class: "btn small", onclick: () => answer(o) }, o)),
-      el("button", {
-        type: "button", class: "btn small ghost", "aria-pressed": String(other != null),
-        onclick: () => {
-          if (other != null) st.others.delete(c.id); else st.others.set(c.id, "");
-          render();
-          if (st.others.has(c.id)) document.getElementById(`bs-other-${c.id}`)?.focus();
-        },
-      }, "Other"));
-    out.push(opts);
-    if (other != null) {
-      const box = el("textarea", { id: `bs-other-${c.id}`, rows: 2, placeholder: "Your answer", value: other, "aria-label": "Your answer" });
-      box.addEventListener("input", () => st.others.set(c.id, box.value));
-      box.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); answer(box.value); }
-      });
-      out.push(el("div", { class: "bs-other" }, box,
-        el("button", { type: "button", class: "btn small primary", onclick: () => answer(box.value) }, "Answer")));
-    }
-    return out;
+    await loadTopic();
+    return true;
   }
 
   async function cardAction(c, action, body) {
@@ -373,7 +382,6 @@ export function brainstormView(projectId, { agents, onBadge }) {
     st.busy.add(key);
     try {
       await api(`/api/brainstorm/cards/${c.id}/${action}`, { method: "POST", body });
-      if (action === "answer") st.others.delete(c.id);
     } catch (err) {
       toast(err.message);
     }
@@ -555,6 +563,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
     // destroy: la iesirea din proiect (workspace cleanup)
     destroy() {
       clearTimeout(timer);
+      closeIdea();
       document.removeEventListener("pointerdown", closeMenus);
     },
   };
