@@ -101,6 +101,11 @@ func (f *fakeBackend) ProposeAgent(c Caller, args json.RawMessage) (string, erro
 	return "ok", f.err
 }
 
+func (f *fakeBackend) BrainstormReply(c Caller, in BrainstormReplyInput) (string, error) {
+	f.calls = append(f.calls, fmt.Sprintf("brainstorm_reply|%d|%s|%s|%s|%s|%s|%v", c.BrainstormCardID, in.Kind, in.Title, in.Text, in.Basis, strings.Join(in.Options, ","), in.Options))
+	return "ok", f.err
+}
+
 func (f *fakeBackend) AskUser(c Caller, question string, options []string) (string, error) {
 	f.calls = append(f.calls, "ask_user|"+question+"|"+strings.Join(options, ","))
 	return "ok", f.err
@@ -189,6 +194,7 @@ func setup(t *testing.T) (*fakeBackend, *httptest.Server) {
 		"reviewer":     {ProjectID: 1, AgentID: 4, HasParent: true, IsReviewer: true},
 		"solo":         {ProjectID: 1, AgentID: 5},
 		"setup":        {SetupID: "s1"},
+		"brainstorm":   {ProjectID: 1, AgentID: 40, BrainstormCardID: 5, IsLead: true, CanAddAgents: true},
 		"writer":       {ProjectID: 1, AgentID: 30, HasParent: true, CanWrite: true},
 		"stagework":    {ProjectID: 1, AgentID: 6, TaskID: 9, StageKind: "work"},
 		"stagelead":    {ProjectID: 1, AgentID: 8, IsLead: true, HasStages: true},
@@ -816,5 +822,22 @@ func TestRecurringTools(t *testing.T) {
 	}
 	if strings.Join(fb.calls, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("calls:\n%s", strings.Join(fb.calls, "\n"))
+	}
+}
+
+func TestBrainstormToolsOnly(t *testing.T) {
+	c := Caller{BrainstormCardID: 5, IsLead: true, CanAddAgents: true}
+	tools := toolsFor(c)
+	if len(tools) != 1 || tools[0].Name != "brainstorm_reply" {
+		t.Fatalf("brainstorm tools = %+v", tools)
+	}
+	fb, ts := setup(t)
+	rpc(t, ts, "brainstorm", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"brainstorm_reply","arguments":{"kind":"question","title":"T","text":"Q?","options":["a","b"]}}}`)
+	if len(fb.calls) != 1 || !strings.HasSuffix(fb.calls[0], "|[a b]") || !strings.HasPrefix(fb.calls[0], "brainstorm_reply|5|question|T|Q?") {
+		t.Fatalf("apeluri: %v", fb.calls)
+	}
+	// un agent obisnuit nu are tool-ul
+	if allowed(Caller{AgentID: 1, IsLead: true}, "brainstorm_reply") {
+		t.Fatal("un agent obisnuit nu are brainstorm_reply")
 	}
 }

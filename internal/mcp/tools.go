@@ -160,6 +160,22 @@ var proposeAgentTool = Tool{
 	}),
 }
 
+var brainstormReplyTool = Tool{
+	Name:        "brainstorm_reply",
+	Description: "Submits your answer to the brainstorming session: one idea or one question. Call it exactly once per run. Use kind \"wild\" only for truly bold ideas. Use kind \"question\" only when the answer would change your idea.",
+	InputSchema: schema([]string{"kind", "title", "text"}, map[string]any{
+		"kind":  map[string]any{"type": "string", "enum": []string{"idea", "wild", "question"}, "description": "idea, wild (a bold idea) or question"},
+		"title": str("Short title, max 120 characters"),
+		"text":  str("The idea or the question"),
+		"basis": str("What you base it on: files, attachments, what you found in the project"),
+		"options": map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string"},
+			"description": "Only for a question: 2-5 answer options",
+		},
+	}),
+}
+
 var proposeSetupTool = Tool{
 	Name:        "propose_setup",
 	Description: "Submits the project and team proposal. Call it once, at the end. If you get an error, fix the proposal and call it again.",
@@ -415,6 +431,9 @@ var proposeLibraryTool = Tool{
 // toolsFor intoarce reuniunea tool-urilor pentru rolurile agentului.
 // Orice agent al echipei primeste ask_user; analistul din wizard nu.
 func toolsFor(c Caller) []Tool {
+	if c.BrainstormCardID != 0 {
+		return []Tool{brainstormReplyTool}
+	}
 	if c.DraftID != "" {
 		return []Tool{proposeAgentTool}
 	}

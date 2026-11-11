@@ -15,22 +15,29 @@ import (
 
 // Caller identifica agentul care apeleaza, pe baza token-ului din URL.
 type Caller struct {
-	ProjectID    int64
-	AgentID      int64
-	RunID        string
-	TaskID       int64  // 0 = run fara task
-	IsLead       bool   // are agenti direct sub el
-	HasParent    bool   // are sef, deci raporteaza cu report_done
-	IsReviewer   bool   // verifica munca cuiva
-	SetupID      string // != "" = analistul din wizard; vede doar propose_setup
-	DraftID      string // != "" = draft-ul AI al unui agent nou; vede doar propose_agent
-	StageKind    string // etapa task-ului curent: "work", "check" sau "" (fara etape)
-	HasStages    bool   // proiectul are etape: la create_task assignee e optional
-	CanAddAgents bool   // lider sau radacina: add_agent / remove_agent
-	HasLinks     bool   // proiectul are legaturi cu alte proiecte
-	CanWrite     bool   // agentul are tool-ul write: poate propune elemente pentru Library
-	IsRoot       bool   // raporteaza utilizatorului: primeste intrebarile proiectelor legate
-	FromRequest  bool   // run pe un task cerut de un proiect legat: are report_done chiar fara sef
+	ProjectID        int64
+	AgentID          int64
+	RunID            string
+	TaskID           int64  // 0 = run fara task
+	IsLead           bool   // are agenti direct sub el
+	HasParent        bool   // are sef, deci raporteaza cu report_done
+	IsReviewer       bool   // verifica munca cuiva
+	SetupID          string // != "" = analistul din wizard; vede doar propose_setup
+	DraftID          string // != "" = draft-ul AI al unui agent nou; vede doar propose_agent
+	BrainstormCardID int64  // != 0 = run de brainstorming; vede doar brainstorm_reply
+	StageKind        string // etapa task-ului curent: "work", "check" sau "" (fara etape)
+	HasStages        bool   // proiectul are etape: la create_task assignee e optional
+	CanAddAgents     bool   // lider sau radacina: add_agent / remove_agent
+	HasLinks         bool   // proiectul are legaturi cu alte proiecte
+	CanWrite         bool   // agentul are tool-ul write: poate propune elemente pentru Library
+	IsRoot           bool   // raporteaza utilizatorului: primeste intrebarile proiectelor legate
+	FromRequest      bool   // run pe un task cerut de un proiect legat: are report_done chiar fara sef
+}
+
+// BrainstormReplyInput sunt argumentele lui brainstorm_reply.
+type BrainstormReplyInput struct {
+	Kind, Title, Text, Basis string
+	Options                  []string
 }
 
 // LibraryInput sunt argumentele lui propose_library_item.
@@ -99,6 +106,7 @@ type Backend interface {
 	ReviewReject(c Caller, task, feedback string) (string, error)
 	ProposeSetup(c Caller, args json.RawMessage) (string, error)
 	ProposeAgent(c Caller, args json.RawMessage) (string, error)
+	BrainstormReply(c Caller, in BrainstormReplyInput) (string, error)
 	ProposeLibraryItem(c Caller, in LibraryInput) (string, error)
 	AskUser(c Caller, question string, options []string) (string, error)
 	AddAgent(c Caller, in AddAgentInput) (string, error)
@@ -347,6 +355,11 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 	case "propose_setup":
 		raw, _ := json.Marshal(p.Arguments)
 		text, err = s.backend.ProposeSetup(c, raw)
+	case "brainstorm_reply":
+		text, err = s.backend.BrainstormReply(c, BrainstormReplyInput{
+			Kind: arg("kind"), Title: arg("title"), Text: arg("text"), Basis: arg("basis"),
+			Options: argList(p.Arguments, "options"),
+		})
 	case "propose_agent":
 		raw, _ := json.Marshal(p.Arguments)
 		text, err = s.backend.ProposeAgent(c, raw)
