@@ -190,6 +190,10 @@ func (s *Store) SetProjectAccount(projectID int64, accountID *int64, note string
 	if _, err := tx.Exec(`UPDATE projects SET account_id = ? WHERE id = ?`, nullPtr(accountID), projectID); err != nil {
 		return false, err
 	}
+	// sesiunile de brainstorming ale proiectului pleaca si ele (alt cont, alta conversatie)
+	if _, err := tx.Exec(`DELETE FROM brainstorm_sessions WHERE topic_id IN (SELECT id FROM brainstorm_topics WHERE project_id = ?)`, projectID); err != nil {
+		return false, err
+	}
 	rows, err := tx.Query(`SELECT id FROM agents WHERE project_id = ? ORDER BY id`, projectID)
 	if err != nil {
 		return false, err

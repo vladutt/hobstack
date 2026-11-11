@@ -93,6 +93,11 @@ func ProjectFilesDir(projectsRoot string, id int64) string {
 	return filepath.Join(projectsRoot, strconv.FormatInt(id, 10), "files")
 }
 
+// ProjectBrainstormDir: folderul cu fisierele de brainstorming ale proiectului (<dir>/<topicID>/ pe subiect).
+func ProjectBrainstormDir(projectsRoot string, projectID int64) string {
+	return filepath.Join(projectsRoot, strconv.FormatInt(projectID, 10), "brainstorm")
+}
+
 // ProjectTaskFilesDir: folderul cu fisierele de pe task-urile unui proiect (task-files/<task>/ sub el).
 func ProjectTaskFilesDir(projectsRoot string, projectID int64) string {
 	return filepath.Join(projectsRoot, strconv.FormatInt(projectID, 10), "task-files")

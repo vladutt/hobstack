@@ -62,8 +62,8 @@ func TestOpenAppliesMigrationsOnce(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
 			t.Fatal(err)
 		}
-		if v != 37 {
-			t.Fatalf("user_version = %d, vreau 37", v)
+		if v != 38 {
+			t.Fatalf("user_version = %d, vreau 38", v)
 		}
 		s.Close()
 	}
