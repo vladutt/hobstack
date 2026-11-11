@@ -11,6 +11,9 @@ import (
 
 // afterSwap: in HobStack.app binarul nou schimba continutul bundle-ului, deci versiunea din Info.plist se
 // actualizeaza si bundle-ul se semneaza din nou ad-hoc (altfel macOS il poate vedea ca modificat).
+// Release-urile de pe GitHub vin semnate Developer ID si notarizate (docs/macos-signing.md); dupa un update din
+// aplicatie semnatura devine ad-hoc. E acceptabil: fisierele descarcate de aplicatie insasi nu primesc atributul de
+// carantina (com.apple.quarantine), deci Gatekeeper nu le mai verifica si aplicatia porneste in continuare.
 func afterSwap(exe, version string) {
 	macos := filepath.Dir(exe)
 	if filepath.Base(macos) != "MacOS" || !strings.HasSuffix(filepath.Dir(filepath.Dir(macos)), ".app") {
