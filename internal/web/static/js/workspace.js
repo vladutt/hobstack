@@ -1146,6 +1146,18 @@ export async function workspaceView(root, projectId, route) {
     return el("div", { class: "card-wrap" }, card, btn);
   }
 
+  // stopItem: "Stop" pe un task in lucru (sau in coada, inca nepornit), "Resume" pe unul oprit; altfel nimic.
+  function stopItem(t, pick) {
+    if (t.status === "queued" && t.stopped) {
+      return el("button", { type: "button", role: "menuitem", onclick: pick(() => taskAction(t, "resume")) }, "Resume");
+    }
+    const working = (state.project.agents || []).some((a) => a.workingTaskId === t.id);
+    if (working || t.status === "queued") {
+      return el("button", { type: "button", role: "menuitem", onclick: pick(() => taskAction(t, "stop")) }, "Stop");
+    }
+    return null;
+  }
+
   // openCardMenu: meniul cardului (Move to… / Delete); se inchide la Esc, click in afara, scroll si dupa o alegere.
   // Sta pe document.body cu position: fixed, ca sa nu fie taiat de board-ul care se deruleaza.
   function openCardMenu(t, btn) {
@@ -1172,6 +1184,7 @@ export async function workspaceView(root, projectId, route) {
       },
     }, "Move to…");
     const menu = el("div", { class: "card-menu", role: "menu", "aria-label": `Actions for T-${t.number}` },
+      stopItem(t, pick),
       moveBtn, sub,
       el("button", { type: "button", role: "menuitem", class: "danger", onclick: pick(() => deleteTask(t)) }, "Delete"));
     document.body.append(menu);
@@ -1496,6 +1509,7 @@ export async function workspaceView(root, projectId, route) {
     const kidsDone = kids.filter((x) => x.status === "done").length;
     let line = null;
     if (blocked) line = el("span", { class: "task-line bad" }, "Blocked");
+    else if (t.status === "queued" && t.stopped) line = el("span", { class: "task-line warn", title: "You stopped it. Resume it from ⋯ or drag it to Queued." }, "Stopped by you");
     else if (working) line = el("span", { class: "task-line working" }, el("span", { class: "dot working" }), `${worker.name} \u00b7 working`);
     else if ((state.project.fillIns || []).some((f) => f.taskId === t.id)) line = el("span", { class: "task-line warn" }, "Waiting on you");
     // spune ce are de facut: Accept / Send back sunt in modala (cu intrebarile din Decide, daca sunt)
@@ -1985,7 +1999,21 @@ export async function workspaceView(root, projectId, route) {
     stopLive();
     if (!runId) return;
     state.liveRunId = runId;
-    const head = el("div", { class: "live-head" }, `${a.name} is working now`);
+    // Stop opreste doar run-ul acestui agent (echipa merge mai departe); pe un task, task-ul asteapta Resume
+    const label = el("span", {}, `${a.name} is working now`);
+    const stopBtn = el("button", {
+      type: "button", class: "btn small live-stop", title: `Stop ${a.name} (the team keeps working)`,
+      onclick: async () => {
+        stopBtn.disabled = true;
+        try {
+          await api(`/api/agents/${a.id}/stop`, { method: "POST" });
+        } catch (err) {
+          stopBtn.disabled = false;
+          toast(err.message);
+        }
+      },
+    }, "Stop");
+    const head = el("div", { class: "live-head" }, label, stopBtn);
     const box = el("div", { class: "live" }, head);
     thread.append(box);
     scrollDown();
@@ -2003,7 +2031,7 @@ export async function workspaceView(root, projectId, route) {
       render(ev);
       // capul blocului arata ultimul tool folosit ("Forge is working · Edit CLAUDE.md")
       const tool = ev.type === "assistant" ? (ev.message?.content || []).filter((b) => b.type === "tool_use").pop() : null;
-      if (tool) head.textContent = `${a.name} is working \u00b7 ${toolLabel(tool)}`;
+      if (tool) label.textContent = `${a.name} is working \u00b7 ${toolLabel(tool)}`;
       scrollDown();
     };
     es.onerror = () => {

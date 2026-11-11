@@ -82,10 +82,15 @@ type Server struct {
 
 func New(st *store.Store, tm *team.Team, runs *runner.Manager, hub *events.Hub, mcpHandler http.Handler,
 	dirs Dirs, pick func(context.Context) (string, error), canPick bool) *Server {
-	return &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick,
+	s := &Server{st: st, team: tm, runs: runs, hub: hub, mcp: mcpHandler, dirs: dirs, pick: pick, canPick: canPick,
 		codeCache: codefiles.NewCache(30 * time.Second),
 		registry:  mcpregistry.NewClient(), home: os.UserHomeDir,
 		skills: skillsrc.NewRemote(), preps: newPreparations(), now: time.Now, clip: clipfiles.Paths}
+	if tm != nil {
+		// install_mcp al unui lider la cererea utilizatorului din chat: acelasi drum ca Library > MCP > Add server
+		tm.SetMCPInstaller(s.installForAgent)
+	}
+	return s
 }
 
 // SetSetup activeaza wizard-ul "Proiect nou cu AI".
@@ -151,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agents/{id}/messages", s.listMessages)
 	mux.HandleFunc("POST /api/agents/{id}/messages", s.postMessage)
 	mux.HandleFunc("POST /api/agents/{id}/new-chat", s.newChat)
+	mux.HandleFunc("POST /api/agents/{id}/stop", s.stopAgent)
 	mux.HandleFunc("POST /api/prompt-preview", s.promptPreview)
 
 	mux.HandleFunc("GET /api/projects/{id}/files", s.listFiles)
@@ -216,6 +222,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/move", s.moveTask)
 	mux.HandleFunc("DELETE /api/tasks/{id}", s.deleteTask)
 	mux.HandleFunc("POST /api/tasks/{id}/restore", s.restoreTask)
+	mux.HandleFunc("POST /api/tasks/{id}/stop", s.stopTask)
+	mux.HandleFunc("POST /api/tasks/{id}/resume", s.resumeTask)
 	mux.HandleFunc("GET /api/projects/{id}/archived", s.listArchived)
 	mux.HandleFunc("GET /api/projects/{id}/code-files", s.codeFiles)
 	mux.HandleFunc("GET /api/projects/{id}/tree", s.getProjectTree)

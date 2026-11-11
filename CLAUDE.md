@@ -353,6 +353,22 @@ Gata (agentii cer servere MCP, spec in docs/superpowers/specs/2026-11-08-hobstac
 install_mcp (toti agentii) face o cerere (mcp_requests, migrarea 036; max 5 deschise, un nume din Library = activarea lui);
 o aproba MEREU utilizatorul in Needs you, si cu Full autonomy (comanda exacta, cheile optionale, Install / Decline; Install =
 web.createMCP, acelasi drum ca Library > MCP > Add server, doar in proiectul cererii); agentul afla printr-o nota in coada.
+Exceptie: un lider / o radacina intr-un run pornit dintr-un mesaj al utilizatorului din chat (requestOf, ca la create_recurring;
+Full autonomy nu ajunge) instaleaza direct, daca serverul nu cere chei (team.SetMCPInstaller -> web.installForAgent, cu proba;
+proba picata = team.MCPTestError, cererea merge totusi in Needs you; un nume din Library doar se activeaza). Elementul nou are
+MadeBy = liderul si source_project_id = proiectul (pus dupa publicare); pagina item-ului arata "Made by <agent> in <proiect>".
+Gata (Stop pe agent / task, fara Stop team): POST /api/agents/{id}/stop (butonul Stop din blocul "is working" din chat),
+POST /api/tasks/{id}/stop|resume (meniul ⋯ de pe card si modala). team/stop.go: activeRun.userStop; la finalul run-ului oprit
+task-ul ramane in Queued cu tasks.stopped (migrarea 037), "Stopped by you" pe card, Reconcile il sare (agentul trece la
+urmatorul task); Resume, tragerea pe Queued sau intr-o etapa il reiau; SaveTask curata stopped cand task-ul iese din Queued.
+Un task din coada inca nepornit poate fi oprit direct. Un run de chat oprit lasa randul "Stopped by the user." in chat.
+Task-urile care asteapta un raspuns / o aprobare / sub-task-uri raman In progress, ca la Stop team.
+Gata (semnare macOS Developer ID + notarizare, doar in GitHub Actions; ghid in docs/macos-signing.md): scripts/build-mac.sh
+fara MACOS_SIGN_IDENTITY ramane ad-hoc (local nu se configureaza nimic); cu ea semneaza binarele din tar.gz, .app-ul si
+.dmg-ul (hardened runtime, timestamp) si notarizarea e obligatorie (MACOS_NOTARY_APPLE_ID / _TEAM_ID / _PASSWORD, altfel
+eroare): .dmg notarizat + staple, binarele trimise intr-un zip (tar.gz-urile neschimbate), la final spctl. Job-ul `mac`
+importa certificatul (secretele MACOS_CERT_P12, MACOS_CERT_PASSWORD) intr-un keychain temporar cu `security`, doar daca
+exista secretul; fara el build-ul e ad-hoc. Update-ul din aplicatie re-semneaza ad-hoc (fara carantina, Gatekeeper nu verifica).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

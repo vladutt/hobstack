@@ -80,7 +80,11 @@ func (t *Team) moveToQueue(task store.Task, agents []store.Agent, reason string)
 		return t.reopenTask(task, agents, nil, reason)
 	case store.StatusQueued:
 		if task.StageID != nil {
+			task.Stopped = false // tras pe Queued: reia lucrul
 			return t.leaveStages(task, agents, reason)
+		}
+		if task.Stopped {
+			return t.resumeLocked(task, reason)
 		}
 	}
 	return MoveError(task.Ref() + " is already queued.")
@@ -143,6 +147,7 @@ func (t *Team) moveToStage(task store.Task, agents []store.Agent, stageID int64,
 	task.StageID = &st.ID
 	task.AssigneeID = placeholder(st, task.AssigneeID)
 	task.Status, task.SendBacks, task.Escalated = store.StatusQueued, 0, false
+	task.Stopped = false // mutat de utilizator intr-o etapa: reia lucrul
 	if reason != "" {
 		task.Feedback = reason
 	}

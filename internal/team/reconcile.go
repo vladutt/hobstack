@@ -204,7 +204,8 @@ func (t *Team) Reconcile(projectID int64) error {
 	hasQueued := map[int64]bool{}
 	for i := range tasks {
 		task := &tasks[i]
-		if task.Status != store.StatusQueued {
+		// oprit de utilizator: asteapta Resume (nu tine nici notificarile agentului pe loc)
+		if task.Status != store.StatusQueued || task.Stopped {
 			continue
 		}
 		var a store.Agent

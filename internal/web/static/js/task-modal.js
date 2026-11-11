@@ -697,7 +697,9 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
     const openKey = JSON.stringify(open.map((d) => [d.id, d.question, d.options, d.multi]));
     // askName: cine primeste intrebarea din "Ask" (ca la comentarii: cel care a lasat punctele, altfel asignatul)
     const askName = mine ? ((data.todos || []).length && data.todosBy ? data.todosBy : data.assignee) || "" : "";
-    const key = [t.status, mine, byRoot, stuck, openKey, askName].join("|");
+    // worker: cine lucreaza acum pe task (Stop il opreste; task-ul asteapta apoi Resume)
+    const worker = (project.agents || []).find((a) => a.workingTaskId === t.id);
+    const key = [t.status, mine, byRoot, stuck, openKey, askName, worker?.id || 0, !!t.stopped].join("|");
     if (key === actionsKey) return;
     actionsKey = key;
 
@@ -741,6 +743,16 @@ export function taskModal({ projectId, taskId, project, info = {}, onClose, acti
       accept.addEventListener("click", run(accept, () => actions.taskAction(t, "accept")));
       unblock.addEventListener("click", run(unblock, () => actions.taskAction(t, "unblock")));
       parts.push(el("div", { class: "actions" }, accept, unblock));
+    }
+    if (t.status === "queued" && t.stopped) {
+      const resume = el("button", { type: "button", class: "btn small primary" }, "Resume");
+      resume.addEventListener("click", run(resume, () => actions.taskAction(t, "resume")));
+      parts.push(el("div", { class: "actions" }, el("span", { class: "hint" }, "You stopped this task; no one picks it up until you resume it."), el("span", { class: "grow" }), resume));
+    } else if (worker || t.status === "queued") {
+      const stop = el("button", { type: "button", class: "btn small" }, "Stop");
+      stop.addEventListener("click", run(stop, () => actions.taskAction(t, "stop")));
+      const hint = worker ? `${worker.name} is working on it. Stop ends the run; the task waits until you resume it.` : "Stop keeps it in Queued until you resume it.";
+      parts.push(el("div", { class: "actions" }, el("span", { class: "hint" }, hint), el("span", { class: "grow" }), stop));
     }
     if (stuck) {
       const nudge = el("button", { type: "button", class: "btn small" }, "Nudge");

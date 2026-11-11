@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 // Cererile install_mcp ale agentilor, in "Needs you": utilizatorul vede comanda exacta, completeaza cheile si
@@ -140,4 +141,45 @@ func (s *Server) declineMCPRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// installForAgent: install_mcp al unui lider, la cererea utilizatorului din chat (team.SetMCPInstaller). Fara chei
+// (team nu ajunge aici cand serverul cere chei). Un element deja in Library doar se activeaza in proiect; altfel
+// se creeaza cu proba, ca la Library > MCP > Add server. Proba picata = team.MCPTestError (cererea merge in Needs you).
+func (s *Server) installForAgent(in team.MCPInstall) ([]string, error) {
+	if s.lib == nil {
+		return nil, errors.New("the library is not available")
+	}
+	if in.ItemID != nil {
+		it, err := s.st.GetLibraryItem(*in.ItemID)
+		if err != nil {
+			return nil, err
+		}
+		vs, err := s.st.ListLibraryVersions(it.ID)
+		if err != nil {
+			return nil, err
+		}
+		if len(vs) == 0 || it.Status != store.ItemPublished {
+			return nil, errors.New("this library server has no published version")
+		}
+		if err := s.installInProject(in.ProjectID, it.ID, vs[0].ID, nil); err != nil {
+			return nil, err
+		}
+		s.hub.Publish(in.ProjectID, "project", map[string]int64{"id": in.ProjectID})
+		return it.ToolNames, nil
+	}
+	it, f := s.createMCP(mcpInstall{Kind: in.Transport, Name: in.Name, Description: in.Description,
+		Command: in.Command, Args: in.Args, URL: in.URL, ProjectID: in.ProjectID, AgentID: in.AgentID, AgentName: in.AgentName})
+	switch {
+	case f == nil:
+		return it.ToolNames, nil
+	case f.testFailed:
+		return nil, &team.MCPTestError{Msg: f.msg}
+	case f.libErr != nil:
+		return nil, f.libErr
+	case f.err != nil:
+		return nil, f.err
+	default:
+		return nil, errors.New(f.msg)
+	}
 }

@@ -377,6 +377,9 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 		t.note(ar.projectID, a.ID, "Run failed: "+o.Error, true)
 	}
 	if ar.taskID == 0 {
+		if ar.userStop && o.Status == store.RunStopped {
+			return t.note(ar.projectID, a.ID, stoppedText(nil), true)
+		}
 		return nil
 	}
 
@@ -430,6 +433,7 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 			return nil // ramane In progress; raspunsul il pune in coada
 		}
 		task.Status = store.StatusQueued
+		task.Stopped = ar.userStop // oprit de utilizator: nu-l reia nimeni pana la Resume
 	case store.RunFailed:
 		task.Status = store.StatusReview
 		task.ReviewStage = store.StageLead
@@ -485,7 +489,11 @@ func (t *Team) recordOutcome(ar activeRun, agentID int64, hash string, o runner.
 	if err := t.st.SaveTask(&task); err != nil {
 		return err
 	}
-	if o.Status == store.RunStopped {
+	switch {
+	case o.Status == store.RunStopped && ar.userStop:
+		t.taskEvent(task, "stopped", actorUser, fmt.Sprintf("You stopped %s; it waits in Queued until you resume it", a.Name))
+		t.note(ar.projectID, a.ID, stoppedText(&task), true)
+	case o.Status == store.RunStopped:
 		t.taskEvent(task, "requeued", actorHobStack, "Stopped; back in the queue")
 	}
 	t.emit(ar.projectID, "task", task)

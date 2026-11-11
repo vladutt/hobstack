@@ -486,7 +486,10 @@ export async function libraryItemView(root, id, tab) {
   const side = el("aside", { class: "modal-side lib-side" },
     el("div", { class: "side-rows" },
       row("Type", kindWord),
-      row("Made by", avatar(d.madeBy, "worker", 26), d.madeBy),
+      row("Made by", avatar(d.madeBy, "worker", 26), d.madeBy,
+        d.sourceProjectId && projectNames.has(d.sourceProjectId)
+          ? [el("span", { class: "muted" }, " in "), el("a", { href: `#/p/${d.sourceProjectId}` }, projectNames.get(d.sourceProjectId))]
+          : null),
       row("Status", { published: "Published", proposed: "Proposed · needs you", declined: "Kept in a project", unpublished: "Unpublished" }[d.status] || d.status),
       d.publishedAt ? row("Published", new Date(d.publishedAt).toLocaleDateString("en-GB", { month: "short", day: "numeric" })) : null,
       d.version ? row("Version", el("span", { class: "mono" }, "v" + d.version.version)) : null,

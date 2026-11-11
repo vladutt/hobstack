@@ -364,6 +364,12 @@ func (s *Store) DeleteLibraryItem(id int64) error {
 	return err
 }
 
+// SetLibrarySourceProject: proiectul in care a fost facut elementul (install_mcp direct al unui lider, setat
+// dupa publicare: un element de utilizator in curs de creare are sursa 0 pana la Publish).
+func (s *Store) SetLibrarySourceProject(id, projectID int64) error {
+	return mustAffect(s.db.Exec(`UPDATE library_items SET source_project_id = ? WHERE id = ?`, projectID, id))
+}
+
 // SetLibraryToolNames salveaza tool-urile expuse de un server MCP (rezultatul probe-ului de la Publish).
 func (s *Store) SetLibraryToolNames(id int64, names []string) error {
 	_, err := s.db.Exec(`UPDATE library_items SET tool_names = ? WHERE id = ?`, jsonList(names), id)

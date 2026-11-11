@@ -394,6 +394,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 /* minmax(0, 1fr): fara el, coloana gridului ia latimea celui mai lung rand nowrap (comanda) si iese din chat */
 :is(.thread, .wizard, .hobstack-chat) .live { border: 1px dashed var(--line-2); border-radius: 12px; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 8px; font-size: 13px; background: rgba(79, 195, 161, .03); }
 .live-head { color: var(--teal); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.live-head .live-stop { margin-left: auto; font-weight: 500; }
 .live-head::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); animation: pulse 1.4s ease-in-out infinite; }
 .live-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 :is(.thread, .wizard, .hobstack-chat) .live details { background: var(--bg); border-radius: 7px; padding: 5px 9px; }

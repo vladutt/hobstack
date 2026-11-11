@@ -63,12 +63,16 @@ type Task struct {
 	ArchivedFrom string     `json:"archivedFrom"`
 	ArchivedAt   *time.Time `json:"archivedAt"`
 	ArchivedRoot *int64     `json:"archivedRoot"`
+
+	// Stopped: utilizatorul a oprit task-ul (Stop pe card / in modala); ramane in Queued si
+	// scheduler-ul nu-l mai porneste pana la Resume. SaveTask il curata cand task-ul iese din Queued.
+	Stopped bool `json:"stopped"`
 }
 
 // Ref e forma afisata a task-ului: T-3.
 func (t Task) Ref() string { return fmt.Sprintf("T-%d", t.Number) }
 
-const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at, escalated, recurring_id, auto_accept, request_id, thread_id, archived_from, archived_at, archived_root, via_stages`
+const taskCols = `id, project_id, number, title, description, assignee_id, status, result, feedback, send_backs, created_at, updated_at, creator_id, parent_task_id, review_stage, stage_id, by_user, nudged_at, escalated, recurring_id, auto_accept, request_id, thread_id, archived_from, archived_at, archived_root, via_stages, stopped`
 
 func scanTask(sc scanner) (Task, error) { return scanTaskWith(sc) }
 
@@ -81,7 +85,7 @@ func scanTaskWith(sc scanner, extra ...any) (Task, error) {
 		&t.Status, &t.Result, &t.Feedback, &t.SendBacks, &created, &updated,
 		&t.CreatorID, &t.ParentTaskID, &t.ReviewStage, &t.StageID, &t.ByUser, &nudged, &t.Escalated,
 		&t.RecurringID, &t.AutoAccept, &t.RequestID, &t.ThreadID,
-		&t.ArchivedFrom, &archivedAt, &t.ArchivedRoot, &t.ViaStages}
+		&t.ArchivedFrom, &archivedAt, &t.ArchivedRoot, &t.ViaStages, &t.Stopped}
 	err := sc.Scan(append(dest, extra...)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Task{}, ErrNotFound
@@ -161,9 +165,10 @@ func (s *Store) ListTasks(projectID int64) ([]Task, error) {
 func (s *Store) SaveTask(t *Task) error {
 	ts := now()
 	t.ViaStages = t.ViaStages || t.StageID != nil
+	t.Stopped = t.Stopped && t.Status == StatusQueued // oprit are sens doar in coada
 	err := mustAffect(s.db.Exec(`UPDATE tasks SET status = ?, result = ?, feedback = ?, send_backs = ?, review_stage = ?,
-		assignee_id = ?, stage_id = ?, escalated = ?, via_stages = ?, updated_at = ?, nudged_at = NULL
-		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), t.Escalated, t.ViaStages, ts, t.ID))
+		assignee_id = ?, stage_id = ?, escalated = ?, via_stages = ?, stopped = ?, updated_at = ?, nudged_at = NULL
+		WHERE id = ?`, t.Status, t.Result, t.Feedback, t.SendBacks, t.ReviewStage, t.AssigneeID, nullPtr(t.StageID), t.Escalated, t.ViaStages, t.Stopped, ts, t.ID))
 	if err != nil {
 		return err
 	}

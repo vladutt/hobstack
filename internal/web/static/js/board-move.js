@@ -21,6 +21,7 @@ export function moveAction(t, target) {
     if (t.status === "done") return { ok: true, label: "Reopen", needsReason: true };
     // dintr-o etapa inapoi pe drumul standard, la asignatul de acum
     if (t.status === "queued" && t.stageId) return { ok: true, label: "Move" };
+    if (t.status === "queued" && t.stopped) return { ok: true, label: "Resume" }; // oprit de utilizator
     return { ok: false, why: `${ref} is already queued.` };
   }
   if (target.startsWith("stage:")) {

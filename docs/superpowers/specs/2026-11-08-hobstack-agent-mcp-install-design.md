@@ -23,3 +23,15 @@ pe masina lui.
   Pe task: evenimentele mcp_requested / mcp_installed / mcp_declined.
 - POST /api/mcp-requests/{id}/install {secretValues, skipTest} si /decline; projectCard.mcpRequests intra in
   "N need you".
+
+## Completare (2026-11-11): instalare directa la cererea utilizatorului din chat
+
+Un lider sau o radacina (canAddAgents) intr-un run pornit dintr-un mesaj al utilizatorului din chat (requestOf, ca la
+create_recurring; Full autonomy nu ajunge) instaleaza serverul direct, fara card in Needs you, daca nu cere chei (valorile
+lor le da doar utilizatorul). team.RequestMCP pregateste cererea sub t.work, apoi cheama, fara lock, instalatorul pus de
+web (SetMCPInstaller -> Server.installForAgent): un nume din Library doar se activeaza in proiect, altfel createMCP cu
+proba, ca la Library > MCP > Add server. Proba picata (team.MCPTestError) = cererea merge totusi in Needs you, cu motivul,
+ca utilizatorul sa-l poata instala fara test; alte erori ajung la agent. Pe task: evenimentul mcp_installed cu liderul ca actor.
+Elementul creat asa are MadeBy / MadeByAgentID = liderul si source_project_id = proiectul, setat dupa publicare
+(store.SetLibrarySourceProject; inainte, Publish trateaza elementul ca pe unul al utilizatorului doar cu sursa 0).
+Pagina item-ului din Library arata "Made by <agent> in <proiect>" (link spre proiect).

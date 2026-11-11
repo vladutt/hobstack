@@ -199,6 +199,10 @@ type mcpInstall struct {
 	// SecretValues: valorile secretelor pentru proiect (doar cu projectId). Intra in mediul probei si se salveaza
 	// ca secretele proiectului; nu apar niciodata intr-un raspuns.
 	SecretValues map[string]string `json:"secretValues"`
+	// AgentID / AgentName: install_mcp direct al unui lider (installForAgent); elementul apare "made by" el.
+	// Nu vin din browser. Gol = facut de utilizator ("You").
+	AgentID   int64  `json:"-"`
+	AgentName string `json:"-"`
 }
 
 // hasMarker: textul contine un marcaj care nu e o valoare reala.
@@ -259,8 +263,8 @@ func (f *mcpFail) write(w http.ResponseWriter) {
 	}
 }
 
-// createMCP: validare -> nume liber -> proba (doar local, fara skipTest) -> element publicat facut de "You" ->
-// optional instalat in proiect. Proba picata = testFailed si nimic creat. Comanda a fost confirmata de utilizator.
+// createMCP: validare -> nume liber -> proba (doar local, fara skipTest) -> element publicat facut de "You" (sau de
+// liderul din install_mcp) -> optional instalat in proiect. Proba picata = testFailed si nimic creat. Comanda a fost confirmata de utilizator.
 func (s *Server) createMCP(in mcpInstall) (store.LibraryItem, *mcpFail) {
 	bad := func(msg string) (store.LibraryItem, *mcpFail) {
 		return store.LibraryItem{}, &mcpFail{err: badRequest(msg)}
@@ -343,7 +347,11 @@ func (s *Server) createMCP(in mcpInstall) (store.LibraryItem, *mcpFail) {
 	}
 	defer os.RemoveAll(staging) // dupa AdoptStaged nu mai exista
 
-	it := store.LibraryItem{Kind: v.Kind, Name: v.Name, Description: v.Description, MadeBy: "You",
+	madeBy := "You"
+	if in.AgentName != "" {
+		madeBy = in.AgentName
+	}
+	it := store.LibraryItem{Kind: v.Kind, Name: v.Name, Description: v.Description, MadeBy: madeBy, MadeByAgentID: in.AgentID,
 		Secrets: v.Secrets, Command: v.Command, Args: v.Args, URL: v.URL, Transport: in.Kind, ToolNames: tools,
 		// ascuns (declined) cat se pregateste; PublishSkipTest il face published (proba s-a facut mai sus)
 		Status: store.ItemDeclined}
@@ -374,6 +382,13 @@ func (s *Server) createMCP(in mcpInstall) (store.LibraryItem, *mcpFail) {
 		if err := s.installInProject(in.ProjectID, it.ID, ver.ID, in.SecretValues); err != nil {
 			undo()
 			return store.LibraryItem{}, &mcpFail{err: err}
+		}
+		// facut de un lider: Library arata si proiectul (dupa publicare, ca Publish sa-l trateze ca pe al utilizatorului)
+		if in.AgentID != 0 {
+			if err := s.st.SetLibrarySourceProject(it.ID, in.ProjectID); err != nil {
+				undo()
+				return store.LibraryItem{}, &mcpFail{err: err}
+			}
 		}
 		s.hub.Publish(in.ProjectID, "project", map[string]int64{"id": in.ProjectID})
 	}

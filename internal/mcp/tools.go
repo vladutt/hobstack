@@ -212,9 +212,11 @@ var tickLeftTool = Tool{
 var installMCPTool = Tool{
 	Name: "install_mcp",
 	Description: "Asks the user to install an MCP server in this project, so the project's agents get its tools " +
-		"(for example a browser, a database or an API). Only the user can install it: the request appears in their " +
-		"Needs you list with the exact command, and you are told when it is installed or declined. Its tools are " +
-		"available from your next run. Prefer servers from the official MCP registry and their documented command.",
+		"(for example a browser, a database or an API). Normally only the user can install it: the request appears in their " +
+		"Needs you list with the exact command, and you are told when it is installed or declined. If you are a lead or " +
+		"report to the user and the user asked you in chat to install it, it is installed right away (after a quick test), " +
+		"unless it needs keys. Its tools are available from your next run. Prefer servers from the official MCP registry " +
+		"and their documented command.",
 	InputSchema: schema([]string{"name", "description", "reason"}, map[string]any{
 		"name":        str("Short name: lowercase letters, digits and dashes, e.g. playwright"),
 		"description": str("What the server does, in one line (max 300 characters)"),

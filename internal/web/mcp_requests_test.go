@@ -2,12 +2,15 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
 	"hobstack/internal/mcp"
 	"hobstack/internal/store"
+	"hobstack/internal/team"
 )
 
 // install_mcp: agentul cere, utilizatorul instaleaza din Needs you (cu proba) sau refuza; agentul afla
@@ -97,5 +100,45 @@ func TestMCPRequestFlow(t *testing.T) {
 	}
 	if _, err := e.st.FindLibraryItem(store.KindMCP, "remote-one"); err == nil {
 		t.Fatal("declined server was created")
+	}
+}
+
+// install_mcp direct al unui lider (team.SetMCPInstaller): server nou cu proba, element existent doar activat,
+// proba picata = team.MCPTestError si nimic creat
+func TestInstallForAgent(t *testing.T) {
+	e := setupLib(t)
+	p := e.project(t)
+	agents, _ := e.st.ListAgents(p.ID)
+	tools, err := e.srv.installForAgent(team.MCPInstall{ProjectID: p.ID, AgentID: agents[0].ID, AgentName: agents[0].Name, Name: "vehicles", Description: "Vehicles",
+		Transport: "local", Command: "env", Args: helperArgs()})
+	if err != nil || !slices.Contains(tools, "list_vehicles") {
+		t.Fatalf("%v %v", tools, err)
+	}
+	it, err := e.st.FindLibraryItem(store.KindMCP, "vehicles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.MadeBy != agents[0].Name || it.MadeByAgentID != agents[0].ID || it.SourceProjectID != p.ID || it.Status != store.ItemPublished {
+		t.Fatalf("made by: %q %d in %d %s", it.MadeBy, it.MadeByAgentID, it.SourceProjectID, it.Status)
+	}
+	if ins, _ := e.st.ListInstalls(p.ID); len(ins) != 1 || ins[0].ItemID != it.ID {
+		t.Fatalf("installs: %+v", ins)
+	}
+	p2 := e.project(t)
+	id := it.ID
+	if _, err := e.srv.installForAgent(team.MCPInstall{ProjectID: p2.ID, ItemID: &id, Name: "vehicles"}); err != nil {
+		t.Fatal(err)
+	}
+	if ins, _ := e.st.ListInstalls(p2.ID); len(ins) != 1 || ins[0].ItemID != it.ID {
+		t.Fatalf("p2 installs: %+v", ins)
+	}
+	_, err = e.srv.installForAgent(team.MCPInstall{ProjectID: p.ID, Name: "broken", Description: "B",
+		Transport: "local", Command: "false"})
+	var te *team.MCPTestError
+	if !errors.As(err, &te) {
+		t.Fatalf("probe: %v", err)
+	}
+	if _, err := e.st.FindLibraryItem(store.KindMCP, "broken"); err == nil {
+		t.Fatal("a server that failed its test was created")
 	}
 }

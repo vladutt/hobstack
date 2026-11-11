@@ -48,6 +48,8 @@ type Team struct {
 
 	// lib construieste pluginul Library al proiectului; nil = fara Library (testele).
 	lib *library.Lib
+	// installMCP: instalarea directa a unui server MCP de catre un lider (web); nil = install_mcp face mereu cerere.
+	installMCP MCPInstaller
 
 	// now da ora curenta (time.Now); ticker-ul detectorului de task-uri
 	// blocate si web-ul o folosesc prin Now.
@@ -75,6 +77,7 @@ type activeRun struct {
 	request   *store.Message    // ultimul mesaj al utilizatorului livrat la pornire (doar run-urile de chat)
 	questions []int64           // intrebarile din alte proiecte livrate run-ului: nu poate intreba la randul lui (anti-bucla), iar la final se inchid
 	snap      *gitsnap.Snapshot // starea git a folderului la pornire (run pe task care poate scrie); nil = fara repo
+	userStop  bool              // utilizatorul a apasat Stop pe agent / task: task-ul ramane oprit in coada
 }
 
 // setRequest retine mesajul utilizatorului care a pornit run-ul activ al agentului.
@@ -265,7 +268,7 @@ func (t *Team) AgentStatus(a store.Agent, tasks []store.Task) (string, *store.Ta
 	var current *store.Task
 	for _, want := range []string{store.StatusInProgress, store.StatusQueued} {
 		for i := range tasks {
-			if current == nil && tasks[i].AssigneeID == a.ID && tasks[i].Status == want {
+			if current == nil && tasks[i].AssigneeID == a.ID && tasks[i].Status == want && !tasks[i].Stopped {
 				current = &tasks[i]
 			}
 		}
@@ -281,7 +284,7 @@ func (t *Team) statusOf(a store.Agent, tasks []store.Task, pending bool) string 
 		return StatusQueued
 	}
 	for _, task := range tasks {
-		if task.AssigneeID == a.ID && task.Status == store.StatusQueued {
+		if task.AssigneeID == a.ID && task.Status == store.StatusQueued && !task.Stopped {
 			return StatusQueued
 		}
 	}
