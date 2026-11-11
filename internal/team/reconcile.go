@@ -64,9 +64,14 @@ func (t *Team) Run(ctx context.Context) {
 //     in ordinea numarului;
 //  2. altfel, un agent inactiv cu mesaje nelivrate primeste un run de notificari.
 //
+// Brainstorming-ul (cardurile waiting) vine dupa toate: un agent liber, fara task in coada
+// si fara note nelivrate, ia urmatorul lui card. Exceptie: un card "Run now" porneste
+// imediat dupa pasul 0, inaintea task-urilor din coada.
+//
 // max_parallel se aplica doar agentilor care au sef; radacinile vorbesc cu
 // utilizatorul si pornesc mereu. Pe pauza porneste doar run-urile de chat ale
-// agentilor carora le-a scris utilizatorul. E sigur de apelat oricand si de oricate ori.
+// agentilor carora le-a scris utilizatorul, plus brainstorming-ul (il cere tot utilizatorul).
+// E sigur de apelat oricand si de oricate ori.
 func (t *Team) Reconcile(projectID int64) error {
 	t.work.Lock()
 	defer t.work.Unlock()
@@ -90,6 +95,12 @@ func (t *Team) Reconcile(projectID int64) error {
 	agents, err := t.st.ListAgents(projectID)
 	if err != nil || len(agents) == 0 {
 		return err
+	}
+	// cardurile agentilor scosi din participanti sau stersi nu mai pornesc (Skipped)
+	if n, err := t.st.SkipOrphanCards(projectID); err != nil {
+		return err
+	} else if n > 0 {
+		t.emit(projectID, "brainstorm", map[string]int64{"topicId": 0}) // 0 = mai multe subiecte
 	}
 	tasks, err := t.st.ListTasks(projectID)
 	if err != nil {
@@ -161,6 +172,21 @@ func (t *Team) Reconcile(projectID int64) error {
 		}
 		return notesRun(a, notes)
 	}
+	// cardRun porneste urmatorul card de brainstorming al agentului, daca are unul
+	// (priorityOnly: doar cardurile "Run now"). Un run care nu porneste lasa cardul
+	// Failed (brainstormRun), fara pauza pe proiect: nu e munca echipei.
+	cardRun := func(a store.Agent, priorityOnly bool) error {
+		card, ok, err := t.st.NextCard(a.ID, priorityOnly)
+		if err != nil || !ok {
+			return err
+		}
+		if err := t.brainstormRun(p, a, agents, card); err != nil {
+			log.Printf("brainstorm card %d: %v", card.ID, err)
+			return nil
+		}
+		started(a)
+		return nil
+	}
 
 	// pe pauza raspund doar agentii carora le-a scris utilizatorul (chat): fara task-uri
 	// din board, fara decizii si fara run-uri pornite doar de notele altor agenti.
@@ -181,6 +207,22 @@ func (t *Team) Reconcile(projectID int64) error {
 				return err
 			}
 		}
+		// brainstorming pentru agentii ramasi liberi si fara note (task-urile din coada nu ruleaza pe pauza)
+		for _, a := range agents {
+			if t.isActive(a.ID) {
+				continue
+			}
+			pending, err := t.st.HasUndelivered(a.ID)
+			if err != nil {
+				return err
+			}
+			if pending {
+				continue
+			}
+			if err := cardRun(a, false); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -196,6 +238,33 @@ func (t *Team) Reconcile(projectID int64) error {
 			continue
 		}
 		if err := notifyRun(a); err != nil || failed {
+			return err
+		}
+	}
+
+	// "Run now": cardul prioritar trece inaintea task-urilor din coada; notele nelivrate
+	// (scurte, deblocheaza alti agenti) tot au intaietate, cardul porneste la urmatorul tur
+	for _, a := range agents {
+		if t.isActive(a.ID) || full(a) {
+			continue
+		}
+		_, ok, err := t.st.NextCard(a.ID, true)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		pending, err := t.st.HasUndelivered(a.ID)
+		if err != nil {
+			return err
+		}
+		if pending {
+			err = notifyRun(a)
+		} else {
+			err = cardRun(a, true)
+		}
+		if err != nil || failed {
 			return err
 		}
 	}
@@ -283,6 +352,23 @@ func (t *Team) Reconcile(projectID int64) error {
 			continue
 		}
 		if err := notifyRun(a); err != nil || failed {
+			return err
+		}
+	}
+
+	// 3. brainstorming: doar agentii liberi, fara task in coada (cele oprite nu conteaza) si fara note
+	for _, a := range agents {
+		if t.isActive(a.ID) || full(a) || hasQueued[a.ID] {
+			continue
+		}
+		pending, err := t.st.HasUndelivered(a.ID)
+		if err != nil {
+			return err
+		}
+		if pending {
+			continue
+		}
+		if err := cardRun(a, false); err != nil {
 			return err
 		}
 	}
@@ -601,6 +687,10 @@ func (t *Team) Recover() error {
 	t.work.Lock()
 	defer t.work.Unlock()
 	if err := t.st.InterruptRunning(); err != nil {
+		return err
+	}
+	// cardurile de brainstorming ramase running revin in asteptare (Reconcile le reia)
+	if err := t.st.RequeueRunningCards(); err != nil {
 		return err
 	}
 	ids, err := t.st.RequeueAllInProgress()

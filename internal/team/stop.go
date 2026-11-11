@@ -52,6 +52,20 @@ func (t *Team) StopTask(taskID int64) error {
 	return nil
 }
 
+// StopCard opreste brainstorming-ul pe card: run-ul lui se opreste (finishCard il lasa Stopped),
+// iar un card in asteptare trece direct pe Stopped. Nu se reia singur, doar cu Retry.
+func (t *Team) StopCard(cardID int64) error {
+	if t.stopRun(func(_ int64, ar activeRun) bool { return ar.cardID == cardID }) {
+		return nil
+	}
+	return t.cardAction(cardID, func(card store.BrainstormCard) error {
+		if card.Status != store.CardWaiting {
+			return CardStateError("This card is not waiting or running.")
+		}
+		return t.st.SetCardState(card.ID, store.CardStopped, "", "")
+	})
+}
+
 // stopRun opreste primul run activ ales de match si il marcheaza ca oprit de utilizator.
 func (t *Team) stopRun(match func(agentID int64, ar activeRun) bool) bool {
 	t.mu.Lock()

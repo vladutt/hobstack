@@ -106,12 +106,14 @@ type fixture struct {
 	lead store.Agent
 	rook store.Agent
 	vera store.Agent
+	db   string // calea bazei de date (pentru testele care o strica intentionat)
 }
 
 // setup: proiect cu lead + doi workeri (Rook poate scrie fisiere, Vera nu).
 func setup(t *testing.T) *fixture {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	db := filepath.Join(t.TempDir(), "t.db")
+	st, err := store.Open(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +133,7 @@ func setup(t *testing.T) *fixture {
 	}
 	fs := newFakeStarter()
 	tm := New(st, fs, events.NewHub(), "http://127.0.0.1:7777")
-	return &fixture{st: st, tm: tm, fs: fs, p: p, lead: lead, rook: rook, vera: vera}
+	return &fixture{st: st, tm: tm, fs: fs, p: p, lead: lead, rook: rook, vera: vera, db: db}
 }
 
 // agent adauga un agent in proiectul fixture-ului; parent/reviewer pot fi nil.
