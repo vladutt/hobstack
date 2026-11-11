@@ -369,6 +369,17 @@ fara MACOS_SIGN_IDENTITY ramane ad-hoc (local nu se configureaza nimic); cu ea s
 eroare): .dmg notarizat + staple, binarele trimise intr-un zip (tar.gz-urile neschimbate), la final spctl. Job-ul `mac`
 importa certificatul (secretele MACOS_CERT_P12, MACOS_CERT_PASSWORD) intr-un keychain temporar cu `security`, doar daca
 exista secretul; fara el build-ul e ad-hoc. Update-ul din aplicatie re-semneaza ad-hoc (fara carantina, Gatekeeper nu verifica).
+Gata (Brainstorm, spec in docs/superpowers/specs/2026-11-11-hobstack-brainstorm-design.md): tab-ul Brainstorm pe proiect (#/p/<pid>/brainstorm/<topic>,
+static/js/brainstorm.js; subiectele apar ca niste canale). Tabelele brainstorm_* (migrarea 038, internal/store/brainstorm.go): topics, participants,
+rounds (mesajul utilizatorului), cards (un card per agent per runda, status waiting / running / done / stopped / failed / skipped), files, sessions.
+Fiecare participant raspunde la un mesaj cu un card: idee, wild sau intrebare cu 2-5 optiuni + Other (max 2 intrebari per agent pe runda), prin
+tool-ul MCP brainstorm_reply (singurul tool al run-ului; daca nu-l cheama, textul final devine idee, primul rand fiind titlul). Run-urile sunt
+doar citire, cu sesiune Claude separata per (subiect, agent) in brainstorm_sessions (stearsa la schimbarea contului). Reconcile porneste un card
+doar cand agentul e liber (fara task Queued nestopat, fara note) si proiectul nu e pe pauza; "Run now" trece inaintea cozii. Stop = card Stopped
+cu Retry; agentii scosi sau stersi -> Skipped; Recover pune cardurile running inapoi in waiting. Atasamentele subiectului stau in
+projects/<pid>/brainstorm/<topic>/ (--add-dir). Iesiri: Pick; Save to Files (brainstorm-<slug>.md in Files, suprascris); Send to lead (mesaj de chat
+al utilizatorului catre un lider, cu linkul "Topic: #/p/<pid>/brainstorm/<tid>"). Intrebarile nu apar in Needs you, doar ca insigna pe tab. API:
+/api/projects/{id}/brainstorm, /api/brainstorm/{tid}..., /api/brainstorm/cards/{id}/{action}; eveniment SSE "brainstorm" {topicId} (0 = mai multe subiecte).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
