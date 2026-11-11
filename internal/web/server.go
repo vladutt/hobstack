@@ -178,6 +178,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/recurring/{id}/run", s.runRecurring)
 	mux.HandleFunc("GET /api/recurring/{id}/history", s.recurringHistory)
 	mux.HandleFunc("GET /api/recurring/{id}/files", s.recurringFiles)
+	mux.HandleFunc("GET /api/projects/{id}/brainstorm", s.listBrainstorm)
+	mux.HandleFunc("POST /api/projects/{id}/brainstorm", s.createTopic)
+	mux.HandleFunc("GET /api/brainstorm/{id}", s.getTopic)
+	mux.HandleFunc("PATCH /api/brainstorm/{id}", s.patchTopic)
+	mux.HandleFunc("POST /api/brainstorm/{id}/rounds", s.newRound)
+	mux.HandleFunc("POST /api/brainstorm/{id}/files", s.uploadTopicFiles)
+	mux.HandleFunc("GET /api/brainstorm/{id}/files/{fid}", s.serveTopicFile)
+	mux.HandleFunc("DELETE /api/brainstorm/{id}/files/{fid}", s.deleteTopicFile)
+	mux.HandleFunc("POST /api/brainstorm/cards/{id}/{action}", s.cardAction)
+	mux.HandleFunc("POST /api/brainstorm/{id}/save", s.saveBrainstorm)
+	mux.HandleFunc("POST /api/brainstorm/{id}/send", s.sendBrainstorm)
 	mux.HandleFunc("GET /api/tasks/{id}", s.getTask)
 	mux.HandleFunc("GET /api/tasks/{id}/changes", s.getTaskChanges)
 	mux.HandleFunc("GET /api/tasks/{id}/modified", s.getTaskModified)
@@ -333,7 +344,13 @@ func fail(w http.ResponseWriter, err error) {
 	var tmf team.TooManyFilesError
 	var are team.AgentRequestError
 	var pre team.ProjectRequestError
+	var bse team.BrainstormError
+	var cse team.CardStateError
 	switch {
+	case errors.As(err, &bse):
+		writeErr(w, http.StatusBadRequest, bse.Error())
+	case errors.As(err, &cse):
+		writeErr(w, http.StatusConflict, cse.Error())
 	case errors.As(err, &br):
 		writeErr(w, http.StatusBadRequest, br.Error())
 	case errors.As(err, &re), errors.As(err, &ae), errors.As(err, &tmf):
