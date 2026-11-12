@@ -1843,7 +1843,9 @@ input.task-search:focus { border-color: var(--amber); outline: none; }
 .bs-head { padding: 14px 18px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
 .bs-head-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
 .bs-head-top .grow { flex: 1; }
-.bs-title { margin: 0; font-size: 18px; font-weight: 650; display: flex; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+/* fara min-width: 0 si fara "anywhere": cu ele titlul se micsora sub un cuvant si Firefox rupea "Improvement / s" */
+.bs-title { margin: 0; font-size: 18px; font-weight: 650; display: flex; gap: 6px; max-width: 100%; }
+.bs-title-text { overflow-wrap: break-word; min-width: 0; }
 .bs-faces { display: flex; align-items: center; }
 .bs-faces > * + * { margin-left: -6px; }
 .bs-faces .avatar { box-shadow: 0 0 0 2px var(--col); }

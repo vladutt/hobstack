@@ -226,7 +226,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
     }
     fill(head,
       el("div", { class: "bs-head-top" },
-        el("h2", { class: "bs-title" }, el("span", { class: "bs-hash" }, "#"), t.name),
+        el("h2", { class: "bs-title" }, el("span", { class: "bs-hash" }, "#"), el("span", { class: "bs-title-text" }, t.name)),
         el("div", { class: "bs-faces", "aria-label": "Participants" },
           t.participants.map((id) => {
             const a = agentBy(id);
