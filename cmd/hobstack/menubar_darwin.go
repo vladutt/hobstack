@@ -15,6 +15,8 @@ package main
 #include <stdlib.h>
 
 extern void goMenuOpen(void);
+extern int hsTerminatePending(void); // window_darwin.go
+extern void hsReplyTerminate(void);
 extern void goMenuQuit(void);
 
 @interface HSMenuTarget : NSObject
@@ -71,6 +73,10 @@ static int hsConfirm(const char *text) {
 
 // hsStopApp scoate iconita si opreste bucla; [NSApp stop:] are efect abia dupa un eveniment, deci trimitem unul.
 static void hsStopApp(void) {
+	if (hsTerminatePending()) { // Quit din Dock / logout: macOS asteapta raspunsul, apoi iese singur
+		hsReplyTerminate();
+		return;
+	}
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (hsItem != nil) {
 			[[NSStatusBar systemStatusBar] removeStatusItem:hsItem];
@@ -109,7 +115,10 @@ var menuHooks struct {
 func menuBarAvailable() bool { return true }
 
 // runMenuBar ruleaza bucla Cocoa pe firul principal pana la stopMenuBar.
-func runMenuBar() { C.hsRunApp() }
+func runMenuBar() {
+	installAppDelegate() // Dock / reopen / Quit din Dock (window_darwin.go)
+	C.hsRunApp()
+}
 
 func stopMenuBar() { C.hsStopApp() }
 
