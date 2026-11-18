@@ -142,10 +142,20 @@ static NSMenuItem *hsItem(NSString *title, SEL action, NSString *key, id target)
 		[self createWithFrame:frame zoom:zoom];
 		[self.web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:url]]];
 	}
+	// trecerea Accessory -> Regular se aplica abia la urmatorul ciclu: activarea si "key" (tastatura in fereastra)
+	// le facem dupa; altfel fereastra apare in fata, dar Cmd+W / Cmd+C / Cmd+K nu ajung la ea pana la un clic
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-	[NSApp activateIgnoringOtherApps:YES];
-	[self.window makeKeyAndOrderFront:nil];
+	[self.window orderFrontRegardless];
 	hsVisible = 1;
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[NSApp activateIgnoringOtherApps:YES];
+		[self.window makeKeyAndOrderFront:nil];
+	});
+}
+
+// makeKey: chemat cand aplicatia devine activa (Dock, Cmd+Tab, open): fereastra vizibila primeste tastatura
+- (void)makeKey {
+	if (self.window != nil && self.window.isVisible && !self.window.isKeyWindow) [self.window makeKeyAndOrderFront:nil];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
@@ -272,7 +282,10 @@ static NSMenuItem *hsItem(NSString *title, SEL action, NSString *key, id target)
 // Quit din Dock / logout = oprire curata prin Go (NSTerminateLater, raspunsul in hsStopApp).
 @interface HSAppDelegate : NSObject <NSApplicationDelegate>
 @end
+static HSWindowCtl *hsCtl;
+
 @implementation HSAppDelegate
+- (void)applicationDidBecomeActive:(NSNotification *)n { [hsCtl makeKey]; }
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag {
 	goWindowReopen();
 	return NO;
@@ -284,7 +297,6 @@ static NSMenuItem *hsItem(NSString *title, SEL action, NSString *key, id target)
 }
 @end
 
-static HSWindowCtl *hsCtl;
 static HSAppDelegate *hsDelegate; // NSApp.delegate e weak: il tinem noi
 
 // hsInstallAppDelegate: pe firul principal, inainte de [NSApp run]
