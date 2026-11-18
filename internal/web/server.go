@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -53,6 +54,8 @@ type Server struct {
 	dirs    Dirs
 	pick    func(context.Context) (string, error) // dialogul nativ de ales folder
 	canPick bool
+	window  *AppWindow      // fereastra proprie (SetAppWindow); nil = doar browser
+	dlMu    sync.Mutex      // descarcarile in Downloads aleg pe rand un nume liber
 	opener  Opener          // nil = butoanele "Deschide" nu sunt disponibile
 	wizard  *wizard.Manager // nil = wizard-ul "Proiect nou cu AI" nu e disponibil
 	drafts  *draft.Manager  // nil = "Let AI draft this agent" nu e disponibil
@@ -118,6 +121,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/app", s.getApp)
 	mux.HandleFunc("PUT /api/app/autostart", s.setAutostart)
 	mux.HandleFunc("POST /api/app/quit", s.quitApp)
+	mux.HandleFunc("PUT /api/app/open-in", s.setOpenIn)
+	mux.HandleFunc("POST /api/app/show", s.showApp)
+	mux.HandleFunc("POST /api/app/download", s.downloadFile)
+	mux.HandleFunc("POST /api/app/reveal", s.revealDownload)
 	mux.HandleFunc("POST /api/claude/install", s.installClaude)
 	mux.HandleFunc("POST /api/claude/check", s.checkClaude)
 	mux.HandleFunc("POST /api/claude/path", s.claudePath)

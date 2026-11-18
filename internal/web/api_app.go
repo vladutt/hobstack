@@ -21,7 +21,7 @@ func (s *Server) SetApp(exe, home, root, logFile string, quit func()) {
 
 func (s *Server) appState() map[string]any {
 	a := s.app
-	return map[string]any{
+	st := map[string]any{
 		"os":        runtime.GOOS,
 		"autostart": autostart.Supported() && autostart.Enabled(a.home, a.exe),
 		"supported": autostart.Supported(),
@@ -29,6 +29,10 @@ func (s *Server) appState() map[string]any {
 		"logFile":   a.logFile,
 		"running":   max(s.runs.ActiveCount(), s.team.ActiveCount()),
 	}
+	for k, v := range s.windowState() {
+		st[k] = v
+	}
+	return st
 }
 
 func (s *Server) getApp(w http.ResponseWriter, r *http.Request) {
