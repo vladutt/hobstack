@@ -403,6 +403,8 @@ Dupa: service install, goreleaser, notificari, git worktrees.
 Idei salvate (fara spec): chat general pe orice pagina, care propune modificari cu Apply/Undo (docs/ideas/2026-10-07-general-assistant.md);
 admin self-hosted al companiei, doar limite si setari, fara comenzi pe masini (docs/ideas/2026-10-07-company-admin.md);
 plugin JetBrains subtire (UI-ul web in JCEF + deschis fisiere/diff-uri in IDE) (docs/ideas/2026-10-07-jetbrains-plugin.md).
+Modul Turbo: clone ale unui agent pe task-uri in paralel, fiecare in worktree-ul lui git, merge la Done
+(docs/ideas/2026-11-18-turbo-mode.md).
 
 ## Conventii
 - `go vet ./...` si `go build -race` trebuie sa treaca.
