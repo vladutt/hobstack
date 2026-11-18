@@ -65,7 +65,8 @@ export function appSettings() {
     const toggle = el("input", { type: "checkbox", checked: st.autostart, disabled: busy || !st.supported,
       onchange: (e) => setAutostart(e.target.checked) });
     const where = st.os === "windows" ? "Windows" : st.os === "darwin" ? "macOS" : "your desktop";
-    box.replaceChildren(
+    // replaceChildren nativ scrie false / null ca text ("false" sub titlu pe macOS): le scoatem
+    box.replaceChildren(...[
       el("h2", {}, "App"),
       el("p", { class: "hint" }, `HobStack runs in the background at ${location.origin}; you can close the terminal and this ${window.hobstackApp ? "window" : "tab"}. Starting it again opens this page.`),
       st.os === "windows" && el("p", { class: "hint" }, "It also sits in the notification area next to the clock: click the H to open it, right-click to quit."),
@@ -75,7 +76,7 @@ export function appSettings() {
       openInGroup(),
       el("p", { class: "hint" }, "Log: ", el("code", {}, st.logFile)),
       el("div", { class: "upd-actions" },
-        el("button", { type: "button", class: "btn small danger", onclick: () => quit(false) }, "Quit HobStack")));
+        el("button", { type: "button", class: "btn small danger", onclick: () => quit(false) }, "Quit HobStack"))].filter(Boolean));
   }
 
   draw();
