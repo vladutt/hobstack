@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"hobstack/internal/appprefs"
 	"hobstack/internal/autostart"
 	"hobstack/internal/claudecli"
 	"hobstack/internal/config"
@@ -93,6 +94,9 @@ func main() {
 		args := os.Args[1:]
 		if !slices.Contains(args, "--no-open") && !slices.Contains(args, "-no-open") {
 			args = append(args, "--no-open")
+		}
+		if re.showWindow && !slices.Contains(args, "--show-window") {
+			args = append(args, "--show-window")
 		}
 		log.Printf("starting the new version")
 		err = selfupdate.Reexec(re.exe, args)
@@ -218,21 +222,25 @@ func alreadyRunning(addr string) bool {
 var releaseVersion = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
 // restartError: start s-a oprit pentru ca update-ul a pus un binar nou; main il porneste.
-type restartError struct{ exe string }
+type restartError struct {
+	exe        string
+	showWindow bool // fereastra era deschisa: binarul nou o redeschide (--show-window)
+}
 
 func (restartError) Error() string { return "restart after update" }
 
 func start(args []string) error {
 	fl := flag.NewFlagSet("start", flag.ExitOnError)
 	port := fl.Int("port", 7777, "port the UI listens on")
-	noOpen := fl.Bool("no-open", false, "don't open the browser automatically")
+	noOpen := fl.Bool("no-open", false, "don't open HobStack automatically")
+	showWin := fl.Bool("show-window", false, "open the app window even with --no-open (after an update)")
 	fl.Parse(args)
 
 	// pornit a doua oara: deschidem HobStack-ul care ruleaza, inainte sa atingem datele
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	if alreadyRunning(addr) {
 		log.Printf("%s is already running at http://%s", config.DisplayName, addr)
-		if !*noOpen {
+		if !*noOpen && !showRunning(addr) {
 			openBrowser("http://" + addr)
 		}
 		return nil
@@ -283,7 +291,7 @@ func start(args []string) error {
 		if alreadyRunning(addr) {
 			// a doua pornire: deschidem HobStack-ul care ruleaza deja, fara eroare
 			log.Printf("%s is already running at http://%s", config.DisplayName, addr)
-			if !*noOpen {
+			if !*noOpen && !showRunning(addr) {
 				openBrowser("http://" + addr)
 			}
 			return nil
@@ -385,7 +393,15 @@ func start(args []string) error {
 	}
 
 	// Windows: iconita langa ceas (clic = deschide, meniul Open / Quit); scoasa la oprire si inainte de restart
-	tr := startTray(func() { openBrowser(url) }, stop, func() int { return max(mgr.ActiveCount(), tm.ActiveCount()) })
+	// fereastra proprie (macOS): marimea / pozitia din app.json; clic pe Dock o redeschide
+	windowHooks.Lock()
+	windowHooks.root = paths.Root
+	windowHooks.reopen = func() { openUI(paths.Root, url) }
+	windowHooks.Unlock()
+	winOK, winReason := windowAvailable()
+	webSrv.SetAppWindow(web.AppWindow{Supported: winOK, Reason: winReason, Show: func() { openUI(paths.Root, url) }})
+
+	tr := startTray(func() { openUI(paths.Root, url) }, stop, func() int { return max(mgr.ActiveCount(), tm.ActiveCount()) })
 	defer tr.Close()
 
 	log.Printf("%s %s running at %s", config.AppName, config.Version, url)
@@ -393,8 +409,8 @@ func start(args []string) error {
 	if claudeBin != "" {
 		log.Printf("claude: %s", claudeBin)
 	}
-	if !*noOpen {
-		openBrowser(url)
+	if !*noOpen || *showWin {
+		openUI(paths.Root, url)
 	}
 
 	errCh := make(chan error, 1)
@@ -408,6 +424,7 @@ func start(args []string) error {
 		}
 	}
 
+	wasOpen := windowOpen() // inainte de oprire: dupa update fereastra se redeschide
 	log.Println("stopping active agents...")
 	mgr.Shutdown()
 	shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -415,7 +432,7 @@ func start(args []string) error {
 	err = srv.Shutdown(shCtx)
 	if restart.Load() {
 		tm.Drain() // un finish in curs isi termina scrierile inainte sa se inchida baza de date
-		return restartError{exe: exe}
+		return restartError{exe: exe, showWindow: wasOpen}
 	}
 	return err
 }
@@ -492,6 +509,27 @@ func backfillTokens(st *store.Store, logs string) {
 			return
 		}
 	}
+}
+
+// openUI deschide HobStack cum a ales utilizatorul: fereastra proprie (implicit, unde exista) sau browserul.
+func openUI(root, url string) {
+	if ok, _ := windowAvailable(); ok && appprefs.Load(root).OpenIn == appprefs.OpenWindow {
+		showWindow(url)
+		return
+	}
+	openBrowser(url)
+}
+
+// showRunning cere HobStack-ului care ruleaza deja sa se arate (fereastra sau browser, dupa preferinta lui).
+// false = n-a putut (versiune veche fara /api/app/show, alt raspuns, eroare): atunci deschidem browserul.
+func showRunning(addr string) bool {
+	c := &http.Client{Timeout: 2 * time.Second}
+	resp, err := c.Post("http://"+addr+"/api/app/show", "application/json", nil)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusNoContent
 }
 
 func openBrowser(url string) {
