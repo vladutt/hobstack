@@ -6,6 +6,8 @@ A project's team is a hierarchy: you give goals to the root agents, leads split 
 only among their direct team, and work goes through the reviewer (if there is one), then to the lead
 that created the task. You can talk to any agent. Everything is visible live on a board and saved in SQLite.
 
+![HobStack board with Needs you, Queued, In progress, Review and Done columns and one permission request waiting](docs/images/board.png)
+
 ## Install
 
 From [Releases](https://github.com/vladutt/hobstack/releases/latest):
@@ -31,6 +33,24 @@ your PATH and opens the login. The plain archives (`.tar.gz`, `.zip`) work too: 
 HobStack checks GitHub for a new release every hour. When there is one, it shows the version and its notes when you
 open it; "Update and restart" downloads it, verifies it, waits for running agents to finish, backs up the database
 and restarts. The previous version is removed once the new one is running.
+
+## Screenshots
+
+**Every task, fully accounted for: what changed, who checked it and why.**
+
+![An open task with assignee, reviewer, changed files and the activity log](docs/images/task.png)
+
+**A team you can read at a glance: who reports to whom, and who reviews.**
+
+![Team chart: you at the top, a tech lead, then developers and a reviewer, with reporting and review lines](docs/images/team.png)
+
+**Talk to any agent directly.**
+
+![Chat panel open on the backend agent](docs/images/chat.png)
+
+**All your projects in one place.**
+
+![Projects table with lead, team, progress and seven-day activity](docs/images/projects.png)
 
 ## Running from source
 
