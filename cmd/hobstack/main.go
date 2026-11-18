@@ -91,13 +91,7 @@ func main() {
 	var re restartError
 	if errors.As(err, &re) {
 		// dupa update: portul si baza de date sunt inchise; pornim binarul nou fara sa redeschidem browserul
-		args := os.Args[1:]
-		if !slices.Contains(args, "--no-open") && !slices.Contains(args, "-no-open") {
-			args = append(args, "--no-open")
-		}
-		if re.showWindow && !slices.Contains(args, "--show-window") {
-			args = append(args, "--show-window")
-		}
+		args := restartArgs(os.Args[1:], re.showWindow)
 		log.Printf("starting the new version")
 		err = selfupdate.Reexec(re.exe, args)
 	}
@@ -509,6 +503,24 @@ func backfillTokens(st *store.Store, logs string) {
 			return
 		}
 	}
+}
+
+// restartArgs: argumentele binarului nou dupa update. Fara browser (--no-open); fereastra se redeschide doar daca
+// era deschisa acum: un --show-window ramas de la un restart mai vechi se scoate.
+func restartArgs(args []string, showWindow bool) []string {
+	out := []string{}
+	for _, a := range args {
+		if a != "--show-window" && a != "-show-window" {
+			out = append(out, a)
+		}
+	}
+	if !slices.Contains(out, "--no-open") && !slices.Contains(out, "-no-open") {
+		out = append(out, "--no-open")
+	}
+	if showWindow {
+		out = append(out, "--show-window")
+	}
+	return out
 }
 
 // openUI deschide HobStack cum a ales utilizatorul: fereastra proprie (implicit, unde exista) sau browserul.

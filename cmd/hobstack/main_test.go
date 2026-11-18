@@ -35,3 +35,18 @@ func TestShowRunning(t *testing.T) {
 		t.Fatal("port inchis: vreau false")
 	}
 }
+
+func TestRestartArgs(t *testing.T) {
+	got := restartArgs([]string{"start", "--port", "7791", "--show-window"}, false)
+	if strings.Join(got, " ") != "start --port 7791 --no-open" {
+		t.Fatalf("fara fereastra: %v", got)
+	}
+	got = restartArgs([]string{"start", "-no-open"}, true)
+	if strings.Join(got, " ") != "start -no-open --show-window" {
+		t.Fatalf("cu fereastra: %v", got)
+	}
+	got = restartArgs([]string{"start", "-show-window", "--no-open"}, true)
+	if strings.Join(got, " ") != "start --no-open --show-window" {
+		t.Fatalf("o singura data: %v", got)
+	}
+}

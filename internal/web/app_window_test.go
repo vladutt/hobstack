@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -157,5 +158,34 @@ func TestUniqueName(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "notes"), nil, 0o644)
 	if got := uniqueName(dir, "notes"); got != "notes (2)" {
 		t.Fatal(got)
+	}
+}
+
+// un nume lung: "nume (2).ext" trece de 255 de octeti; nu are voie sa blocheze serverul
+func TestDownloadLongNameDoesNotHang(t *testing.T) {
+	e, _ := appEnv(t)
+	p := e.createProject(t, t.TempDir())
+	list := uploadOK(t, e, p.ID, map[string][]byte{"a.txt": []byte("x")})
+	url := "/api/files/" + itoa(list[0].ID) + "?download=1"
+	long := strings.Repeat("a", 251) + ".txt" // 255 octeti
+	done := make(chan int, 2)
+	go func() {
+		for i := 0; i < 2; i++ {
+			code, _ := e.do(t, "POST", "/api/app/download", map[string]string{"url": url, "name": long})
+			done <- code
+		}
+	}()
+	for i := 0; i < 2; i++ {
+		select {
+		case code := <-done:
+			if i == 0 && code != http.StatusOK {
+				t.Fatalf("primul: %d", code)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("descarcarea s-a blocat")
+		}
+	}
+	if code, _ := e.do(t, "POST", "/api/app/download", map[string]string{"url": url, "name": "a\x00b"}); code != http.StatusBadRequest {
+		t.Fatalf("NUL: %d", code)
 	}
 }

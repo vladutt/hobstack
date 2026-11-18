@@ -12,7 +12,8 @@ var windowHooks struct {
 	reopen func()
 }
 
-func windowAvailable() (bool, string) { return false, "not available on this system" }
+// motivul gol: fara fereastra pe platforma asta, Settings nu arata deloc alegerea (Reason e pentru o eroare reala)
+func windowAvailable() (bool, string) { return false, "" }
 
 func showWindow(url string) {}
 

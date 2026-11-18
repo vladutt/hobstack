@@ -395,6 +395,16 @@ cards/{id}/edit) pastreaza textul utilizatorului si pune "Edited"; nu porneste n
 Gata (poze in README): board-ul (hero, sub descriere) si sectiunea "## Screenshots" (task, team, chat, projects) din
 docs/images/*.png. Pozele vin de pe landing page (hobstack-landing/app/src/assets/hs-*.png), micsorate cu sips la 1600 px
 latime (~1.6 MB toate); sunt capturi de design cu date demo ("Meridian Auto"), nu din aplicatia reala.
+Gata (fereastra proprie pe macOS, spec in docs/superpowers/specs/2026-11-18-hobstack-app-window-design.md): HobStack se
+deschide implicit intr-un NSWindow cu WKWebView (cmd/hobstack/window_darwin.go, Objective-C langa bara de meniu) pe UI-ul de
+pe 127.0.0.1; window_other.go = browser (Linux; Windows pana la planul cu go-webview2). Preferinta "Open HobStack in"
+(App window / Browser, Settings > App) si marimea / pozitia / zoom-ul in <date>/app.json (internal/appprefs, salvate cu
+intarziere la mutare / redimensionare / zoom). main.openUI decide fereastra sau browserul; a doua pornire = POST
+/api/app/show (versiune veche: browser); dupa update --show-window doar daca fereastra era deschisa (restartArgs). In fereastra:
+meniurile HobStack / Edit / View (Back, Forward, zoom) / Window, confirm / alert / prompt ca foi, NSOpenPanel la input file,
+alte origini si target=_blank in browserul de sistem; inchisa se ascunde (pagina ramane), iese din Dock; clic pe Dock o
+redeschide; Quit din Dock / logout = oprire curata (NSTerminateLater). UI-ul stie de fereastra prin window.hobstackApp: a[download]
+merge prin POST /api/app/download (serverul isi cheama handler-ul, ~/Downloads, "nume (2).ext") + /api/app/reveal.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

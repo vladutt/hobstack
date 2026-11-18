@@ -17,7 +17,7 @@ package main
 #import <WebKit/WebKit.h>
 #include <stdlib.h>
 
-extern void goWindowClosed(double x, double y, double w, double h, double zoom);
+extern void goWindowState(double x, double y, double w, double h, double zoom);
 extern void goWindowReopen(void);
 extern void goAppTerminate(void);
 extern void goMenuQuit(void);
@@ -154,9 +154,17 @@ static NSMenuItem *hsItem(NSString *title, SEL action, NSString *key, id target)
 }
 
 // inchiderea doar ascunde fereastra: pagina, stream-urile si pozitia in UI raman pentru urmatorul Open
-- (BOOL)windowShouldClose:(NSWindow *)sender {
+// saveState: marimea, pozitia si zoom-ul ajung in app.json (Go le scrie cu intarziere, dupa ultima schimbare),
+// ca sa ramana si cand aplicatia se opreste cu fereastra deschisa (Cmd+Q, update, logout)
+- (void)saveState {
 	NSRect f = self.window.frame;
-	goWindowClosed(f.origin.x, f.origin.y, f.size.width, f.size.height, self.web.pageZoom);
+	goWindowState(f.origin.x, f.origin.y, f.size.width, f.size.height, self.web.pageZoom);
+}
+- (void)windowDidEndLiveResize:(NSNotification *)n { [self saveState]; }
+- (void)windowDidMove:(NSNotification *)n { [self saveState]; }
+
+- (BOOL)windowShouldClose:(NSWindow *)sender {
+	[self saveState];
 	[self.window orderOut:nil];
 	hsVisible = 0;
 	[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
@@ -170,9 +178,9 @@ static NSMenuItem *hsItem(NSString *title, SEL action, NSString *key, id target)
 - (void)reloadPage:(id)sender { [self.web reload]; }
 - (void)goBackPage:(id)sender { [self.web goBack]; }
 - (void)goForwardPage:(id)sender { [self.web goForward]; }
-- (void)zoomIn:(id)sender { self.web.pageZoom = MIN(3.0, self.web.pageZoom + 0.1); }
-- (void)zoomOut:(id)sender { self.web.pageZoom = MAX(0.5, self.web.pageZoom - 0.1); }
-- (void)zoomReset:(id)sender { self.web.pageZoom = 1.0; }
+- (void)zoomIn:(id)sender { self.web.pageZoom = MIN(3.0, self.web.pageZoom + 0.1); [self saveState]; }
+- (void)zoomOut:(id)sender { self.web.pageZoom = MAX(0.5, self.web.pageZoom - 0.1); [self saveState]; }
+- (void)zoomReset:(id)sender { self.web.pageZoom = 1.0; [self saveState]; }
 
 // navigarile cadrului principal spre alta origine (GitHub, skills.sh, mailto...) merg in browserul de sistem
 - (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)action

@@ -74,7 +74,12 @@ func (s *Server) downloadsDir() (string, error) {
 	return dir, os.MkdirAll(dir, 0o755)
 }
 
+// maxNameBytes: limita unui nume de fisier pe macOS / Linux / Windows (255 de octeti / caractere).
+const maxNameBytes = 255
+
 // uniqueName: "report.pdf", apoi "report (2).pdf", "report (3).pdf"... primul nume liber din dir.
+// "" daca nu gaseste unul (nume prea lung pentru sufix, eroare a sistemului de fisiere, peste 1000 de incercari):
+// fara limita, o eroare alta decat "nu exista" ar invarti bucla la nesfarsit.
 func uniqueName(dir, name string) string {
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)
@@ -82,12 +87,20 @@ func uniqueName(dir, name string) string {
 		base, ext = name, ""
 	}
 	candidate := name
-	for i := 2; ; i++ {
-		if _, err := os.Lstat(filepath.Join(dir, candidate)); os.IsNotExist(err) {
+	for i := 2; i <= 1000; i++ {
+		if len(candidate) > maxNameBytes {
+			return ""
+		}
+		_, err := os.Lstat(filepath.Join(dir, candidate))
+		if os.IsNotExist(err) {
 			return candidate
+		}
+		if err != nil {
+			return ""
 		}
 		candidate = fmt.Sprintf("%s (%d)%s", base, i, ext)
 	}
+	return ""
 }
 
 // fileResponse: ResponseWriter care scrie corpul raspunsului intr-un fisier (download-ul din fereastra).
@@ -135,7 +148,8 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimSpace(in.Name)
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || filepath.Base(name) != name {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") || filepath.Base(name) != name ||
+		len(name) > maxNameBytes {
 		writeErr(w, http.StatusBadRequest, "bad file name")
 		return
 	}
@@ -170,7 +184,12 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	s.dlMu.Lock() // doua descarcari cu acelasi nume nu au voie sa ia acelasi nume liber
 	defer s.dlMu.Unlock()
-	dest := filepath.Join(dir, uniqueName(dir, name))
+	free := uniqueName(dir, name)
+	if free == "" {
+		writeErr(w, http.StatusConflict, "a file with this name already exists in Downloads; rename or move it, then try again")
+		return
+	}
+	dest := filepath.Join(dir, free)
 	if err := os.Rename(tmp.Name(), dest); err != nil {
 		fail(w, err)
 		return
