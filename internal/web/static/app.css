@@ -333,7 +333,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .needs-you h2.needs-head { justify-content: flex-start; gap: 10px; }
 .needs-you h2.needs-head .col-count { margin-left: auto; }
 /* sub-containerele nu sunt cutii: casetele lor stau direct in grila coloanei */
-.needs-questions, .needs-stuck, .needs-access, .needs-agent-requests, .needs-work-requests { display: contents; }
+.needs-questions, .needs-fill, .needs-stuck, .needs-access, .needs-agent-requests, .needs-mcp-requests, .needs-work-requests, .needs-library, .needs-account { display: contents; }
 .question { background: var(--card); border: 1px solid transparent; border-radius: 11px; padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 /* optiunile pot fi propozitii lungi: se rup pe mai multe randuri in loc sa iasa din card */
 .question .actions .btn { height: auto; min-height: 30px; padding-block: 6px; white-space: normal; text-align: left; justify-content: flex-start; max-width: 100%; line-height: 1.35; }
@@ -1144,6 +1144,8 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .comment-form textarea { min-height: 48px; }
 .side-waiting { color: var(--amber); font-size: 13px; }
 .fill-in .fill-title { font-weight: 600; }
+.fill-all { display: flex; align-items: center; gap: 8px; padding: 0 4px 8px; }
+.fill-all .grow { flex: 1; }
 
 /* ---------- Library (library.js) ---------- */
 .mainnav { display: flex; gap: 4px; }

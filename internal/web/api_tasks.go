@@ -355,3 +355,18 @@ func (s *Server) setTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// tickAllFillIns: "Mark all done" din Needs you: bifeaza toate punctele deschise ale cardurilor "To fill in"
+func (s *Server) tickAllFillIns(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	n, err := s.team.UserTickAll(id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"ticked": n})
+}

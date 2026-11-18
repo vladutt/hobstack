@@ -458,6 +458,23 @@ export async function workspaceView(root, projectId, route) {
         el("a", { class: "btn small primary", href: `#/p/${projectId}/tasks/${f.taskId}` }, "Fill in")));
   }
 
+  // fillAllBar: "N to fill in · Mark all done" deasupra cardurilor "To fill in" (bifeaza tot dintr-o data)
+  function fillAllBar(fills) {
+    const items = fills.reduce((n, f) => n + f.open, 0);
+    const btn = el("button", { class: "btn small", type: "button" }, "Mark all done");
+    btn.onclick = async () => {
+      if (!confirm(`Mark all ${items} open item${items === 1 ? "" : "s"} on ${fills.length} tasks as done?`)) return;
+      btn.disabled = true;
+      try {
+        const r = await api(`/api/projects/${projectId}/fill-ins/done`, { method: "POST" });
+        toast(`Marked ${r.ticked} item${r.ticked === 1 ? "" : "s"} as done`, "ok");
+        reload();
+      } catch (e) { toast(e.message, "error"); btn.disabled = false; }
+    };
+    return el("div", { class: "fill-all" },
+      el("span", { class: "hint" }, `${fills.length} tasks to fill in`), el("span", { class: "grow" }), btn);
+  }
+
   // renderNeeds: banda "Needs you". Titlul si vizibilitatea se actualizeaza
   // mereu; intrebarile si task-urile blocate se redeseneaza fiecare doar cand
   // se schimba setul lor: reload-urile dese (SSE) ar sterge raspunsul pe care il scrii.
@@ -483,7 +500,7 @@ export async function workspaceView(root, projectId, route) {
     const fKey = fills.map((f) => f.taskId + ":" + f.open).join(",");
     if (fKey !== fillKey) {
       fillKey = fKey;
-      fillList.replaceChildren(...fills.map(fillNode));
+      fillList.replaceChildren(fills.length > 1 ? fillAllBar(fills) : "", ...fills.map(fillNode));
     }
     const sKey = stuck.map((s) => s.taskId).join(",");
     if (sKey !== stuckKey) {

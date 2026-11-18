@@ -107,7 +107,8 @@ internal/draft, run scurt doar citire cu tool-ul propose_agent; pagina Agent nou
 Costul nu intra in Total cost.
 Gata (Left for you, spec in docs/superpowers/specs/2026-10-08-foreman-left-for-you-design.md): report_done
 left_for_user, tick_left_for_user, comment_task; comentariile utilizatorului trezesc asignatul; task_todos
-(migrarea 021); cardul To fill in in Needs you.
+(migrarea 021); cardul To fill in in Needs you. Cu mai multe carduri, bara "N tasks to fill in · Mark all done" bifeaza
+tot dintr-o data (team.UserTickAll, POST /api/projects/{id}/fill-ins/done; cu Full autonomy pasii raman neatinsi).
 Gata (Library, spec in docs/superpowers/specs/2026-10-08-foreman-library-design.md): tool-uri, skill-uri si servere MCP
 refolosite intre proiecte. Tabelele library_* (migrarea 022); pachet internal/library: propuneri copiate cu OpenRoot,
 versiuni read-only, plugin per proiect pe hash (--plugin-dir), serverele MCP prin --mcp-config (fisier 0600 cu
@@ -391,6 +392,9 @@ run-ul (prompt.BrainstormCombineTurn) e fara sesiune si fara intrebari (brainsto
 randul "Combined" de sub runda, cu "Combined from: A + B" (link: deruleaza la sursa); sursele au eticheta "Merged" (store.MergedSources
 la citire, doar cat exista un combinat terminat sau in lucru). Edit in modala pe ideea combinata (team.EditCombined, POST
 cards/{id}/edit) pastreaza textul utilizatorului si pune "Edited"; nu porneste niciun run.
+Gata (poze in README): board-ul (hero, sub descriere) si sectiunea "## Screenshots" (task, team, chat, projects) din
+docs/images/*.png. Pozele vin de pe landing page (hobstack-landing/app/src/assets/hs-*.png), micsorate cu sips la 1600 px
+latime (~1.6 MB toate); sunt capturi de design cu date demo ("Meridian Auto"), nu din aplicatia reala.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

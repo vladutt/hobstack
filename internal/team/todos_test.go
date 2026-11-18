@@ -142,3 +142,39 @@ func TestLeaveForUserListsNumbersAndTicksRecordEvents(t *testing.T) {
 		t.Fatalf("evenimente: %s", kinds)
 	}
 }
+
+// "Mark all done": bifeaza tot ce apare in Needs you; cu Full autonomy pasii raman deschisi
+func TestUserTickAll(t *testing.T) {
+	f := setup(t)
+	a := f.task(t, "Page A", f.rook, store.StatusDone)
+	b := f.task(t, "Page B", f.rook, store.StatusDone)
+	f.st.AddTodos(a.ID, []string{"Company name", "VAT"}, "value")
+	f.st.AddTodos(b.ID, []string{"Logo"}, "value")
+	f.st.AddTodos(b.ID, []string{"Check on phone"}, "step")
+	f.st.SetTodo(a.ID, 1, true, "You")
+
+	p, _ := f.st.GetProject(f.p.ID)
+	p.Autonomy = true
+	if err := f.st.UpdateProject(p); err != nil {
+		t.Fatal(err)
+	}
+	n, err := f.tm.UserTickAll(f.p.ID)
+	if err != nil || n != 2 {
+		t.Fatalf("%d %v", n, err)
+	}
+	if l, _ := f.st.ListFillIns(f.p.ID, false); len(l) != 0 {
+		t.Fatalf("au ramas: %+v", l)
+	}
+	if l, _ := f.st.ListFillIns(f.p.ID, true); len(l) != 1 || l[0].First != "Check on phone" {
+		t.Fatalf("pasul trebuia sa ramana: %+v", l)
+	}
+
+	p.Autonomy = false
+	f.st.UpdateProject(p)
+	if n, err := f.tm.UserTickAll(f.p.ID); err != nil || n != 1 {
+		t.Fatalf("%d %v", n, err)
+	}
+	if l, _ := f.st.ListFillIns(f.p.ID, true); len(l) != 0 {
+		t.Fatalf("%+v", l)
+	}
+}

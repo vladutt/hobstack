@@ -280,3 +280,46 @@ func (t *Team) UserSetTodo(taskID int64, position int, done bool) error {
 	t.emit(task.ProjectID, "task", task)
 	return nil
 }
+
+// UserTickAll: utilizatorul bifeaza toate punctele deschise din cardurile "To fill in" ale proiectului
+// (aceeasi lista ca in Needs you: cu Full autonomy pasii "step" raman neatinsi). Intoarce cate puncte a bifat.
+func (t *Team) UserTickAll(projectID int64) (int, error) {
+	t.work.Lock()
+	defer t.work.Unlock()
+	p, err := t.st.GetProject(projectID)
+	if err != nil {
+		return 0, err
+	}
+	withSteps := !p.Autonomy
+	fills, err := t.st.ListFillIns(projectID, withSteps)
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, f := range fills {
+		task, err := t.st.GetTask(f.TaskID)
+		if err != nil {
+			return total, err
+		}
+		list, err := t.st.ListTodos(task.ID)
+		if err != nil {
+			return total, err
+		}
+		n := 0
+		for _, x := range list {
+			if x.DoneAt != nil || (!withSteps && x.Kind == "step") {
+				continue
+			}
+			if err := t.st.SetTodo(task.ID, x.Position, true, actorUser); err != nil {
+				return total, err
+			}
+			n++
+		}
+		if n > 0 {
+			t.taskMsg(task, "todo_done", actorUser, "", fmt.Sprintf("You marked %d %s as done", n, plural(n, "item", "items")), "")
+			t.emit(task.ProjectID, "task", task)
+		}
+		total += n
+	}
+	return total, nil
+}

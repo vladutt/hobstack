@@ -247,6 +247,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/nudge", s.nudgeTask)
 	mux.HandleFunc("POST /api/tasks/{id}/comments", s.commentTask)
 	mux.HandleFunc("PUT /api/tasks/{id}/todos/{pos}", s.setTodo)
+	mux.HandleFunc("POST /api/projects/{id}/fill-ins/done", s.tickAllFillIns)
 
 	mux.HandleFunc("GET /api/library", s.listLibrary)
 	mux.HandleFunc("POST /api/library", s.createLibraryItem)
