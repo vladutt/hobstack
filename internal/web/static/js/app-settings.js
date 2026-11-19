@@ -26,6 +26,19 @@ export function appSettings() {
     busy = false; draw();
   }
 
+  async function setNotify(key, on) {
+    busy = true; draw();
+    try { st = await api("/api/app/notify", { method: "PUT", body: { [key]: on } }); } catch (err) { toast(err.message); }
+    busy = false; draw();
+  }
+
+  // notifyRow: un comutator pentru notificarile de sistem (Settings > App)
+  function notifyRow(key, checked, label, hint) {
+    return el("label", { class: "check toggle-row" },
+      el("input", { type: "checkbox", checked, disabled: busy, onchange: (e) => setNotify(key, e.target.checked) }),
+      el("span", { class: "grow" }, el("strong", {}, label), el("span", { class: "hint" }, hint)));
+  }
+
   // openInGroup: "Open HobStack in" App window / Browser (doar pe macOS / Windows, unde exista fereastra)
   function openInGroup() {
     if (!st.windowSupported && !st.windowReason) return null;
@@ -75,6 +88,9 @@ export function appSettings() {
         el("span", { class: "grow" }, el("strong", {}, "Start HobStack when I log in"),
           el("span", { class: "hint" }, `${where} starts it in the background, without opening the browser.`))),
       openInGroup(),
+      el("h3", {}, "Notifications"),
+      notifyRow("done", st.notifyDone !== false, "Notify me when a project finishes", "When a project that was working stops for a minute."),
+      notifyRow("needs", st.notifyNeeds !== false, "Notify me when something needs me", "New questions, approvals and blocked tasks in Needs you."),
       window.hobstackApp && el("label", { class: "check toggle-row" },
         el("input", { type: "checkbox", checked: railEnabled(), onchange: (e) => setRailEnabled(e.target.checked) }),
         el("span", { class: "grow" }, el("strong", {}, "Recent projects on the side"),

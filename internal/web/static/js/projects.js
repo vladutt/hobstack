@@ -298,6 +298,7 @@ export async function projectFormView(root, id) {
             el("label", { class: "check toggle-row" }, autonomy,
               el("span", { class: "grow" }, el("strong", {}, "Full autonomy"),
                 el("span", { class: "hint" }, "Agents don't ask you questions; the root lead decides what you would decide. You still get access requests."))),
+            id && notifySwitch(id, p.notify !== false),
             !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
           id && linksSection(id, p.links || [], category.input),
           id && projectCommands(id),
@@ -331,6 +332,22 @@ export async function projectFormView(root, id) {
       toast(err.message);
     }
   }
+}
+
+// notifySwitch: notificarile de sistem ale proiectului; se salveaza imediat (ca steluta), nu odata cu formularul.
+function notifySwitch(projectId, on) {
+  const input = el("input", { type: "checkbox", checked: on });
+  input.addEventListener("change", async () => {
+    try {
+      await api(`/api/projects/${projectId}/notify`, { method: "PUT", body: { on: input.checked } });
+    } catch (err) {
+      input.checked = !input.checked;
+      toast(err.message);
+    }
+  });
+  return el("label", { class: "check toggle-row" }, input,
+    el("span", { class: "grow" }, el("strong", {}, "Notifications"),
+      el("span", { class: "hint" }, "System notifications for this project: when it finishes and when something needs you.")));
 }
 
 // linksSection: proiectele legate (agentii lor isi pot pune intrebari si cere munca).
