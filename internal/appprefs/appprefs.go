@@ -26,6 +26,14 @@ type Prefs struct {
 	OpenIn string  `json:"openIn"`
 	Frame  *Frame  `json:"window,omitempty"`
 	Zoom   float64 `json:"zoom,omitempty"` // 0 = 1.0
+	// notificarile de sistem (Settings > App); nil = pornite
+	NotifyDone  *bool `json:"notifyDone,omitempty"`
+	NotifyNeeds *bool `json:"notifyNeeds,omitempty"`
+}
+
+// Notify: "un proiect a terminat" si "ceva are nevoie de tine"; lipsa = pornite.
+func (p Prefs) Notify() (done, needs bool) {
+	return p.NotifyDone == nil || *p.NotifyDone, p.NotifyNeeds == nil || *p.NotifyNeeds
 }
 
 var mu sync.Mutex // Update: citire + scriere fara sa se calce doua schimbari
