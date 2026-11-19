@@ -397,7 +397,7 @@ docs/images/*.png. Pozele vin de pe landing page (hobstack-landing/app/src/asset
 latime (~1.6 MB toate); sunt capturi de design cu date demo ("Meridian Auto"), nu din aplicatia reala.
 Gata (fereastra proprie pe macOS, spec in docs/superpowers/specs/2026-11-18-hobstack-app-window-design.md): HobStack se
 deschide implicit intr-un NSWindow cu WKWebView (cmd/hobstack/window_darwin.go, Objective-C langa bara de meniu) pe UI-ul de
-pe 127.0.0.1; window_other.go = browser (Linux; Windows pana la planul cu go-webview2). Preferinta "Open HobStack in"
+pe 127.0.0.1; window_other.go = browser (Linux). Preferinta "Open HobStack in"
 (App window / Browser, Settings > App) si marimea / pozitia / zoom-ul in <date>/app.json (internal/appprefs, salvate cu
 intarziere la mutare / redimensionare / zoom). main.openUI decide fereastra sau browserul; a doua pornire = POST
 /api/app/show (versiune veche: browser); dupa update --show-window doar daca fereastra era deschisa (restartArgs). In fereastra:
@@ -405,6 +405,14 @@ meniurile HobStack / Edit / View (Back, Forward, zoom) / Window, confirm / alert
 alte origini si target=_blank in browserul de sistem; inchisa se ascunde (pagina ramane), iese din Dock; clic pe Dock o
 redeschide; Quit din Dock / logout = oprire curata (NSTerminateLater). UI-ul stie de fereastra prin window.hobstackApp: a[download]
 merge prin POST /api/app/download (serverul isi cheama handler-ul, ~/Downloads, "nume (2).ext") + /api/app/reveal.
+Gata (fereastra proprie pe Windows, plan in docs/superpowers/plans/2026-11-19-hobstack-app-window-windows.md): fereastra
+Win32 + WebView2 prin github.com/wailsapp/go-webview2 (Go pur, release-ul ramane CGO_ENABLED=0; cmd/hobstack/window_windows.go),
+pe un fir al ei (LockOSThread, COM STA, DPI per monitor), datele WebView2 in <date>/webview2. Fara WebView2 Runtime
+(webviewloader) = browser si motivul in Settings. X / Alt+F4 / Ctrl+W ascund fereastra, Ctrl+, = Settings; restul
+scurtaturilor sunt ale WebView2. Linkurile externe, target=_blank, window.open si titlul trec prin window_shim.js (injectat,
+mesaje JSON catre Go, verificate de parseBridge in window_logic.go: doar http/https catre alta origine si mailto). O eroare
+WebView2 dupa pornire: biblioteca ar face os.Exit, onError ascunde fereastra, deschide browserul si opreste doar firul
+ferestrei. A doua pornire cheama AllowSetForegroundWindow inainte de /api/app/show. Netestat inca pe o masina Windows reala.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

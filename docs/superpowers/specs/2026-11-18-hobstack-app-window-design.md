@@ -139,3 +139,13 @@ iconita = fereastra HobStack.
 ## Lasat builder-ului
 - API-ul exact al go-webview2 si versiunea (fixata, mai veche de 2 saptamani), structura fisierelor, numele
   endpoint-urilor, cum se cheama intern handler-ul pentru download, detaliile de threading.
+
+## Decizii la implementarea pe Windows (2026-11-19)
+- Biblioteca: github.com/wailsapp/go-webview2 v1.0.23 in loc de jchv/go-webview2 (jchv face log.Fatal la orice eroare
+  WebView2 si n-are zoom; wails are callback de eroare, ZoomFactor si verificarea runtime-ului). Tot Go pur.
+- Callback-ul de eroare al bibliotecii se termina cu os.Exit: al nostru ascunde fereastra, deschide browserul si opreste
+  firul ferestrei (select{}), ca serverul sa mearga mai departe.
+- Navigarea externa, target=_blank, window.open si titlul: printr-un script injectat (window_shim.js), nu prin
+  NavigationStarting / NewWindowRequested (biblioteca nu le leaga). O navigare pornita altfel (form cu target=_blank) nu e
+  prinsa; HobStack n-are asa ceva.
+- Fereastra se ascunde la inchidere (nu se distruge): avem propriul WndProc.
