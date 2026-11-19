@@ -371,6 +371,8 @@ func (t *winThread) show() {
 	if !t.loaded && u != "" {
 		t.web.Navigate(u)
 		t.loaded = true
+	} else if h := windowHash(u); h != "" {
+		t.web.Eval("location.hash='" + h + "'") // clic pe o notificare: fereastra trece pe proiect
 	}
 	if ctl := t.web.GetController(); ctl != nil {
 		_ = ctl.PutIsVisible(true)

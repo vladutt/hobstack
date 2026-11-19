@@ -261,6 +261,8 @@ func wndProc(hwnd, message, wparam, lparam uintptr) uintptr {
 			go t.open()
 		case wmRButtonUp, wmContextMenu:
 			t.menu()
+		case ninBalloonUserClick:
+			balloonClicked() // notificarea (notify_windows.go)
 		}
 		return 0
 	case message == wmClose:

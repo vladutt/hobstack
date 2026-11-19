@@ -95,3 +95,22 @@ func parseBridge(raw, origin string) (action, arg string) {
 	}
 	return "", ""
 }
+
+// windowHash: fragmentul adresei ("#/p/3") daca are doar caractere sigure de pus intr-un script
+// (location.hash in fereastra deja deschisa); altfel "".
+func windowHash(rawURL string) string {
+	i := strings.IndexByte(rawURL, '#')
+	if i < 0 {
+		return ""
+	}
+	h := rawURL[i:]
+	if len(h) < 2 || len(h) > 200 || h[1] != '/' {
+		return ""
+	}
+	for _, c := range h[1:] {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("/-_.", c)) {
+			return ""
+		}
+	}
+	return h
+}

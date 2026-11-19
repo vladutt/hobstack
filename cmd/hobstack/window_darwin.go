@@ -319,14 +319,20 @@ static void hsSetDockIcon(const void *data, int n) {
 	NSApp.applicationIconImage = icon;
 }
 
-static void hsShowWindow(const char *url, const char *origin, double x, double y, double w, double h, double zoom) {
+// hash: fragmentul de deschis in fereastra deja incarcata ("#/p/3", verificat in Go de windowHash; "" = nimic)
+static void hsShowWindow(const char *url, const char *origin, const char *hash, double x, double y, double w, double h, double zoom) {
 	NSString *u = [NSString stringWithUTF8String:url]; // copiile, inainte de dispatch (C.free dupa apel)
 	NSString *o = [NSString stringWithUTF8String:origin];
+	NSString *hs = [NSString stringWithUTF8String:hash];
 	dispatch_async(dispatch_get_main_queue(), ^{
 		if (hsCtl == nil) hsCtl = [HSWindowCtl new];
+		BOOL loaded = hsCtl.window != nil;
 		hsCtl.origin = o;
 		NSRect frame = [hsCtl initialFrameX:x y:y w:w h:h];
 		[hsCtl showURL:u frame:frame zoom:zoom];
+		if (loaded && hs.length > 0) {
+			[hsCtl.web evaluateJavaScript:[NSString stringWithFormat:@"location.hash='%@'", hs] completionHandler:nil];
+		}
 	});
 }
 
@@ -369,7 +375,8 @@ func installAppDelegate() {
 //go:embed dockicon.png
 var dockIconPNG []byte
 
-// showWindow creeaza fereastra (prima data) sau o aduce in fata; sigur din orice goroutine.
+// showWindow creeaza fereastra (prima data) sau o aduce in fata; cu un fragment ("#/p/3") fereastra deja deschisa
+// trece pe el. Sigur din orice goroutine.
 func showWindow(rawURL string) {
 	windowHooks.Lock()
 	root := windowHooks.root
@@ -386,10 +393,11 @@ func showWindow(rawURL string) {
 	if u, err := url.Parse(rawURL); err == nil {
 		origin = u.Scheme + "://" + u.Host
 	}
-	cu, co := C.CString(rawURL), C.CString(origin)
+	cu, co, ch := C.CString(rawURL), C.CString(origin), C.CString(windowHash(rawURL))
 	defer C.free(unsafe.Pointer(cu))
 	defer C.free(unsafe.Pointer(co))
-	C.hsShowWindow(cu, co, C.double(x), C.double(y), C.double(w), C.double(h), C.double(clampZoom(p.Zoom)))
+	defer C.free(unsafe.Pointer(ch))
+	C.hsShowWindow(cu, co, ch, C.double(x), C.double(y), C.double(w), C.double(h), C.double(clampZoom(p.Zoom)))
 }
 
 // windowOpen: fereastra e pe ecran (pentru restart-ul dupa update: o redeschidem).
