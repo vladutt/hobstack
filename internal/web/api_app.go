@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"runtime"
 
+	"hobstack/internal/appprefs"
 	"hobstack/internal/autostart"
 )
 
@@ -29,6 +30,7 @@ func (s *Server) appState() map[string]any {
 		"logFile":   a.logFile,
 		"running":   max(s.runs.ActiveCount(), s.team.ActiveCount()),
 	}
+	st["notifyDone"], st["notifyNeeds"] = appprefs.Load(a.root).Notify()
 	for k, v := range s.windowState() {
 		st[k] = v
 	}

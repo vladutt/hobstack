@@ -51,3 +51,17 @@ func TestUpdateKeepsOtherFields(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestNotifyDefaultsOn(t *testing.T) {
+	if d, n := Load(t.TempDir()).Notify(); !d || !n {
+		t.Fatalf("implicit: %v %v", d, n)
+	}
+	root := t.TempDir()
+	off := false
+	if err := Save(root, Prefs{NotifyNeeds: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if d, n := Load(root).Notify(); !d || n {
+		t.Fatalf("needs oprit: %v %v", d, n)
+	}
+}

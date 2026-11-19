@@ -118,3 +118,29 @@ func TestTaskUsage(t *testing.T) {
 		t.Fatalf("%+v %v", u, err)
 	}
 }
+
+func TestSetNotify(t *testing.T) {
+	s := newStore(t)
+	p, _ := newProject(t, s)
+	if !p.Notify {
+		t.Fatal("un proiect nou are notificarile pornite")
+	}
+	if err := s.SetNotify(p.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetProject(p.ID)
+	if got.Notify {
+		t.Fatal("notify nu s-a salvat")
+	}
+	// formularul proiectului nu atinge comutatorul (Notify=true trimis nu-l schimba)
+	got.Notify = true
+	if err := s.UpdateProject(got); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.GetProject(p.ID); got.Notify {
+		t.Fatal("UpdateProject a schimbat notify")
+	}
+	if err := s.SetNotify(999, true); err != ErrNotFound {
+		t.Fatalf("proiect inexistent: %v", err)
+	}
+}

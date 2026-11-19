@@ -397,6 +397,8 @@ func start(args []string) error {
 
 	tr := startTray(func() { openUI(paths.Root, url) }, stop, func() int { return max(mgr.ActiveCount(), tm.ActiveCount()) })
 	defer tr.Close()
+	// notificarile de sistem: proiect terminat / ceva nou in Needs you; clic = proiectul
+	go notifyLoop(ctx, webSrv, url+"/", func(u string) { openUI(paths.Root, u) })
 
 	log.Printf("%s %s running at %s", config.AppName, config.Version, url)
 	log.Printf("data: %s", paths.Root)

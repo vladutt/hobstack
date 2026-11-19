@@ -96,3 +96,20 @@ func TestParseBridge(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowHash(t *testing.T) {
+	for in, want := range map[string]string{
+		"http://127.0.0.1:7777/#/p/3":        "#/p/3",
+		"http://127.0.0.1:7777/":             "",
+		"http://127.0.0.1:7777/#":            "",
+		"http://127.0.0.1:7777/#/p/3';x()//": "",
+		"http://127.0.0.1:7777/#p":           "",
+	} {
+		if got := windowHash(in); got != want {
+			t.Errorf("%q: %q, vreau %q", in, got, want)
+		}
+	}
+	if got := notifyURL("http://127.0.0.1:7777/", 12); got != "http://127.0.0.1:7777/#/p/12" {
+		t.Fatalf("notifyURL: %q", got)
+	}
+}

@@ -19,19 +19,20 @@ type Project struct {
 	Autonomy    bool      `json:"autonomy"` // full autonomy: agentii nu pun intrebari; decide radacina
 	BudgetUSD   float64   `json:"budgetUsd"`
 	Favorite    bool      `json:"favorite"`  // steluta din lista de proiecte; se schimba doar prin SetFavorite
+	Notify      bool      `json:"notify"`    // notificarile de sistem pentru proiect; se schimba doar prin SetNotify
 	Category    string    `json:"category"`  // categoria din lista de proiecte; '' = fara
 	AccountID   *int64    `json:"accountId"` // contul Claude; nil = Default (CLI-ul logat). Se schimba doar prin SetProjectAccount
 	CreatedAt   time.Time `json:"createdAt"`
 	Folders     []Folder  `json:"folders"` // cel putin unul; primul e cel implicit
 }
 
-const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, favorite, created_at, account_id, category`
+const projectCols = `id, name, goal, context, workdir, paused, max_parallel, budget_usd, autonomy, favorite, created_at, account_id, category, notify`
 
 func scanProject(sc scanner) (Project, error) {
 	var p Project
 	var created string
 	var account sql.NullInt64
-	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &p.Autonomy, &p.Favorite, &created, &account, &p.Category)
+	err := sc.Scan(&p.ID, &p.Name, &p.Goal, &p.Context, &p.Workdir, &p.Paused, &p.MaxParallel, &p.BudgetUSD, &p.Autonomy, &p.Favorite, &created, &account, &p.Category, &p.Notify)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Project{}, ErrNotFound
 	}
@@ -66,6 +67,7 @@ func (s *Store) CreateProject(p *Project) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
+	p.Notify = true // valoarea implicita a coloanei
 	if p.ID, err = res.LastInsertId(); err != nil {
 		return Agent{}, err
 	}
@@ -111,6 +113,7 @@ func (s *Store) CreateProjectWithTeam(p *Project, team []NewMember) ([]Agent, er
 	if err != nil {
 		return nil, err
 	}
+	p.Notify = true // valoarea implicita a coloanei
 	if p.ID, err = res.LastInsertId(); err != nil {
 		return nil, err
 	}
@@ -242,6 +245,11 @@ func (s *Store) SetPaused(id int64, paused bool) error {
 // SetFavorite pune sau scoate steluta unui proiect.
 func (s *Store) SetFavorite(id int64, on bool) error {
 	return mustAffect(s.db.Exec(`UPDATE projects SET favorite = ? WHERE id = ?`, on, id))
+}
+
+// SetNotify porneste sau opreste notificarile de sistem ale unui proiect.
+func (s *Store) SetNotify(id int64, on bool) error {
+	return mustAffect(s.db.Exec(`UPDATE projects SET notify = ? WHERE id = ?`, on, id))
 }
 
 // canonicalCategory: "work" si "Work" sunt aceeasi categorie; daca alt proiect (nu exceptID) o are

@@ -14,6 +14,7 @@ import { updateRail } from "./recent-rail.js";
 import { modKey } from "./code-explorer.js";
 import { initUpdates } from "./update.js";
 import { initClaudeSetup } from "./claude-setup.js";
+import { initViewing } from "./viewing.js";
 
 // Aplicatia se numea foreman: preferintele salvate ("foreman-drawer", "foreman-category"...) trec o data
 // pe cheile noi "hobstack-...", ca sa nu se piarda starea panourilor si filtrele.
@@ -123,6 +124,7 @@ async function route() {
 }
 
 window.addEventListener("hashchange", route);
+initViewing();
 
 // Cmd/Ctrl+K pe orice pagina: switcher-ul de proiecte. Pe window, in capture, inregistrat inaintea modalelor:
 // merge si peste explorer-ul de cod sau modala de task. Butonul din bara de sus trimite evenimentul hobstack:switch.
