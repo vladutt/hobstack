@@ -336,6 +336,14 @@ HobStack.app universal in HobStack-<v>.dmg (scripts/build-mac.sh, job `mac` pe m
 bundle-ul dupa update), PATH din shell-ul de login cand e pornit fara terminal. Linux: tray prin fyne.io/systray
 (StatusNotifierItem) si `hobstack install` / `uninstall` (meniu, Desktop, ~/.local/bin, datele langa exe). Dupa
 pornirea unei versiuni de release, <exe>.prev se sterge (selfupdate.CleanupPrevious).
+Gata (skill-uri refuzate): claude permite singur skill-urile din plugin-uri (Library) fara allowed-tools si le refuza pe
+cele care vin cu Claude Code (ex. claude-api) sau isi dau tool-uri prin allowed-tools. "Skill" NU intra in allow: un skill
+cu allowed-tools ar ocoli permisiunile (verificat cu claude 2.1.328, un agent fara Shell a rulat Bash prin skill). Un card
+per skill (detail normalizat la {"skill":"<nume>"}, team.SkillOfDenial / SkillDetail, comasat dupa detail in store);
+cardul "<agent> wanted the skill "x"" are "Add "x" to this project": POST /api/access/{id}/install-skill daca e in Library,
+altfel #/library/skill/add?project=<pid>&q=<nume>. Orice instalare a skill-ului in proiect (card, Add skill, PUT library)
+cheama team.SkillAvailable: cardurile lui se inchid si agentul primeste nota cu "hobstack-library:<nume>".
+"Open <agent>" din Needs you (cereri de acces, task-uri blocate) ramane pe pagina si deschide panoul agentului pe Details.
 Gata (fisierele proprii, spec in docs/superpowers/specs/2026-11-05-hobstack-own-files-design.md): un agent sterge fara
 sa intrebe ce a creat el (task_changes kind create, in folderul lui, necommis in git): tool-ul MCP delete_files si, pentru
 un `rm` simplu oprit de Ask pe fisiere doar ale lui, HobStack sterge in locul lui fara card (team/own_files.go).

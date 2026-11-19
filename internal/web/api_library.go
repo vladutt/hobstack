@@ -772,6 +772,9 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 			fail(w, err)
 			return
 		}
+		if cur == nil || !cur.Enabled {
+			s.skillInstalled(pid, it)
+		}
 	case cur != nil:
 		if err := s.st.Uninstall(pid, itemID); err != nil && !errors.Is(err, store.ErrNotFound) {
 			fail(w, err)

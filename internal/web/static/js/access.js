@@ -2,7 +2,7 @@ import { api } from "./api.js";
 import { el, avatar, kindOf, toast } from "./ui.js";
 import { stuckAge } from "./stuck.js";
 
-// accessBox: un tool refuzat unui agent ("Beacon was denied Bash" + comanda).
+// accessBox: un tool refuzat unui agent ("Beacon was denied Bash" + comanda); un skill refuzat are "Add <skill> to this project".
 // Butoane: Enable Shell for <agent> (doar daca r.canEnableShell), Allow package installs
 // (doar daca r.canEnablePackages), Open <agent>, Dismiss.
 // Cu prefix (r.kind "ask" sau "command"): Allow "<prefix>" on T-N (sau in this chat), Allow in this
@@ -39,6 +39,24 @@ export function accessBox(r, { agent, projectId, onDone, onOpen }) {
         act("Dismiss", "btn small", `/api/access/${r.id}/dismiss`)));
   }
   const href = `#/p/${projectId}/team/${r.agentId}`;
+  if (r.skill) {
+    // skill refuzat (vine cu Claude Code sau din alta parte): se rezolva instaland skill-ul in Library si in proiect;
+    // HobStack nu permite tool-ul Skill direct (un skill cu allowed-tools ar ocoli permisiunile)
+    const add = r.skillItemId
+      ? act(`Add "${r.skill}" to this project`, "btn small primary", `/api/access/${r.id}/install-skill`)
+      : el("a", { class: "btn small primary", href: `#/library/skill/add?project=${projectId}&q=${encodeURIComponent(r.skill)}` },
+        `Add "${r.skill}" to this project`);
+    return el("div", { class: "question access" },
+      el("div", { class: "question-head" }, agent ? avatar(agent.name, kindOf(agent), 20) : null,
+        el("strong", {}, `${name} wanted the skill "${r.skill}"`),
+        el("span", {}, (r.count > 1 ? ` (${r.count}×)` : "") + (r.ref ? ` · ${r.ref}` : ""))),
+      el("p", { class: "question-text" },
+        r.skillItemId ? "In your Library, not in this project · " : "Agents only get skills from the Library · ",
+        el("span", { class: "stuck-age", "data-since": r.updatedAt }, stuckAge(r.updatedAt)), " ago"),
+      el("div", { class: "actions" }, add,
+        el("a", { class: "btn small", href, onclick: (e) => onOpen?.(href, e) }, `Open ${name}`),
+        act("Dismiss", "btn small", `/api/access/${r.id}/dismiss`)));
+  }
   return el("div", { class: "question access" },
     el("div", { class: "question-head" }, agent ? avatar(agent.name, kindOf(agent), 20) : null,
       el("strong", {}, `${name} was denied ${r.tool}`),

@@ -19,7 +19,7 @@ export function refreshStuckAges(root) {
 }
 
 // stuckBox: un task care nu se mai misca, cu agentul responsabil.
-// onOpen(href, event) se cheama la click pe "Open <agent>" (apelantul alege panoul Chat).
+// onOpen(href, event) se cheama la click pe "Open <agent>" (workspace deschide panoul agentului pe Details, pe loc).
 export function stuckBox(s, { agent, projectId, onDone, onOpen }) {
   const why = s.kind === "orphan"
     ? "in progress but nothing is running · "

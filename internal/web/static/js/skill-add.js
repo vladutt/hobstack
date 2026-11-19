@@ -3,7 +3,7 @@ import { el, toast, topbar } from "./ui.js";
 import { newForm } from "./library.js";
 import { dropToken, githubURL, plural, preparedFiles, sourceNode } from "./skill-source.js";
 
-// Pagina "Add skill" (#/library/skill/add, optional ?project=<id>): cautare pe skills.sh (Official = anthropics/skills),
+// Pagina "Add skill" (#/library/skill/add, optional ?project=<id>[&q=<cautare>]): cautare pe skills.sh (Official = anthropics/skills),
 // lista Official cand campul e gol, skill-urile din Claude ("From your Claude") si fereastra de Install.
 // Numele, descrierile si fisierele vin din afara (skills.sh / GitHub / ~/.claude): doar prin el() / textContent.
 
@@ -27,7 +27,7 @@ function truncate(text, max) {
   return chars.length <= max ? chars.join("") : chars.slice(0, max - 1).join("") + "…";
 }
 
-export async function skillAddView(root, projectId) {
+export async function skillAddView(root, projectId, initialQuery = "") {
   let project = null;
   if (projectId) {
     project = await api(`/api/projects/${projectId}`).catch(() => null);
@@ -307,6 +307,11 @@ export async function skillAddView(root, projectId) {
         el("h2", { class: "mcp-h2" }, "From your Claude"),
         el("p", { class: "hint" }, "Skills in ~/.claude/skills, synced from claude.ai and from your Claude Code plugins."),
         localList)));
+  // ?q=: venit din cardul "was denied the skill" din Needs you; cautarea porneste direct cu numele
+  if (initialQuery.trim().length >= 2) {
+    search.value = initialQuery.trim();
+    query = search.value;
+  }
   search.focus();
   load();
   loadLocal();

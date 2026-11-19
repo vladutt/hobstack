@@ -57,7 +57,7 @@ func (s *Store) RecordCommandRequest(projectID, agentID int64, taskID *int64, de
 }
 
 // recordAccess noteaza o cerere. Daca agentul are deja un rand deschis pentru acelasi
-// tool, prefix, fel si task (sau tot in chat), il comasam (count++, detail = ultimul).
+// tool, prefix, fel si task (sau tot in chat), il comasam (count++, detail = ultimul); la Skill si acelasi detail.
 // Task-ul face parte din cheie: aprobarea se da pe task-ul cererii.
 func (s *Store) recordAccess(projectID, agentID int64, taskID *int64, tool, detail, prefix, kind string) error {
 	tx, err := s.db.Begin()
@@ -68,8 +68,10 @@ func (s *Store) recordAccess(projectID, agentID int64, taskID *int64, tool, deta
 
 	ts := now()
 	var id int64
-	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND prefix = ? AND kind = ? AND task_id IS ? AND dismissed = 0`,
-		agentID, tool, prefix, kind, nullPtr(taskID)).Scan(&id)
+	// Skill: un rand per skill (detail-ul e doar {"skill":"<nume>"}), ca fiecare sa aiba butonul lui
+	err = tx.QueryRow(`SELECT id FROM access_requests WHERE agent_id = ? AND tool = ? AND prefix = ? AND kind = ? AND task_id IS ? AND dismissed = 0
+		AND (tool <> 'Skill' OR detail = ?)`,
+		agentID, tool, prefix, kind, nullPtr(taskID), detail).Scan(&id)
 	switch {
 	case err == nil:
 		if _, err := tx.Exec(`UPDATE access_requests SET count = count + 1, detail = ?, updated_at = ? WHERE id = ?`,

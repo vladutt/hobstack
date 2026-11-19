@@ -213,6 +213,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/access/{id}/dismiss", s.dismissAccess)
 	mux.HandleFunc("POST /api/access/{id}/enable-shell", s.enableShell)
 	mux.HandleFunc("POST /api/access/{id}/enable-packages", s.enablePackages)
+	mux.HandleFunc("POST /api/access/{id}/install-skill", s.installSkillAccess)
 	mux.HandleFunc("GET /api/settings/commands", s.getGlobalCommands)
 	mux.HandleFunc("PUT /api/settings/commands", s.putGlobalCommands)
 	mux.HandleFunc("POST /api/settings/commands/reset", s.resetGlobalCommands)

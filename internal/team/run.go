@@ -645,8 +645,14 @@ func (t *Team) recordDenials(ar activeRun, a store.Agent, denials []runner.Denia
 			}
 		}
 		added := false
+		if sk := SkillOfDenial(d.Tool, d.Detail); sk != "" {
+			d.Detail = SkillDetail(sk) // un card per skill (store comaseaza Skill dupa detail)
+		}
 		for _, r := range reqs {
 			key := d.Tool + "|" + r.Kind + "|" + r.Prefix
+			if d.Tool == "Skill" {
+				key += "|" + d.Detail
+			}
 			if seen[key] {
 				continue
 			}

@@ -158,7 +158,6 @@ export async function workspaceView(root, projectId, route) {
   // varstele task-urilor blocate ("N min") se actualizeaza la fiecare minut,
   // fara sa redesenam casetele
   const agesTimer = setInterval(() => refreshStuckAges(needsBox), 60000);
-  let keepPanel = false; // urmatorul update() pastreaza panoul ales (vezi openChat)
   let questionsKey = null; // id-urile intrebarilor desenate ultima data in banda
   let fillKey = null;      // task-urile "To fill in" desenate ultima data
   let stuckKey = null;     // id-urile task-urilor blocate desenate ultima data
@@ -396,7 +395,7 @@ export async function workspaceView(root, projectId, route) {
       agent: state.project.agents.find((a) => a.id === s.agentId),
       projectId,
       onDone: reload,
-      onOpen: openChat,
+      onOpen: openDetails,
     });
   }
 
@@ -427,22 +426,20 @@ export async function workspaceView(root, projectId, route) {
       agent: state.project.agents.find((a) => a.id === r.agentId),
       projectId,
       onDone: reload,
-      onOpen: openChat,
+      onOpen: openDetails,
     });
   }
 
-  // openChat: link-ul "Open <agent>" duce pe agent cu panoul Chat. update()
-  // ar deschide Detaliile, deci tinem minte alegerea pana trece prin update.
-  // Daca adresa e deja cea din link nu vine hashchange: doar aratam Chat-ul.
-  // Un click cu Cmd/Ctrl/Shift (tab sau fereastra noua) nu schimba pagina
-  // curenta, deci nu tinem minte nimic.
-  function openChat(href, e) {
+  // openDetails: "Open <agent>" din Needs you ramane pe pagina curenta si deschide panoul agentului pe Details
+  // (Cmd/Ctrl/Shift/clic de mijloc merg pe link, in tab nou)
+  function openDetails(href, e) {
     if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) return;
-    state.panel = "chat";
-    state.drawer = true;
-    applyDrawer();
-    if (location.hash === href) { renderTabs(); scrollDown(true); return; }
-    keepPanel = true;
+    const id = Number(href.split("/").pop());
+    if (!state.project.agents.some((a) => a.id === id)) return; // agent disparut: link-ul duce pe Echipa
+    e?.preventDefault();
+    state.panel = "details";
+    setDrawer(true);
+    select(id, "details").then(renderHeader);
   }
 
   // fillNode: card "To fill in": task terminat care mai are puncte lasate utilizatorului
@@ -685,24 +682,21 @@ export async function workspaceView(root, projectId, route) {
 
   // update: ruta s-a schimbat in acelasi proiect (alt tab sau alt agent)
   async function update(r) {
-    const keep = keepPanel;
-    keepPanel = false;
     syncModal(r.taskId);
     syncHistory(r.recurringId);
-    if (r.tab === "team" && state.tab !== "team" && !keep) state.panel = "details"; // intrarea pe Echipa arata Detaliile
-    if (r.tab !== "team" && state.tab === "team" && !keep) state.panel = "chat"; // iesirea de pe Echipa: inapoi la chat
+    if (r.tab === "team" && state.tab !== "team") state.panel = "details"; // intrarea pe Echipa arata Detaliile
+    if (r.tab !== "team" && state.tab === "team") state.panel = "chat"; // iesirea de pe Echipa: inapoi la chat
     const enteringStats = r.tab === "stats" && state.tab !== "stats";
     state.tab = r.tab;
     renderNeeds(); // eticheta "N need you" din bara de sus apare doar in afara board-ului
     if (r.tab === "team" && r.agentId && r.agentId !== state.selected) {
       if (!state.project.agents.some((a) => a.id === r.agentId)) { renderTabs(); return; }
-      if (!keep) state.panel = "details";
+      state.panel = "details";
       state.drawer = true;
       applyDrawer();
       await select(r.agentId);
       return;
     }
-    if (keep) { state.drawer = true; applyDrawer(); }
     renderTabs();
     if (enteringStats) stats.load();
     if (r.tab === "brainstorm") brainstorm.open(r.topicId);

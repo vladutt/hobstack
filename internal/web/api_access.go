@@ -3,8 +3,10 @@ package web
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"hobstack/internal/prompt"
@@ -32,6 +34,20 @@ type accessView struct {
 	CanEnablePackages bool   `json:"canEnablePackages"`
 	Kind              string `json:"kind"`     // "" (tool) / "ask" / "command"
 	HasShell          bool   `json:"hasShell"` // fara Shell, "Allow in this project" nu are efect
+	// Skill: numele skill-ului refuzat (fara prefixul plugin-ului), daca se poate rezolva prin instalare;
+	// gol pentru skill-urile din Library (hobstack-library:x refuzat = skill cu allowed-tools, instalarea nu ajuta)
+	Skill string `json:"skill,omitempty"`
+	// SkillItemID: skill-ul cu acest nume din Library (0 = nu e acolo; se adauga din pagina Add skill)
+	SkillItemID int64 `json:"skillItemId,omitempty"`
+}
+
+// skillOf: numele de pus pe card pentru un refuz Skill ("" = fara buton de instalare).
+func skillOf(r store.AccessRequest) string {
+	name := team.SkillOfDenial(r.Tool, r.Detail)
+	if name == "" || strings.HasPrefix(name, "hobstack-library:") {
+		return ""
+	}
+	return team.SkillBase(name)
 }
 
 // accessViews intoarce cererile deschise ale proiectului (lista e mereu non-nil).
@@ -55,6 +71,11 @@ func (s *Server) accessViews(projectID int64, agents []store.Agent, tasks []stor
 				v.CanEnableShell = r.Tool == "Bash" && !hasShell &&
 					(r.Kind == store.AccessCommand || (r.Kind == store.AccessTool && !prompt.AlwaysDeniedBash(r.Detail, a.Tools, rules)))
 				v.CanEnablePackages = r.Kind == store.AccessTool && r.Tool == "Bash" && !slices.Contains(a.Tools, "packages") && prompt.NeedsPackages(r.Detail)
+			}
+		}
+		if v.Skill = skillOf(r); v.Skill != "" {
+			if it, err := s.st.FindLibraryItem(store.KindSkill, v.Skill); err == nil && it.Status == store.ItemPublished {
+				v.SkillItemID = it.ID
 			}
 		}
 		if r.TaskID != nil {
@@ -120,4 +141,59 @@ func (s *Server) enableTool(w http.ResponseWriter, r *http.Request, tool string)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// installSkillAccess: POST /api/access/{id}/install-skill — skill-ul refuzat, deja in Library, se instaleaza
+// (versiunea cea mai noua) si se activeaza in proiectul cererii; team.SkillAvailable inchide cardurile si trezeste agentul.
+func (s *Server) installSkillAccess(w http.ResponseWriter, r *http.Request) {
+	if !s.libraryOK(w) {
+		return
+	}
+	req, err := s.getAccess(r)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	name := skillOf(req)
+	if req.Dismissed || name == "" {
+		writeErr(w, http.StatusConflict, "This request can't be solved by installing a skill.")
+		return
+	}
+	it, err := s.st.FindLibraryItem(store.KindSkill, name)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && it.Status != store.ItemPublished) {
+		writeErr(w, http.StatusConflict, "\""+name+"\" is not in the Library yet. Add it first.")
+		return
+	} else if err != nil {
+		fail(w, err)
+		return
+	}
+	vs, err := s.st.ListLibraryVersions(it.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if len(vs) == 0 {
+		writeErr(w, http.StatusConflict, "this item has no published version")
+		return
+	}
+	if err := s.installInProject(req.ProjectID, it.ID, vs[0].ID, nil); err != nil {
+		fail(w, err)
+		return
+	}
+	s.hub.Publish(req.ProjectID, "project", map[string]int64{"id": req.ProjectID})
+	if err := s.team.SkillAvailable(req.ProjectID, it.Name); err != nil {
+		fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// skillInstalled: dupa o instalare din Library intr-un proiect; un skill inchide cardurile lui (erorile doar in log).
+func (s *Server) skillInstalled(pid int64, it store.LibraryItem) {
+	if it.Kind != store.KindSkill {
+		return
+	}
+	if err := s.team.SkillAvailable(pid, it.Name); err != nil {
+		log.Printf("skill %s installed in project %d: %v", it.Name, pid, err)
+	}
 }

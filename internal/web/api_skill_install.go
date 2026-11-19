@@ -693,6 +693,7 @@ func (s *Server) installSkill(w http.ResponseWriter, r *http.Request) {
 		}
 		installs = 1
 		s.hub.Publish(in.ProjectID, "project", map[string]int64{"id": in.ProjectID})
+		s.skillInstalled(in.ProjectID, it)
 	}
 	cur, err := s.st.GetLibraryItem(it.ID)
 	if err != nil {
