@@ -369,7 +369,7 @@ func showWindow(rawURL string) {
 	cu, co := C.CString(rawURL), C.CString(origin)
 	defer C.free(unsafe.Pointer(cu))
 	defer C.free(unsafe.Pointer(co))
-	C.hsShowWindow(cu, co, C.double(x), C.double(y), C.double(w), C.double(h), C.double(p.Zoom))
+	C.hsShowWindow(cu, co, C.double(x), C.double(y), C.double(w), C.double(h), C.double(clampZoom(p.Zoom)))
 }
 
 // windowOpen: fereastra e pe ecran (pentru restart-ul dupa update: o redeschidem).
