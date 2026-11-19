@@ -56,6 +56,7 @@ type Server struct {
 	canPick bool
 	window  *AppWindow      // fereastra proprie (SetAppWindow); nil = doar browser
 	dlMu    sync.Mutex      // descarcarile in Downloads aleg pe rand un nume liber
+	viewing viewers         // paginile care se uita la un proiect (notificarile nu vin atunci)
 	opener  Opener          // nil = butoanele "Deschide" nu sunt disponibile
 	wizard  *wizard.Manager // nil = wizard-ul "Proiect nou cu AI" nu e disponibil
 	drafts  *draft.Manager  // nil = "Let AI draft this agent" nu e disponibil
@@ -123,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/app/quit", s.quitApp)
 	mux.HandleFunc("PUT /api/app/open-in", s.setOpenIn)
 	mux.HandleFunc("PUT /api/app/notify", s.setAppNotify)
+	mux.HandleFunc("POST /api/app/viewing", s.setViewing)
 	mux.HandleFunc("POST /api/app/show", s.showApp)
 	mux.HandleFunc("POST /api/app/download", s.downloadFile)
 	mux.HandleFunc("POST /api/app/reveal", s.revealDownload)
