@@ -1,3 +1,5 @@
+import { projectsChanged } from "./project-cache.js";
+
 // api face un request JSON catre server si arunca o eroare cu mesajul
 // serverului daca raspunsul nu e ok.
 // Serverul cere Content-Type: application/json pe orice request care nu e GET
@@ -11,6 +13,8 @@ export async function api(path, { method = "GET", body, signal } = {}) {
     body: body ? JSON.stringify(body) : undefined,
     signal,
   });
+  // o schimbare la proiecte (creat, sters, redenumit, wizard...): switcher-ul isi cere lista din nou
+  if (res.ok && method !== "GET" && /^\/api\/(projects|setup)(\/|$|\?)/.test(path)) projectsChanged();
   if (res.status === 204) return null;
   // 202 poate veni cu corp (ex. sesiunea la /chat) sau fara (ex. /stop): fara corp -> null
   const data = await res.json().catch(() => (res.status === 202 ? null : {}));

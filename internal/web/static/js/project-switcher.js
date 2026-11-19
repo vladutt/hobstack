@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { el, avatar } from "./ui.js";
 import { isMac } from "./code-explorer.js";
 import { needsCount } from "./projects.js";
+import { cachedProjects, projectsStale, loadProjects } from "./project-cache.js";
 
 // Switcher-ul de proiecte (Cmd/Ctrl+K pe orice pagina): lista proiectelor, cele deschise recent primele.
 // Ordinea "recent" sta in localStorage (doar id-uri, max 20), actualizata la fiecare intrare intr-un proiect.
@@ -164,14 +165,22 @@ function openSwitcher(onClose) {
   document.body.append(overlay);
   input.focus();
   paint();
-  api("/api/projects").then((res) => {
-    if (closed) return;
-    projects = res || [];
+  // lista din memorie apare imediat; de la server doar daca s-a schimbat ceva sau e veche (project-cache.js)
+  const cached = cachedProjects();
+  if (cached) {
+    projects = cached;
     refilter();
-  }).catch((err) => {
-    if (closed) return;
-    list.replaceChildren(el("li", { class: "ps-empty error" }, `Could not load projects: ${err.message}`));
-  });
+  }
+  if (projectsStale()) {
+    loadProjects().then((res) => {
+      if (closed) return;
+      projects = res;
+      refilter();
+    }).catch((err) => {
+      if (closed || cached) return; // cu lista din memorie ramanem pe ea
+      list.replaceChildren(el("li", { class: "ps-empty error" }, `Could not load projects: ${err.message}`));
+    });
+  }
 
   return { close };
 }

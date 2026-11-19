@@ -171,6 +171,8 @@ Gata (switcher de proiecte): Cmd/Ctrl+K pe orice pagina (sau butonul ⌘K de lan
 fara text, proiectele deschise recent primele (localStorage "hobstack-recent-projects", max 20, actualizat in app.js la intrarea
 pe #/p/<id>), apoi favoritele, cel curent ultimul; cu text, numele incepe / contine, apoi categoria. Enter pastreaza tab-ul
 (Stats -> Stats), Cmd/Ctrl+Enter in tab nou; sta peste explorer-ul de cod (explorer-ul si modala de fisier ignora tastele din .ps-overlay).
+Lista proiectelor din switcher sta in memorie (project-cache.js, umpluta si de pagina Proiecte): apare imediat si se cere din
+nou in fundal doar dupa o cerere reusita non-GET pe /api/projects* / /api/setup* (api.js) sau daca are peste 60 s.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din

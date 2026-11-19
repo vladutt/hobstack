@@ -3,9 +3,11 @@ import { el, avatar, field, toast, kindOf, clock, topbar } from "./ui.js";
 import { projectCommands } from "./commands.js";
 import { libraryInstalls } from "./library-cards.js";
 import { ALL, savedCategory, saveCategory, loadCategories, categoryInput } from "./category.js";
+import { rememberProjects } from "./project-cache.js";
 
 export async function projectsView(root) {
   const [projects, setups] = await Promise.all([api("/api/projects"), api("/api/setup").catch(() => [])]);
+  rememberProjects([...projects]); // switcher-ul (Cmd/Ctrl+K) o ia de aici, fara cerere noua
   const setupBox = el("div", { class: "setups" });
   const search = el("input", {
     type: "search", class: "search", placeholder: "Search projects", "aria-label": "Search projects",
