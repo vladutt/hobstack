@@ -410,9 +410,13 @@ Win32 + WebView2 prin github.com/wailsapp/go-webview2 (Go pur, release-ul ramane
 pe un fir al ei (LockOSThread, COM STA, DPI per monitor), datele WebView2 in <date>/webview2. Fara WebView2 Runtime
 (webviewloader) = browser si motivul in Settings. X / Alt+F4 / Ctrl+W ascund fereastra, Ctrl+, = Settings; restul
 scurtaturilor sunt ale WebView2. Linkurile externe, target=_blank, window.open si titlul trec prin window_shim.js (injectat,
-mesaje JSON catre Go, verificate de parseBridge in window_logic.go: doar http/https catre alta origine si mailto). O eroare
-WebView2 dupa pornire: biblioteca ar face os.Exit, onError ascunde fereastra, deschide browserul si opreste doar firul
-ferestrei. A doua pornire cheama AllowSetForegroundWindow inainte de /api/app/show. Netestat inca pe o masina Windows reala.
+mesaje JSON catre Go, verificate de parseBridge in window_logic.go: http/https catre alta origine, fisierele /api/ deschise
+cu target=_blank si mailto, re-escapate; doar in pagina principala, dupa handler-ele paginii). WebView2 care nu porneste
+(eroare / 20 s) = inca o incercare dupa 2 s, apoi browser pana la repornire; biblioteca face os.Exit dupa callback-ul de
+eroare, deci onError inchide fereastra si ramane in bucla de mesaje. Inainte de restart-ul dupa update closeWindow inchide
+controller-ul (vtable Close) ca procesul nou sa gaseasca <date>/webview2 liber. WM_DPICHANGED = RasterizationScale;
+ascunsa / minimizata = PutIsVisible(false). WEBVIEW2_* puse de biblioteca se scot din mediu (agentii nu le mostenesc).
+A doua pornire cheama AllowSetForegroundWindow inainte de /api/app/show. Netestat inca pe o masina Windows reala.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
