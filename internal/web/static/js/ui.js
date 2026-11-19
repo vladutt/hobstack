@@ -1,3 +1,4 @@
+import { tabStrip } from "./project-tabs.js";
 // Utilitare mici pentru construit DOM fara framework.
 
 // el("div", { class: "x", onclick: fn }, copii...) creeaza un element.
@@ -109,7 +110,8 @@ export function topbar(crumbs, ...right) {
       el("nav", { class: "mainnav", "aria-label": "Main" },
         [["projects", "Projects", "#/"], ["library", "Library", "#/library/tools"], ["settings", "Settings", "#/settings"]].map(([id, label, href]) =>
           el("a", { class: "navlink" + (id === crumbs ? " active" : ""), href, "aria-current": id === crumbs ? "page" : null }, label))),
-      el("div", { class: "topbar-right" }, right, topbarExtra && topbarExtra()));
+      el("div", { class: "topbar-right" }, right, topbarExtra && topbarExtra()),
+      tabStrip());
   }
   const parts = [];
   crumbs.forEach(([text, href], i) => {
@@ -120,7 +122,8 @@ export function topbar(crumbs, ...right) {
     el("a", { class: "logo", href: "#/", title: "Projects", "aria-label": "Projects" }, "H"),
     switchButton(),
     el("nav", { class: "crumbs", "aria-label": "Breadcrumb" }, parts),
-    el("div", { class: "topbar-right" }, right, topbarExtra && topbarExtra()));
+    el("div", { class: "topbar-right" }, right, topbarExtra && topbarExtra()),
+    tabStrip());
 }
 
 export const STATUS_LABELS = {
