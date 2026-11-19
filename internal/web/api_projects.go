@@ -442,6 +442,9 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) {
 	views := make([]taskView, len(tasks))
 	fromProject := map[int64]string{} // cache: id proiect sursa -> nume
 	for i, t := range tasks {
+		// fara textele lungi (raport, descriere, feedback): board-ul nu le arata, iar modala ia task-ul intreg din
+		// /api/tasks/{id}. Un proiect cu sute de task-uri Done trimitea altfel MB de rapoarte la fiecare deschidere.
+		t.Description, t.Result, t.Feedback = "", "", ""
 		views[i] = taskView{Task: t, FilesChanged: changed[t.ID], Attachments: attached[t.ID]}
 		if t.RequestID == nil {
 			continue
