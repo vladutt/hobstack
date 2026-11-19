@@ -56,9 +56,10 @@ type bridgeMsg struct {
 
 const maxTitleRunes = 200
 
-// parseBridge decide ce face fereastra cu un mesaj de la pagina: "open" = adresa in browserul de sistem (doar
-// http/https catre alta origine si mailto), "title" = titlul ferestrei, "" = nimic. Pagina e a noastra, dar
-// un link din markdown poate fi orice: nu deschidem file:, javascript: sau alte scheme.
+// parseBridge decide ce face fereastra cu un mesaj de la pagina: "open" = adresa in browserul de sistem, "title" =
+// titlul ferestrei, "" = nimic. In browser merg doar http/https catre alta origine, fisierele aplicatiei (/api/...,
+// deschise cu target=_blank, ca pe macOS) si mailto. Pagina e a noastra, dar un link din markdown poate fi orice:
+// nu deschidem file:, javascript: sau alte scheme. Adresa ajunge in linia de comanda a lui rundll32: o dam re-escapata.
 func parseBridge(raw, origin string) (action, arg string) {
 	var m bridgeMsg
 	if json.Unmarshal([]byte(raw), &m) != nil {
@@ -72,12 +73,18 @@ func parseBridge(raw, origin string) (action, arg string) {
 		}
 		switch strings.ToLower(u.Scheme) {
 		case "mailto":
-			return "open", m.URL
-		case "http", "https":
-			if u.Host == "" || strings.EqualFold(u.Scheme+"://"+u.Host, origin) {
+			if strings.ContainsFunc(m.URL, func(r rune) bool { return r <= ' ' || r == '"' || r == 0x7f }) {
 				return "", ""
 			}
 			return "open", m.URL
+		case "http", "https":
+			if u.Host == "" {
+				return "", ""
+			}
+			if strings.EqualFold(u.Scheme+"://"+u.Host, origin) && !strings.HasPrefix(u.Path, "/api/") {
+				return "", "" // o pagina a aplicatiei ramane in fereastra
+			}
+			return "open", u.String()
 		}
 	case "title":
 		t := []rune(strings.TrimSpace(m.Title))

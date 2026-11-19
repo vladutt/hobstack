@@ -18,3 +18,5 @@ func windowAvailable() (bool, string) { return false, "" }
 func showWindow(url string) {}
 
 func windowOpen() bool { return false }
+
+func closeWindow() {}

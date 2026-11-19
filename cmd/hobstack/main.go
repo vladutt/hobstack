@@ -426,6 +426,9 @@ func start(args []string) error {
 	err = srv.Shutdown(shCtx)
 	if restart.Load() {
 		tm.Drain() // un finish in curs isi termina scrierile inainte sa se inchida baza de date
+		if wasOpen {
+			closeWindow() // Windows: WebView2 elibereaza folderul de date pentru procesul nou
+		}
 		return restartError{exe: exe, showWindow: wasOpen}
 	}
 	return err

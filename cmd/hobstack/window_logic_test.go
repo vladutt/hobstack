@@ -75,6 +75,12 @@ func TestParseBridge(t *testing.T) {
 		{`{"type":"open","url":"https://github.com/x/y"}`, "open", "https://github.com/x/y"},
 		{`{"type":"open","url":"mailto:a@b.c"}`, "open", "mailto:a@b.c"},
 		{`{"type":"open","url":"http://127.0.0.1:7777/#/settings"}`, "", ""}, // pagina noastra: nu in browser
+		// fisierele din aplicatie (target=_blank pe /api/files/N): in browser, ca pe macOS
+		{`{"type":"open","url":"http://127.0.0.1:7777/api/files/3"}`, "open", "http://127.0.0.1:7777/api/files/3"},
+		{`{"type":"open","url":"http://127.0.0.1:7777/apix"}`, "", ""},
+		// adresa ajunge la rundll32: re-escapata, fara ghilimele / spatii brute
+		{`{"type":"open","url":"https://x.com/a b\" c"}`, "open", "https://x.com/a%20b%22%20c"},
+		{`{"type":"open","url":"mailto:a@b.c\" x"}`, "", ""},
 		{`{"type":"open","url":"javascript:alert(1)"}`, "", ""},
 		{`{"type":"open","url":"file:///C:/Windows/notepad.exe"}`, "", ""},
 		{`{"type":"open","url":"https://"}`, "", ""},

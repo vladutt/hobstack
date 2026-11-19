@@ -374,3 +374,6 @@ func showWindow(rawURL string) {
 
 // windowOpen: fereastra e pe ecran (pentru restart-ul dupa update: o redeschidem).
 func windowOpen() bool { return C.hsWindowVisible() == 1 }
+
+// closeWindow: doar Windows (WebView2 tine folderul de date); pe macOS procesul nou o redeschide direct.
+func closeWindow() {}
