@@ -10,6 +10,7 @@ import { libraryView, libraryItemView } from "./library.js";
 import { mcpAddView } from "./mcp-add.js";
 import { skillAddView } from "./skill-add.js";
 import { toggleSwitcher, touchRecent } from "./project-switcher.js";
+import { updateRail } from "./recent-rail.js";
 import { modKey } from "./code-explorer.js";
 import { initUpdates } from "./update.js";
 import { initClaudeSetup } from "./claude-setup.js";
@@ -87,6 +88,7 @@ async function route() {
   const { r, m } = found;
   const inProject = hash.match(/^#\/p\/(\d+)/);
   if (inProject) touchRecent(Number(inProject[1])); // ordinea din switcher-ul de proiecte
+  updateRail(); // fereastra proprie: proiectele recente in stanga
   updateTitle(hash);
   const key = r.key ? r.key(m) : null;
   if (key && current && current.key === key && current.update) {

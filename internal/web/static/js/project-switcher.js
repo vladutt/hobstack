@@ -11,7 +11,7 @@ const RECENT_KEY = "hobstack-recent-projects";
 const MAX_RECENT = 20;
 const TABS = ["tasks", "team", "files", "stats"]; // tab-urile care se pastreaza la schimbarea proiectului
 
-function readRecent() {
+export function readRecent() {
   try {
     const ids = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
     return Array.isArray(ids) ? ids.filter((x) => Number.isInteger(x)) : [];

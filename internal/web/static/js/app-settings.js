@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { el, toast } from "./ui.js";
+import { railEnabled, setRailEnabled } from "./recent-rail.js";
 
 // app-settings.js: Settings > App: pornirea la login si Quit. HobStack ruleaza fara terminal (pe Windows consola
 // e ascunsa), deci de aici se opreste; pornit din nou, deschide pagina asta.
@@ -74,6 +75,10 @@ export function appSettings() {
         el("span", { class: "grow" }, el("strong", {}, "Start HobStack when I log in"),
           el("span", { class: "hint" }, `${where} starts it in the background, without opening the browser.`))),
       openInGroup(),
+      window.hobstackApp && el("label", { class: "check toggle-row" },
+        el("input", { type: "checkbox", checked: railEnabled(), onchange: (e) => setRailEnabled(e.target.checked) }),
+        el("span", { class: "grow" }, el("strong", {}, "Recent projects on the side"),
+          el("span", { class: "hint" }, "Up to 5 recently opened projects at the left edge of this window; click one to open it."))),
       el("p", { class: "hint" }, "Log: ", el("code", {}, st.logFile)),
       el("div", { class: "upd-actions" },
         el("button", { type: "button", class: "btn small danger", onclick: () => quit(false) }, "Quit HobStack"))].filter(Boolean));

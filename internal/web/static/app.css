@@ -2036,3 +2036,19 @@ button.bs-tag.merged:hover { color: var(--blue); text-decoration: underline; }
   .bs-composer { position: sticky; bottom: 0; background: var(--col); border-radius: 0 0 10px 10px; padding: 10px 12px; z-index: 2; }
   .bs-form-slot { padding: 12px; }
 }
+
+/* Proiectele recente in stanga (recent-rail.js), doar in fereastra proprie */
+.recent-rail { position: fixed; left: 8px; top: 50%; transform: translateY(-50%); z-index: 14; display: flex; flex-direction: column;
+  gap: 8px; padding: 8px 6px; border-radius: 14px; background: var(--deep); border: 1px solid var(--line); }
+.rr-item { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
+  background: var(--tone); color: var(--ink); font-weight: 700; font-size: 13px; text-decoration: none; opacity: .85;
+  transition: opacity .12s, transform .12s; }
+.rr-item:hover, .rr-item:focus-visible { opacity: 1; transform: scale(1.08); }
+.rr-dot { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--amber);
+  box-shadow: 0 0 0 2px var(--deep); }
+.rr-name { position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); white-space: nowrap;
+  padding: 4px 9px; border-radius: 7px; background: var(--card-hi); color: var(--text); font-size: 12px; font-weight: 500;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35); opacity: 0; pointer-events: none; transition: opacity .12s; }
+.rr-item:hover .rr-name, .rr-item:focus-visible .rr-name { opacity: 1; }
+body.has-rail .page, body.has-rail .ws-main { padding-left: 64px; }
+@media (max-width: 760px) { .recent-rail { display: none; } body.has-rail .page, body.has-rail .ws-main { padding-left: 16px; } }

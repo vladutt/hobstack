@@ -173,6 +173,10 @@ pe #/p/<id>), apoi favoritele, cel curent ultimul; cu text, numele incepe / cont
 (Stats -> Stats), Cmd/Ctrl+Enter in tab nou; sta peste explorer-ul de cod (explorer-ul si modala de fisier ignora tastele din .ps-overlay).
 Lista proiectelor din switcher sta in memorie (project-cache.js, umpluta si de pagina Proiecte): apare imediat si se cere din
 nou in fundal doar dupa o cerere reusita non-GET pe /api/projects* / /api/setup* (api.js) sau daca are peste 60 s.
+In fereastra proprie (window.hobstackApp), recent-rail.js pune in stanga pe mijloc cel mult 5 proiecte recente (ordinea din
+switcher, fara cel curent; initiala in culoarea proiectului, punct amber cu "need you", numele la hover); clic = proiectul.
+Settings > App "Recent projects on the side" (localStorage "hobstack-recent-rail", pornita implicit); .page / .ws-main primesc
+loc in stanga cat se vede bara.
 Gata (fisiere pe task, spec in docs/superpowers/specs/2026-10-08-foreman-task-files-design.md): report_done files
 (max 20) copiaza livrabilele ca snapshot in projects/<pid>/task-files/<task>/ (task_files, migrarea 024; pachet
 internal/taskfiles, doar din folderele proiectului si projects/<pid>/files, prin os.OpenRoot); evenimentul files_attached; tab-ul Files din
