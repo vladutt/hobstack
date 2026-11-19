@@ -2074,9 +2074,24 @@ body.has-ptabs { --topbar-h: 104px; }
 .ptab-x:hover { background: rgba(255, 255, 255, .08); color: var(--text); }
 
 /* trecerea intre pagini (app.js route): continutul de sub bara de sus intra cu un fade scurt */
+/* pagina noua se deseneaza ascunsa peste cea veche (app.js route) si apare cand e gata */
+#view { position: relative; }
+.view-pending { position: absolute; inset: 0 0 auto 0; visibility: hidden; pointer-events: none; }
+.view-leaving { pointer-events: none; }
+.view-leaving > :not(.topbar):not(.ws), .view-leaving > .ws > .ws-body { opacity: .5; transition: opacity .15s ease .12s; } /* intarziat: o trecere rapida nu clipeste */
 @keyframes view-enter { from { opacity: 0; } to { opacity: 1; } }
-.view-enter > :not(.topbar) { animation: view-enter .2s ease-out both; /* fara transform: ar muta elementele fixe (sertarul de chat) */ }
+/* pornita abia cand pagina devine vizibila; fara transform: ar muta elementele fixe (sertarul de chat) */
+.view-enter:not(.view-pending) > :not(.topbar):not(.ws), .view-enter:not(.view-pending) > .ws > .ws-body {
+  animation: view-enter .2s ease-out both; }
+.route-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 100; overflow: hidden; opacity: 0;
+  transition: opacity .15s; pointer-events: none; }
+.route-progress.on { opacity: 1; }
+.route-progress::before { content: ""; position: absolute; top: 0; bottom: 0; width: 35%; background: var(--amber);
+  border-radius: 2px; animation: route-progress 1s ease-in-out infinite; }
+@keyframes route-progress { from { left: -35%; } to { left: 100%; } }
 @media (prefers-reduced-motion: reduce) {
-  .view-enter > :not(.topbar) { animation: none; }
+  .view-enter:not(.view-pending) > *, .view-enter:not(.view-pending) > .ws > * { animation: none; }
+  .view-leaving > *, .view-leaving > .ws > * { transition: none; }
+  .route-progress::before { animation: none; left: 0; width: 100%; }
   .ptab { transition: none; }
 }

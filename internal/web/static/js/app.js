@@ -107,13 +107,33 @@ async function route() {
   const root = document.getElementById("view");
   const my = ++seq;
   const box = document.createElement("div"); // container nou pentru fiecare ruta
-  // pagina noua intra cu un fade scurt (doar continutul de sub bara de sus); clasa pleaca dupa animatie,
-  // ca ce se adauga mai tarziu in pagina sa nu mai clipeasca
+  // Pagina veche ramane pe ecran (estompata) pana e gata cea noua, desenata ascunsa dedesubt: un proiect mare
+  // (MB de task-uri) altfel lasa ecranul gol. Apoi cea noua intra cu un fade scurt (vezi reveal).
+  for (const c of [...root.children]) if (c.classList.contains("view-pending")) c.remove(); // o ruta inca nedesenata
+  const old = root.firstElementChild;
   box.className = "view-enter";
-  setTimeout(() => box.classList.remove("view-enter"), 400);
-  root.replaceChildren(box);
+  if (old) {
+    box.classList.add("view-pending");
+    old.classList.add("view-leaving");
+    root.append(box);
+  } else {
+    root.replaceChildren(box);
+  }
+  routeLoading(true);
+  let shown = false;
+  const reveal = () => {
+    if (shown || my !== seq) return;
+    shown = true;
+    for (const c of [...root.children]) if (c !== box) c.remove();
+    box.classList.remove("view-pending");
+    window.scrollTo(0, 0); // ca inainte, cand pagina goala aducea scroll-ul sus
+    routeLoading(false);
+    setTimeout(() => box.classList.remove("view-enter"), 400); // ce se adauga mai tarziu nu mai clipeste
+  };
+  setTimeout(reveal, 2500); // un view care asteapta mult (retea) nu tine pagina veche la nesfarsit
   try {
     const res = await r.view(box, m);
+    reveal();
     const cleanup = typeof res === "function" ? res : res?.cleanup;
     if (my !== seq) {
       if (cleanup) cleanup(); // ruta s-a schimbat intre timp: curatam imediat
@@ -125,8 +145,21 @@ async function route() {
       update: res?.update && r.update ? (mm) => r.update(res, mm) : null,
     };
   } catch (err) {
+    reveal();
     toast(err.message);
   }
+}
+
+// routeLoading: bara subtire de progres de sus, doar daca pagina noua intarzie peste 120 ms
+let loadingTimer = null;
+const loadingBar = document.createElement("div");
+loadingBar.className = "route-progress";
+loadingBar.setAttribute("aria-hidden", "true");
+document.body.append(loadingBar);
+function routeLoading(on) {
+  clearTimeout(loadingTimer);
+  if (on) loadingTimer = setTimeout(() => loadingBar.classList.add("on"), 120);
+  else loadingBar.classList.remove("on");
 }
 
 window.addEventListener("hashchange", route);

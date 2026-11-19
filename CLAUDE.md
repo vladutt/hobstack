@@ -451,8 +451,10 @@ un rand sub bara de sus (ui.topbar -> tabStrip, body.has-ptabs = --topbar-h 104p
 singur la coada (max 8, pleaca cel mai vechi care nu e curent); x / clic cu rotita inchide (tab-ul curent -> vecinul); fiecare
 tab tine minte ultima adresa din proiect; Cmd/Ctrl+1..9; initiala colorata, punct teal (Running) si numar amber (needsCount),
 recitite la 15 s. localStorage "hobstack-tabs" / "hobstack-tab-routes" / "hobstack-tabs-off" (Settings > App "Project tabs").
-Trecerea intre pagini: app.js route pune .view-enter pe container 400 ms, continutul de sub bara de sus intra cu fade de
-opacitate (fara transform: ar muta elementele fixe), oprit cu prefers-reduced-motion.
+Trecerea intre pagini (app.js route): pagina noua se deseneaza ascunsa (.view-pending, absolut peste #view) cat cea veche
+ramane pe ecran estompata (.view-leaving, doar sub bara de sus: .ws-body pe proiect); cand r.view se termina (sau dupa 2,5 s)
+cea veche pleaca, scroll sus si fade de opacitate (fara transform: ar muta elementele fixe). Bara subtire .route-progress
+apare dupa 120 ms. Totul oprit cu prefers-reduced-motion.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
