@@ -398,6 +398,28 @@ cards/{id}/edit) pastreaza textul utilizatorului si pune "Edited"; nu porneste n
 Gata (poze in README): board-ul (hero, sub descriere) si sectiunea "## Screenshots" (task, team, chat, projects) din
 docs/images/*.png. Pozele vin de pe landing page (hobstack-landing/app/src/assets/hs-*.png), micsorate cu sips la 1600 px
 latime (~1.6 MB toate); sunt capturi de design cu date demo ("Meridian Auto"), nu din aplicatia reala.
+Gata (fereastra proprie pe macOS, spec in docs/superpowers/specs/2026-11-18-hobstack-app-window-design.md): HobStack se
+deschide implicit intr-un NSWindow cu WKWebView (cmd/hobstack/window_darwin.go, Objective-C langa bara de meniu) pe UI-ul de
+pe 127.0.0.1; window_other.go = browser (Linux). Preferinta "Open HobStack in"
+(App window / Browser, Settings > App) si marimea / pozitia / zoom-ul in <date>/app.json (internal/appprefs, salvate cu
+intarziere la mutare / redimensionare / zoom). main.openUI decide fereastra sau browserul; a doua pornire = POST
+/api/app/show (versiune veche: browser); dupa update --show-window doar daca fereastra era deschisa (restartArgs). In fereastra:
+meniurile HobStack / Edit / View (Back, Forward, zoom) / Window, confirm / alert / prompt ca foi, NSOpenPanel la input file,
+alte origini si target=_blank in browserul de sistem; inchisa se ascunde (pagina ramane), iese din Dock; clic pe Dock o
+redeschide; Quit din Dock / logout = oprire curata (NSTerminateLater). UI-ul stie de fereastra prin window.hobstackApp: a[download]
+merge prin POST /api/app/download (serverul isi cheama handler-ul, ~/Downloads, "nume (2).ext") + /api/app/reveal.
+Gata (fereastra proprie pe Windows, plan in docs/superpowers/plans/2026-11-19-hobstack-app-window-windows.md): fereastra
+Win32 + WebView2 prin github.com/wailsapp/go-webview2 (Go pur, release-ul ramane CGO_ENABLED=0; cmd/hobstack/window_windows.go),
+pe un fir al ei (LockOSThread, COM STA, DPI per monitor), datele WebView2 in <date>/webview2. Fara WebView2 Runtime
+(webviewloader) = browser si motivul in Settings. X / Alt+F4 / Ctrl+W ascund fereastra, Ctrl+, = Settings; restul
+scurtaturilor sunt ale WebView2. Linkurile externe, target=_blank, window.open si titlul trec prin window_shim.js (injectat,
+mesaje JSON catre Go, verificate de parseBridge in window_logic.go: http/https catre alta origine, fisierele /api/ deschise
+cu target=_blank si mailto, re-escapate; doar in pagina principala, dupa handler-ele paginii). WebView2 care nu porneste
+(eroare / 20 s) = inca o incercare dupa 2 s, apoi browser pana la repornire; biblioteca face os.Exit dupa callback-ul de
+eroare, deci onError inchide fereastra si ramane in bucla de mesaje. Inainte de restart-ul dupa update closeWindow inchide
+controller-ul (vtable Close) ca procesul nou sa gaseasca <date>/webview2 liber. WM_DPICHANGED = RasterizationScale;
+ascunsa / minimizata = PutIsVisible(false). WEBVIEW2_* puse de biblioteca se scot din mediu (agentii nu le mostenesc).
+A doua pornire cheama AllowSetForegroundWindow inainte de /api/app/show. Netestat inca pe o masina Windows reala.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
@@ -406,6 +428,8 @@ Dupa: service install, goreleaser, notificari, git worktrees.
 Idei salvate (fara spec): chat general pe orice pagina, care propune modificari cu Apply/Undo (docs/ideas/2026-10-07-general-assistant.md);
 admin self-hosted al companiei, doar limite si setari, fara comenzi pe masini (docs/ideas/2026-10-07-company-admin.md);
 plugin JetBrains subtire (UI-ul web in JCEF + deschis fisiere/diff-uri in IDE) (docs/ideas/2026-10-07-jetbrains-plugin.md).
+Modul Turbo: clone ale unui agent pe task-uri in paralel, fiecare in worktree-ul lui git, merge la Done
+(docs/ideas/2026-11-18-turbo-mode.md).
 
 ## Conventii
 - `go vet ./...` si `go build -race` trebuie sa treaca.

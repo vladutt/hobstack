@@ -92,7 +92,8 @@ function openSwitcher(onClose) {
     if (!p) return;
     const href = hrefFor(p);
     close();
-    if (newTab) window.open(location.pathname + location.search + href, "_blank");
+    // in fereastra proprie (o singura fereastra) "tab nou" ramane in aceeasi fereastra
+    if (newTab && !window.hobstackApp) window.open(location.pathname + location.search + href, "_blank");
     else location.hash = href;
   }
 

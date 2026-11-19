@@ -25,6 +25,27 @@ try {
   }
 } catch { /* fara localStorage: nimic de mutat */ }
 
+// In fereastra proprie (window.hobstackApp, pus de fereastra la crearea paginii) nu exista bara de descarcari a
+// browserului: un link de descarcare din HobStack se salveaza prin server in Downloads, cu "Show in Finder".
+if (window.hobstackApp) {
+  document.addEventListener("click", async (e) => {
+    const a = e.target instanceof Element ? e.target.closest("a[download]") : null;
+    if (!a) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin || !url.pathname.startsWith("/api/")) return;
+    e.preventDefault();
+    const name = a.getAttribute("download") || decodeURIComponent(url.pathname.split("/").pop());
+    try {
+      const { path } = await api("/api/app/download", { method: "POST", body: { url: url.pathname + url.search, name } });
+      const where = window.hobstackApp.platform === "windows" ? "Show in Explorer" : "Show in Finder";
+      toast(`Saved to Downloads: ${path.split(/[\\/]/).pop()}`, "ok", {
+        label: where,
+        onClick: () => api("/api/app/reveal", { method: "POST", body: { path } }).catch((err) => toast(err.message)),
+      });
+    } catch (err) { toast(err.message); }
+  }, true);
+}
+
 // Rute in hash: #/, #/new, #/setup, #/setup/<id>, #/setup/folder/<proiect>/<folder>, #/p/3/edit si pagina proiectului cu tab-uri:
 // #/p/3/tasks, #/p/3/team, #/p/3/team/7, #/p/3/files, #/library/tools|skills|mcp, #/library/mcp/add[?project=<id>],
 // #/library/skill/add[?project=<id>], #/library/item/<id>.

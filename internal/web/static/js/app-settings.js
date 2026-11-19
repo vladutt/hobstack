@@ -19,6 +19,28 @@ export function appSettings() {
     busy = false; draw();
   }
 
+  async function setOpenIn(openIn) {
+    busy = true; draw();
+    try { st = await api("/api/app/open-in", { method: "PUT", body: { openIn } }); } catch (err) { toast(err.message); }
+    busy = false; draw();
+  }
+
+  // openInGroup: "Open HobStack in" App window / Browser (doar pe macOS / Windows, unde exista fereastra)
+  function openInGroup() {
+    if (!st.windowSupported && !st.windowReason) return null;
+    const off = busy || !st.windowSupported;
+    const option = (value, label, hint) => el("label", { class: "check toggle-row" },
+      el("input", { type: "radio", name: "open-in", value, checked: st.openIn === value, disabled: off,
+        onchange: () => setOpenIn(value) }),
+      el("span", { class: "grow" }, el("strong", {}, label), el("span", { class: "hint" }, hint)));
+    return el("div", { class: "open-in" },
+      el("h3", {}, "Open HobStack in"),
+      option("window", "App window", "Its own window, like any other app."),
+      option("browser", "Browser", "A tab in your default browser."),
+      !st.windowSupported && el("p", { class: "hint" }, `App window is not available: ${st.windowReason}`),
+      el("p", { class: "hint" }, "Takes effect the next time you open HobStack."));
+  }
+
   async function quit(force) {
     try {
       await api("/api/app/quit", { method: "POST", body: { force } });
@@ -43,16 +65,18 @@ export function appSettings() {
     const toggle = el("input", { type: "checkbox", checked: st.autostart, disabled: busy || !st.supported,
       onchange: (e) => setAutostart(e.target.checked) });
     const where = st.os === "windows" ? "Windows" : st.os === "darwin" ? "macOS" : "your desktop";
-    box.replaceChildren(
+    // replaceChildren nativ scrie false / null ca text ("false" sub titlu pe macOS): le scoatem
+    box.replaceChildren(...[
       el("h2", {}, "App"),
-      el("p", { class: "hint" }, `HobStack runs in the background at ${location.origin}; you can close the terminal and this tab. Starting it again opens this page.`),
+      el("p", { class: "hint" }, `HobStack runs in the background at ${location.origin}; you can close the terminal and this ${window.hobstackApp ? "window" : "tab"}. Starting it again opens this page.`),
       st.os === "windows" && el("p", { class: "hint" }, "It also sits in the notification area next to the clock: click the H to open it, right-click to quit."),
       el("label", { class: "check toggle-row" }, toggle,
         el("span", { class: "grow" }, el("strong", {}, "Start HobStack when I log in"),
           el("span", { class: "hint" }, `${where} starts it in the background, without opening the browser.`))),
+      openInGroup(),
       el("p", { class: "hint" }, "Log: ", el("code", {}, st.logFile)),
       el("div", { class: "upd-actions" },
-        el("button", { type: "button", class: "btn small danger", onclick: () => quit(false) }, "Quit HobStack")));
+        el("button", { type: "button", class: "btn small danger", onclick: () => quit(false) }, "Quit HobStack"))].filter(Boolean));
   }
 
   draw();
