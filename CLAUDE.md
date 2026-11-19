@@ -435,11 +435,22 @@ eroare, deci onError inchide fereastra si ramane in bucla de mesaje. Inainte de 
 controller-ul (vtable Close) ca procesul nou sa gaseasca <date>/webview2 liber. WM_DPICHANGED = RasterizationScale;
 ascunsa / minimizata = PutIsVisible(false). WEBVIEW2_* puse de biblioteca se scot din mediu (agentii nu le mostenesc).
 A doua pornire cheama AllowSetForegroundWindow inainte de /api/app/show. Netestat inca pe o masina Windows reala.
+Gata (notificari de sistem, spec in docs/superpowers/specs/2026-11-19-hobstack-notifications-design.md): pachetul
+internal/notify (Watcher, doar logica): "<Proiect> finished" / "is waiting for you" cand un proiect care a rulat macar un run
+pe task sta oprit 60 s (pauza = oprit; un run nou anuleaza), "<Proiect> needs you" pentru elementele noi din Needs you (cheie
+stabila per card, adunate 10 s; "waiting" nu mai vine daca "needs you" a plecat chiar atunci). La pornire ce exista e "vazut".
+web.NotifySnapshots (aceleasi surse ca "N need you", randul scurt per card), Viewing (POST /api/app/viewing din viewing.js:
+proiectul deschis + focus, expira la 45 s; atunci nu se trimite nimic). Comutatoare: Settings > App (app.json notifyDone /
+notifyNeeds, PUT /api/app/notify) si per proiect in Instructions (projects.notify, migrarea 040, PUT /api/projects/{id}/notify).
+cmd/hobstack/notify_loop.go la 5 s (fiecare notificare in log); macOS: UNUserNotificationCenter in HobStack.app (clic =
+proiectul), altfel osascript fara clic; Windows: balonul iconitei (NIF_INFO, clic NIN_BALLOONUSERCLICK); Linux: notify-send
+(--action --wait, fara pe versiunile vechi). Clic = openUI pe url#/p/<id>; fereastra deja deschisa trece pe hash (windowHash).
+UNUserNotificationCenter si balonul Windows netestate inca (verificat pe macOS doar drumul osascript).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
 4. Runs & logs, Settings
-Dupa: service install, goreleaser, notificari, git worktrees.
+Dupa: service install, goreleaser, git worktrees.
 Idei salvate (fara spec): chat general pe orice pagina, care propune modificari cu Apply/Undo (docs/ideas/2026-10-07-general-assistant.md);
 admin self-hosted al companiei, doar limite si setari, fara comenzi pe masini (docs/ideas/2026-10-07-company-admin.md);
 plugin JetBrains subtire (UI-ul web in JCEF + deschis fisiere/diff-uri in IDE) (docs/ideas/2026-10-07-jetbrains-plugin.md).
