@@ -85,7 +85,9 @@ func (s *Server) projectEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ping.C:
-			fmt.Fprint(w, ": ping\n\n")
+			// eveniment adevarat, nu comentariu: browserul il vede si stie ca stream-ul traieste
+			// (fara el, o conexiune moarta in tacere lasa pagina fara actualizari)
+			fmt.Fprint(w, "data: {\"type\":\"ping\"}\n\n")
 			flusher.Flush()
 		case payload, ok := <-ch:
 			if !ok {

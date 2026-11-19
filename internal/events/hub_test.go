@@ -61,7 +61,19 @@ func TestSlowSubscriberDoesNotBlock(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Publish a blocat din cauza unui abonat lent")
 	}
-	if len(ch) != buffer {
-		t.Fatalf("in buffer: %d, vreau %d", len(ch), buffer)
+	// abonatul lent primeste ce era in buffer, apoi channel-ul se inchide (stream-ul SSE se termina,
+	// browserul se reconecteaza si reincarca tot); un abonat nou merge normal
+	n := 0
+	for range ch {
+		n++
+	}
+	if n != buffer {
+		t.Fatalf("in buffer: %d, vreau %d", n, buffer)
+	}
+	fresh, cancelFresh := h.Subscribe(1)
+	defer cancelFresh()
+	h.Publish(1, "task", 1)
+	if len(fresh) != 1 {
+		t.Fatal("abonatul nou nu a primit evenimentul")
 	}
 }

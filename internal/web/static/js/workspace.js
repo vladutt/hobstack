@@ -2143,31 +2143,58 @@ export async function workspaceView(root, projectId, route) {
     explorer?.close();
     return () => {};
   }
+  // Stream-ul proiectului. Serverul trimite un ping la 15 s; daca nu vine nimic 45 s (conexiune moarta in tacere:
+  // somn, tab inghetat, retea schimbata) il redeschidem si reincarcam tot, altfel chat-ul ramane cu "queued".
+  const STALE_MS = 45000;
+  let events = null;
   let hadError = false;
-  const events = new EventSource(`/api/projects/${projectId}/events`);
-  events.onmessage = (msg) => {
-    let ev;
-    try { ev = JSON.parse(msg.data); } catch { return; }
-    if (ev.type === "message" && ev.data.agentId === state.selected) addMessage(ev.data);
-    if (ev.type === "files") loadFiles();
-    // Brainstorm: subiectul deschis se reincarca, la celelalte doar lista (insigna); nu atinge restul paginii
-    if (ev.type === "brainstorm") { brainstorm.refresh(ev.data?.topicId || 0); return; }
-    // Run history: doar la schimbarile de task (o rulare noua, un status, fisiere atasate), nu la fiecare mesaj
-    if (ev.type === "task") runHistory?.refresh();
-    scheduleReload();
-  };
-  events.onerror = () => { hadError = true; };
-  events.onopen = async () => {
-    // dupa o reconectare (ex. restart server) reincarcam tot, am putut pierde evenimente
-    if (!hadError) return;
-    hadError = false;
+  let lastEvent = Date.now();
+  // resync: dupa o reconectare am putut pierde evenimente, reincarcam tot
+  async function resync() {
     await reload();
     loadFiles();
     brainstorm.refresh(0);
     await loadThread();
     syncLive();
-  };
-
+  }
+  function connect() {
+    events?.close();
+    lastEvent = Date.now();
+    events = new EventSource(`/api/projects/${projectId}/events`);
+    events.onmessage = (msg) => {
+      lastEvent = Date.now();
+      let ev;
+      try { ev = JSON.parse(msg.data); } catch { return; }
+      if (ev.type === "ping") return;
+      if (ev.type === "message" && ev.data.agentId === state.selected) addMessage(ev.data);
+      if (ev.type === "files") loadFiles();
+      // Brainstorm: subiectul deschis se reincarca, la celelalte doar lista (insigna); nu atinge restul paginii
+      if (ev.type === "brainstorm") { brainstorm.refresh(ev.data?.topicId || 0); return; }
+      // Run history: doar la schimbarile de task (o rulare noua, un status, fisiere atasate), nu la fiecare mesaj
+      if (ev.type === "task") runHistory?.refresh();
+      scheduleReload();
+    };
+    events.onerror = () => { hadError = true; };
+    events.onopen = () => {
+      lastEvent = Date.now();
+      // dupa o reconectare (ex. restart server, abonat scos de server) reincarcam tot
+      if (!hadError) return;
+      hadError = false;
+      resync();
+    };
+  }
+  // checkStream: stream tacut prea mult = mort; il redeschidem (onopen face resync)
+  function checkStream() {
+    if (disposed || Date.now() - lastEvent < STALE_MS) return;
+    hadError = true;
+    connect();
+  }
+  connect();
+  const streamTimer = setInterval(checkStream, 10000);
+  // timer-ele merg rar in taburile ascunse: verificam si cand tab-ul revine in fata / reteaua revine
+  const onVisible = () => { if (document.visibilityState === "visible") checkStream(); };
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("online", checkStream);
 
   const cleanup = () => {
     disposed = true;
@@ -2179,6 +2206,9 @@ export async function workspaceView(root, projectId, route) {
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
     events.close();
+    clearInterval(streamTimer);
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("online", checkStream);
     document.removeEventListener("pointerdown", closeMenus);
     document.removeEventListener("keydown", onShortcut);
     if (teamOutside) document.removeEventListener("click", teamOutside);

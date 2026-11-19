@@ -18,6 +18,9 @@ Autorul e senior PHP/Laravel, incepator in Go: cod simplu, idiomatic, comentat u
   nepermis blocheaza run-ul la nesfarsit, verificat cu claude 2.1.285); deny fix pe TaskCreate/TodoWrite/Agent; actiunile riscante (git push, sudo, rm -rf...) vin din regulile pentru comenzi (Settings + proiect, Allow/Ask/Block).
 - Numele aplicatiei e config.AppName ("hobstack", afisat config.DisplayName "HobStack"), usor de schimbat.
 - Live output prin SSE (nu websockets). UI: HTML + JS vanilla, embedded cu `embed`.
+  Stream-ul proiectului trimite un ping la 15 s ca eveniment ({"type":"ping"}, nu comentariu); workspace.js il redeschide
+  si reincarca tot (resync) dupa 45 s fara nimic (verificat si la visibilitychange / online). Un abonat cu buffer-ul plin e
+  scos de events.Hub (channel inchis, stream-ul se termina, browserul se reconecteaza), nu mai pierde evenimente in tacere.
 - Fara Docker la runtime; Docker doar pentru dev daca e nevoie.
 - Un singur run activ per agent. Stop omoara tot process group-ul.
 - In -p, claude nu iese dupa "result" cat are o comanda in fundal (server de dev): runner-ul il opreste (SIGKILL pe
