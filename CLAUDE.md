@@ -446,6 +446,13 @@ cmd/hobstack/notify_loop.go la 5 s (fiecare notificare in log); macOS: UNUserNot
 proiectul), altfel osascript fara clic; Windows: balonul iconitei (NIF_INFO, clic NIN_BALLOONUSERCLICK); Linux: notify-send
 (--action --wait, fara pe versiunile vechi). Clic = openUI pe url#/p/<id>; fereastra deja deschisa trece pe hash (windowHash).
 UNUserNotificationCenter si balonul Windows netestate inca (verificat pe macOS doar drumul osascript).
+Gata (tab-uri de proiecte, spec in docs/superpowers/specs/2026-11-19-hobstack-project-tabs-design.md): project-tabs.js,
+un rand sub bara de sus (ui.topbar -> tabStrip, body.has-ptabs = --topbar-h 104px) pe toate paginile. Proiectul deschis intra
+singur la coada (max 8, pleaca cel mai vechi care nu e curent); x / clic cu rotita inchide (tab-ul curent -> vecinul); fiecare
+tab tine minte ultima adresa din proiect; Cmd/Ctrl+1..9; initiala colorata, punct teal (Running) si numar amber (needsCount),
+recitite la 15 s. localStorage "hobstack-tabs" / "hobstack-tab-routes" / "hobstack-tabs-off" (Settings > App "Project tabs").
+Trecerea intre pagini: app.js route pune .view-enter pe container 400 ms, continutul de sub bara de sus intra cu fade de
+opacitate (fara transform: ar muta elementele fixe), oprit cu prefers-reduced-motion.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

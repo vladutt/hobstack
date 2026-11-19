@@ -11,6 +11,7 @@ import { mcpAddView } from "./mcp-add.js";
 import { skillAddView } from "./skill-add.js";
 import { toggleSwitcher, touchRecent } from "./project-switcher.js";
 import { updateRail } from "./recent-rail.js";
+import { openTab, refreshTabs } from "./project-tabs.js";
 import { modKey } from "./code-explorer.js";
 import { initUpdates } from "./update.js";
 import { initClaudeSetup } from "./claude-setup.js";
@@ -92,6 +93,7 @@ async function route() {
   const { r, m } = found;
   const inProject = hash.match(/^#\/p\/(\d+)/);
   if (inProject) touchRecent(Number(inProject[1])); // ordinea din switcher-ul de proiecte
+  if (inProject) openTab(Number(inProject[1]), hash); else refreshTabs(); // tab-urile de proiecte
   updateRail(); // fereastra proprie: proiectele recente in stanga
   updateTitle(hash);
   const key = r.key ? r.key(m) : null;
@@ -105,6 +107,10 @@ async function route() {
   const root = document.getElementById("view");
   const my = ++seq;
   const box = document.createElement("div"); // container nou pentru fiecare ruta
+  // pagina noua intra cu un fade scurt (doar continutul de sub bara de sus); clasa pleaca dupa animatie,
+  // ca ce se adauga mai tarziu in pagina sa nu mai clipeasca
+  box.className = "view-enter";
+  setTimeout(() => box.classList.remove("view-enter"), 400);
   root.replaceChildren(box);
   try {
     const res = await r.view(box, m);

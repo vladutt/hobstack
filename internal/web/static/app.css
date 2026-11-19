@@ -2052,3 +2052,31 @@ button.bs-tag.merged:hover { color: var(--blue); text-decoration: underline; }
 .rr-item:hover .rr-name, .rr-item:focus-visible .rr-name { opacity: 1; }
 body.has-rail .page, body.has-rail .ws-main { padding-left: 64px; }
 @media (max-width: 760px) { .recent-rail { display: none; } body.has-rail .page, body.has-rail .ws-main { padding-left: 16px; } }
+
+/* Tab-uri cu proiectele (project-tabs.js): al doilea rand din bara de sus, ca in browser */
+body.has-ptabs { --topbar-h: 104px; }
+.ptabs { flex-basis: 100%; order: 99; display: flex; gap: 2px; margin: 2px -8px -10px; overflow-x: auto; scrollbar-width: none; }
+.ptabs[hidden] { display: none; }
+.ptab { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px 0 10px; min-width: 0;
+  max-width: 220px; flex: none; border-radius: 9px 9px 0 0; border: 1px solid transparent; border-bottom: 0; color: var(--muted);
+  text-decoration: none; font-size: 13.5px; transition: background-color .18s ease, color .18s ease, border-color .18s ease; }
+.ptab:hover { color: var(--text); background: rgba(255, 255, 255, .035); }
+.ptab:hover, .ptab.active { padding-right: 6px; }
+.ptab.active { color: var(--text); background: var(--bg); border-color: var(--line); }
+.ptab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: var(--bg); }
+.ptab-ini { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font: 700 11px var(--sans); flex: none; }
+.ptab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptab-needs { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--amber); color: var(--amber-ink);
+  font: 700 11px/18px var(--sans); text-align: center; flex: none; }
+.ptab-x { display: none; width: 20px; height: 20px; border: 0; border-radius: 5px; background: none; color: var(--dim); font-size: 15px;
+  line-height: 1; cursor: pointer; flex: none; }
+.ptab:hover .ptab-x, .ptab.active .ptab-x, .ptab-x:focus-visible { display: block; }
+.ptab-x:hover { background: rgba(255, 255, 255, .08); color: var(--text); }
+
+/* trecerea intre pagini (app.js route): continutul de sub bara de sus intra cu un fade scurt */
+@keyframes view-enter { from { opacity: 0; } to { opacity: 1; } }
+.view-enter > :not(.topbar) { animation: view-enter .2s ease-out both; /* fara transform: ar muta elementele fixe (sertarul de chat) */ }
+@media (prefers-reduced-motion: reduce) {
+  .view-enter > :not(.topbar) { animation: none; }
+  .ptab { transition: none; }
+}
