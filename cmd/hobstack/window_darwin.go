@@ -306,6 +306,19 @@ static void hsInstallAppDelegate(void) {
 	NSApp.delegate = hsDelegate;
 }
 
+// hsSetDockIcon: iconita din Dock / Cmd+Tab cand binarul ruleaza in afara HobStack.app (build local, tar.gz);
+// in bundle o ia macOS din Info.plist (hobstack.icns). Desenata cu ~10% margine, ca iconitele de macOS.
+static void hsSetDockIcon(const void *data, int n) {
+	if ([[[NSBundle mainBundle] bundlePath] hasSuffix:@".app"]) return;
+	NSImage *src = [[NSImage alloc] initWithData:[NSData dataWithBytes:data length:n]];
+	if (src == nil) return;
+	NSImage *icon = [NSImage imageWithSize:NSMakeSize(512, 512) flipped:NO drawingHandler:^BOOL(NSRect r) {
+		[src drawInRect:NSInsetRect(r, 50, 50)];
+		return YES;
+	}];
+	NSApp.applicationIconImage = icon;
+}
+
 static void hsShowWindow(const char *url, const char *origin, double x, double y, double w, double h, double zoom) {
 	NSString *u = [NSString stringWithUTF8String:url]; // copiile, inainte de dispatch (C.free dupa apel)
 	NSString *o = [NSString stringWithUTF8String:origin];
@@ -330,6 +343,7 @@ void hsReplyTerminate(void) {
 import "C"
 
 import (
+	_ "embed"
 	"net/url"
 	"sync"
 	"unsafe"
@@ -347,7 +361,13 @@ var windowHooks struct {
 func windowAvailable() (bool, string) { return true, "" }
 
 // installAppDelegate: din runMenuBar, pe firul principal, inainte de bucla Cocoa.
-func installAppDelegate() { C.hsInstallAppDelegate() }
+func installAppDelegate() {
+	C.hsInstallAppDelegate()
+	C.hsSetDockIcon(unsafe.Pointer(&dockIconPNG[0]), C.int(len(dockIconPNG)))
+}
+
+//go:embed dockicon.png
+var dockIconPNG []byte
 
 // showWindow creeaza fereastra (prima data) sau o aduce in fata; sigur din orice goroutine.
 func showWindow(rawURL string) {

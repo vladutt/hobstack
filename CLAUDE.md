@@ -410,7 +410,8 @@ pe 127.0.0.1; window_other.go = browser (Linux). Preferinta "Open HobStack in"
 (App window / Browser, Settings > App) si marimea / pozitia / zoom-ul in <date>/app.json (internal/appprefs, salvate cu
 intarziere la mutare / redimensionare / zoom). main.openUI decide fereastra sau browserul; a doua pornire = POST
 /api/app/show (versiune veche: browser); dupa update --show-window doar daca fereastra era deschisa (restartArgs). In fereastra:
-meniurile HobStack / Edit / View (Back, Forward, zoom) / Window, confirm / alert / prompt ca foi, NSOpenPanel la input file,
+iconita din Dock vine din Info.plist in HobStack.app, iar in afara bundle-ului (build local, tar.gz) din dockicon.png
+(NSApp.applicationIconImage, hsSetDockIcon); meniurile HobStack / Edit / View (Back, Forward, zoom) / Window, confirm / alert / prompt ca foi, NSOpenPanel la input file,
 alte origini si target=_blank in browserul de sistem; inchisa se ascunde (pagina ramane), iese din Dock; clic pe Dock o
 redeschide; Quit din Dock / logout = oprire curata (NSTerminateLater). UI-ul stie de fereastra prin window.hobstackApp: a[download]
 merge prin POST /api/app/download (serverul isi cheama handler-ul, ~/Downloads, "nume (2).ext") + /api/app/reveal.
