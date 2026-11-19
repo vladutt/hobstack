@@ -535,6 +535,7 @@ func openUI(root, url string) {
 // showRunning cere HobStack-ului care ruleaza deja sa se arate (fereastra sau browser, dupa preferinta lui).
 // false = n-a putut (versiune veche fara /api/app/show, alt raspuns, eroare): atunci deschidem browserul.
 func showRunning(addr string) bool {
+	allowForeground()
 	c := &http.Client{Timeout: 2 * time.Second}
 	resp, err := c.Post("http://"+addr+"/api/app/show", "application/json", nil)
 	if err != nil {

@@ -1,10 +1,10 @@
-//go:build !(darwin && cgo)
+//go:build !(darwin && cgo) && !windows
 
 package main
 
 import "sync"
 
-// Fara fereastra proprie (Linux, Windows deocamdata, macOS fara cgo): HobStack se deschide in browser.
+// Fara fereastra proprie (Linux, macOS fara cgo): HobStack se deschide in browser.
 
 var windowHooks struct {
 	sync.Mutex

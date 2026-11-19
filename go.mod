@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	fyne.io/systray v1.12.2
+	github.com/wailsapp/go-webview2 v1.0.23
 	modernc.org/sqlite v1.60.0
 )
 
@@ -11,6 +12,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
