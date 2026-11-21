@@ -102,6 +102,11 @@ func FindHTML(dir string) (string, error) {
 	return filepath.Join(dir, pages[0]), nil
 }
 
+// Native: deschiderea in Finder facuta de aplicatia insasi (macOS, cmd/hobstack/finder_darwin.go). `open` pornit
+// din fundal nu poate ceda locul din fata: din macOS 14 Finder devine activ, dar fereastra lui ramane sub
+// fereastra HobStack. nil = comenzile de sistem (open / explorer / xdg-open).
+var Native func(path string, reveal bool) error
+
 // Opener deschide lucruri pe sistemul curent.
 type Opener struct {
 	editors []Editor
@@ -119,6 +124,9 @@ func (o *Opener) Editors() []Editor { return o.editors }
 
 // OpenFolder deschide folderul in managerul de fisiere.
 func (o *Opener) OpenFolder(dir string) error {
+	if Native != nil {
+		return Native(dir, false)
+	}
 	name, args := folderCommand(dir)
 	return start(name, args...)
 }
@@ -131,6 +139,9 @@ func (o *Opener) OpenFile(path string) error {
 
 // Reveal deschide folderul fisierului in Finder / Explorer, cu fisierul selectat (pe Linux doar folderul).
 func (o *Opener) Reveal(path string) error {
+	if Native != nil {
+		return Native(path, true)
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		return start("open", "-R", path)

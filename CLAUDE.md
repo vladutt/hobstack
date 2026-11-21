@@ -458,6 +458,10 @@ apare dupa 120 ms. Totul oprit cu prefers-reduced-motion.
 Gata (lista de task-uri usoara): GET /api/projects/{id} trimite task-urile fara description / result / feedback (board-ul
 nu le arata; modala ia task-ul intreg din /api/tasks/{id}); un proiect cu 475 de task-uri Done: 2,3 MB -> ~0,37 MB. Done
 ramane paginat in pagina ("Show N more"); paginarea pe server (grupuri pe fire, cautare) doar daca mai e nevoie.
+Gata (Finder in fata): pe macOS folderele / fisierele deschise din HobStack (link-urile din chat, Show in Finder) trec
+prin opener.Native = cmd/hobstack/finder_darwin.go: NSWorkspace (openURLs cu activates / activateFileViewerSelectingURLs)
+dupa yieldActivationToApplication catre Finder (macOS 14+). Cu `open` din fundal Finder devenea activ, dar fereastra lui
+ramanea sub fereastra HobStack. Fara cgo / pe alte sisteme: comenzile de sistem, ca inainte.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
