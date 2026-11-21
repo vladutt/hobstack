@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -160,6 +161,15 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 	} else if err != nil {
 		fail(w, err)
 		return
+	}
+	// prima runda porneste singura: descrierea (sau o invitatie) e primul mesaj, ca utilizatorul sa nu mai
+	// trebuiasca sa scrie ceva ca agentii sa inceapa
+	kickoff := desc
+	if kickoff == "" {
+		kickoff = fmt.Sprintf("Share your first ideas on %q.", name)
+	}
+	if _, _, err := s.team.NewRound(t.ID, kickoff); err != nil {
+		log.Printf("brainstorm: first round of topic %d: %v", t.ID, err) // subiectul ramane; runda se porneste din chat
 	}
 	s.publishTopic(pid, t.ID)
 	writeJSON(w, http.StatusCreated, t)

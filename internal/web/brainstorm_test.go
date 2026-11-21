@@ -12,7 +12,19 @@ import (
 	"hobstack/internal/store"
 )
 
+// makeTopic: subiect creat direct in store, fara prima runda pe care o porneste POST /brainstorm (testele isi
+// pornesc singure rundele); crearea prin API e in TestBrainstormTopicAPI si TestCreateTopicStartsFirstRound
 func (e *env) makeTopic(t *testing.T, pid int64, name string, agents ...int64) store.BrainstormTopic {
+	t.Helper()
+	tp := store.BrainstormTopic{ProjectID: pid, Name: name, Description: "d", Participants: agents}
+	if err := e.st.CreateTopic(&tp); err != nil {
+		t.Fatalf("topic: %v", err)
+	}
+	return tp
+}
+
+// apiTopic: subiect creat prin API (cu prima runda pornita)
+func (e *env) apiTopic(t *testing.T, pid int64, name string, agents ...int64) store.BrainstormTopic {
 	t.Helper()
 	code, raw := e.do(t, "POST", "/api/projects/"+itoa(pid)+"/brainstorm", map[string]any{"name": name, "description": "d", "participants": agents})
 	if code != http.StatusCreated {
@@ -31,7 +43,7 @@ func TestBrainstormTopicAPI(t *testing.T) {
 	b := e.addWorker(t, other.ID, "Bob")
 	base := "/api/projects/" + itoa(p.ID) + "/brainstorm"
 
-	tp := e.makeTopic(t, p.ID, "Pricing", a.ID)
+	tp := e.apiTopic(t, p.ID, "Pricing", a.ID)
 	if code, _ := e.do(t, "POST", base, map[string]any{"name": "Pricing", "participants": []int64{a.ID}}); code != http.StatusConflict {
 		t.Fatalf("nume duplicat: %d", code)
 	}
@@ -327,5 +339,26 @@ func TestTopicCombinedShape(t *testing.T) {
 	cf := r.Combined[0].CombinedFrom
 	if len(cf) != 2 || cf[0].Title != "Alpha" || cf[1].Title != "Beta" || cf[0].ID != ia {
 		t.Fatalf("combinedFrom: %s", raw)
+	}
+}
+
+// "Create topic" porneste singur prima runda: descrierea e primul mesaj (fara descriere, o invitatie)
+func TestCreateTopicStartsFirstRound(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	a := e.addWorker(t, p.ID, "Ana")
+	tp := e.apiTopic(t, p.ID, "Pricing", a.ID)
+	rounds, err := e.st.TopicRounds(tp.ID)
+	if err != nil || len(rounds) != 1 || rounds[0].Text != "d" {
+		t.Fatalf("%v %+v", err, rounds)
+	}
+	code, raw := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/brainstorm", map[string]any{"name": "Naming", "participants": []int64{a.ID}})
+	if code != http.StatusCreated {
+		t.Fatalf("%d %s", code, raw)
+	}
+	var t2 store.BrainstormTopic
+	json.Unmarshal(raw, &t2)
+	if rounds, _ = e.st.TopicRounds(t2.ID); len(rounds) != 1 || rounds[0].Text != `Share your first ideas on "Naming".` {
+		t.Fatalf("fara descriere: %+v", rounds)
 	}
 }

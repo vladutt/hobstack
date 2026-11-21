@@ -564,7 +564,7 @@ export function brainstormView(projectId, { agents, onBadge }) {
     const t = mode === "edit" ? st.data?.topic : null;
     const people = agentsNow();
     const chosen = new Set(t ? t.participants : people.filter((a) => !a.detached).map((a) => a.id));
-    const name = el("input", { type: "text", maxlength: 60, placeholder: "multiplayer", value: t?.name || "", required: true });
+    const name = el("input", { type: "text", maxlength: 60, placeholder: "e.g. Checkout ideas", value: t?.name || "", required: true });
     const desc = el("textarea", { rows: 3, maxlength: 4000, placeholder: "What should the team think about? Goals, limits, what you already tried.", value: t?.description || "" });
     const faces = el("div", { class: "bs-people" });
     const paintPeople = () => faces.replaceChildren(...people.map((a) => el("button", {
