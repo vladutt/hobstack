@@ -462,6 +462,11 @@ Gata (Finder in fata): pe macOS folderele / fisierele deschise din HobStack (lin
 prin opener.Native = cmd/hobstack/finder_darwin.go: NSWorkspace (openURLs cu activates / activateFileViewerSelectingURLs)
 dupa yieldActivationToApplication catre Finder (macOS 14+). Cu `open` din fundal Finder devenea activ, dar fereastra lui
 ramanea sub fereastra HobStack. Fara cgo / pe alte sisteme: comenzile de sistem, ca inainte.
+Gata (fereastra Windows la scala DPI): totul aparea mic pe 125% / 150% fiindca go-webview2 v1.0.23
+(ICoreWebView2Controller3.PutRasterizationScale) trimite un pointer in loc de double, iar Embed opreste detectarea
+scalei (raw pixels), deci pagina ramanea la 1.0. window_windows.go putRasterScale apeleaza direct vtbl-ul cu
+math.Float64bits (ca PutZoomFactor; corect doar pe amd64, singurul build Windows), la pornire si la WM_DPICHANGED,
+cu log la eroare; scaleFromDPI (window_logic.go, testat) = DPI / 96. GetRasterizationScale din biblioteca e corect (out pointer).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

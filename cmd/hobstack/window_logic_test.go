@@ -66,6 +66,19 @@ func TestClampZoom(t *testing.T) {
 	}
 }
 
+// scala Windows (100% / 125% / 150% / 175% / 200%) = DPI / 96; DPI lipsa = 1
+func TestScaleFromDPI(t *testing.T) {
+	for dpi, want := range map[uint32]float64{0: 1, 96: 1, 120: 1.25, 144: 1.5, 168: 1.75, 192: 2} {
+		if got := scaleFromDPI(dpi); got != want {
+			t.Errorf("scaleFromDPI(%d) = %v, want %v", dpi, got, want)
+		}
+	}
+	// fereastra la 150%: marimea implicita in pixeli fizici = 1400x900 CSS x 1.5 (aceeasi scala o primeste pagina)
+	if got := windowRect(nil, winRect{0, 0, 3000, 2000}, scaleFromDPI(144), yes); got.W != 2100 || got.H != 1350 {
+		t.Errorf("windowRect at 144 DPI = %+v, want 2100x1350", got)
+	}
+}
+
 func TestParseBridge(t *testing.T) {
 	const origin = "http://127.0.0.1:7777"
 	long := strings.Repeat("ă", 250)

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -337,7 +338,10 @@ func (t *winThread) run() {
 	if ctl := web.GetController(); ctl != nil {
 		_ = ctl.PutZoomFactor(clampZoom(prefs.Zoom))
 		if c3 := ctl.GetICoreWebView2Controller3(); c3 != nil {
-			_ = c3.PutRasterizationScale(t.scale) // biblioteca opreste detectarea scalei: o dam noi (si la WM_DPICHANGED)
+			// biblioteca opreste detectarea scalei: o dam noi (si la WM_DPICHANGED)
+			if err := putRasterScale(c3, t.scale); err != nil {
+				log.Printf("app window: %v", err)
+			}
 		}
 	}
 	web.Resize()
@@ -635,13 +639,15 @@ func appWndProc(hwnd, message, wparam, lparam uintptr) uintptr {
 			return 0
 		case wmDpiChanged:
 			// fereastra a trecut pe un monitor cu alta scala: marimea sugerata de Windows si scala paginii
-			t.scale = float64(wparam>>16&0xffff) / 96
+			t.scale = scaleFromDPI(uint32(wparam >> 16 & 0xffff)) // HIWORD = DPI-ul pe Y (egal cu X)
 			rc := *(**rect32)(unsafe.Pointer(&lparam))
 			pSetWindowPos.Call(hwnd, 0, uintptr(rc.Left), uintptr(rc.Top), uintptr(rc.Right-rc.Left),
 				uintptr(rc.Bottom-rc.Top), swpNoZOrder|swpNoActivate)
 			if ctl := t.web.GetController(); ctl != nil {
 				if c3 := ctl.GetICoreWebView2Controller3(); c3 != nil {
-					_ = c3.PutRasterizationScale(t.scale)
+					if err := putRasterScale(c3, t.scale); err != nil {
+						log.Printf("app window: %v", err)
+					}
 				}
 			}
 			return 0
@@ -684,8 +690,21 @@ func dpiScale(hwnd uintptr) float64 {
 		return 1
 	}
 	dpi, _, _ := pGetDpiForWindow.Call(hwnd)
-	if dpi == 0 {
-		return 1
+	return scaleFromDPI(uint32(dpi))
+}
+
+// putRasterScale da scala DPI paginii din WebView2. Nu folosim c3.PutRasterizationScale din go-webview2 v1.0.23:
+// trimite un pointer la double (&scale), dar metoda COM put_RasterizationScale primeste double-ul prin valoare, asa
+// ca apelul esua sau seta o valoare gresita si pagina ramanea la scala 1 (totul mic pe 125% / 150%). Ca la
+// PutZoomFactor din aceeasi biblioteca, trimitem bitii double-ului: pe windows/amd64 apelul stdcall al lui Go copiaza
+// primele 4 argumente si in XMM0-3, deci metoda il primeste corect. Doar pentru amd64 (singurul build Windows din
+// release): pe arm64 un double merge in registrele de virgula mobila, iar pe 386 ocupa doua sloturi pe stiva.
+// Biblioteca (Chromium.Embed) pune BoundsMode = raw pixels si opreste ShouldDetectMonitorScaleChanges, deci scala
+// paginii vine numai de aici (la pornire si la WM_DPICHANGED).
+func putRasterScale(c3 *edge.ICoreWebView2Controller3, s float64) error {
+	hr, _, _ := c3.Vtbl.PutRasterizationScale.Call(uintptr(unsafe.Pointer(c3)), uintptr(math.Float64bits(s)))
+	if hr != 0 { // S_OK
+		return fmt.Errorf("put_RasterizationScale(%v): HRESULT 0x%08x", s, uint32(hr))
 	}
-	return float64(dpi) / 96
+	return nil
 }

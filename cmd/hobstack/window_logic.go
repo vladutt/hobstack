@@ -39,6 +39,16 @@ func windowRect(saved *appprefs.Frame, work winRect, scale float64, onScreen fun
 	return winRect{work.X + (work.W-w)/2, work.Y + (work.H-h)/2, w, h}
 }
 
+// scaleFromDPI: scala ferestrei pentru un DPI de monitor (96 = 100%, 120 = 125%, 144 = 150%, 192 = 200%). Un DPI
+// lipsa (0, de ex. GetDpiForWindow nu exista) inseamna 1. Aceeasi scala ajunge la WebView2 (RasterizationScale), deci
+// marimea in pixeli fizici = marimea CSS x scala, ca in Edge la aceeasi scala Windows.
+func scaleFromDPI(dpi uint32) float64 {
+	if dpi == 0 {
+		return 1
+	}
+	return float64(dpi) / 96
+}
+
 // clampZoom: zoom-ul din app.json (scris de mana sau de o versiune veche) intre 0.5 si 3; lipsa = 1.
 func clampZoom(z float64) float64 {
 	if z <= 0 || math.IsNaN(z) {
