@@ -551,17 +551,20 @@ func (s *Server) createLibraryItem(w http.ResponseWriter, r *http.Request) {
 }
 
 type secretView struct {
-	Name string `json:"name"`
-	Set  bool   `json:"set"`
+	Name   string `json:"name"`
+	Set    bool   `json:"set"`    // proiectul are valoarea lui
+	Global bool   `json:"global"` // fara valoare in proiect, dar cu cheie globala (Library > element)
 }
 
 type projectLibraryView struct {
-	Item      itemView     `json:"item"`
-	Installed bool         `json:"installed"`
-	Enabled   bool         `json:"enabled"`
-	Version   string       `json:"version"` // versiunea fixata in proiect ("" daca nu e instalat)
-	Update    bool         `json:"updateAvailable"`
-	Secrets   []secretView `json:"secrets"`
+	Item      itemView `json:"item"`
+	Installed bool     `json:"installed"`
+	Enabled   bool     `json:"enabled"`
+	Version   string   `json:"version"` // versiunea fixata in proiect ("" daca nu e instalat)
+	// FromDefault: elementul vine din "Default for all projects" (fara rand propriu, mereu pe ultima versiune)
+	FromDefault bool         `json:"fromDefault"`
+	Update      bool         `json:"updateAvailable"`
+	Secrets     []secretView `json:"secrets"`
 }
 
 func (s *Server) secretViews(projectID int64, it store.LibraryItem) ([]secretView, error) {
@@ -569,9 +572,13 @@ func (s *Server) secretViews(projectID int64, it store.LibraryItem) ([]secretVie
 	if err != nil {
 		return nil, err
 	}
+	global, err := s.st.DefaultSecrets(it.ID)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]secretView, 0, len(it.Secrets))
 	for _, n := range it.Secrets {
-		out = append(out, secretView{Name: n, Set: have[n] != ""})
+		out = append(out, secretView{Name: n, Set: have[n] != "", Global: have[n] == "" && global[n] != ""})
 	}
 	return out, nil
 }
@@ -591,7 +598,7 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	installs, err := s.st.ListInstalls(pid)
+	installs, err := s.st.EffectiveInstalls(pid) // si elementele default
 	if err != nil {
 		fail(w, err)
 		return
@@ -640,7 +647,10 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		pv := projectLibraryView{Item: view, Secrets: secrets}
 		if in, has := byItem[it.ID]; has {
-			pv.Installed, pv.Enabled = true, in.Enabled
+			pv.Installed, pv.Enabled, pv.FromDefault = true, in.Enabled, in.FromDefault
+			if it.IsDefault && it.Status == store.ItemPublished && !in.Enabled {
+				pv.Installed = false // un default oprit in proiect apare nebifat
+			}
 			vs, err := s.st.ListLibraryVersions(it.ID)
 			if err != nil {
 				fail(w, err)
@@ -651,7 +661,7 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 					pv.Version = v.Version
 				}
 			}
-			pv.Update = len(vs) > 0 && vs[0].ID != in.VersionID
+			pv.Update = len(vs) > 0 && vs[0].ID != in.VersionID && !in.FromDefault
 		}
 		out = append(out, pv)
 	}
@@ -738,7 +748,20 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	installs, err := s.st.ListInstalls(pid)
+	def, err := s.st.IsActiveDefault(itemID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if def && (in.Installed == nil || !*in.Installed) {
+		// default: doar cheile proiectului (fara sa-l porneasca) sau oprirea lui in proiect
+		if s.putDefaultInProject(w, pid, it, in.Installed != nil, in.Secrets, in.Clear) {
+			s.hub.Publish(pid, "project", map[string]int64{"id": pid})
+			w.WriteHeader(http.StatusNoContent)
+		}
+		return
+	}
+	installs, err := s.st.EffectiveInstalls(pid)
 	if err != nil {
 		fail(w, err)
 		return
@@ -804,4 +827,40 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 	}
 	s.hub.Publish(pid, "project", map[string]int64{"id": pid})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// putDefaultInProject: un element default in proiect, fara pornire. Salveaza cheile proiectului (valorile goale
+// raman, "clear" sterge) si, cu turnOff, il opreste (rand cu enabled = 0). false = eroarea e deja scrisa.
+func (s *Server) putDefaultInProject(w http.ResponseWriter, pid int64, it store.LibraryItem, turnOff bool, secrets map[string]string, clear []string) bool {
+	for name, val := range secrets {
+		if val == "" {
+			continue
+		}
+		if err := s.st.SetSecret(pid, it.ID, name, val); err != nil {
+			fail(w, err)
+			return false
+		}
+	}
+	for _, name := range clear {
+		if err := s.st.SetSecret(pid, it.ID, name, ""); err != nil {
+			fail(w, err)
+			return false
+		}
+	}
+	if !turnOff {
+		return true
+	}
+	vs, err := s.st.ListLibraryVersions(it.ID)
+	if err != nil {
+		fail(w, err)
+		return false
+	}
+	if len(vs) == 0 { // un default fara versiuni nu ajunge in proiecte, deci nu are ce opri
+		return true
+	}
+	if err := s.st.DisableInstall(pid, it.ID, vs[0].ID); err != nil {
+		fail(w, err)
+		return false
+	}
+	return true
 }

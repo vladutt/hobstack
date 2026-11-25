@@ -81,3 +81,81 @@ func TestLibraryDefaultClosesSkillCards(t *testing.T) {
 		t.Fatalf("cardul ramane: %+v", acc)
 	}
 }
+
+type projectLibRow struct {
+	Item struct {
+		ID int64 `json:"id"`
+	} `json:"item"`
+	Installed   bool   `json:"installed"`
+	Enabled     bool   `json:"enabled"`
+	FromDefault bool   `json:"fromDefault"`
+	Version     string `json:"version"`
+	Secrets     []struct {
+		Name   string `json:"name"`
+		Set    bool   `json:"set"`
+		Global bool   `json:"global"`
+	} `json:"secrets"`
+}
+
+func (e *libEnv) projectLibRow(t *testing.T, pid, itemID int64) projectLibRow {
+	t.Helper()
+	_, raw := e.do(t, "GET", "/api/projects/"+itoa(pid)+"/library", nil)
+	var rows []projectLibRow
+	json.Unmarshal(raw, &rows)
+	for _, r := range rows {
+		if r.Item.ID == itemID {
+			return r
+		}
+	}
+	t.Fatalf("elementul %d lipseste: %s", itemID, raw)
+	return projectLibRow{}
+}
+
+func TestProjectLibraryDefaultToggle(t *testing.T) {
+	e := setupLib(t)
+	src := e.project(t)
+	it := e.publishedMCP(t, src.ID, "gh")
+	e.do(t, "PUT", "/api/library/"+itoa(it.ID)+"/default", map[string]any{"default": true})
+	p := e.project(t)
+	if r := e.projectLibRow(t, p.ID, it.ID); !r.Installed || !r.Enabled || !r.FromDefault || r.Version == "" {
+		t.Fatalf("%+v", r)
+	}
+	path := "/api/projects/" + itoa(p.ID) + "/library/" + itoa(it.ID)
+	if code, raw := e.do(t, "PUT", path, map[string]any{"installed": false}); code != 204 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if r := e.projectLibRow(t, p.ID, it.ID); r.Enabled || r.FromDefault {
+		t.Fatalf("oprit: %+v", r)
+	}
+	eff, _ := e.st.EffectiveInstalls(p.ID)
+	if len(eff) != 1 || eff[0].Enabled {
+		t.Fatalf("%+v", eff)
+	}
+	if code, raw := e.do(t, "PUT", path, map[string]any{"installed": true}); code != 204 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if r := e.projectLibRow(t, p.ID, it.ID); !r.Enabled || !r.FromDefault {
+		t.Fatalf("repornit: %+v", r)
+	}
+	if l, _ := e.st.ListInstalls(p.ID); len(l) != 0 {
+		t.Fatalf("randul trebuia sters: %+v", l)
+	}
+}
+
+func TestProjectLibraryGlobalSecretView(t *testing.T) {
+	e := setupLib(t)
+	src := e.project(t)
+	it := e.publishedMCP(t, src.ID, "gh")
+	e.do(t, "PUT", "/api/library/"+itoa(it.ID)+"/default", map[string]any{"default": true, "secrets": map[string]string{"TOKEN": "g"}})
+	p := e.project(t)
+	if r := e.projectLibRow(t, p.ID, it.ID); len(r.Secrets) != 1 || !r.Secrets[0].Global || r.Secrets[0].Set {
+		t.Fatalf("%+v", r)
+	}
+	path := "/api/projects/" + itoa(p.ID) + "/library/" + itoa(it.ID)
+	if code, raw := e.do(t, "PUT", path, map[string]any{"secrets": map[string]string{"TOKEN": "own"}}); code != 204 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if r := e.projectLibRow(t, p.ID, it.ID); !r.Secrets[0].Set {
+		t.Fatalf("%+v", r)
+	}
+}
