@@ -498,8 +498,14 @@ export async function libraryItemView(root, id, tab) {
       drawDefault();
     };
     const on = el("input", { type: "checkbox", checked: !!d.isDefault });
-    on.addEventListener("change", () => save({ default: on.checked },
-      on.checked ? "On in every project" : "No longer a default"));
+    on.addEventListener("change", () => {
+      // scoaterea flag-ului il scoate din toate proiectele, si din cele care il instalasera inainte sa fie default
+      if (!on.checked && !confirm(`Turn off ${d.name} in every project? Projects that had it before it became a default lose it too; turn it on again in a project's Instructions › Library.`)) {
+        on.checked = true;
+        return;
+      }
+      save({ default: on.checked }, on.checked ? "On in every project" : "No longer a default");
+    });
     const set = new Set(d.defaultSecretsSet || []);
     const keys = (d.secrets || []).map((name) => {
       const input = el("input", { type: "password", autocomplete: "new-password", "aria-label": name,

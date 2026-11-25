@@ -477,7 +477,7 @@ InstallWithSecrets pe un default sterge randul (toate drumurile de instalare rep
 sursa) nu mai reporneste un rand oprit si nu face nimic pe un default. install_mcp pe un default oprit = cerere in Needs you.
 PUT /api/library/{id}/default {default?, secrets?, clear?} (la pornire: SkillAvailable in proiectele care il primesc);
 itemView.defaultSecretsSet / offIn, projectLibraryView.fromDefault, secretView.global. UI: comutatorul si "Global keys" pe
-pagina item-ului, eticheta Default in liste si in Instructions > Library ("Latest vX", "global").
+pagina item-ului (scoaterea flag-ului cere confirmare), eticheta Default in liste si in Instructions > Library ("Latest vX", "global").
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
