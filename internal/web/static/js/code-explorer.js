@@ -45,7 +45,8 @@ export function previewKind(path) {
   return null;
 }
 
-export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, onClose }) {
+// start: { folder, path, line } deschide direct acel fisier, cu linia selectata (caile din chat)
+export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, onClose, start }) {
   const storeKey = `hobstack-code-${projectId}`;
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(storeKey) || "{}") || {}; } catch {}
@@ -579,11 +580,25 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
   document.addEventListener("click", onDocClick);
   document.body.append(overlay);
   search.focus(); // activ de la inceput: tastele nu ajung in campul de dedesubt cat se incarca lista
+  // goTo: fisierul din chat, cu linia selectata si adusa la mijloc
+  async function goTo(ref) {
+    await openFile({ folder: ref.folder, path: ref.path });
+    if (closed || !ref.line || current?.path !== ref.path || current?.folder !== ref.folder) return;
+    const row = codeBox.querySelectorAll(".fv-line")[ref.line - 1];
+    if (!row) return;
+    sel = { from: ref.line, to: ref.line };
+    anchorLine = ref.line;
+    paintSelection();
+    row.scrollIntoView({ block: "center" });
+  }
+
   loadTree().then(() => {
-    // ultimul fisier deschis, daca mai e in lista
-    const last = saved.last;
-    if (!closed && last && all.some((x) => x.folder === last.folder && x.path === last.path)) openFile(last);
-    if (!closed) search.focus();
+    if (closed) return;
+    const inList = (c) => c && all.some((x) => x.folder === c.folder && x.path === c.path);
+    // fisierul cerut din chat, altfel ultimul fisier deschis, daca mai e in lista
+    if (inList(start)) goTo(start);
+    else if (inList(saved.last)) openFile(saved.last);
+    search.focus();
   });
-  return { close };
+  return { close, goTo };
 }

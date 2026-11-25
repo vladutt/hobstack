@@ -1,8 +1,10 @@
 import { api } from "./api.js";
 import { toast } from "./ui.js";
 import { revealLabel } from "./open-file.js";
+import { isMac, modKey } from "./code-explorer.js";
 
-// Caile din mesajele de chat devin clicabile: clic = fisierul in Finder / Explorer (un folder se deschide).
+// Caile din mesajele de chat devin clicabile: un fisier de cod se deschide in exploratorul de cod la linia din
+// cale (Checkout.tsx:42), Cmd/Ctrl+clic il arata in Finder / Explorer; restul (foldere, fisiere ignorate) = Finder.
 // Se marcheaza intai candidatii (text care arata a cale), apoi serverul spune care exista in proiect: doar
 // aceia devin link. Blocurile de cod (```), linkurile si butoanele raman neatinse.
 
@@ -61,8 +63,15 @@ export function markPaths(root) {
   return out;
 }
 
+// lineOf: linia din "Checkout.tsx:42" / ":42:7" (0 = fara)
+function lineOf(path) {
+  const m = path.match(/:(\d+)(?::\d+)?$/);
+  return m ? Number(m[1]) : 0;
+}
+
 // pathLinker: tine minte ce a raspuns serverul (per chat) si strange cererile din mesajele adaugate deodata
-export function pathLinker(projectId, agentId) {
+// onCode({ folder, path, line }): deschide exploratorul de cod (lipsa = doar Finder)
+export function pathLinker(projectId, agentId, onCode) {
   const known = new Map(); // cale -> { dir } | null (nu exista)
   let pending = [];
   let timer = null;
@@ -71,10 +80,13 @@ export function pathLinker(projectId, agentId) {
     span.classList.add("path-link");
     span.tabIndex = 0;
     span.setAttribute("role", "button");
-    span.title = info.dir ? "Open this folder" : revealLabel();
+    const code = onCode && info.file ? { folder: info.folder, path: info.file, line: lineOf(span.dataset.path) } : null;
+    const finder = info.dir ? "Open this folder" : revealLabel();
+    span.title = code ? `Open in the code viewer (${isMac ? "\u2318-click" : "Ctrl+click"}: ${finder})` : finder;
     const go = async (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (code && !modKey(e)) { onCode(code); return; }
       try {
         await api(`/api/projects/${projectId}/reveal`, { method: "POST", body: { path: span.dataset.path, agent: agentId() } });
       } catch (err) { toast(err.message); }

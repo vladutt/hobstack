@@ -11,8 +11,8 @@ import (
 	"hobstack/internal/store"
 )
 
-// Caile din chat (web/src/App.tsx, /Users/.../site/index.html, Checkout.tsx:42) devin clicabile: clic = Show in
-// Finder / Explorer (un folder se deschide). Doar cai din folderele proiectului si din fisierele lui de pe disc;
+// Caile din chat (web/src/App.tsx, /Users/.../site/index.html, Checkout.tsx:42) devin clicabile: un fisier din
+// lista de cod se deschide in exploratorul de cod (la linie), restul = Show in Finder / Explorer (un folder se deschide). Doar cai din folderele proiectului si din fisierele lui de pe disc;
 // restul discului nu se poate cere de aici.
 
 const (
@@ -151,11 +151,44 @@ func (s *Server) checkPaths(w http.ResponseWriter, r *http.Request) {
 	}
 	found := map[string]any{}
 	for _, raw := range in.Paths {
-		if _, dir, ok := s.resolvePath(p, home, raw); ok {
-			found[raw] = map[string]bool{"dir": dir}
+		abs, dir, ok := s.resolvePath(p, home, raw)
+		if !ok {
+			continue
 		}
+		res := map[string]any{"dir": dir}
+		if !dir {
+			if fid, rel, ok := s.codeRef(p, abs); ok {
+				res["folder"], res["file"] = fid, rel
+			}
+		}
+		found[raw] = res
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"found": found})
+}
+
+// codeRef: folderul proiectului si calea relativa (cu /) a unui fisier din lista de cod (cea din exploratorul
+// de cod); ok=false pentru fisierele din afara listei (ignorate, fisierele proiectului / task-urilor).
+func (s *Server) codeRef(p store.Project, abs string) (int64, string, bool) {
+	for _, f := range p.Folders {
+		if f.Path == "" {
+			continue
+		}
+		rel, err := filepath.Rel(f.Path, abs)
+		if err != nil || !filepath.IsLocal(rel) {
+			continue
+		}
+		rel = filepath.ToSlash(rel)
+		files, err := s.codeCache.Files(f.Path)
+		if err != nil {
+			continue
+		}
+		for _, file := range files {
+			if file == rel {
+				return f.ID, rel, true
+			}
+		}
+	}
+	return 0, "", false
 }
 
 // revealPath: POST /api/projects/{id}/reveal {path, agent}: fisierul selectat in Finder / Explorer, folderul deschis.

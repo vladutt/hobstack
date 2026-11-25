@@ -42,6 +42,24 @@ func TestChatPaths(t *testing.T) {
 		t.Fatalf("dir flags: %s", raw)
 	}
 
+	// fisierele din lista de cod au si folderul + calea relativa (clic = exploratorul de cod la linie)
+	var refs struct {
+		Found map[string]struct {
+			Folder int64  `json:"folder"`
+			File   string `json:"file"`
+		} `json:"found"`
+	}
+	json.Unmarshal(raw, &refs)
+	if r := refs.Found["src/server.go:42"]; r.Folder != p.Folders[0].ID || r.File != "src/server.go" {
+		t.Errorf("server.go ref: %+v", r)
+	}
+	if r := refs.Found["Checkout.tsx"]; r.Folder != p.Folders[1].ID || r.File != "src/pages/Checkout.tsx" {
+		t.Errorf("Checkout ref: %+v", r)
+	}
+	if r := refs.Found["src/"]; r.Folder != 0 || r.File != "" {
+		t.Errorf("dir has a ref: %+v", r)
+	}
+
 	// README.md e in ambele foldere: primul e cel al agentului (aici primul folder)
 	if code, _ := e.do(t, "POST", base+"/reveal", map[string]any{"path": "README.md"}); code != http.StatusOK {
 		t.Fatalf("reveal: %d", code)

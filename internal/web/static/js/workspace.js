@@ -256,8 +256,8 @@ export async function workspaceView(root, projectId, route) {
   let chatShareKey = null;
   let chatQuestionKey = null; // id-ul intrebarii desenate ultima data in chat
   const threadHint = el("div", { class: "thread-hint" });
-  // caile din chat devin link (Show in Finder); raspunsurile serverului se tin minte per chat
-  const paths = pathLinker(projectId, () => state.selected);
+  // caile din chat devin link (fisierele de cod: exploratorul la linie, restul Show in Finder); raspunsurile serverului se tin minte per chat
+  const paths = pathLinker(projectId, () => state.selected, (ref) => toggleExplorer(ref));
   const quick = el("div", { class: "quick-actions" }); // Ask for status, Give a task, Open T-<nr>
   const chatBox = el("div", { class: "chat" }, threadHint, thread, chatShare, chatQuestion, el("div", { class: "composer" }, chips, composer, quick, note));
   // @ in mesaj: fisierele de cod ale proiectului (caile relative la folderul agentului selectat)
@@ -324,9 +324,10 @@ export async function workspaceView(root, projectId, route) {
     renderHeader();
   }
 
-  // toggleExplorer: deschide / inchide explorer-ul de cod (Cmd/Ctrl+P, butonul Code)
-  function toggleExplorer() {
-    if (explorer) { explorer.close(); return; }
+  // toggleExplorer: deschide / inchide explorer-ul de cod (Cmd/Ctrl+P, butonul Code);
+  // start = { folder, path, line } deschide direct fisierul (clic pe o cale din chat)
+  function toggleExplorer(start) {
+    if (explorer) { if (start) explorer.goTo(start); else explorer.close(); return; }
     const rootId = state.project.agents.find((a) => a.isRoot && !a.detached)?.id ?? firstRootId();
     explorer = openCodeExplorer({
       projectId, project: state.project,
@@ -334,6 +335,7 @@ export async function workspaceView(root, projectId, route) {
       defaultAgentId: state.drawer && state.project.agents.some((a) => a.id === state.selected && !a.detached) ? state.selected : rootId,
       onAsk: prefillChat,
       onClose: () => { explorer = null; },
+      start,
     });
   }
 
