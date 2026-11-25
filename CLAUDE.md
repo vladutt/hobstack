@@ -467,6 +467,17 @@ Gata (fereastra Windows la scala DPI): totul aparea mic pe 125% / 150% fiindca g
 scalei (raw pixels), deci pagina ramanea la 1.0. window_windows.go putRasterScale apeleaza direct vtbl-ul cu
 math.Float64bits (ca PutZoomFactor; corect doar pe amd64, singurul build Windows), la pornire si la WM_DPICHANGED,
 cu log la eroare; scaleFromDPI (window_logic.go, testat) = DPI / 96. GetRasterizationScale din biblioteca e corect (out pointer).
+Gata (Library defaults, spec in docs/superpowers/specs/2026-11-25-hobstack-library-defaults-design.md): "Default for all
+projects" pe un element publicat (library_items.is_default, migrarea 041): intra in toate proiectele pe ultima versiune.
+store.EffectiveInstalls = randurile proiectului + instalari virtuale (FromDefault) pentru default-urile published fara rand;
+EffectiveSecrets = cheile globale (library_default_secrets, fallback pentru orice proiect care are elementul) suprascrise de
+valorile proiectului. Build / inputsHash, recordLibraryUses, install_mcp si pagina Library din proiect le folosesc. Oprirea in
+proiect = rand enabled 0 (DisableInstall); pornirea flag-ului sterge randurile pornite (trec pe default), opririle raman;
+InstallWithSecrets pe un default sterge randul (toate drumurile de instalare repornesc default-ul); Install (Publish, proiectul
+sursa) nu mai reporneste un rand oprit si nu face nimic pe un default. install_mcp pe un default oprit = cerere in Needs you.
+PUT /api/library/{id}/default {default?, secrets?, clear?} (la pornire: SkillAvailable in proiectele care il primesc);
+itemView.defaultSecretsSet / offIn, projectLibraryView.fromDefault, secretView.global. UI: comutatorul si "Global keys" pe
+pagina item-ului, eticheta Default in liste si in Instructions > Library ("Latest vX", "global").
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
