@@ -70,9 +70,21 @@ export function librarySharePrompt(it, { onDone }) {
       el("span", { class: "grow" }), keep));
 }
 
-// libraryInstalls: sectiunea "Library" din Instructions. Se salveaza imediat la fiecare schimbare;
-// valorile secretelor nu se afiseaza niciodata (API-ul nu le intoarce, doar "set").
-export function libraryInstalls(projectId) {
+// Tab-urile Skills / MCP servers / Tools din Instructions: titlul, butonul Add si textul cand lista e goala
+const INSTALL_TABS = {
+  skill: { title: "Skills", hint: " \u00b7 skills the agents can use in this project", add: ["Add skill", "skill"],
+    empty: "No skills yet. Add one, or publish one from the Library." },
+  mcp: { title: "MCP servers", hint: " \u00b7 servers the agents can call in this project", add: ["Add MCP server", "mcp"],
+    empty: "No MCP servers yet. Add one from the registry or from your Claude." },
+  tool: { title: "Tools", hint: " \u00b7 scripts the agents run in this project", add: null,
+    empty: "No tools yet. Agents propose tools; published ones show up here." },
+};
+
+// libraryInstalls: un tab din Instructions (Skills, MCP servers sau Tools), doar elementele de tipul kind.
+// Se salveaza imediat la fiecare schimbare; valorile secretelor nu se afiseaza niciodata (API-ul nu le
+// intoarce, doar "set"). onRows(randuri) primeste lista intreaga dupa fiecare citire (numerele de pe tab-uri).
+export function libraryInstalls(projectId, kind, onRows) {
+  const meta = INSTALL_TABS[kind];
   const list = el("div", { class: "lib-installs" });
   const nodes = new Map(); // id element -> nodul randului
   const queues = new Map(); // id element -> coada de PUT-uri (un singur PUT pe rand odata)
@@ -87,7 +99,9 @@ export function libraryInstalls(projectId) {
         if (okMsg) toast(okMsg, "ok");
       } catch (err) { toast(err.message); }
       try {
-        const fresh = (await api(`/api/projects/${projectId}/library`)).find((x) => x.item.id === id);
+        const all = await api(`/api/projects/${projectId}/library`);
+        onRows?.(all);
+        const fresh = all.find((x) => x.item.id === id);
         const old = nodes.get(id);
         if (fresh && old) { const n = row(fresh); nodes.set(id, n); old.replaceWith(n); }
       } catch (err) { toast(err.message); }
@@ -102,7 +116,7 @@ export function libraryInstalls(projectId) {
     on.addEventListener("change", () => put(r, { installed: on.checked }));
     const head = el("label", { class: "check toggle-row" }, on,
       el("span", { class: "grow" },
-        el("strong", { class: "lib-name" }, it.name), " ", el("span", { class: "label-tag" }, kindLabel(it)),
+        el("strong", { class: "lib-name" }, it.name),
         it.isDefault ? [" ", el("span", { class: "label-tag default", title: "On in every project unless turned off here" }, "Default")] : null,
         el("span", { class: "hint" }, it.description || "")));
     const meta = el("div", { class: "lib-install-meta" },
@@ -139,18 +153,18 @@ export function libraryInstalls(projectId) {
     let rows;
     try { rows = await api(`/api/projects/${projectId}/library`); }
     catch (err) { list.replaceChildren(el("p", { class: "hint" }, err.message)); return; }
+    onRows?.(rows);
+    rows = rows.filter((r) => r.item.kind === kind);
     nodes.clear();
     list.replaceChildren(...(rows.length ? rows.map((r) => { const n = row(r); nodes.set(r.item.id, n); return n; })
-      : [el("p", { class: "hint" }, "Nothing published yet. Published tools, skills and MCP servers show up here.")]));
+      : [el("p", { class: "hint" }, meta.empty)]));
   }
   api("/api/info").catch(() => ({})).then((i) => { windows = i.os === "windows"; load(); });
   return el("section", { class: "section" },
     el("div", { class: "section-head" },
-      el("h2", {}, "Library", el("span", { class: "hint" }, " · tools, skills and servers for this project")),
-      // cautare + Install direct in proiect (paginile Add skill / Add MCP server primesc proiectul)
-      el("span", { class: "lib-install-adds" },
-        el("a", { class: "btn small", href: `#/library/skill/add?project=${projectId}` }, "Add skill"),
-        el("a", { class: "btn small", href: `#/library/mcp/add?project=${projectId}` }, "Add MCP server"))),
+      el("h2", {}, meta.title, el("span", { class: "hint" }, meta.hint)),
+      // Install direct in proiect (paginile Add skill / Add MCP server primesc proiectul)
+      meta.add ? el("a", { class: "btn small", href: `#/library/${meta.add[1]}/add?project=${projectId}` }, meta.add[0]) : null),
     el("p", { class: "hint" }, "Changes save immediately and apply on each agent's next run. Secrets are stored on this machine and never shown again."),
     list);
 }

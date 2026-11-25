@@ -212,6 +212,44 @@ function projectRow(p, peak, onCategory) {
       : el("span", { class: "hint" }, "\u2014")));
 }
 
+// formTabs: tab-urile General / Skills / MCP servers / Tools din Instructions. Panourile raman in pagina
+// (ascunse), ca un camp nesalvat din General sa nu se piarda la schimbarea tab-ului; adresa se schimba prin
+// replaceState (fara hashchange, deci fara redesenarea paginii). Tools apare doar daca proiectul are tool-uri.
+function formTabs(id, form) {
+  const panes = new Map(); // tab -> panoul lui (General = formularul, cerut abia la select)
+  const buttons = new Map();
+  const counts = new Map();
+  const t = { bar: el("div", { class: "modal-tabs form-tabs", role: "tablist" }), panes, current: "general" };
+  for (const [key, label, kind] of FORM_TABS) {
+    const count = el("span", { class: "count" });
+    const b = el("button", { type: "button", class: "tab", role: "tab", hidden: key === "tools",
+      onclick: () => t.select(key, true) }, label, count);
+    buttons.set(key, b);
+    counts.set(key, count);
+    t.bar.append(b);
+    panes.set(key, kind ? el("div", { role: "tabpanel", class: "form-tab-pane", hidden: true },
+      libraryInstalls(id, kind, paintCounts)) : null);
+  }
+  t.panels = [...panes.values()].filter(Boolean);
+  // paintCounts: cate elemente sunt pornite pe fiecare tab (din lista intreaga a proiectului)
+  function paintCounts(rows) {
+    for (const [key, , kind] of FORM_TABS) {
+      if (!kind) continue;
+      const n = rows.filter((r) => r.item.kind === kind && r.installed).length;
+      counts.get(key).textContent = n ? String(n) : "";
+      if (key === "tools") buttons.get(key).hidden = !rows.some((r) => r.item.kind === "tool") && t.current !== "tools";
+    }
+  }
+  t.select = (key, push) => {
+    t.current = key;
+    if (key === "tools") buttons.get(key).hidden = false;
+    for (const [k, b] of buttons) b.setAttribute("aria-selected", String(k === key));
+    for (const [k, p] of panes) (p || form()).hidden = k !== key;
+    if (push) history.replaceState(null, "", `#/p/${id}/edit${key === "general" ? "" : "?tab=" + key}`);
+  };
+  return t;
+}
+
 // dayLabel: "today", "yesterday" sau data scurta, pentru zilele din activitate
 function dayLabel(ago) {
   if (ago === 0) return "Today";
@@ -232,7 +270,10 @@ function compact(n) {
   return String(n);
 }
 
-export async function projectFormView(root, id) {
+// tab-urile din Instructions (proiect existent): General = formularul, restul = elementele din Library pe tip
+const FORM_TABS = [["general", "General"], ["skills", "Skills", "skill"], ["mcp", "MCP servers", "mcp"], ["tools", "Tools", "tool"]];
+
+export async function projectFormView(root, id, startTab) {
   const p = id
     ? await api(`/api/projects/${id}`)
     : { name: "", goal: "", context: "", folders: [], maxParallel: 0, budgetUsd: 0 };
@@ -265,6 +306,7 @@ export async function projectFormView(root, id) {
     "Agents start new Claude sessions on the new account. Earlier messages stay saved. Stop the team first if it is working.");
   account.addEventListener("change", () => { accountNote.hidden = !id || account.value === currentAccount; });
   const formId = `project-form-${id || "new"}`;
+  const tabs = id ? formTabs(id, () => document.getElementById(formId)) : null;
   root.append(
     topbar([["Projects", "#/"], ...(id ? [[p.name, `#/p/${id}`]] : []), [id ? "Instructions" : "New project", null]],
       el("span", { class: "grow" }),
@@ -272,7 +314,8 @@ export async function projectFormView(root, id) {
       el("a", { class: "btn ghost", href: id ? `#/p/${id}` : "#/" }, "Cancel"),
       el("button", { type: "submit", form: formId, class: "btn primary" }, id ? "Save" : "Create project")),
     el("div", { class: "page" },
-      el("form", { class: "form project-form", id: formId, onsubmit: save },
+      id && tabs.bar,
+      el("form", { class: "form project-form", id: formId, onsubmit: save, role: id ? "tabpanel" : null },
         el("div", { class: "form-main" },
           el("section", { class: "section" },
             el("h2", {}, "Brief"),
@@ -301,9 +344,10 @@ export async function projectFormView(root, id) {
             id && notifySwitch(id, p.notify !== false),
             !id && el("p", { class: "hint" }, "You get a default lead. Add workers from the project page.")),
           id && linksSection(id, p.links || [], category.input),
-          id && projectCommands(id),
-          id && libraryInstalls(id)))));
-  name.focus();
+          id && projectCommands(id))),
+      id && tabs.panels));
+  if (id) tabs.select(tabs.panes.has(startTab) ? startTab : "general", false);
+  if (!id || tabs.current === "general") name.focus();
 
   async function save(e) {
     e.preventDefault();

@@ -70,7 +70,7 @@ const routes = [
   { pattern: /^#\/library\/?$/, view: () => { location.hash = "#/library/tools"; } },
   { pattern: /^#\/settings\/?$/, view: (root) => settingsView(root) },
   { pattern: /^#\/new$/, view: (root) => newProjectView(root) },
-  { pattern: /^#\/p\/(\d+)\/edit$/, view: (root, m) => projectFormView(root, Number(m[1])) },
+  { pattern: /^#\/p\/(\d+)\/edit(?:\?tab=(\w+))?$/, view: (root, m) => projectFormView(root, Number(m[1]), m[2]) },
   { pattern: /^#\/p\/(\d+)\/agents\/new(?:\?parent=(\d+))?$/, view: (root, m) => newAgentView(root, Number(m[1]), m[2] ? Number(m[2]) : null) },
   {
     pattern: /^#\/p\/(\d+)(\/.*)?$/,

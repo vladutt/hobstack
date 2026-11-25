@@ -877,6 +877,10 @@ a.flow-head:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px
 .form-main, .form-side { display: grid; gap: 20px; min-width: 0; }
 .form-side { position: sticky; top: calc(var(--topbar-h) + 20px); }
 .toggle-row strong { font-weight: 600; }
+/* tab-urile din Instructions: General = formularul, Skills / MCP servers / Tools = cate o lista din Library */
+.form-tabs { margin-bottom: 20px; }
+.form-tab-pane { max-width: 880px; }
+.project-form[hidden], .form-tab-pane[hidden] { display: none; }
 @media (max-width: 1000px) { .project-form { grid-template-columns: minmax(0, 1fr); } .form-side { position: static; } }
 .files-box-row { gap: 0; }
 .files-box-row .fb-dir { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
@@ -1665,7 +1669,7 @@ input.mcp-search { height: 46px; font-size: 16px; padding: 0 16px; }
 .lib-source-from a { color: var(--text); }
 .lib-update { display: inline-flex; align-items: center; gap: 7px; color: var(--amber); font-weight: 600; }
 .lib-update-dot { align-self: center; }
-.lib-install-adds { display: flex; gap: 8px; flex-wrap: wrap; }
+
 
 /* switcher-ul de proiecte (Cmd/Ctrl+K, project-switcher.js): peste orice, inclusiv explorer-ul de cod */
 .ps-hint { flex: none; height: 26px; padding: 0 8px; margin-left: -6px; border-radius: 7px; border: 1px solid var(--line-2); background: none;

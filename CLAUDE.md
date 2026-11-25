@@ -478,6 +478,9 @@ sursa) nu mai reporneste un rand oprit si nu face nimic pe un default. install_m
 PUT /api/library/{id}/default {default?, secrets?, clear?} (la pornire: SkillAvailable in proiectele care il primesc);
 itemView.defaultSecretsSet / offIn, projectLibraryView.fromDefault, secretView.global. UI: comutatorul si "Global keys" pe
 pagina item-ului (scoaterea flag-ului cere confirmare), eticheta Default in liste si in Instructions > Library ("Latest vX", "global").
+Gata (tab-uri in Instructions): pagina #/p/<id>/edit are tab-urile General (formularul) | Skills | MCP servers | Tools
+(Tools doar cand proiectul are tool-uri), cu numarul celor pornite; ?tab=skills|mcp|tools in adresa (schimbat prin
+replaceState, panourile raman in pagina, deci campurile nesalvate din General nu se pierd). libraryInstalls(pid, kind, onRows).
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"
