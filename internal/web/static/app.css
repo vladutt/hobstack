@@ -1242,6 +1242,12 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .lib-side { border-left: 1px solid var(--line); background: var(--deep); min-height: calc(100vh - var(--topbar-h)); }
 .lib-side .side-rows { grid-template-columns: 110px minmax(0, 1fr); }
 .lib-needs { display: grid; gap: 12px; margin-top: 22px; }
+.lib-default { display: grid; gap: 10px; margin-top: 22px; }
+.lib-default:empty { display: none; }
+.lib-default .toggle-row .grow { display: grid; gap: 2px; }
+.lib-default-key { display: grid; grid-template-columns: minmax(70px, auto) 1fr auto; gap: 8px; align-items: center; }
+.lib-default-key input { min-width: 0; }
+.label-tag.default { background: var(--teal-bg); color: var(--teal); }
 .lib-side-foot { display: grid; gap: 8px; justify-items: start; }
 .lib-side-foot .btn.ghost.danger { padding-left: 0; }
 .lib-form.modal { display: block; max-width: 640px; height: auto; max-height: 100%; overflow-y: auto; }

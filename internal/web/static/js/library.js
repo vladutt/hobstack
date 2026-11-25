@@ -281,7 +281,8 @@ export async function libraryView(root, path) {
       const name = el("td", {}, el("span", { class: "lib-name-cell" },
         el("a", { class: "lib-name small", href: `#/library/item/${it.id}`, onclick: (e) => e.stopPropagation() }, it.name),
         kind === "mcp" ? el("span", { class: "label-tag" + (mine(it) ? "" : " by-agent") }, mine(it) ? "external" : "by agent")
-          : el("span", { class: "label-tag" }, "script")));
+          : el("span", { class: "label-tag" }, "script"),
+        it.isDefault ? el("span", { class: "label-tag default" }, "default") : null));
       const desc = el("td", { class: "lib-cell-desc" }, it.description);
       if (kind === "mcp") {
         tr.append(name, desc, el("td", {}, it.transport === "remote" ? "Remote" : "Local"),
@@ -305,6 +306,7 @@ export async function libraryView(root, path) {
       onclick: () => { selected = it.id; draw(); },
     },
       el("span", { class: "lib-skill-top" }, el("span", { class: "lib-icon" }, "✦"), el("span", { class: "lib-skill-name" }, it.name),
+        it.isDefault ? el("span", { class: "label-tag default" }, "default") : null,
         // sursa are o versiune noua (Add skill): punctul de pe card
         it.updateAvailable ? el("span", { class: "dot-amber lib-update-dot", title: "Update available", "aria-label": "Update available" }) : null,
         el("span", { class: "lib-ver" + (it.status === "proposed" ? " flag" : "") }, it.status === "proposed" ? "Proposed" : it.version ? "v" + it.version.version : "")),
@@ -483,6 +485,47 @@ export async function libraryItemView(root, id, tab) {
     }).catch(() => {});
   }
 
+  // "Default for all projects": comutatorul si cheile globale (fallback-ul oricarui proiect fara valoarea lui)
+  const defaultBox = el("div", { class: "lib-default" });
+  function drawDefault() {
+    if (d.status !== "published" && !d.isDefault) { defaultBox.replaceChildren(); return; }
+    const save = async (body, okMsg) => {
+      try {
+        const v = await api(`/api/library/${d.id}/default`, { method: "PUT", body });
+        Object.assign(d, { isDefault: v.isDefault, defaultSecretsSet: v.defaultSecretsSet, offIn: v.offIn });
+        if (okMsg) toast(okMsg, "ok");
+      } catch (err) { toast(err.message); }
+      drawDefault();
+    };
+    const on = el("input", { type: "checkbox", checked: !!d.isDefault });
+    on.addEventListener("change", () => save({ default: on.checked },
+      on.checked ? "On in every project" : "No longer a default"));
+    const set = new Set(d.defaultSecretsSet || []);
+    const keys = (d.secrets || []).map((name) => {
+      const input = el("input", { type: "password", autocomplete: "new-password", "aria-label": name,
+        placeholder: set.has(name) ? "saved \u00b7 type to replace" : "not set" });
+      const put = () => { if (input.value) save({ secrets: { [name]: input.value } }, `${name} saved`); };
+      input.addEventListener("change", put);
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); put(); } });
+      return el("div", { class: "lib-default-key" },
+        el("span", { class: "lib-secret-name" }, name),
+        input,
+        set.has(name) ? el("a", { href: "#", class: "hint", onclick: (e) => {
+          e.preventDefault();
+          if (confirm(`Remove the global value for ${name}?`)) save({ clear: [name] });
+        } }, "Clear") : null);
+    });
+    defaultBox.replaceChildren(
+      el("label", { class: "check toggle-row" }, on,
+        el("span", { class: "grow" }, el("strong", {}, "Default for all projects"),
+          el("span", { class: "hint" }, "On in every project unless a project turns it off."))),
+      d.isDefault && d.offIn ? el("p", { class: "hint" }, `Off in ${d.offIn} ${d.offIn === 1 ? "project" : "projects"}.`) : null,
+      keys.length ? el("span", { class: "side-label" }, "Global keys") : null,
+      keys.length ? el("p", { class: "hint" }, "Used by every project that has no own value.") : null,
+      ...keys);
+  }
+  drawDefault();
+
   const side = el("aside", { class: "modal-side lib-side" },
     el("div", { class: "side-rows" },
       row("Type", kindWord),
@@ -493,10 +536,13 @@ export async function libraryItemView(root, id, tab) {
       row("Status", { published: "Published", proposed: "Proposed · needs you", declined: "Kept in a project", unpublished: "Unpublished" }[d.status] || d.status),
       d.publishedAt ? row("Published", new Date(d.publishedAt).toLocaleDateString("en-GB", { month: "short", day: "numeric" })) : null,
       d.version ? row("Version", el("span", { class: "mono" }, "v" + d.version.version)) : null,
-      d.installs ? row("Installed in", `${d.installs} ${d.installs === 1 ? "project" : "projects"}`) : null),
+      // un default e in toate proiectele; randurile lui sunt doar opririle (spuse sub comutator)
+      d.isDefault && d.status === "published" ? row("Installed in", "All projects")
+        : d.installs ? row("Installed in", `${d.installs} ${d.installs === 1 ? "project" : "projects"}`) : null),
     (d.needs || []).length || (d.secrets || []).length
       ? el("div", { class: "lib-needs" }, el("span", { class: "side-label" }, "Needs"), el("div", { class: "chips" }, chips(d)))
       : null,
+    defaultBox,
     el("div", { class: "side-foot lib-side-foot" },
       proposed ? [publishButton(d, toList), ...declineButtons(d, projectNames, toList)] : null,
       d.status === "published" ? unpublish : null));

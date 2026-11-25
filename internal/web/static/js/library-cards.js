@@ -103,14 +103,16 @@ export function libraryInstalls(projectId) {
     const head = el("label", { class: "check toggle-row" }, on,
       el("span", { class: "grow" },
         el("strong", { class: "lib-name" }, it.name), " ", el("span", { class: "label-tag" }, kindLabel(it)),
+        it.isDefault ? [" ", el("span", { class: "label-tag default", title: "On in every project unless turned off here" }, "Default")] : null,
         el("span", { class: "hint" }, it.description || "")));
     const meta = el("div", { class: "lib-install-meta" },
-      r.installed && r.version ? el("span", { class: "hint" }, `Pinned ${r.version}`) : null,
+      r.installed && r.version ? el("span", { class: "hint" }, r.fromDefault ? `Latest ${r.version}` : `Pinned ${r.version}`) : null,
       r.updateAvailable ? el("button", { type: "button", class: "btn small",
         onclick: () => put(r, { installed: true, upgrade: true }) }, `Update to ${it.version?.version || "latest"}`) : null);
     const secrets = r.installed ? (r.secrets || []).map((s) => {
       const input = el("input", { type: "password", autocomplete: "new-password",
-        placeholder: s.set ? "set \u00b7 type to replace" : "not set", "aria-label": s.name });
+        placeholder: s.set ? "set \u00b7 type to replace" : s.global ? "type to override" : "not set",
+        "aria-label": s.name });
       const save = () => { if (input.value) put(r, { installed: true, secrets: { [s.name]: input.value } }, `${s.name} saved`); };
       input.addEventListener("change", save);
       // Enter nu trebuie sa trimita formularul proiectului: salveaza doar secretul
@@ -121,7 +123,7 @@ export function libraryInstalls(projectId) {
       });
       return el("div", { class: "lib-secret" },
         el("span", { class: "lib-secret-name" }, s.name),
-        el("span", { class: "lib-secret-state" + (s.set ? " set" : "") }, s.set ? "set" : "missing"),
+        el("span", { class: "lib-secret-state" + (s.set || s.global ? " set" : "") }, s.set ? "set" : s.global ? "global" : "missing"),
         input,
         s.set ? el("a", { href: "#", class: "hint", onclick: (e) => {
           e.preventDefault();
