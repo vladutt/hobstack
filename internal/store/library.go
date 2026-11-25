@@ -63,6 +63,8 @@ type LibraryInstall struct {
 	ItemID    int64 `json:"itemId"`
 	VersionID int64 `json:"versionId"`
 	Enabled   bool  `json:"enabled"`
+	// FromDefault: instalare virtuala, venita dintr-un element default (fara rand in library_installs)
+	FromDefault bool `json:"fromDefault"`
 }
 
 // LibraryUse: o folosire a elementului intr-un task.
@@ -241,23 +243,39 @@ func (s *Store) ListLibraryVersions(itemID int64) ([]LibraryVersion, error) {
 	return out, rows.Err()
 }
 
-// Install instaleaza (sau muta pe alta versiune) un element in proiect, activat.
+// Install fixeaza un element in proiect pe versiune (folosit la Publish, pentru proiectul sursa). Un rand nou e
+// pornit; unul existent isi schimba doar versiunea (un element oprit in proiect ramane oprit). Pe un element
+// default nu face nimic: proiectul il are deja pe ultima versiune, iar o oprire trebuie pastrata.
 func (s *Store) Install(projectID, itemID, versionID int64) error {
-	_, err := s.db.Exec(`INSERT INTO library_installs (project_id, item_id, version_id, enabled) VALUES (?, ?, ?, 1)
-		ON CONFLICT (project_id, item_id) DO UPDATE SET version_id = excluded.version_id, enabled = 1`,
+	def, err := s.IsActiveDefault(itemID)
+	if err != nil || def {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO library_installs (project_id, item_id, version_id, enabled) VALUES (?, ?, ?, 1)
+		ON CONFLICT (project_id, item_id) DO UPDATE SET version_id = excluded.version_id`,
 		projectID, itemID, versionID)
 	return err
 }
 
 // InstallWithSecrets instaleaza (si activeaza) elementul in proiect si salveaza secretele, intr-o singura
 // tranzactie: la o eroare nu ramane nici instalarea, nici vreun secret. O valoare goala pastreaza secretul existent.
+// Pe un element default, "instalarea" sterge randul proiectului (o oprire, de obicei): proiectul urmeaza default-ul,
+// deci ultima versiune; versionID e ignorat.
 func (s *Store) InstallWithSecrets(projectID, itemID, versionID int64, secrets map[string]string) error {
+	def, err := s.IsActiveDefault(itemID)
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO library_installs (project_id, item_id, version_id, enabled) VALUES (?, ?, ?, 1)
+	if def {
+		if _, err := tx.Exec(`DELETE FROM library_installs WHERE project_id = ? AND item_id = ?`, projectID, itemID); err != nil {
+			return err
+		}
+	} else if _, err := tx.Exec(`INSERT INTO library_installs (project_id, item_id, version_id, enabled) VALUES (?, ?, ?, 1)
 		ON CONFLICT (project_id, item_id) DO UPDATE SET version_id = excluded.version_id, enabled = 1`,
 		projectID, itemID, versionID); err != nil {
 		return err
