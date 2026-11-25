@@ -135,7 +135,7 @@ func (t *Team) recordLibraryUses(ar activeRun, a store.Agent, o runner.Outcome) 
 	if t.lib == nil || ar.taskID == 0 || (len(o.Commands) == 0 && len(o.ToolUses) == 0) {
 		return
 	}
-	installs, err := t.st.ListInstalls(ar.projectID)
+	installs, err := t.st.EffectiveInstalls(ar.projectID) // si elementele default
 	if err != nil {
 		log.Printf("agent %d: library uses: %v", a.ID, err)
 		return

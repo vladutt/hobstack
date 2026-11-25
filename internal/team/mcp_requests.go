@@ -129,12 +129,13 @@ func (t *Team) prepareMCPRequest(c mcp.Caller, v mcp.LibraryInput, reason string
 	}
 	// un server cu acelasi nume exista deja in Library: cererea il activeaza pe acela, cu comanda lui
 	if it, err := t.st.FindLibraryItem(store.KindMCP, v.Name); err == nil {
-		installs, err := t.st.ListInstalls(c.ProjectID)
+		installs, err := t.st.EffectiveInstalls(c.ProjectID) // si elementele default
 		if err != nil {
 			return r, "", false, err
 		}
 		for _, in := range installs {
-			if in.ItemID == it.ID {
+			// un default oprit in proiect l-a oprit utilizatorul: cererea ajunge la el in Needs you
+			if in.ItemID == it.ID && (in.Enabled || !it.IsDefault) {
 				return r, fmt.Sprintf("The MCP server %q is already installed in this project. If its tools are missing, "+
 					"it may be turned off in Instructions > Library; ask the user.", v.Name), false, nil
 			}
