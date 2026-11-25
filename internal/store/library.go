@@ -40,6 +40,7 @@ type LibraryItem struct {
 	Args            []string   `json:"args"`
 	Entry           string     `json:"entry"`     // tool: fisierul care se ruleaza
 	ToolNames       []string   `json:"toolNames"` // mcp: tool-urile expuse (din probe)
+	IsDefault       bool       `json:"isDefault"` // pornit in toate proiectele (cat e published), afara de cele care l-au oprit
 	CreatedAt       time.Time  `json:"createdAt"`
 	PublishedAt     *time.Time `json:"publishedAt"`
 }
@@ -74,7 +75,7 @@ type LibraryUse struct {
 }
 
 const libraryItemCols = `id, kind, name, description, status, source_project_id, source_task_id, made_by_agent_id, made_by,
-	needs, secrets, transport, url, command, args, entry, tool_names, created_at, published_at`
+	needs, secrets, transport, url, command, args, entry, tool_names, created_at, published_at, is_default`
 
 // jsonList serializeaza o lista; nil devine [].
 func jsonList(l []string) string {
@@ -101,7 +102,7 @@ func scanLibraryItem(sc scanner) (LibraryItem, error) {
 	var needs, secrets, args, tools, created string
 	var published sql.NullString
 	err := sc.Scan(&it.ID, &it.Kind, &it.Name, &it.Description, &it.Status, &src, &task, &agent, &it.MadeBy,
-		&needs, &secrets, &it.Transport, &it.URL, &it.Command, &args, &it.Entry, &tools, &created, &published)
+		&needs, &secrets, &it.Transport, &it.URL, &it.Command, &args, &it.Entry, &tools, &created, &published, &it.IsDefault)
 	if err == sql.ErrNoRows {
 		return it, ErrNotFound
 	}
