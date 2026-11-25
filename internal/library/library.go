@@ -634,7 +634,7 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 	defer mu.Unlock()
 
 	out := Build{MCPServers: map[string]any{}, ToolPaths: map[string]int64{}}
-	installs, err := l.St.ListInstalls(projectID)
+	installs, err := l.St.EffectiveInstalls(projectID) // cu elementele default
 	if err != nil {
 		return out, err
 	}
@@ -689,7 +689,7 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 			log.Printf("library: skipping item with unsafe name %q", it.Name)
 			continue
 		}
-		secrets, err := l.St.Secrets(projectID, it.ID)
+		secrets, err := l.St.EffectiveSecrets(projectID, it.ID)
 		if err != nil {
 			return out, err
 		}
@@ -766,7 +766,7 @@ func (l *Lib) inputsHash(projectID int64, installs []store.LibraryInstall) (stri
 	}
 	h := sha256.New()
 	fmt.Fprintf(h, "format=3 os=%s\n", runtime.GOOS)
-	for _, in := range installs { // ListInstalls vine sortat dupa item
+	for _, in := range installs { // EffectiveInstalls vine sortat dupa item
 		fmt.Fprintf(h, "install %d %d %v\n", in.ItemID, in.VersionID, in.Enabled)
 		if !in.Enabled {
 			continue
@@ -779,7 +779,7 @@ func (l *Lib) inputsHash(projectID int64, installs []store.LibraryInstall) (stri
 		if err != nil {
 			return "", err
 		}
-		secrets, err := l.St.Secrets(projectID, it.ID)
+		secrets, err := l.St.EffectiveSecrets(projectID, it.ID)
 		if err != nil {
 			return "", err
 		}
