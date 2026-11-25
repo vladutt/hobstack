@@ -521,14 +521,15 @@ export async function libraryItemView(root, id, tab) {
           if (confirm(`Remove the global value for ${name}?`)) save({ clear: [name] });
         } }, "Clear") : null);
     });
-    defaultBox.replaceChildren(
+    // replaceChildren (DOM) scrie null ca text "null": doar nodurile reale
+    defaultBox.replaceChildren(...[
       el("label", { class: "check toggle-row" }, on,
         el("span", { class: "grow" }, el("strong", {}, "Default for all projects"),
           el("span", { class: "hint" }, "On in every project unless a project turns it off."))),
       d.isDefault && d.offIn ? el("p", { class: "hint" }, `Off in ${d.offIn} ${d.offIn === 1 ? "project" : "projects"}.`) : null,
       keys.length ? el("span", { class: "side-label" }, "Global keys") : null,
       keys.length ? el("p", { class: "hint" }, "Used by every project that has no own value.") : null,
-      ...keys);
+      ...keys].filter(Boolean));
   }
   drawDefault();
 
