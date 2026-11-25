@@ -368,7 +368,9 @@ Caile din mesajele de chat (paths.js: in text si `cod`, nu in blocurile ```) dev
 apoi la celelalte; un nume / o coada care se potriveste unui singur fisier din lista; :linie ignorat), clic = POST /reveal
 (fisierul selectat in Finder / Explorer, un folder se deschide). Un fisier din lista de cod (raspunsul /paths are folder + file, web.codeRef)
 se deschide in explorer-ul de cod la linia din cale (Checkout.tsx:42 selectata si centrata; openCodeExplorer start / goTo);
-Cmd/Ctrl+clic ramane Show in Finder; folderele si fisierele din afara listei merg tot in Finder.
+Cmd/Ctrl+clic ramane Show in Finder; folderele si fisierele din afara listei merg tot in Finder. Intervalele (:64-68) se recunosc si
+se selecteaza. Caile se cauta si in proiectele legate, dupa cele ale proiectului (resolveIn, linkedFolders); un fisier de
+acolo are "project" in raspuns si se deschide explorer-ul acelui proiect, cu agentii de aici pentru Ask (cale absoluta).
 Gata (agentii cer servere MCP, spec in docs/superpowers/specs/2026-11-08-hobstack-agent-mcp-install-design.md): tool-ul MCP
 install_mcp (toti agentii) face o cerere (mcp_requests, migrarea 036; max 5 deschise, un nume din Library = activarea lui);
 o aproba MEREU utilizatorul in Needs you, si cu Full autonomy (comanda exacta, cheile optionale, Install / Decline; Install =

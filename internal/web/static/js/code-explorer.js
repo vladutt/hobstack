@@ -45,7 +45,7 @@ export function previewKind(path) {
   return null;
 }
 
-// start: { folder, path, line } deschide direct acel fisier, cu linia selectata (caile din chat)
+// start: { folder, path, line, to } deschide direct acel fisier, cu liniile selectate (caile din chat)
 export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, onClose, start }) {
   const storeKey = `hobstack-code-${projectId}`;
   let saved = {};
@@ -584,9 +584,10 @@ export function openCodeExplorer({ projectId, project, defaultAgentId, onAsk, on
   async function goTo(ref) {
     await openFile({ folder: ref.folder, path: ref.path });
     if (closed || !ref.line || current?.path !== ref.path || current?.folder !== ref.folder) return;
-    const row = codeBox.querySelectorAll(".fv-line")[ref.line - 1];
+    const rows = codeBox.querySelectorAll(".fv-line");
+    const row = rows[ref.line - 1];
     if (!row) return;
-    sel = { from: ref.line, to: ref.line };
+    sel = { from: ref.line, to: Math.min(Math.max(ref.to || ref.line, ref.line), rows.length) };
     anchorLine = ref.line;
     paintSelection();
     row.scrollIntoView({ block: "center" });

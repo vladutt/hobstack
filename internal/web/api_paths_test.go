@@ -75,3 +75,56 @@ func TestChatPaths(t *testing.T) {
 		t.Fatalf("calls: %s", got)
 	}
 }
+
+// intervalele de linii (:64-68) si fisierele din proiectele legate (nu si din cele nelegate)
+func TestChatPathsLinkedAndRanges(t *testing.T) {
+	e := setup(t)
+	p, api, _ := twoFolders(t, e)
+	writeFiles(t, api, "src/server.go")
+	mk := func(name string) (int64, int64, string) {
+		dir := t.TempDir()
+		code, raw := e.do(t, "POST", "/api/projects", map[string]any{"name": name, "goal": "x",
+			"folders": []map[string]any{{"name": name, "path": dir}}})
+		if code != http.StatusCreated {
+			t.Fatalf("%d %s", code, raw)
+		}
+		var q struct {
+			ID      int64 `json:"id"`
+			Folders []struct {
+				ID int64 `json:"id"`
+			} `json:"folders"`
+		}
+		json.Unmarshal(raw, &q)
+		return q.ID, q.Folders[0].ID, dir
+	}
+	linked, linkedFolder, ldir := mk("Mobile")
+	_, _, odir := mk("Other")
+	writeFiles(t, ldir, "app/Rules/HasKnownAmountRule.php")
+	writeFiles(t, odir, "app/Secret.php")
+	if code, raw := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/links", map[string]any{"projectId": linked}); code != http.StatusCreated && code != http.StatusOK {
+		t.Fatalf("link: %d %s", code, raw)
+	}
+
+	code, raw := e.do(t, "POST", "/api/projects/"+itoa(p.ID)+"/paths",
+		map[string]any{"paths": []string{"server.go:42-50", "HasKnownAmountRule.php:33-37", "Secret.php"}})
+	if code != http.StatusOK {
+		t.Fatalf("%d %s", code, raw)
+	}
+	var res struct {
+		Found map[string]struct {
+			Project int64  `json:"project"`
+			Folder  int64  `json:"folder"`
+			File    string `json:"file"`
+		} `json:"found"`
+	}
+	json.Unmarshal(raw, &res)
+	if r, ok := res.Found["server.go:42-50"]; !ok || r.File != "src/server.go" || r.Project != 0 {
+		t.Errorf("range: %s", raw)
+	}
+	if r, ok := res.Found["HasKnownAmountRule.php:33-37"]; !ok || r.Project != linked || r.Folder != linkedFolder || r.File != "app/Rules/HasKnownAmountRule.php" {
+		t.Errorf("linked: %s", raw)
+	}
+	if _, ok := res.Found["Secret.php"]; ok {
+		t.Errorf("unlinked project file found: %s", raw)
+	}
+}

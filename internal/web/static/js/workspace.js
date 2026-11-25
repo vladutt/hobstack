@@ -325,12 +325,23 @@ export async function workspaceView(root, projectId, route) {
   }
 
   // toggleExplorer: deschide / inchide explorer-ul de cod (Cmd/Ctrl+P, butonul Code);
-  // start = { folder, path, line } deschide direct fisierul (clic pe o cale din chat)
-  function toggleExplorer(start) {
-    if (explorer) { if (start) explorer.goTo(start); else explorer.close(); return; }
+  // start = { project?, folder, path, line, to } deschide direct fisierul (clic pe o cale din chat);
+  // project = un proiect legat: explorer-ul acelui proiect, cu agentii de aici pentru Ask
+  let explorerPid = projectId;
+  async function toggleExplorer(start) {
+    const pid = start?.project || projectId;
+    if (explorer && (!start || explorerPid === pid)) { if (start) explorer.goTo(start); else explorer.close(); return; }
+    explorer?.close();
+    let project = state.project;
+    if (pid !== projectId) {
+      try { project = { ...(await api(`/api/projects/${pid}`)), agents: state.project.agents }; }
+      catch (err) { toast(err.message); return; }
+      if (explorer) return; // deschis intre timp
+    }
     const rootId = state.project.agents.find((a) => a.isRoot && !a.detached)?.id ?? firstRootId();
+    explorerPid = pid;
     explorer = openCodeExplorer({
-      projectId, project: state.project,
+      projectId: pid, project,
       // agentul din panou, daca poate primi mesaje (un agent nelegat nu lucreaza): altfel radacina
       defaultAgentId: state.drawer && state.project.agents.some((a) => a.id === state.selected && !a.detached) ? state.selected : rootId,
       onAsk: prefillChat,
@@ -731,7 +742,7 @@ export async function workspaceView(root, projectId, route) {
           onclick: () => saveCategory(p.category) }, p.category) : null,
         needsChip),
       el("span", { class: "grow" }),
-      el("button", { type: "button", class: "btn ghost", title: `Code explorer (${shortcutLabel})`, onclick: toggleExplorer }, "Code"),
+      el("button", { type: "button", class: "btn ghost", title: `Code explorer (${shortcutLabel})`, onclick: () => toggleExplorer() }, "Code"),
       tabsNav,
       openMenu,
       el("a", { class: "btn ghost", href: `#/p/${projectId}/edit`, title: "Goal, shared context, folders, linked projects" }, "Instructions"),

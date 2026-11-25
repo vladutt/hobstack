@@ -9,12 +9,12 @@ import { isMac, modKey } from "./code-explorer.js";
 // aceia devin link. Blocurile de cod (```), linkurile si butoanele raman neatinse.
 
 const TOKEN = /[^\s"'`<>()[\]{},;|]+/g;
-// cale cu "/" (sau "\" pe Windows), optional :linie(:coloana)
-const WITH_DIR = /^(~[\\/]|[\\/]|\.{1,2}[\\/]|[A-Za-z]:\\)?([\w.@+-]+[\\/])+[\w.@+-]*[\w@+-](:\d+(:\d+)?)?$/;
+// cale cu "/" (sau "\" pe Windows), optional :linie(:coloana) sau :linie-linie
+const WITH_DIR = /^(~[\\/]|[\\/]|\.{1,2}[\\/]|[A-Za-z]:\\)?([\w.@+-]+[\\/])+[\w.@+-]*[\w@+-](:\d+([-:]\d+)?)?$/;
 // doar un nume de fisier cu extensie (Checkout.tsx, README.md:12)
-const BARE_FILE = /^[\w@+-][\w.@+-]*\.[A-Za-z][A-Za-z0-9]{1,7}(:\d+(:\d+)?)?$/;
+const BARE_FILE = /^[\w@+-][\w.@+-]*\.[A-Za-z][A-Za-z0-9]{1,7}(:\d+([-:]\d+)?)?$/;
 // ~/.zshrc, ./build.sh: un singur nume dupa ~/ sau ./
-const PREFIXED = /^(~|\.{1,2})[\\/][\w.@+-]+(:\d+(:\d+)?)?$/;
+const PREFIXED = /^(~|\.{1,2})[\\/][\w.@+-]+(:\d+([-:]\d+)?)?$/;
 // fisiere ascunse (.env.example, .gitignore) si foldere scrise cu / la final (src/, web/public/)
 const DOTFILE = /^\.[\w-][\w.@+-]*$/;
 const DIR = /^([\w.@+-]+[\\/])+$/;
@@ -63,10 +63,13 @@ export function markPaths(root) {
   return out;
 }
 
-// lineOf: linia din "Checkout.tsx:42" / ":42:7" (0 = fara)
-function lineOf(path) {
-  const m = path.match(/:(\d+)(?::\d+)?$/);
-  return m ? Number(m[1]) : 0;
+// linesOf: liniile din "Checkout.tsx:42", ":42:7" (coloana ignorata) sau ":64-68" (interval)
+function linesOf(path) {
+  const m = path.match(/:(\d+)(?:([-:])(\d+))?$/);
+  if (!m) return { line: 0, to: 0 };
+  const line = Number(m[1]);
+  const to = m[2] === "-" ? Math.max(line, Number(m[3])) : line;
+  return { line, to };
 }
 
 // pathLinker: tine minte ce a raspuns serverul (per chat) si strange cererile din mesajele adaugate deodata
@@ -80,7 +83,7 @@ export function pathLinker(projectId, agentId, onCode) {
     span.classList.add("path-link");
     span.tabIndex = 0;
     span.setAttribute("role", "button");
-    const code = onCode && info.file ? { folder: info.folder, path: info.file, line: lineOf(span.dataset.path) } : null;
+    const code = onCode && info.file ? { project: info.project, folder: info.folder, path: info.file, ...linesOf(span.dataset.path) } : null;
     const finder = info.dir ? "Open this folder" : revealLabel();
     span.title = code ? `Open in the code viewer (${isMac ? "\u2318-click" : "Ctrl+click"}: ${finder})` : finder;
     const go = async (e) => {

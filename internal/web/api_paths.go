@@ -20,8 +20,8 @@ const (
 	maxPathLen    = 1024
 )
 
-// lineSuffix: ":42" sau ":42:7" de la finalul unei cai (linia si coloana)
-var lineSuffix = regexp.MustCompile(`:\d+(:\d+)?$`)
+// lineSuffix: ":42", ":42:7" (linia si coloana) sau ":64-68" (interval) de la finalul unei cai
+var lineSuffix = regexp.MustCompile(`:\d+([-:]\d+)?$`)
 
 // pathRoots: folderele proiectului (primul = folderul agentului), apoi fisierele proiectului si de pe task-uri
 func (s *Server) pathRoots(p store.Project, home store.Folder) (folders []store.Folder, extra []string) {
@@ -51,7 +51,35 @@ func (s *Server) resolvePath(p store.Project, home store.Folder, raw string) (ab
 		}
 	}
 	folders, extra := s.pathRoots(p, home)
-	roots := extra
+	if abs, dir, ok := s.resolveIn(folders, extra, raw); ok {
+		return abs, dir, true
+	}
+	// apoi proiectele legate: agentii le citesc si le pomenesc in chat (doar daca nu e in proiectul asta)
+	var linked []store.Folder
+	for _, lp := range s.linkedFolders(p.ID) {
+		linked = append(linked, lp.Folders...)
+	}
+	return s.resolveIn(linked, nil, raw)
+}
+
+// linkedFolders: proiectele legate de pid, cu folderele lor
+func (s *Server) linkedFolders(pid int64) []store.Project {
+	links, err := s.st.LinkedProjects(pid)
+	if err != nil {
+		return nil
+	}
+	var out []store.Project
+	for _, l := range links {
+		if lp, err := s.st.GetProject(l.ID); err == nil {
+			out = append(out, lp)
+		}
+	}
+	return out
+}
+
+// resolveIn: cautarea din resolvePath intr-un set de foldere (+ radacini doar pentru caile absolute)
+func (s *Server) resolveIn(folders []store.Folder, extra []string, raw string) (abs string, dir bool, ok bool) {
+	roots := append([]string(nil), extra...)
 	for _, f := range folders {
 		roots = append(roots, f.Path)
 	}
@@ -157,8 +185,11 @@ func (s *Server) checkPaths(w http.ResponseWriter, r *http.Request) {
 		}
 		res := map[string]any{"dir": dir}
 		if !dir {
-			if fid, rel, ok := s.codeRef(p, abs); ok {
+			if pid, fid, rel, ok := s.codeRef(p, abs); ok {
 				res["folder"], res["file"] = fid, rel
+				if pid != p.ID {
+					res["project"] = pid // fisier dintr-un proiect legat: exploratorul acelui proiect
+				}
 			}
 		}
 		found[raw] = res
@@ -166,10 +197,22 @@ func (s *Server) checkPaths(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"found": found})
 }
 
-// codeRef: folderul proiectului si calea relativa (cu /) a unui fisier din lista de cod (cea din exploratorul
-// de cod); ok=false pentru fisierele din afara listei (ignorate, fisierele proiectului / task-urilor).
-func (s *Server) codeRef(p store.Project, abs string) (int64, string, bool) {
-	for _, f := range p.Folders {
+// codeRef: proiectul (al lui sau unul legat), folderul si calea relativa (cu /) a unui fisier din lista de cod
+// (cea din exploratorul de cod); ok=false pentru fisierele din afara listei (ignorate, fisierele proiectului / task-urilor).
+func (s *Server) codeRef(p store.Project, abs string) (int64, int64, string, bool) {
+	if fid, rel, ok := s.codeRefIn(p.Folders, abs); ok {
+		return p.ID, fid, rel, true
+	}
+	for _, lp := range s.linkedFolders(p.ID) {
+		if fid, rel, ok := s.codeRefIn(lp.Folders, abs); ok {
+			return lp.ID, fid, rel, true
+		}
+	}
+	return 0, 0, "", false
+}
+
+func (s *Server) codeRefIn(folders []store.Folder, abs string) (int64, string, bool) {
+	for _, f := range folders {
 		if f.Path == "" {
 			continue
 		}
