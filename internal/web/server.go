@@ -284,6 +284,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/library/{id}/unpublish", s.unpublishLibraryItem)
 	mux.HandleFunc("GET /api/projects/{id}/library", s.listProjectLibrary)
 	mux.HandleFunc("PUT /api/projects/{id}/library/{item}", s.putProjectLibrary)
+	mux.HandleFunc("PUT /api/library/{id}/default", s.putLibraryDefault)
 
 	mux.HandleFunc("GET /api/runs/{id}/events", s.streamRun)
 

@@ -28,6 +28,9 @@ type itemView struct {
 	// Source: de unde a fost instalat (Add skill), null pentru celelalte elemente
 	Source          *store.LibrarySource `json:"source"`
 	UpdateAvailable bool                 `json:"updateAvailable"` // sursa are o referinta noua (latest != ref)
+	// DefaultSecretsSet: numele cheilor globale cu valoare (valorile nu ies niciodata)
+	DefaultSecretsSet []string `json:"defaultSecretsSet"`
+	OffIn             int      `json:"offIn"` // in cate proiecte e oprit (randuri cu enabled = 0)
 }
 
 type installedIn struct {
@@ -60,7 +63,19 @@ func (s *Server) itemViewOf(it store.LibraryItem, installs int) (itemView, error
 	if err != nil {
 		return itemView{}, err
 	}
-	v := itemView{LibraryItem: it, Installs: installs}
+	v := itemView{LibraryItem: it, Installs: installs, DefaultSecretsSet: []string{}}
+	global, err := s.st.DefaultSecrets(it.ID)
+	if err != nil {
+		return itemView{}, err
+	}
+	for _, n := range it.Secrets { // in ordinea declarata
+		if global[n] != "" {
+			v.DefaultSecretsSet = append(v.DefaultSecretsSet, n)
+		}
+	}
+	if v.OffIn, err = s.st.DefaultOffCount(it.ID); err != nil {
+		return itemView{}, err
+	}
 	if len(vs) > 0 {
 		v.Version = &vs[0]
 	}
