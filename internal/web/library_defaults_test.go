@@ -159,3 +159,53 @@ func TestProjectLibraryGlobalSecretView(t *testing.T) {
 		t.Fatalf("%+v", r)
 	}
 }
+
+// o oprire ramane oprire si cand flag-ul e scos: randul apare nebifat, iar debifarea lui nu-l sterge
+func TestProjectLibraryOptOutSurvivesFlagOff(t *testing.T) {
+	e := setupLib(t)
+	src := e.project(t)
+	it := e.publishedMCP(t, src.ID, "gh")
+	def := "/api/library/" + itoa(it.ID) + "/default"
+	e.do(t, "PUT", def, map[string]any{"default": true})
+	p := e.project(t)
+	path := "/api/projects/" + itoa(p.ID) + "/library/" + itoa(it.ID)
+	e.do(t, "PUT", path, map[string]any{"installed": false})
+	e.do(t, "PUT", def, map[string]any{"default": false})
+	if r := e.projectLibRow(t, p.ID, it.ID); r.Installed || r.Enabled {
+		t.Fatalf("oprit, fara flag: %+v", r)
+	}
+	if code, raw := e.do(t, "PUT", path, map[string]any{"installed": false}); code != 204 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	e.do(t, "PUT", def, map[string]any{"default": true})
+	eff, _ := e.st.EffectiveInstalls(p.ID)
+	if len(eff) != 1 || eff[0].Enabled {
+		t.Fatalf("oprirea s-a pierdut: %+v", eff)
+	}
+}
+
+// un default oprit nu arata "Update to vX" (butonul l-ar reporni)
+func TestProjectLibraryNoUpdateOnOptOut(t *testing.T) {
+	e := setupLib(t)
+	src := e.project(t)
+	it := e.propose(t, store.KindSkill, "ro-copy", src.ID, map[string]string{"SKILL.md": "v1"}, nil)
+	e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/publish", nil)
+	e.do(t, "PUT", "/api/library/"+itoa(it.ID)+"/default", map[string]any{"default": true})
+	p := e.project(t)
+	e.do(t, "PUT", "/api/projects/"+itoa(p.ID)+"/library/"+itoa(it.ID), map[string]any{"installed": false})
+	e.writeProposal(t, it.ID, map[string]string{"SKILL.md": "v2"})
+	if code, raw := e.do(t, "POST", "/api/library/"+itoa(it.ID)+"/publish", nil); code != 200 {
+		t.Fatalf("publish v2: %d %s", code, raw)
+	}
+	_, raw := e.do(t, "GET", "/api/projects/"+itoa(p.ID)+"/library", nil)
+	var rows []struct {
+		Item   struct{ ID int64 } `json:"item"`
+		Update bool               `json:"updateAvailable"`
+	}
+	json.Unmarshal(raw, &rows)
+	for _, r := range rows {
+		if r.Item.ID == it.ID && r.Update {
+			t.Fatalf("update pe un default oprit: %s", raw)
+		}
+	}
+}

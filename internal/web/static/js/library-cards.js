@@ -107,7 +107,7 @@ export function libraryInstalls(projectId) {
         el("span", { class: "hint" }, it.description || "")));
     const meta = el("div", { class: "lib-install-meta" },
       r.installed && r.version ? el("span", { class: "hint" }, r.fromDefault ? `Latest ${r.version}` : `Pinned ${r.version}`) : null,
-      r.updateAvailable ? el("button", { type: "button", class: "btn small",
+      r.installed && r.updateAvailable ? el("button", { type: "button", class: "btn small",
         onclick: () => put(r, { installed: true, upgrade: true }) }, `Update to ${it.version?.version || "latest"}`) : null);
     const secrets = r.installed ? (r.secrets || []).map((s) => {
       const input = el("input", { type: "password", autocomplete: "new-password",

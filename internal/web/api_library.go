@@ -647,10 +647,8 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		pv := projectLibraryView{Item: view, Secrets: secrets}
 		if in, has := byItem[it.ID]; has {
-			pv.Installed, pv.Enabled, pv.FromDefault = true, in.Enabled, in.FromDefault
-			if it.IsDefault && it.Status == store.ItemPublished && !in.Enabled {
-				pv.Installed = false // un default oprit in proiect apare nebifat
-			}
+			// un rand oprit (enabled = 0) apare nebifat: e o oprire, si trebuie sa ramana una (default pus la loc)
+			pv.Installed, pv.Enabled, pv.FromDefault = in.Enabled, in.Enabled, in.FromDefault
 			vs, err := s.st.ListLibraryVersions(it.ID)
 			if err != nil {
 				fail(w, err)
@@ -661,7 +659,8 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 					pv.Version = v.Version
 				}
 			}
-			pv.Update = len(vs) > 0 && vs[0].ID != in.VersionID && !in.FromDefault
+			// fara "Update" pe un rand oprit: butonul l-ar reporni
+			pv.Update = pv.Installed && len(vs) > 0 && vs[0].ID != in.VersionID && !in.FromDefault
 		}
 		out = append(out, pv)
 	}
@@ -813,7 +812,7 @@ func (s *Server) putProjectLibrary(w http.ResponseWriter, r *http.Request) {
 		if cur == nil || !cur.Enabled {
 			s.skillInstalled(pid, it)
 		}
-	case cur != nil:
+	case cur != nil && cur.Enabled: // un rand deja oprit ramane (e oprirea unui default, poate pus la loc)
 		if err := s.st.Uninstall(pid, itemID); err != nil && !errors.Is(err, store.ErrNotFound) {
 			fail(w, err)
 			return
