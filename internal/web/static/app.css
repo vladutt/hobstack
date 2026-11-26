@@ -239,7 +239,8 @@ input:disabled, textarea:disabled, select:disabled { opacity: .55; }
 .team-face .avatar, .team-more > summary { box-shadow: 0 0 0 2px var(--bg); }
 .team-face:hover, .team-face:focus-visible { z-index: 1; outline: none; }
 .team-face:hover .avatar, .team-face:focus-visible .avatar { box-shadow: 0 0 0 2px var(--amber); }
-.team-face.working::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 2px var(--bg); }
+/* z-index: bulina ramane deasupra avatarului urmator, care se suprapune peste marginea din dreapta */
+.team-face.working::after { content: ""; position: absolute; z-index: 2; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 2px var(--bg); }
 .team-more > summary { cursor: pointer; }
 .team-more > summary::after { display: none; }
 .team-more[open] > summary, .team-more > summary:hover { background: var(--card-hi); color: var(--text); }
