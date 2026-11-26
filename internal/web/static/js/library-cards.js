@@ -154,7 +154,9 @@ export function libraryInstalls(projectId, kind, onRows) {
     try { rows = await api(`/api/projects/${projectId}/library`); }
     catch (err) { list.replaceChildren(el("p", { class: "hint" }, err.message)); return; }
     onRows?.(rows);
-    rows = rows.filter((r) => r.item.kind === kind);
+    // cele pornite primele (sort stabil: in rest ordinea serverului); la comutare randul ramane pe loc,
+    // ordinea se reface doar la urmatoarea incarcare, ca lista sa nu sara sub cursor
+    rows = rows.filter((r) => r.item.kind === kind).sort((a, b) => Number(b.installed) - Number(a.installed));
     nodes.clear();
     list.replaceChildren(...(rows.length ? rows.map((r) => { const n = row(r); nodes.set(r.item.id, n); return n; })
       : [el("p", { class: "hint" }, meta.empty)]));
