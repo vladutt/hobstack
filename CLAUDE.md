@@ -491,6 +491,16 @@ PUT /api/library/{id}/default {alwaysLoad}) si alegerea proiectului library_alwa
 Reset; PUT /api/projects/{id}/library/{item}/always {on: true|false|null}, null = urmeaza flag-ul). store.AlwaysLoadIn decide;
 library.Build pune in tura linia AlwaysLoadLine ("load each of these with the Skill tool, unless it is already loaded in this
 conversation": intr-o sesiune reluata nu se reincarca). Doar skill-urile pornite in proiect. Verificat cu claude 2.1.332: cheama Skill primul.
+Gata (memoria proiectului, spec in docs/superpowers/specs/2026-11-27-hobstack-project-memory-design.md): fapte si
+decizii cu cheie (area.topic), rezumat de un rand (max 140), text optional (max 4000), autor, task si istoric
+(project_memory / project_memory_versions, migrarea 043; store/memory.go, max 200 active per proiect). Tool-urile MCP
+remember / recall / search_memory / forget (team/memory.go) pentru toti agentii, si in chat; nu la draft, wizard, brainstorming.
+Indexul (prompt.MemoryIndex: blocate, apoi recente; max 40 randuri / 3000 caractere, "N more") intra in tura langa liniile
+Library, nu in system prompt (sesiunile raman); brainstorming-ul il vede fara tool-uri. Regula howMemory in system prompt.
+O intrare blocata de utilizator nu poate fi schimbata / stearsa de agenti (eroare care ii spune sa-l anunte); o scriere pe o
+cheie stearsa o reinvie neblocata, iar Restore / Undo pastreaza blocarea. API /api/projects/{id}/memory, /api/memory/{id}...
+(409 pe cheie existenta); tab-ul Memory (memory.js, #/p/<pid>/memory/<id>), evenimentul SSE "memory". Verificat cu claude
+2.1.332: liderul a salvat singur o decizie din chat, iar o sesiune noua a raspuns din index.
 Gata (nume amuzante pentru agenti noi): static/js/agent-names.js (AGENT_NAMES, 159 de nume din docs/ideas/agent-names.csv,
 max 40 caractere, fara "You"; randomAgentName(taken, avoid) alege unul liber, altfel "New agent N"). Pagina Agent nou vine cu
 numele propus si zarul 🎲 din camp (alt nume; nu conteaza ca atins, deci draft-ul AI il poate inlocui); agentul nou de pe canvas ia si el un nume din lista.
