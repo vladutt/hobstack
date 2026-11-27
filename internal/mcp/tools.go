@@ -268,6 +268,38 @@ var deleteFilesTool = Tool{
 	}),
 }
 
+// memoryTools: memoria proiectului, pentru toti agentii echipei (si in chat: nu e un fisier).
+var memoryTools = []Tool{
+	{
+		Name:        "remember",
+		Description: "Save or update an entry in the project memory, which every agent of this project sees in each turn. Only for what outlives this task: a general rule behind a send-back, a decision the user made, an architecture or convention choice. Update the existing key instead of adding a near duplicate.",
+		InputSchema: schema([]string{"key", "summary"}, map[string]any{
+			"key":     str("Short stable key, area.topic (for example ui.dates); 1-60 characters a-z, 0-9, '.', '_', '-'"),
+			"summary": str("One line, at most 140 characters: the rule or fact itself"),
+			"text":    str("Optional details (at most 4000 characters): why, examples, exceptions"),
+			"task":    str("Optional: the task it came from, e.g. T-124 (default: your current task)"),
+		}),
+	},
+	{
+		Name:        "recall",
+		Description: "Read the full text of a project memory entry (who saved it, when, on which task).",
+		InputSchema: schema([]string{"key"}, map[string]any{"key": str("The key, as listed in your turn")}),
+	},
+	{
+		Name:        "search_memory",
+		Description: "Search the project memory (keys, summaries and texts); use it when your turn says there are more entries.",
+		InputSchema: schema([]string{"query"}, map[string]any{"query": str("Words to look for")}),
+	},
+	{
+		Name:        "forget",
+		Description: "Delete a project memory entry that is wrong or outdated (it stays in the history with your reason).",
+		InputSchema: schema([]string{"key", "reason"}, map[string]any{
+			"key":    str("The key"),
+			"reason": str("Why it is no longer valid, short"),
+		}),
+	},
+}
+
 var commentTaskTool = Tool{
 	Name:        "comment_task",
 	Description: "Answers the user in a task's comments (for example after they gave you a value you left for them).",
@@ -506,6 +538,7 @@ func toolsFor(c Caller) []Tool {
 		out = append(out, startTaskTool)
 	}
 	out = append(out, askUserTool, attachFilesTool, installMCPTool)
+	out = append(out, memoryTools...)
 	return out
 }
 

@@ -115,6 +115,10 @@ func (t *Team) startRunOpts(p store.Project, a store.Agent, agents []store.Agent
 	if len(libBuild.TurnLines) > 0 {
 		turn += "\n\nLibrary (shared tools, skills and servers installed in this project):\n" + strings.Join(libBuild.TurnLines, "\n")
 	}
+	// memoria proiectului: tot in tura; brainstorming-ul o vede, dar n-are tool-urile ei
+	if idx := t.memoryTurn(p.ID, card == nil); idx != "" {
+		turn += "\n\n" + idx
+	}
 
 	// run fara task (chat, notificari, comentarii): doar citire; modificarile se fac pe task (start_task / create_task).
 	// Doar permisiunile se schimba: system prompt-ul ramane acelasi, ca sesiunea sa continue intre chat si task.

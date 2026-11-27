@@ -106,6 +106,23 @@ func (f *fakeBackend) BrainstormReply(c Caller, in BrainstormReplyInput) (string
 	return "ok", f.err
 }
 
+func (f *fakeBackend) Remember(c Caller, key, summary, text, task string) (string, error) {
+	f.calls = append(f.calls, "remember|"+key+"|"+summary+"|"+text+"|"+task)
+	return "ok", f.err
+}
+func (f *fakeBackend) Recall(c Caller, key string) (string, error) {
+	f.calls = append(f.calls, "recall|"+key)
+	return "ok", f.err
+}
+func (f *fakeBackend) SearchMemory(c Caller, query string) (string, error) {
+	f.calls = append(f.calls, "search_memory|"+query)
+	return "ok", f.err
+}
+func (f *fakeBackend) Forget(c Caller, key, reason string) (string, error) {
+	f.calls = append(f.calls, "forget|"+key+"|"+reason)
+	return "ok", f.err
+}
+
 func (f *fakeBackend) AskUser(c Caller, question string, options []string) (string, error) {
 	f.calls = append(f.calls, "ask_user|"+question+"|"+strings.Join(options, ","))
 	return "ok", f.err
@@ -306,19 +323,19 @@ func TestToolsListByRole(t *testing.T) {
 		}
 		return out
 	}
-	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,start_task,ask_user,attach_files,install_mcp" {
+	if got := strings.Join(names("lead"), ","); got != "create_task,list_tasks,accept_task,send_back,start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("lead: %s", got)
 	}
-	if got := strings.Join(names("worker"), ","); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp" {
+	if got := strings.Join(names("worker"), ","); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("worker: %s", got)
 	}
-	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp" {
+	if got := strings.Join(names("sublead"), ","); got != "create_task,list_tasks,accept_task,send_back,report_done,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("sublead: %s", got)
 	}
-	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp" {
+	if got := strings.Join(names("reviewer"), ","); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("reviewer: %s", got)
 	}
-	if got := strings.Join(names("solo"), ","); got != "start_task,ask_user,attach_files,install_mcp" {
+	if got := strings.Join(names("solo"), ","); got != "start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("solo: %s", got)
 	}
 }
@@ -453,10 +470,10 @@ func TestStageTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("stagework"); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp" {
+	if got := names("stagework"); got != "report_done,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("work: %s", got)
 	}
-	if got := names("stagecheck"); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp" {
+	if got := names("stagecheck"); got != "report_done,review_approve,review_reject,tick_left_for_user,comment_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("check: %s", got)
 	}
 }
@@ -534,11 +551,11 @@ func TestAddAgentTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files,install_mcp" {
+	if got := names("leadadd"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("leadadd: %s", got)
 	}
 	// radacina fara echipa: create_task + list_tasks ca sa-i dea de lucru agentului nou, fara accept/send_back
-	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files,install_mcp" {
+	if got := names("rootsolo"); got != "create_task,list_tasks,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("rootsolo: %s", got)
 	}
 	for _, token := range []string{"worker", "sublead", "setup"} {
@@ -579,10 +596,10 @@ func TestLinkedProjectTools(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp" {
+	if got := names("linkedworker"); got != "report_done,list_linked_projects,ask_project,tick_left_for_user,comment_task,start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("linkedworker: %s", got)
 	}
-	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,list_linked_projects,ask_project,reply_to_project,request_project_work,start_task,ask_user,attach_files,install_mcp" {
+	if got := names("linkedlead"); got != "create_task,list_tasks,accept_task,send_back,add_agent,remove_agent,list_recurring,create_recurring,update_recurring,delete_recurring,list_linked_projects,ask_project,reply_to_project,request_project_work,start_task,ask_user,attach_files,install_mcp,remember,recall,search_memory,forget" {
 		t.Fatalf("linkedlead: %s", got)
 	}
 	// radacina intr-un run pe un task venit din alt proiect: report_done chiar fara sef

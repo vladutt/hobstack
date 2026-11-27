@@ -109,6 +109,10 @@ type Backend interface {
 	BrainstormReply(c Caller, in BrainstormReplyInput) (string, error)
 	ProposeLibraryItem(c Caller, in LibraryInput) (string, error)
 	AskUser(c Caller, question string, options []string) (string, error)
+	Remember(c Caller, key, summary, text, task string) (string, error)
+	Recall(c Caller, key string) (string, error)
+	SearchMemory(c Caller, query string) (string, error)
+	Forget(c Caller, key, reason string) (string, error)
 	AddAgent(c Caller, in AddAgentInput) (string, error)
 	RemoveAgent(c Caller, name string) (string, error)
 	ListRecurringFor(c Caller) (string, error)
@@ -310,6 +314,14 @@ func (s *Server) call(c Caller, params json.RawMessage) any {
 		text, err = s.backend.ReviewReject(c, arg("task"), arg("feedback"))
 	case "ask_user":
 		text, err = s.backend.AskUser(c, arg("question"), argList(p.Arguments, "options"))
+	case "remember":
+		text, err = s.backend.Remember(c, arg("key"), arg("summary"), arg("text"), arg("task"))
+	case "recall":
+		text, err = s.backend.Recall(c, arg("key"))
+	case "search_memory":
+		text, err = s.backend.SearchMemory(c, arg("query"))
+	case "forget":
+		text, err = s.backend.Forget(c, arg("key"), arg("reason"))
 	case "add_agent":
 		_, toolsSet := p.Arguments["tools"]
 		text, err = s.backend.AddAgent(c, AddAgentInput{
