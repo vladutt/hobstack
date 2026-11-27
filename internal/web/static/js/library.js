@@ -387,7 +387,8 @@ export async function libraryItemView(root, id, tab) {
         el("p", { class: "hint" }, "Agents get the full path in their turn message; tools with secrets run through a wrapper that adds them. Install it in a project under Instructions \u203a Library."));
     } else if (d.kind === "skill") {
       box.append(el("h3", { class: "lib-h" }, "How agents use it"),
-        el("p", { class: "lib-text" }, "Agents in projects that installed this skill load SKILL.md when a task matches its description."));
+        el("p", { class: "lib-text" }, d.alwaysLoad ? "Agents in projects that have this skill load SKILL.md at the start of every run (unless a project turned Always load off)."
+          : "Agents in projects that installed this skill load SKILL.md when a task matches its description."));
     } else {
       box.append(...[el("h3", { class: "lib-h" }, "Connection"),
         el("pre", { class: "md-pre lib-call" }, d.transport === "remote" ? d.url : commandOf(d)),
@@ -492,7 +493,7 @@ export async function libraryItemView(root, id, tab) {
     const save = async (body, okMsg) => {
       try {
         const v = await api(`/api/library/${d.id}/default`, { method: "PUT", body });
-        Object.assign(d, { isDefault: v.isDefault, defaultSecretsSet: v.defaultSecretsSet, offIn: v.offIn });
+        Object.assign(d, { isDefault: v.isDefault, defaultSecretsSet: v.defaultSecretsSet, offIn: v.offIn, alwaysLoad: v.alwaysLoad });
         if (okMsg) toast(okMsg, "ok");
       } catch (err) { toast(err.message); }
       drawDefault();
@@ -506,6 +507,10 @@ export async function libraryItemView(root, id, tab) {
       }
       save({ default: on.checked }, on.checked ? "On in every project" : "No longer a default");
     });
+    // "Always load" (doar skill-uri default): agentii il incarca la fiecare run; un proiect poate alege altfel
+    const always = d.kind === "skill" && (d.isDefault || d.alwaysLoad) ? el("input", { type: "checkbox", checked: !!d.alwaysLoad }) : null;
+    always?.addEventListener("change", () => save({ alwaysLoad: always.checked },
+      always.checked ? "Agents load it on every run" : "Agents use it only when it fits"));
     const set = new Set(d.defaultSecretsSet || []);
     const keys = (d.secrets || []).map((name) => {
       const input = el("input", { type: "password", autocomplete: "new-password", "aria-label": name,
@@ -527,6 +532,9 @@ export async function libraryItemView(root, id, tab) {
         el("span", { class: "grow" }, el("strong", {}, "Default for all projects"),
           el("span", { class: "hint" }, "On in every project unless a project turns it off."))),
       d.isDefault && d.offIn ? el("p", { class: "hint" }, `Off in ${d.offIn} ${d.offIn === 1 ? "project" : "projects"}.`) : null,
+      always ? el("label", { class: "check toggle-row" }, always,
+        el("span", { class: "grow" }, el("strong", {}, "Always load"),
+          el("span", { class: "hint" }, "Agents load this skill at the start of every run, not only when its description fits. A project can change this in Instructions › Skills."))) : null,
       keys.length ? el("span", { class: "side-label" }, "Global keys") : null,
       keys.length ? el("p", { class: "hint" }, "Used by every project that has no own value.") : null,
       ...keys].filter(Boolean));

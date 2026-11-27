@@ -9,7 +9,9 @@ import (
 
 // putLibraryDefault porneste / opreste "Default for all projects" si schimba cheile globale ale elementului.
 //
-//	{"default": true|false, "secrets": {"NAME": "value"}, "clear": ["NAME"]}
+//	{"default": true|false, "secrets": {"NAME": "value"}, "clear": ["NAME"], "alwaysLoad": true|false}
+//
+// "alwaysLoad" (doar skill-uri): agentii il incarca la fiecare run, in toate proiectele care il au si nu au ales altfel.
 //
 // Fiecare camp e optional: cheile globale se pot schimba si fara flag (sunt fallback-ul oricarui proiect care are
 // elementul). O valoare goala in "secrets" nu schimba nimic; se sterge doar cu "clear". Raspunsul e itemView.
@@ -26,6 +28,7 @@ func (s *Server) putLibraryDefault(w http.ResponseWriter, r *http.Request) {
 		Default *bool             `json:"default"`
 		Secrets map[string]string `json:"secrets"`
 		Clear   []string          `json:"clear"`
+		Always  *bool             `json:"alwaysLoad"`
 	}
 	if err := decode(r, &in); err != nil {
 		fail(w, err)
@@ -38,6 +41,10 @@ func (s *Server) putLibraryDefault(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := checkSecretValues(it.Secrets, in.Secrets, in.Clear); err != nil {
 		fail(w, err)
+		return
+	}
+	if in.Always != nil && it.Kind != store.KindSkill {
+		writeErr(w, http.StatusBadRequest, "only skills can be always loaded")
 		return
 	}
 	turnOn := in.Default != nil && *in.Default && !it.IsDefault
@@ -62,6 +69,12 @@ func (s *Server) putLibraryDefault(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Default != nil && *in.Default != it.IsDefault {
 		if err := s.st.SetLibraryDefault(id, *in.Default); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+	if in.Always != nil && *in.Always != it.AlwaysLoad {
+		if err := s.st.SetItemAlwaysLoad(id, *in.Always); err != nil {
 			fail(w, err)
 			return
 		}

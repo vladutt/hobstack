@@ -666,7 +666,11 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 		defer os.RemoveAll(tmp) // dupa rename nu mai exista
 	}
 
-	var toolLines []string
+	overrides, err := l.St.AlwaysLoadOverrides(projectID)
+	if err != nil {
+		return out, err
+	}
+	var toolLines, always []string
 	pluginItems := 0
 	for _, in := range installs {
 		if !in.Enabled {
@@ -705,6 +709,9 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 				}
 			}
 			pluginItems++
+			if store.AlwaysLoadIn(it, overrides) {
+				always = append(always, PluginName+":"+it.Name)
+			}
 		case store.KindTool:
 			if !dirExists(ver.Dir) {
 				log.Printf("library: version dir %s is missing, skipping %s", ver.Dir, it.Name)
@@ -733,6 +740,9 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 	if len(toolLines) > 0 {
 		out.TurnLines = append(append([]string{"Library tools (run them with Bash):"}, toolLines...), out.TurnLines...)
 	}
+	if len(always) > 0 {
+		out.TurnLines = append([]string{AlwaysLoadLine(always)}, out.TurnLines...)
+	}
 
 	l.cleanOld(buildRoot, pid, final)
 	if pluginItems == 0 {
@@ -742,7 +752,7 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 		out.PluginDir = final // acelasi continut ca la build-ul anterior
 		return out, nil
 	}
-	manifest, _ := json.Marshal(map[string]string{"name": "hobstack-library", "version": "1",
+	manifest, _ := json.Marshal(map[string]string{"name": PluginName, "version": "1",
 		"description": "HobStack library for project " + pid})
 	if err := os.MkdirAll(filepath.Join(tmp, ".claude-plugin"), 0o755); err != nil {
 		return out, err
@@ -756,6 +766,16 @@ func (l *Lib) Build(projectID int64) (Build, error) {
 	l.cleanOld(buildRoot, pid, final)
 	out.PluginDir = final
 	return out, nil
+}
+
+// PluginName: numele pluginului proiectului; skill-urile lui se cheama "<PluginName>:<skill>".
+const PluginName = "hobstack-library"
+
+// AlwaysLoadLine: cererea din tura pentru skill-urile incarcate mereu. Intr-o sesiune reluata skill-ul e deja
+// in context, deci nu se incarca a doua oara (ar costa tokeni la fiecare tura).
+func AlwaysLoadLine(skills []string) string {
+	return "Always-on skills: before anything else, load each of these with the Skill tool, unless it is already loaded in this conversation, and follow it: " +
+		strings.Join(skills, ", ") + "."
 }
 
 // inputsHash: hash peste tot ce influenteaza continutul pluginului (instalari, versiuni, secrete, sistem).

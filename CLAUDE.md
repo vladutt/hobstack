@@ -485,6 +485,12 @@ pagina item-ului (scoaterea flag-ului cere confirmare), eticheta Default in list
 Gata (tab-uri in Instructions): pagina #/p/<id>/edit are tab-urile General (formularul) | Skills | MCP servers | Tools
 (Tools doar cand proiectul are tool-uri), cu numarul celor pornite; ?tab=skills|mcp|tools in adresa (schimbat prin
 replaceState, panourile raman in pagina, deci campurile nesalvate din General nu se pierd). libraryInstalls(pid, kind, onRows).
+Gata (skill-uri incarcate mereu): un skill se incarca altfel doar cand descrierea lui se potriveste (verificat: cele 3 default-uri
+nu fusesera chemate deloc). "Always load": flag-ul global library_items.always_load (pe pagina skill-ului, sub Default for all projects;
+PUT /api/library/{id}/default {alwaysLoad}) si alegerea proiectului library_always (migrarea 042; Instructions > Skills, "global" /
+Reset; PUT /api/projects/{id}/library/{item}/always {on: true|false|null}, null = urmeaza flag-ul). store.AlwaysLoadIn decide;
+library.Build pune in tura linia AlwaysLoadLine ("load each of these with the Skill tool, unless it is already loaded in this
+conversation": intr-o sesiune reluata nu se reincarca). Doar skill-urile pornite in proiect. Verificat cu claude 2.1.332: cheama Skill primul.
 Gata (nume amuzante pentru agenti noi): static/js/agent-names.js (AGENT_NAMES, 159 de nume din docs/ideas/agent-names.csv,
 max 40 caractere, fara "You"; randomAgentName(taken, avoid) alege unul liber, altfel "New agent N"). Pagina Agent nou vine cu
 numele propus si zarul 🎲 din camp (alt nume; nu conteaza ca atins, deci draft-ul AI il poate inlocui); agentul nou de pe canvas ia si el un nume din lista.

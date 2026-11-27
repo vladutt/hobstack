@@ -91,11 +91,12 @@ export function libraryInstalls(projectId, kind, onRows) {
   let windows = false; // tool-urile cu secrete nu merg pe Windows (wrapper sh)
 
   // put: salveaza un rand si redeseneaza DOAR acel rand; celelalte randuri (cu secrete pe jumatate scrise) raman neatinse
-  function put(r, body, okMsg) {
+  // sub = "" (instalare, secrete) sau "/always" (Always load in proiect)
+  function put(r, body, okMsg, sub = "") {
     const id = r.item.id;
     const next = (queues.get(id) || Promise.resolve()).then(async () => {
       try {
-        await api(`/api/projects/${projectId}/library/${id}`, { method: "PUT", body });
+        await api(`/api/projects/${projectId}/library/${id}${sub}`, { method: "PUT", body });
         if (okMsg) toast(okMsg, "ok");
       } catch (err) { toast(err.message); }
       try {
@@ -121,6 +122,7 @@ export function libraryInstalls(projectId, kind, onRows) {
         el("span", { class: "hint" }, it.description || "")));
     const meta = el("div", { class: "lib-install-meta" },
       r.installed && r.version ? el("span", { class: "hint" }, r.fromDefault ? `Latest ${r.version}` : `Pinned ${r.version}`) : null,
+      r.installed && it.kind === "skill" ? alwaysToggle(r) : null,
       r.installed && r.updateAvailable ? el("button", { type: "button", class: "btn small",
         onclick: () => put(r, { installed: true, upgrade: true }) }, `Update to ${it.version?.version || "latest"}`) : null);
     const secrets = r.installed ? (r.secrets || []).map((s) => {
@@ -147,6 +149,19 @@ export function libraryInstalls(projectId, kind, onRows) {
     const winNote = windows && it.kind === "tool" && (it.secrets || []).length
       ? el("p", { class: "hint" }, "Tools with secrets are off on Windows.") : null;
     return el("div", { class: "lib-install" }, head, meta, winNote, ...secrets);
+  }
+
+  // alwaysToggle: "Always load" pe un skill pornit; fara alegere proprie proiectul urmeaza flag-ul global al skill-ului
+  function alwaysToggle(r) {
+    const box = el("input", { type: "checkbox", checked: !!r.alwaysLoad });
+    box.addEventListener("change", () => put(r, { on: box.checked },
+      box.checked ? `${r.item.name} loads on every run` : `${r.item.name} loads only when it fits`, "/always"));
+    return el("span", { class: "lib-always" },
+      el("label", { class: "check", title: "Agents load this skill at the start of every run, not only when its description fits" },
+        box, el("span", {}, "Always load")),
+      !r.alwaysOwn && r.item.alwaysLoad ? el("span", { class: "label-tag", title: "Set on the skill for every project" }, "global") : null,
+      r.alwaysOwn ? el("a", { href: "#", class: "hint", title: "Follow the skill's global setting",
+        onclick: (e) => { e.preventDefault(); put(r, { on: null }, null, "/always"); } }, "Reset") : null);
   }
 
   async function load() {

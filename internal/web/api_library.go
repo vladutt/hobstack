@@ -565,6 +565,9 @@ type projectLibraryView struct {
 	FromDefault bool         `json:"fromDefault"`
 	Update      bool         `json:"updateAvailable"`
 	Secrets     []secretView `json:"secrets"`
+	// AlwaysLoad: skill-ul se incarca la fiecare run in proiect; AlwaysOwn: e alegerea proiectului (nu flag-ul global)
+	AlwaysLoad bool `json:"alwaysLoad"`
+	AlwaysOwn  bool `json:"alwaysOwn"`
 }
 
 func (s *Server) secretViews(projectID int64, it store.LibraryItem) ([]secretView, error) {
@@ -633,6 +636,11 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 			list = append(list, it)
 		}
 	}
+	overrides, err := s.st.AlwaysLoadOverrides(pid)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	out := []projectLibraryView{}
 	for _, it := range list {
 		view, err := s.itemViewOf(it, counts[it.ID])
@@ -645,7 +653,8 @@ func (s *Server) listProjectLibrary(w http.ResponseWriter, r *http.Request) {
 			fail(w, err)
 			return
 		}
-		pv := projectLibraryView{Item: view, Secrets: secrets}
+		pv := projectLibraryView{Item: view, Secrets: secrets, AlwaysLoad: store.AlwaysLoadIn(it, overrides)}
+		_, pv.AlwaysOwn = overrides[it.ID]
 		if in, has := byItem[it.ID]; has {
 			// un rand oprit (enabled = 0) apare nebifat: e o oprire, si trebuie sa ramana una (default pus la loc)
 			pv.Installed, pv.Enabled, pv.FromDefault = in.Enabled, in.Enabled, in.FromDefault
