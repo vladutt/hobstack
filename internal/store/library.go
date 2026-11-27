@@ -38,9 +38,9 @@ type LibraryItem struct {
 	URL             string     `json:"url"`
 	Command         string     `json:"command"`
 	Args            []string   `json:"args"`
-	Entry           string     `json:"entry"`     // tool: fisierul care se ruleaza
-	ToolNames       []string   `json:"toolNames"` // mcp: tool-urile expuse (din probe)
-	IsDefault       bool       `json:"isDefault"` // pornit in toate proiectele (cat e published), afara de cele care l-au oprit
+	Entry           string     `json:"entry"`      // tool: fisierul care se ruleaza
+	ToolNames       []string   `json:"toolNames"`  // mcp: tool-urile expuse (din probe)
+	IsDefault       bool       `json:"isDefault"`  // pornit in toate proiectele (cat e published), afara de cele care l-au oprit
 	AlwaysLoad      bool       `json:"alwaysLoad"` // skill: agentii il incarca la fiecare run (proiectul poate alege altfel)
 	CreatedAt       time.Time  `json:"createdAt"`
 	PublishedAt     *time.Time `json:"publishedAt"`

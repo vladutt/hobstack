@@ -145,6 +145,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/projects/{id}/events", s.projectEvents)
 	mux.HandleFunc("POST /api/projects/{id}/open", s.openProject)
 	mux.HandleFunc("GET /api/projects/{id}/stats", s.getProjectStats)
+	mux.HandleFunc("GET /api/projects/{id}/memory", s.listMemory)
+	mux.HandleFunc("POST /api/projects/{id}/memory", s.createMemory)
+	mux.HandleFunc("PUT /api/memory/{id}", s.updateMemory)
+	mux.HandleFunc("DELETE /api/memory/{id}", s.deleteMemory)
+	mux.HandleFunc("PUT /api/memory/{id}/lock", s.lockMemory)
+	mux.HandleFunc("POST /api/memory/{id}/restore", s.restoreMemory)
+	mux.HandleFunc("GET /api/memory/{id}/history", s.memoryHistory)
 
 	mux.HandleFunc("GET /api/setup", s.listSetups)
 	mux.HandleFunc("POST /api/setup", s.startSetup)

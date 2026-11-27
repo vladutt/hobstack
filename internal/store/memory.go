@@ -65,13 +65,18 @@ var (
 	ErrMemoryExists = errors.New("a memory entry with this key already exists")
 )
 
+// MemoryInputError: cheie, rezumat sau text invalid (400 in API).
+type MemoryInputError struct{ Msg string }
+
+func (e MemoryInputError) Error() string { return e.Msg }
+
 var memoryKeyRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,59}$`)
 
 // NormalizeMemoryKey: lowercase, spatiile devin "-", apoi validarea formatului.
 func NormalizeMemoryKey(s string) (string, error) {
 	k := strings.Join(strings.Fields(strings.ToLower(s)), "-")
 	if !memoryKeyRe.MatchString(k) {
-		return "", fmt.Errorf("invalid key %q: use 1-60 characters a-z, 0-9, '.', '_' or '-', starting with a letter or digit (for example ui.dates)", s)
+		return "", MemoryInputError{fmt.Sprintf("invalid key %q: use 1-60 characters a-z, 0-9, '.', '_' or '-', starting with a letter or digit (for example ui.dates)", s)}
 	}
 	return k, nil
 }
@@ -81,10 +86,10 @@ func checkMemoryText(w *MemoryWrite) error {
 	w.Summary = strings.Join(strings.Fields(w.Summary), " ")
 	w.Body = strings.TrimSpace(w.Body)
 	if w.Summary == "" || len([]rune(w.Summary)) > MaxMemorySummary {
-		return fmt.Errorf("summary: 1-%d characters on one line", MaxMemorySummary)
+		return MemoryInputError{fmt.Sprintf("summary: 1-%d characters on one line", MaxMemorySummary)}
 	}
 	if len([]rune(w.Body)) > MaxMemoryBody {
-		return fmt.Errorf("text: at most %d characters", MaxMemoryBody)
+		return MemoryInputError{fmt.Sprintf("text: at most %d characters", MaxMemoryBody)}
 	}
 	return nil
 }
