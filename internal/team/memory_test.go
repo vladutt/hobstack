@@ -23,17 +23,25 @@ func TestRememberDefaultsToRunTask(t *testing.T) {
 	}
 	evs, _ := f.st.ListTaskEvents(task.ID)
 	last := evs[len(evs)-1]
-	if last.Kind != "memory" || last.Text != "Rook saved memory ui-dates: show dates as DD.MM.YYYY" {
+	// Body nevid: pasul apare si in Conversation, nu doar in Activity
+	if last.Kind != "memory" || last.Text != "Rook saved memory ui-dates: show dates as DD.MM.YYYY" || last.Body == "" {
 		t.Fatalf("%+v", last)
 	}
-	got := false
+	types := map[string]bool{}
 	for len(events) > 0 {
 		var ev struct{ Type string }
 		json.Unmarshal(<-events, &ev)
-		got = got || ev.Type == "memory"
+		types[ev.Type] = true
 	}
-	if !got {
-		t.Fatal("no memory event")
+	if !types["memory"] || !types["task"] {
+		t.Fatalf("events: %v", types)
+	}
+	if _, err := f.tm.Forget(f.workerCaller(f.rook, task.ID), "ui-dates", "we use ISO now"); err != nil {
+		t.Fatal(err)
+	}
+	evs, _ = f.st.ListTaskEvents(task.ID)
+	if last := evs[len(evs)-1]; last.Kind != "memory" || last.Text != "Rook forgot memory ui-dates: we use ISO now" {
+		t.Fatalf("forget event: %+v", last)
 	}
 }
 

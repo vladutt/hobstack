@@ -51,7 +51,8 @@ export function memoryView(projectId) {
       return;
     }
     paintList();
-    if (state.modal) paintModal();
+    // in timpul editarii nu se redeseneaza formularul (s-ar pierde textul scris)
+    if (state.modal && !state.modal.editing) paintModal();
   }
 
   function find(id) {
@@ -133,7 +134,7 @@ export function memoryView(projectId) {
       onclick: (e) => { if (e.target === overlay) closeModal(); },
     }, box);
     const onKey = (e) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.target.closest?.(".ps-overlay")) return; // switcher-ul (Cmd+K) are Esc-ul lui
       e.preventDefault();
       e.stopPropagation();
       if (state.modal?.editing) { state.modal.editing = false; paintModal(); } else closeModal();
@@ -147,7 +148,11 @@ export function memoryView(projectId) {
   function open(id) {
     if (!state.loaded) { state.openId = id; load().then(() => { if (state.openId === id) open(id); }); return; }
     const m = find(id);
-    if (!m) return;
+    if (!m) {
+      history.replaceState(null, "", `#/p/${projectId}/memory`);
+      toast("Memory entry not found");
+      return;
+    }
     showModal("Memory entry").focus();
     state.openId = id;
     const want = `#/p/${projectId}/memory/${id}`;

@@ -150,6 +150,14 @@ func addMemoryVersion(tx *sql.Tx, memoryID int64, action string, w MemoryWrite, 
 // allowLocked = scrierea utilizatorului (poate schimba o intrare blocata). prev = intrarea de dinainte (nil la
 // creare; stearsa la reinviere); changed = false pentru o scriere identica pe o intrare activa (fara versiune noua).
 func (s *Store) SetMemory(projectID int64, w MemoryWrite, allowLocked bool) (m Memory, prev *Memory, changed bool, err error) {
+	return s.setMemory(projectID, w, setOpts{allowLocked: allowLocked})
+}
+
+// setOpts: createOnly = ErrMemoryExists pe o cheie activa ("+ Add"); lock = blocheaza in aceeasi tranzactie.
+type setOpts struct{ allowLocked, createOnly, lock bool }
+
+func (s *Store) setMemory(projectID int64, w MemoryWrite, o setOpts) (m Memory, prev *Memory, changed bool, err error) {
+	allowLocked := o.allowLocked
 	if w.Key, err = NormalizeMemoryKey(w.Key); err != nil {
 		return
 	}
@@ -167,6 +175,9 @@ func (s *Store) SetMemory(projectID int64, w MemoryWrite, allowLocked bool) (m M
 	}
 	exists := gerr == nil
 	active := exists && old.DeletedAt == nil
+	if active && o.createOnly {
+		return m, nil, false, ErrMemoryExists
+	}
 	if active && old.Locked && !allowLocked {
 		return m, nil, false, ErrMemoryLocked
 	}
@@ -205,6 +216,15 @@ func (s *Store) SetMemory(projectID int64, w MemoryWrite, allowLocked bool) (m M
 	if err = addMemoryVersion(tx, id, "set", w, "", ts); err != nil {
 		return
 	}
+	if o.lock {
+		if _, err = tx.Exec(`UPDATE project_memory SET locked = 1 WHERE id = ?`, id); err != nil {
+			return
+		}
+		lockBy := MemoryWrite{Summary: w.Summary, Body: w.Body, AuthorName: UserFileAuthor}
+		if err = addMemoryVersion(tx, id, "lock", lockBy, "", ts); err != nil {
+			return
+		}
+	}
 	if m, err = getMemory(tx, `m.id = ?`, id); err != nil {
 		return
 	}
@@ -212,22 +232,10 @@ func (s *Store) SetMemory(projectID int64, w MemoryWrite, allowLocked bool) (m M
 }
 
 // CreateMemory e "+ Add" al utilizatorului: ErrMemoryExists pe o cheie activa, reinviere pe una stearsa.
+// Verificarea si blocarea sunt in aceeasi tranzactie cu scrierea.
 func (s *Store) CreateMemory(projectID int64, w MemoryWrite, locked bool) (Memory, error) {
-	key, err := NormalizeMemoryKey(w.Key)
-	if err != nil {
-		return Memory{}, err
-	}
-	if old, err := s.GetMemoryByKey(projectID, key); err == nil && old.DeletedAt == nil {
-		return Memory{}, ErrMemoryExists
-	}
-	m, _, _, err := s.SetMemory(projectID, w, true)
-	if err != nil || !locked {
-		return m, err
-	}
-	if err := s.LockMemory(m.ID, true); err != nil {
-		return m, err
-	}
-	return s.GetMemory(m.ID)
+	m, _, _, err := s.setMemory(projectID, w, setOpts{allowLocked: true, createOnly: true, lock: locked})
+	return m, err
 }
 
 // ListMemory: intrarile active (deleted = false) sau doar cele sterse; blocate primele, apoi cele schimbate recent.

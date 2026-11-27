@@ -2236,8 +2236,8 @@ export async function workspaceView(root, projectId, route) {
   };
   if (state.tab === "stats") stats.load(); // pagina deschisa direct pe #/p/3/stats
   if (state.tab === "brainstorm") brainstorm.open(route.topicId); // sau direct pe #/p/3/brainstorm/4
-  if (state.tab === "memory") memory.enter(route.memoryId); // sau direct pe #/p/3/memory/5
   else brainstorm.refresh(0); // doar pentru insigna
+  if (state.tab === "memory") memory.enter(route.memoryId); // sau direct pe #/p/3/memory/5
   return { cleanup, update };
 }
 

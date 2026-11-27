@@ -83,7 +83,12 @@ func (t *Team) Remember(c mcp.Caller, key, summary, text, task string) (string, 
 		return m.Key + " is already saved with this text.", nil
 	}
 	if onTask != nil {
-		t.taskEvent(*onTask, "memory", a.Name, fmt.Sprintf("%s saved memory %s: %s", a.Name, m.Key, m.Summary))
+		text := fmt.Sprintf("%s saved memory %s: %s", a.Name, m.Key, m.Summary)
+		body := "Saved to project memory, " + m.Key + ": " + m.Summary
+		if m.Body != "" {
+			body += "\n\n" + m.Body
+		}
+		t.memoryEvent(*onTask, a.Name, text, body)
 	}
 	t.emit(c.ProjectID, "memory", map[string]int64{"id": m.ID})
 	switch {
@@ -222,8 +227,23 @@ func (t *Team) Forget(c mcp.Caller, key, reason string) (string, error) {
 	if err := t.st.ForgetMemory(m.ID, by, reason, false); err != nil {
 		return "", memoryErr(k, err)
 	}
+	if c.TaskID != 0 {
+		if tk, err := t.st.GetTask(c.TaskID); err == nil {
+			text := fmt.Sprintf("%s forgot memory %s", a.Name, k)
+			if r := strings.TrimSpace(reason); r != "" {
+				text += ": " + r
+			}
+			t.memoryEvent(tk, a.Name, text, text)
+		}
+	}
 	t.emit(c.ProjectID, "memory", map[string]int64{"id": m.ID})
 	return "Forgot " + k + ".", nil
+}
+
+// memoryEvent: pasul "memory" pe task (cu text, deci si in Conversation) si evenimentul "task" pentru modala deschisa.
+func (t *Team) memoryEvent(task store.Task, actor, text, body string) {
+	t.taskMsg(task, "memory", actor, "", text, body)
+	t.emit(task.ProjectID, "task", task)
 }
 
 // memoryTurn: blocul "Project memory" pentru tura; gol fara memorie sau la eroare (run-ul merge oricum).
