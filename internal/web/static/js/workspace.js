@@ -19,6 +19,7 @@ import { saveCategory } from "./category.js";
 import { agentRequestBox } from "./agent-requests.js";
 import { taskModal } from "./task-modal.js";
 import { statsView } from "./stats.js";
+import { memoryView } from "./memory.js";
 import { brainstormView } from "./brainstorm.js";
 import { renderMarkdown, userText, collapsible } from "./md.js";
 import { attachMentions } from "./mentions.js";
@@ -68,6 +69,7 @@ const TABS = [
   { id: "tasks", label: "Tasks" },
   { id: "team", label: "Team" },
   { id: "files", label: "Files" },
+  { id: "memory", label: "Memory" },
   { id: "brainstorm", label: "Brainstorm" },
   { id: "stats", label: "Stats" },
 ];
@@ -91,7 +93,8 @@ export function parseWorkspaceRoute(rest) {
   // #/p/3/tasks/recurring/5 deschide Run history al sarcinii recurente 5 peste board
   const recurringId = tab === "tasks" && parts[1] === "recurring" && /^\d+$/.test(parts[2] || "") ? Number(parts[2]) : null;
   const topicId = tab === "brainstorm" ? num : null;
-  return { tab, agentId, taskId, recurringId, topicId };
+  const memoryId = tab === "memory" ? num : null; // #/p/3/memory/5 deschide intrarea 5
+  return { tab, agentId, taskId, recurringId, topicId, memoryId };
 }
 
 export async function workspaceView(root, projectId, route) {
@@ -287,6 +290,8 @@ export async function workspaceView(root, projectId, route) {
     agents: () => state.project.agents,
     onBadge: (n) => { if (n !== bsBadge) { bsBadge = n; renderTabs(); } },
   });
+  // tab-ul Memory: se incarca la prima intrare, apoi la evenimentele "memory"
+  const memory = memoryView(projectId);
   const bodies = {
     "team": el("div", { class: "tab-body team-body" }, canvas.el),
     "tasks": el("section", { class: "tab-body tasks-body" },
@@ -295,6 +300,7 @@ export async function workspaceView(root, projectId, route) {
       el("div", { class: "board-row" }, needsBox, board),
       boardHint),
     "files": el("div", { class: "tab-body files-body" }, filesSection),
+    "memory": memory.el,
     "brainstorm": brainstorm.el,
     "stats": stats.el,
   };
@@ -711,6 +717,7 @@ export async function workspaceView(root, projectId, route) {
     }
     renderTabs();
     if (enteringStats) stats.load();
+    if (r.tab === "memory") memory.enter(r.memoryId); else memory.destroy(); // modala nu ramane peste alt tab
     if (r.tab === "brainstorm") brainstorm.open(r.topicId);
     syncHash();
     if (!chatBox.hidden) scrollDown(true);
@@ -2140,6 +2147,7 @@ export async function workspaceView(root, projectId, route) {
     closeImage();
     runHistory?.destroy();
     brainstorm.destroy();
+    memory.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
@@ -2176,6 +2184,7 @@ export async function workspaceView(root, projectId, route) {
       if (ev.type === "files") loadFiles();
       // Brainstorm: subiectul deschis se reincarca, la celelalte doar lista (insigna); nu atinge restul paginii
       if (ev.type === "brainstorm") { brainstorm.refresh(ev.data?.topicId || 0); return; }
+      if (ev.type === "memory") { memory.refresh(); return; }
       // Run history: doar la schimbarile de task (o rulare noua, un status, fisiere atasate), nu la fiecare mesaj
       if (ev.type === "task") runHistory?.refresh();
       scheduleReload();
@@ -2208,6 +2217,7 @@ export async function workspaceView(root, projectId, route) {
     modal?.destroy();
     runHistory?.destroy();
     brainstorm.destroy();
+    memory.destroy();
     window.removeEventListener("dragover", guardOver);
     window.removeEventListener("drop", guardDrop);
     window.removeEventListener("dragend", guardEnd);
@@ -2226,6 +2236,7 @@ export async function workspaceView(root, projectId, route) {
   };
   if (state.tab === "stats") stats.load(); // pagina deschisa direct pe #/p/3/stats
   if (state.tab === "brainstorm") brainstorm.open(route.topicId); // sau direct pe #/p/3/brainstorm/4
+  if (state.tab === "memory") memory.enter(route.memoryId); // sau direct pe #/p/3/memory/5
   else brainstorm.refresh(0); // doar pentru insigna
   return { cleanup, update };
 }

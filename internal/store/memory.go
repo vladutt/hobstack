@@ -281,7 +281,7 @@ func (s *Store) SearchMemory(projectID int64, query string, limit int) ([]Memory
 	return out, nil
 }
 
-// ForgetMemory sterge intrarea (pastrata in istoric) si ii scoate blocarea.
+// ForgetMemory sterge intrarea (pastrata in istoric).
 func (s *Store) ForgetMemory(id int64, by MemoryWrite, reason string, allowLocked bool) error {
 	return s.memoryChange(id, func(tx *sql.Tx, m Memory, ts string) error {
 		if m.DeletedAt != nil {
@@ -290,7 +290,8 @@ func (s *Store) ForgetMemory(id int64, by MemoryWrite, reason string, allowLocke
 		if m.Locked && !allowLocked {
 			return ErrMemoryLocked
 		}
-		if _, err := tx.Exec(`UPDATE project_memory SET deleted_at = ?, locked = 0 WHERE id = ?`, ts, id); err != nil {
+		// blocarea ramane pe rand: Restore (Undo) o pastreaza; o scriere noua pe cheie (SetMemory) o scoate
+		if _, err := tx.Exec(`UPDATE project_memory SET deleted_at = ? WHERE id = ?`, ts, id); err != nil {
 			return err
 		}
 		by.Summary, by.Body = m.Summary, m.Body

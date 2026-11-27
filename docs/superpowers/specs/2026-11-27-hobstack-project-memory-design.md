@@ -50,8 +50,7 @@ vede de la prima rulare si le poate scrie, fara sa reseteze sesiuni.
   pentru utilizator), `task_id` (NULL sau task-ul pe care s-a scris).
 - `created_at`, `updated_at`, `deleted_at` (NULL = activa).
 - UNIQUE(project_id, key) — o cheie stearsa si scrisa din nou reinvie acelasi rand (deleted_at = NULL).
-  (Decizia builder-ului, de verificat:) stergerea scoate si blocarea, deci randul reinviat porneste neblocat, cu autorul
-  noii scrieri. Un agent poate reinvia si o cheie stearsa de utilizator; raspunsul lui remember spune atunci "was deleted
+  (Decizia builder-ului, de verificat:) o scriere noua pe o cheie stearsa (reinvierea) porneste neblocata, cu autorul noii scrieri; Restore / Undo din UI pastreaza blocarea. Un agent poate reinvia si o cheie stearsa de utilizator; raspunsul lui remember spune atunci "was deleted
   by You on <data>: <motiv>" ca agentul sa vada ca reinvie ceva sters intentionat, iar istoricul arata reinvierea.
 - `POST /api/projects/{id}/memory` pe o cheie activa = 409 ("key exists"); pe o cheie stearsa = reinviere.
 

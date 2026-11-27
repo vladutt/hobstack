@@ -1187,7 +1187,7 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 .lib-prop-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
 .lib-by { display: inline-flex; align-items: center; gap: 10px; color: var(--soft); font-size: 14px; flex-wrap: wrap; min-width: 0; }
 .lib-cmd { margin: 0; font-size: 13px; overflow-wrap: anywhere; color: var(--soft); }
-.lib-cmd code { font-family: var(--mono, ui-monospace, monospace); background: rgba(127, 127, 127, .12); padding: 2px 6px; border-radius: 5px; }
+.lib-cmd code { font-family: var(--mono); background: rgba(127, 127, 127, .12); padding: 2px 6px; border-radius: 5px; }
 .lib-fail { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; }
 .lib-fail-msg { color: var(--red); overflow-wrap: anywhere; }
 .lib-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
@@ -2110,3 +2110,39 @@ body.has-ptabs { --topbar-h: 104px; }
   .route-progress::before { animation: none; left: 0; width: 100%; }
   .ptab { transition: none; }
 }
+
+/* ---------- Memory (memoria proiectului) ---------- */
+.memory-body { max-width: 980px; display: flex; flex-direction: column; gap: 12px; }
+.mem-toolbar { display: flex; align-items: center; gap: 8px; }
+.mem-toolbar input.mem-search { flex: 0 1 320px; width: 320px; }
+.mem-toolbar .btn[hidden], .mem-intro[hidden] { display: none; }
+.mem-intro { margin: 0; }
+.mem-list { display: flex; flex-direction: column; gap: 8px; }
+.mem-row { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; cursor: pointer; display: grid; gap: 5px; }
+.mem-row:hover, .mem-row:focus-visible { background: var(--card-hi); outline: none; }
+.mem-row.deleted { opacity: .7; }
+.mem-row-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mem-key { font-family: var(--mono); font-size: 13px; color: var(--amber); background: var(--amber-bg); padding: 1px 7px; border-radius: 6px; white-space: nowrap; }
+.mem-summary { color: var(--text); font-size: 14px; line-height: 1.45; }
+.mem-meta { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--soft); white-space: nowrap; }
+.mem-you { font-size: 11px; font-weight: 600; color: var(--amber-ink); background: var(--amber); border-radius: 999px; padding: 1px 7px; }
+.mem-task { color: var(--soft); text-decoration: underline; text-underline-offset: 2px; }
+.mem-task:hover { color: var(--text); }
+.mem-lock { font-size: 12px; color: var(--soft); white-space: nowrap; }
+.mem-deleted-tag { font-size: 12px; color: var(--red); }
+.mem-empty p { max-width: 460px; }
+.mem-modal { background: var(--bg); border: 1px solid var(--line-2); border-radius: 14px; width: min(680px, 100%); max-height: calc(100vh - 56px); overflow: auto; padding: 18px 22px; display: grid; gap: 14px; outline: none; }
+.mem-modal-head { display: flex; align-items: center; gap: 10px; }
+.mem-modal-head h3 { margin: 0; font-size: 17px; }
+.mem-modal-summary { margin: 0 0 8px; font-size: 17px; line-height: 1.4; }
+.mem-modal-meta { margin-top: 10px; }
+.mem-actions { display: flex; gap: 8px; margin-top: 12px; }
+.mem-form { display: grid; gap: 12px; }
+.mem-form label { display: grid; gap: 5px; font-size: 13px; color: var(--soft); }
+.mem-form label.mem-check { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.mem-form textarea { resize: vertical; }
+.mem-history { border-top: 1px solid var(--line); padding-top: 12px; }
+.mem-history h4 { margin: 0 0 8px; font-size: 13px; color: var(--soft); font-weight: 600; }
+.mem-history ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; font-size: 13px; }
+.mem-h-who { color: var(--text); }
+.mem-h-reason, .mem-h-text { color: var(--soft); margin-top: 2px; }

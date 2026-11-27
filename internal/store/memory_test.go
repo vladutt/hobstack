@@ -71,7 +71,7 @@ func TestForgetClearsLockAndRevive(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s.GetMemory(m.ID)
-	if got.DeletedAt == nil || got.Locked {
+	if got.DeletedAt == nil {
 		t.Fatalf("after forget: %+v", got)
 	}
 	if active, _ := s.ListMemory(p.ID, false); len(active) != 0 {
@@ -88,6 +88,21 @@ func TestForgetClearsLockAndRevive(t *testing.T) {
 	}
 	if strings.Join(acts, ",") != "set,forget,lock,set" || h[1].Reason != "old" {
 		t.Fatalf("history: %v %+v", acts, h)
+	}
+}
+
+func TestRestoreKeepsLock(t *testing.T) {
+	s := newStore(t)
+	p, lead := newProject(t, s)
+	m, _, _, _ := s.SetMemory(p.ID, agentWrite(lead, "ui.dates", "a", ""), false)
+	s.LockMemory(m.ID, true)
+	user := MemoryWrite{AuthorName: UserFileAuthor}
+	s.ForgetMemory(m.ID, user, "", true)
+	if err := s.RestoreMemory(m.ID, user); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetMemory(m.ID); got.DeletedAt != nil || !got.Locked {
+		t.Fatalf("after restore: %+v", got)
 	}
 }
 
