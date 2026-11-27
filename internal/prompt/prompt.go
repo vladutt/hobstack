@@ -261,7 +261,7 @@ func System(p store.Project, a store.Agent, l Links) string {
 	if slices.Contains(a.Tools, "write") {
 		how = append(how, howEdits)
 	}
-	how = append(how, howVisuals, howDenied)
+	how = append(how, howMemory, howVisuals, howDenied)
 	if len(l.BlockedCommands) > 0 {
 		how = append(how, "These commands are blocked in this project; do not try them: "+strings.Join(l.BlockedCommands, ", ")+".")
 	}
