@@ -1,4 +1,5 @@
 import { workRequestBox } from "./project-requests.js";
+import { randomAgentName } from "./agent-names.js";
 import { api, upload } from "./api.js";
 import { openButtons } from "./open-file.js";
 import { openImage, closeImage } from "./image-viewer.js";
@@ -643,9 +644,7 @@ export async function workspaceView(root, projectId, route) {
   // in echipa unui agent, legat de utilizator sau nelegat.
   async function createAgent(pos, { parentId, detached }) {
     if (!leaveEditor()) return;
-    const names = new Set(state.project.agents.map((a) => a.name.toLowerCase()));
-    let name = "New agent";
-    for (let i = 2; names.has(name.toLowerCase()); i++) name = `New agent ${i}`;
+    const name = randomAgentName(state.project.agents.map((a) => a.name)); // un nume amuzant liber
     const body = agentBody({
       name, role: "", model: "sonnet", background: "", instructions: "", doneDef: "",
       tools: ["write", "shell"], responsibilities: "", parentId, reviewerId: null, detached,

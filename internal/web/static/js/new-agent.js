@@ -1,5 +1,6 @@
 import { api } from "./api.js";
 import { el, avatar, kindOf, toast, topbar, agentBody, TOOLS } from "./ui.js";
+import { randomAgentName } from "./agent-names.js";
 
 // Pagina "Agent nou" (#/p/<id>/agents/new): numele, rolul, ce ia asupra lui si modelul in
 // stanga; locul in echipa (sef, reviewer), o previzualizare a ramurii si tool-urile in dreapta.
@@ -15,6 +16,11 @@ export async function newAgentView(root, projectId, parentHint) {
 
   const name = el("input", { type: "text", maxlength: 40, required: true, placeholder: "e.g. Herald", "aria-label": "Name" });
   const nameAvatar = el("span", { class: "na-avatar" });
+  // numele vine propus la intamplare din lista amuzanta; zarul da altul (fara sa conteze ca atins de utilizator,
+  // deci draft-ul AI il poate inlocui)
+  name.value = randomAgentName(agents.map((a) => a.name));
+  const dice = el("button", { type: "button", class: "na-dice", title: "Another funny name", "aria-label": "Another funny name",
+    onclick: () => { name.value = randomAgentName(agents.map((a) => a.name), name.value); touched.delete("name"); draw(); name.focus(); } }, "\u{1F3B2}");
   const role = el("input", { type: "text", maxlength: 80, placeholder: "e.g. E-mail & Notifications Developer", "aria-label": "Role" });
   const takes = el("textarea", { rows: 4, maxlength: 2000, "aria-label": "Responsibilities",
     placeholder: "e.g. Transactional e-mails and in-app notifications: mail templates, notification channels, queue workers for sending. Does not touch domain logic outside Notification." });
@@ -122,8 +128,8 @@ export async function newAgentView(root, projectId, parentHint) {
     el("div", { class: "np-main" }, draftBox,
       el("div", { class: "row" },
         el("div", { class: "field" }, el("label", { class: "label" }, "Name"),
-          el("div", { class: "na-name" }, nameAvatar, name),
-          el("span", { class: "hint" }, `${rootAgent?.name || "The lead"} assigns tasks by this name.`)),
+          el("div", { class: "na-name" }, nameAvatar, name, dice),
+          el("span", { class: "hint" }, `${rootAgent?.name || "The lead"} assigns tasks by this name. 🎲 for another one.`)),
         el("div", { class: "field" }, el("label", { class: "label" }, "Role"), role)),
       el("div", { class: "field" },
         el("label", { class: "label" }, "Takes ", el("span", { class: "np-dim" }, "· what this agent is responsible for")),

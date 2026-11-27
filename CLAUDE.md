@@ -485,6 +485,9 @@ pagina item-ului (scoaterea flag-ului cere confirmare), eticheta Default in list
 Gata (tab-uri in Instructions): pagina #/p/<id>/edit are tab-urile General (formularul) | Skills | MCP servers | Tools
 (Tools doar cand proiectul are tool-uri), cu numarul celor pornite; ?tab=skills|mcp|tools in adresa (schimbat prin
 replaceState, panourile raman in pagina, deci campurile nesalvate din General nu se pierd). libraryInstalls(pid, kind, onRows).
+Gata (nume amuzante pentru agenti noi): static/js/agent-names.js (AGENT_NAMES, 159 de nume din docs/ideas/agent-names.csv,
+max 40 caractere, fara "You"; randomAgentName(taken, avoid) alege unul liber, altfel "New agent N"). Pagina Agent nou vine cu
+numele propus si zarul 🎲 din camp (alt nume; nu conteaza ca atins, deci draft-ul AI il poate inlocui); agentul nou de pe canvas ia si el un nume din lista.
 Urmeaza (sub-proiecte separate, fiecare cu spec + plan):
 2. Librarie de agenti refolositi intre proiecte, template-uri de echipa
 3. Aprobari live (--permission-prompt-tool), feed global "Live activity"

@@ -1004,7 +1004,9 @@ input.np-name { font-size: 20px; font-weight: 650; padding: 13px 16px; }
 
 /* ---------- pagina "Agent nou" ---------- */
 .na-name { position: relative; display: flex; }
-.na-name input { padding-left: 50px; font-size: 16px; font-weight: 600; }
+.na-name input { padding-left: 50px; padding-right: 46px; font-size: 16px; font-weight: 600; }
+.na-dice { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none; cursor: pointer; font-size: 18px; line-height: 1; padding: 6px; border-radius: 6px; opacity: .75; }
+.na-dice:hover { opacity: 1; background: var(--line); }
 .na-avatar { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); display: flex; pointer-events: none; }
 .na-more summary { cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 600; margin-bottom: 14px; }
 .na-more[open] { display: grid; gap: 16px; }

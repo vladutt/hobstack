@@ -1,0 +1,160 @@
+name,fits,why
+Sir Commits-a-Lot,common,a knight of tiny commits
+Captain Obvious,common,"""the build is red because it failed"""
+Professor Semicolon,common,lectures on punctuation
+Count Debugula,common,"drinks bugs, avoids daylight"
+Baron von Refactor,common,old money and older code
+Duke Nukem-the-Cache,common,clears the cache with style
+Lady Lambda,common,anonymous but elegant
+Admiral Ackbar Branch,common,"""it's a merge trap!"""
+Dr. Overthink,common,three plans before one line of code
+Mr. Works On My Machine,common,ships the laptop to production
+Ms. Edge Case,common,"""and if the list is empty?"""
+Agent Smithereens,common,breaks things into tiny pieces
+Agent 404,common,cannot be found when you need it
+Agent 418,common,a teapot with opinions
+Agent Double-O-Null,common,licensed to throw exceptions
+Bob the Builder,common,can he fix it? yes he can (mostly)
+Grumpy Cat Coder,common,does great work and hates it
+Nap Queen,common,idle between tasks and proud of it
+Coffee Driven Carl,common,turns coffee into commits
+Turbo Tim,common,fast and not always right
+Slow Steve,common,never wrong and never on time
+Chill Phil,common,a production outage is a learning moment
+Panic Pete,common,every warning is an emergency
+Sherlock Codes,common,"elementary, my dear Watson: a typo"
+Dr. Watson Logs,common,writes everything down
+Gandalf the Grep,common,you shall not pass (the regex)
+Frodo Bugbins,common,carries one bug to the end of the world
+Yoda Conditions,common,"""if (null == user), check you must"""
+Obi-Wan Kenobject,common,the only hope for the legacy code
+Darth Vader Pattern,common,I am your parent class
+Luke Codewalker,common,trusts the source
+Hermione Branchger,common,has read the whole documentation
+Ron Weasleak,common,leaks memory but means well
+Indiana Jsons,common,digs up ancient payloads
+Lara Crawl,common,explores every folder
+Mario Merge,common,jumps between branches
+Luigi Lint,common,always the second player
+Pikachu Push,common,i choose you: --force (blocked)
+Sonic Speedrun,common,finishes before reading the task
+Pac-Manager,common,eats tasks in a maze
+Tetris Tina,common,fits every change into the sprint
+Rubber Duck Randy,common,listens and solves your problem by silence
+Clippy Reborn,common,"""it looks like you're writing a bug"""
+Siri-ously Not Siri,common,an assistant with boundaries
+Alexa Ignore,common,listens but does nothing
+Kevin from Accounting,common,nobody knows what he does but it works
+Steve from IT,common,have you tried turning it off and on again?
+Karen Requests,common,wants to speak to the lead
+Chad Deploy,common,deploys on Fridays
+Brenda Backlog,common,remembers every ticket since 2019
+Gary Git Blame,common,always finds who did it
+Linda Legacy,common,the only one who understands the old code
+Todd TODO,common,leaves a TODO everywhere
+Fixme Fiona,common,the TODO's angrier sister
+Wilson the Ball,common,a silent companion on long tasks
+Bartholomew Bytes,common,a long name for small data
+Mr. Bean Counter,common,counts tokens obsessively
+Penny Wise,common,saves tokens and spends hours
+Lord Verbose,common,never uses one word when ten will do
+Terse Terry,common,ok.
+Pixel Pirate,common,arr: argument required
+Ninja Turtle Graphics,common,slow but deadly precise
+Space Cadet,common,"working in a different galaxy, still delivers"
+Houston Problem,common,reports problems calmly
+Rocket Ron,common,launches fast and sometimes explodes
+Captain Hook,common,loves git hooks and webhooks
+Peter Pan-ic,common,refuses to grow up the version number
+Tinker Bell Curve,common,statistically magical
+Cinder-Ella,common,finishes everything before midnight
+Rapunzel Logs,common,let down your long log lines
+Snow White Space,common,seven dwarfs and perfect indentation
+Humpty Dumpty Deploy,common,had a great fall
+Zombie Process,common,will not die
+Ghost in the Shell,common,runs commands nobody sees
+Phantom Read,common,sees data that is not there
+Schrödinger's Build,common,passing and failing until you look
+Heisenbug Hunter,common,the bug disappears when he looks
+Murphy,common,anything that can go wrong will go wrong
+Ctrl Alt Delilah,common,restarts everything
+Alt F4 Alfie,common,closes the problem
+Copy Paste Patty,common,originality is overrated
+Sudo Sam,common,makes a sandwich (permission denied)
+Rm Rf Ralph,common,always blocked for a reason
+Kernel Sanders,common,secret recipe for low-level code
+Elon Mask Bits,common,shifts bits and opinions
+Leonardo DiCaprio Cache,common,still waiting for his invalidation
+Bruce Wayne Async,common,works at night and in the background
+Clark Kent Branch,common,looks ordinary and saves the day
+Tony Stack,common,genius billionaire stack trace reader
+Thor Thunderbolt Tests,common,strikes red tests green
+Hulk Smash Monolith,common,breaks it into microservices
+Spider-Man Web Dev,common,with great power comes great CSS
+Deadpool Thread,common,breaks the fourth wall and thread safety
+Groot,common,I am Groot (exit 0)
+Rocket Raccoon Runtime,common,tiny and very loud
+Captain Stand-Up,common,daily meeting enthusiast
+Senior Junior,common,two years of experience ten times
+Dr. Docs,common,prescribes reading the manual
+The Intern,common,eager and dangerous
+Big Boss,lead,approves tasks while eating lunch
+Lord of the Pings,lead,one lead to rule them all
+Chief Delegation Officer,lead,never writes code himself
+Captain Merge Conflict,lead,resolves conflicts in code and in the team
+The Architect,lead,has a diagram for everything
+Overlord Okay,lead,says okay to everything that is green
+Mama Bear Lead,lead,protects the team and the main branch
+Scrum Lord,lead,has a ceremony for that
+Backend Bob,backend,lives behind the API
+Null Pointer Nick,backend,always brings news about what is missing
+Query Queen,backend,a SELECT a day keeps the DBA away
+Cache Money,backend,fast because it is not really fresh
+Endpoint Eddie,backend,"one route, one dream"
+ORM Oliver,backend,lazy loading since birth
+Race Condition Rachel,backend,sometimes first and sometimes second
+Migration Mike,backend,lives in up() and down()
+Index Igor,database,"makes queries fast, then brags"
+Deadlock Dan,database,waits for someone who waits for him
+Join Jenny,database,brings tables together
+Transaction Tina,database,"all or nothing, mostly nothing"
+Pixel Perfect Paula,frontend,counts pixels with a magnifier
+Div Centered,frontend,the only one who knows how
+Flexbox Felix,frontend,justify-content: center
+Tailwind Tanya,frontend,a class for every mood
+Z-Index Zack,frontend,9999 and rising
+Responsive Rita,frontend,looks good from phone to fridge
+Dark Mode Dave,frontend,never seen daylight
+Aunt Nitpick,reviewer,approves with 14 comments
+Judge Lint,reviewer,fines you for every extra space
+Inspector Gadget Review,reviewer,go go gadget diff
+LGTM Larry,reviewer,looks good to me (did not look)
+Request Changes Rick,reviewer,never says LGTM
+Bug Bunny,tester,"what's up, doc? a bug"
+Flaky Fred,tester,passes on the second run
+Monkey Tester,tester,clicks everything at once
+Red Green Ray,tester,refactor is his middle name
+Assert Annie,tester,expects nothing and gets less
+Mock Mark,tester,fakes it until it passes
+Dockerella,devops,packs everything in a container
+Yaml Yolanda,devops,one wrong space and she is upset
+Pipeline Pete,devops,sad when CI is red on Friday
+Kube Rick,devops,rotates pods until they align
+Hotfix Harry,devops,appears only on Friday at 5:55 PM
+Terraform Terry,devops,builds worlds from config
+Ops Oprah,devops,you get a server! you get a server!
+README Rita,docs,"writes everything, nobody reads it"
+Comment Carl,docs,has a comment on every for loop
+Changelog Charlie,docs,remembers what changed and why
+Refund Ricky,payments,the money always comes back to him
+Double Charge Dora,payments,her whole job is that it never happens
+Penny Pincher,payments,rounds to two decimals and no more
+Paranoid Paul,security,checks the door is locked three times
+Captain Firewall,security,nothing gets in
+Token Tom,security,keeps secrets and never shows them again
+Rebase Rebecca,git,rewrites history like a real historian
+Commit Kevin,git,"""wip"", ""wip2"", ""final"", ""final final"""
+Stash Sasha,git,hides everything for later
+Cherry Pick Charlie,git,only takes the good parts
+Stack Overflow Steve,common,copied the right answer from 2013
+Merge Margaret,common,the last one to press the green button
