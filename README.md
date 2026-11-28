@@ -2,6 +2,8 @@
 
 Local Claude Code agent teams. A single Go binary, with a browser UI on 127.0.0.1.
 
+**Website: [hobstack.io](https://hobstack.io)** · [Download](https://github.com/vladutt/hobstack/releases/latest)
+
 A project's team is a hierarchy: you give goals to the root agents, leads split the work
 only among their direct team, and work goes through the reviewer (if there is one), then to the lead
 that created the task. You can talk to any agent. Everything is visible live on a board and saved in SQLite.
@@ -52,6 +54,43 @@ and restarts. The previous version is removed once the new one is running.
 
 ![Projects table with lead, team, progress and seven-day activity](docs/images/projects.png)
 
+## Reading the code
+
+HobStack has a read-only code viewer for every project: press **⌘P** (Ctrl+P on Windows and Linux) or click **Code** on
+any project page. You get the project's file tree, search by file name and syntax highlighting. Images and SVGs show
+as pictures, and HTML pages open in a sandboxed preview.
+
+File paths in agents' messages are links. Click `internal/web/api_memory.go:53-71` in a chat and the viewer opens on
+that file with lines 53-71 selected. ⌘-click (Ctrl+click) shows the file in Finder or Explorer instead.
+
+![A chat answer with file paths shown as links](docs/images/chat-paths.png)
+
+Select lines to point an agent at them. **Copy reference** copies `path:53-71`. **Ask Lead** puts `@path:53-71` in that
+agent's chat, so you only type the question.
+
+![The code viewer with lines 53-71 selected and the Copy reference and Ask Lead buttons](docs/images/code.png)
+
+### Shortcuts
+
+On macOS use ⌘, on Windows and Linux use Ctrl.
+
+| Where | Keys | What it does |
+|---|---|---|
+| Anywhere | ⌘K | Switch project (recent projects first; ⌘Enter opens it in a new tab) |
+| Anywhere | ⌘1 … ⌘9 | Go to an open project tab |
+| Project pages | ⌘P | Open the code viewer |
+| Code viewer | type, then ↑ ↓ Enter | Find a file by name and open it |
+| Code viewer | ← → | Collapse or expand a folder in the tree |
+| Code viewer | click a line number, Shift+click another | Select lines |
+| Code viewer | ⌘C (nothing selected) | Copy the reference (`path:42-50`) |
+| Code viewer | ⌘⇧C | Copy the file path |
+| Code viewer | ⌘F, then Enter / Shift+Enter | Find in the file, next / previous match (Aa = match case) |
+| Code viewer | ⌘Enter in Find | Select the line of the current match |
+| Code viewer | Esc | Close Find, then clear the selection, then close the viewer |
+| Chat | @ | Pick a project file to mention |
+| Chat, New task, task | ⌘V | Paste screenshots or files |
+| Task file view | ↑ ↓ | Previous / next changed file |
+
 ## Running from source
 
     go run ./cmd/hobstack start
@@ -90,11 +129,18 @@ archives and publishes the release. The tag message becomes the release notes sh
 - In the API (`POST /api/projects/{id}/agents`, `PUT /api/agents/{id}`), a missing or null `parentId` means
   a root agent.
 - `max_parallel` applies only to agents that have a boss.
-- Permissions come only from the app (`--settings` inline, `--setting-sources user`). `CLAUDE.md`
-  from the project's repo is still read. `git push`, `rm -rf`, `sudo` and package installs
-  are blocked as command prefixes; with "Shell commands" enabled, an agent can get
-  around them (`rm -fr`, `bash -c ...`). Only give shell to agents you trust (approvals
-  come in a future version).
+- Permissions come only from the app (`--settings` inline, `--setting-sources user`, `--permission-mode dontAsk`):
+  an agent never stops to ask Claude Code for permission. `CLAUDE.md` from the project's repo is still read.
+- Each agent has its own tools (write files, shell, git, web, install packages). Chat with an agent is read-only:
+  changes happen on a task, which the agent can start itself from the chat.
+- Shell commands follow the command rules in Settings (global) and in each project: Allow, Ask or Block by
+  command prefix. `git push`, `rm -rf`, `sudo` and similar start on Ask; package installs (`npm install`,
+  `composer require`, `pip install`...) need the "Install packages" tool.
+- When an agent is refused something, a card shows up in "Needs you": allow that command for the agent on that task,
+  allow it in the whole project or block it; enable Shell or package installs for the agent; or add a skill it wanted.
+  The agent continues once you answer.
+- The rules match command prefixes, so they are a guard rail, not a sandbox: an agent with Shell can get around them
+  (`rm -fr`, `bash -c ...`). Only give Shell to agents you trust.
 - Your global Claude settings (`~/.claude/settings.json`) also apply to agents, so a global
   `permissions.allow` rule widens their permissions.
 - The API accepts only Host 127.0.0.1/localhost and requires `Content-Type: application/json` on
@@ -102,7 +148,8 @@ archives and publishes the release. The tag message becomes the release notes sh
   to the app).
 - Files attached to a project live in `~/.hobstack/projects/<id>/files/`; agents get them with
   `--add-dir` and read them with Read (including images and PDFs).
-- On startup all projects are paused: nothing runs (or costs money) until you press "Start team".
+- On startup, runs that were cut off are marked interrupted, their tasks go back to Queued and teams start again by
+  themselves. Only "Stop team" (or a run that cannot start) pauses a project.
 
 ## Data
 
