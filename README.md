@@ -2,7 +2,7 @@
 
 Local Claude Code agent teams. A single Go binary, with a browser UI on 127.0.0.1.
 
-**Website: [hobstack.io](https://hobstack.io)** · [Download](https://github.com/vladutt/hobstack/releases/latest)
+**Website: [hobstack.com](https://hobstack.com)** · [Download](https://github.com/vladutt/hobstack/releases/latest)
 
 A project's team is a hierarchy: you give goals to the root agents, leads split the work
 only among their direct team, and work goes through the reviewer (if there is one), then to the lead
