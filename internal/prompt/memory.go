@@ -9,7 +9,7 @@ import (
 
 // Limitele indexului din tura (spec: memoria proiectului).
 const (
-	memoryIndexLines = 40
+	memoryIndexMax   = 40
 	memoryIndexChars = 3000
 	memoryMoreRoom   = 60 // loc pastrat pentru randul "... N more"
 )
@@ -28,16 +28,38 @@ func MemoryIndex(entries []store.Memory, withTools bool) string {
 	if len(entries) == 0 {
 		return ""
 	}
+	head, lines := memoryIndexLines(entries, withTools)
+	var b strings.Builder
+	b.WriteString(head)
+	for _, l := range lines {
+		b.WriteString(l)
+	}
+	if rest := len(entries) - len(lines); rest > 0 {
+		fmt.Fprintf(&b, "\n- ... %d more", rest)
+		if withTools {
+			b.WriteString(": search with mcp__team__search_memory")
+		}
+	}
+	return b.String()
+}
+
+// MemoryIndexShown: cate intrari (primele, in ordinea primita) intra in indexul din tura unui run cu tool-uri.
+// Tab-ul Memory le marcheaza pe celelalte (agentii le gasesc doar cautand).
+func MemoryIndexShown(entries []store.Memory) int {
+	_, lines := memoryIndexLines(entries, true)
+	return len(lines)
+}
+
+// memoryIndexLines: titlul si randurile care incap in limite (40 de randuri, 3000 de caractere cu loc pentru "N more").
+func memoryIndexLines(entries []store.Memory, withTools bool) (string, []string) {
 	head := "Project memory (decisions and facts saved by the team):"
 	if withTools {
 		head = "Project memory (decisions and facts saved by the team; read the full text with mcp__team__recall):"
 	}
-	var b strings.Builder
-	b.WriteString(head)
 	size := len([]rune(head))
-	shown := 0
+	var lines []string
 	for _, m := range entries {
-		if shown == memoryIndexLines {
+		if len(lines) == memoryIndexMax {
 			break
 		}
 		meta := m.AuthorName
@@ -52,15 +74,8 @@ func MemoryIndex(entries []store.Memory, withTools bool) string {
 		if size+n > memoryIndexChars-memoryMoreRoom {
 			break
 		}
-		b.WriteString(line)
+		lines = append(lines, line)
 		size += n
-		shown++
 	}
-	if rest := len(entries) - shown; rest > 0 {
-		fmt.Fprintf(&b, "\n- ... %d more", rest)
-		if withTools {
-			b.WriteString(": search with mcp__team__search_memory")
-		}
-	}
-	return b.String()
+	return head, lines
 }

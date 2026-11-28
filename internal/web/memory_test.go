@@ -68,3 +68,34 @@ func TestMemoryAPI(t *testing.T) {
 		t.Fatalf("missing: %d", code)
 	}
 }
+
+func TestMemoryListInIndex(t *testing.T) {
+	e := setup(t)
+	p := e.createProject(t, t.TempDir())
+	base := "/api/projects/" + itoa(p.ID) + "/memory"
+	for i := 0; i < 42; i++ {
+		if code, raw := e.do(t, "POST", base, map[string]any{"key": "k" + itoa(int64(i)), "summary": "short"}); code != 201 {
+			t.Fatalf("create %d: %d %s", i, code, raw)
+		}
+	}
+	_, raw := e.do(t, "GET", base, nil)
+	var list []struct {
+		Key     string `json:"key"`
+		InIndex bool   `json:"inIndex"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil || len(list) != 42 {
+		t.Fatalf("%v %d", err, len(list))
+	}
+	in := 0
+	for i, m := range list {
+		if m.InIndex {
+			in++
+			if i >= 40 {
+				t.Fatalf("row %d in index", i)
+			}
+		}
+	}
+	if in != 40 {
+		t.Fatalf("in index: %d", in)
+	}
+}

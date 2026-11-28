@@ -65,3 +65,29 @@ func TestSystemHasMemoryRule(t *testing.T) {
 		}
 	}
 }
+
+func TestMemoryIndexShown(t *testing.T) {
+	if n := MemoryIndexShown(nil); n != 0 {
+		t.Fatalf("empty: %d", n)
+	}
+	var list []store.Memory
+	for i := 0; i < 50; i++ {
+		list = append(list, store.Memory{Key: fmt.Sprintf("k%d", i), Summary: "short", AuthorName: "A"})
+	}
+	if n := MemoryIndexShown(list); n != 40 {
+		t.Fatalf("lines limit: %d", n)
+	}
+	list = list[:3]
+	if n := MemoryIndexShown(list); n != 3 {
+		t.Fatalf("all fit: %d", n)
+	}
+	// acelasi numar ca randurile din MemoryIndex (varianta cu tool-uri)
+	list = nil
+	for i := 0; i < 40; i++ {
+		list = append(list, store.Memory{Key: fmt.Sprintf("k%d", i), Summary: strings.Repeat("ș", 140), AuthorName: "A"})
+	}
+	lines := strings.Split(MemoryIndex(list, true), "\n")
+	if n := MemoryIndexShown(list); n != len(lines)-2 || n >= 40 {
+		t.Fatalf("shown %d, index lines %d", n, len(lines)-2)
+	}
+}

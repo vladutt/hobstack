@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"hobstack/internal/prompt"
 	"hobstack/internal/store"
 )
 
@@ -65,10 +66,20 @@ func (s *Server) listMemory(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if list == nil {
-		list = []store.Memory{}
+	// inIndex: intrarea apare in indexul din tura agentilor (doar pentru cele active)
+	type row struct {
+		store.Memory
+		InIndex bool `json:"inIndex"`
 	}
-	writeJSON(w, http.StatusOK, list)
+	shown := 0
+	if r.URL.Query().Get("deleted") != "1" {
+		shown = prompt.MemoryIndexShown(list)
+	}
+	rows := make([]row, len(list))
+	for i, m := range list {
+		rows[i] = row{m, i < shown}
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
 
 // POST /api/projects/{id}/memory {key, summary, body, locked}

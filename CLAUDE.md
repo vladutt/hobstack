@@ -499,7 +499,9 @@ Indexul (prompt.MemoryIndex: blocate, apoi recente; max 40 randuri / 3000 caract
 Library, nu in system prompt (sesiunile raman); brainstorming-ul il vede fara tool-uri. Regula howMemory in system prompt.
 O intrare blocata de utilizator nu poate fi schimbata / stearsa de agenti (eroare care ii spune sa-l anunte); o scriere pe o
 cheie stearsa o reinvie neblocata, iar Restore / Undo pastreaza blocarea. API /api/projects/{id}/memory, /api/memory/{id}...
-(409 pe cheie existenta); tab-ul Memory (memory.js, #/p/<pid>/memory/<id>), evenimentul SSE "memory". Verificat cu claude
+(409 pe cheie existenta); tab-ul Memory (memory.js, #/p/<pid>/memory/<id>), evenimentul SSE "memory". Lista activa are inIndex
+(prompt.MemoryIndexShown, aceleasi limite ca indexul); cand nu incap toate, tab-ul arata avertismentul "The memory index is
+full" si eticheta "Not in turn" pe intrarile ramase afara. Verificat cu claude
 2.1.332: liderul a salvat singur o decizie din chat, iar o sesiune noua a raspuns din index.
 Gata (nume amuzante pentru agenti noi): static/js/agent-names.js (AGENT_NAMES, 159 de nume din docs/ideas/agent-names.csv,
 max 40 caractere, fara "You"; randomAgentName(taken, avoid) alege unul liber, altfel "New agent N"). Pagina Agent nou vine cu

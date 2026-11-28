@@ -33,9 +33,11 @@ export function memoryView(projectId) {
   const addBtn = el("button", { type: "button", class: "btn small primary", onclick: () => openAdd() }, "+ Add");
   const listBox = el("div", { class: "mem-list" });
   const intro = el("p", { class: "hint mem-intro" }, "Decisions and facts every agent of this project sees in each turn. Agents add them as they work; you can add, edit, lock or delete them here.");
+  // avertismentul cand indexul din tura e plin (inIndex vine de la server, aceleasi limite ca prompt.MemoryIndex)
+  const fullNote = el("div", { class: "mem-full", role: "status" });
   const root = el("section", { class: "tab-body memory-body" },
     el("div", { class: "mem-toolbar" }, search, el("span", { class: "grow" }), deletedBtn, addBtn),
-    intro, listBox);
+    intro, fullNote, listBox);
 
   async function load() {
     try {
@@ -85,6 +87,9 @@ export function memoryView(projectId) {
     el("div", { class: "mem-row-head" },
       el("code", { class: "mem-key" }, m.key),
       m.locked ? el("span", { class: "mem-lock", title: "Locked: agents cannot change it" }, "🔒 Locked") : null,
+      !m.deletedAt && m.inIndex === false
+        ? el("span", { class: "mem-out", title: "Not listed in the agents' turn: they find it only by searching" }, "Not in turn")
+        : null,
       el("span", { class: "grow" }),
       meta(m), restore),
     el("div", { class: "mem-summary" }, m.summary));
@@ -95,6 +100,7 @@ export function memoryView(projectId) {
     deletedBtn.hidden = !state.showDeleted && state.deleted.length === 0;
     addBtn.hidden = state.showDeleted;
     intro.hidden = !state.list.length || state.showDeleted; // starea goala are textul ei
+    paintFull();
     if (!state.loaded) { listBox.replaceChildren(el("p", { class: "empty" }, "Loading…")); return; }
     const src = state.showDeleted ? state.deleted : state.list;
     const q = fold(state.query).trim();
@@ -113,6 +119,16 @@ export function memoryView(projectId) {
       return;
     }
     listBox.replaceChildren(...(shown.length ? shown.map(row) : [el("p", { class: "empty" }, "Nothing matches your search.")]));
+  }
+
+  function paintFull() {
+    const out = state.list.filter((m) => m.inIndex === false).length;
+    fullNote.hidden = state.showDeleted || !out;
+    if (fullNote.hidden) return;
+    fullNote.replaceChildren(
+      el("strong", {}, "The memory index is full. "),
+      `${out} of ${state.list.length} entries don't fit in the list agents get in each turn (max 40 lines, 3000 characters); agents find them only by searching. ` +
+      "Delete outdated entries, shorten long summaries, or lock the ones every agent must see (locked entries come first).");
   }
 
   // ---------- modala ----------
